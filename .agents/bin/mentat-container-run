@@ -15,7 +15,7 @@ WT="$PWD"
 SLUG=$(basename "$WT")
 
 workspace_folder() {
-  sed 's|//.*||g' "$WT/.devcontainer/devcontainer.json" \
+  grep -v '^\s*//' "$WT/.devcontainer/devcontainer.json" \
     | jq -r --arg slug "$SLUG" '.workspaceFolder // ("/workspaces/" + $slug)'
 }
 
