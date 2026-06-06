@@ -4,6 +4,12 @@ providers:
   - id: anthropic:messages:claude-haiku-4-5-20251001
     config:
       max_tokens: 1024
+  # mentat-plan-autosplit: full eval suite in promptfooconfig-autosplit.yaml
+  - id: anthropic:messages:claude-sonnet-4-6
+    label: mentat-plan-autosplit
+    config:
+      max_tokens: 2048
+      system: "file://../../commands/mentat-plan.md"
 
 tests:
   # S4.1: must_not_exist veto fires when plan says drop routes but diff keeps them
