@@ -71,6 +71,18 @@ Unknown file classes pass silently (gate is additive, not a whitelist).
 
 See [bin/lib/gates.sh](bin/lib/gates.sh) for checker implementations and [bin/mentat-gate](bin/mentat-gate) for the driver.
 
+## Test-when-modified
+
+Modifying certain file classes requires additional checks before commit:
+
+| Trigger | Required action |
+|---|---|
+| `agents/*.md` or `skills/*/SKILL.md` modified | Run `mentat-gate <file>` + skill's promptfoo eval (`npx promptfoo eval --filter-providers <skill-name>`) |
+| `docs/adr/*.md` modified | File must include `**Decided:** <YYYY-MM-DD>` and `**Author:** <handle>` lines |
+| `agents/mentat-*-reviewer.md` modified | Must bump ADR-0003 weight rationale (add/update reasoning for any changed dimension weight) |
+
+These are enforced by convention during review, not by a pre-commit hook. `mentat-gate` flags structural violations; the LLM reviewer flags missing promptfoo eval evidence in the PR diff.
+
 ## Project docs
 
 - [../README.md](../README.md) — public overview, quickstart, no-framework thesis.

@@ -21,7 +21,15 @@ Plan path (= the user prompt) + diff or worktree (= the agent response). Both re
 
 ## must_not_exist veto (deterministic — fires before scoring)
 
-Extract every plan line containing: `drop`, `remove`, `replace`, `no longer`, `must not`, `should not`, `delete`, `eliminate`. These name entities the plan requires to be absent from the final diff.
+**ADR-0007 structural check (fires first):** Scan the plan for deletion slices — any slice whose body contains `drop`, `remove`, `replace`, `no longer`, `must not`, `should not`, `delete`, `eliminate`. If a deletion slice exists AND the plan contains neither a `## Must-not-exist` section nor any `[must-not-exist: <path>]` inline tag, emit:
+
+```
+VETO must_not_exist_untagged: deletion slice present but no ## Must-not-exist block or [must-not-exist:] tag found
+```
+
+Hard FAIL, score=0.0. Plan author must add explicit must-not-exist annotation before re-review.
+
+**Entity check (fires after structural check passes):** Extract every plan line containing: `drop`, `remove`, `replace`, `no longer`, `must not`, `should not`, `delete`, `eliminate`. These name entities the plan requires to be absent from the final diff.
 
 For each extracted entity: grep the diff. Present → **VETO**. Emit:
 
