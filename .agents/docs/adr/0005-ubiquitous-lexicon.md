@@ -17,9 +17,9 @@ every command, ADR, and script speaks one vocabulary.
 ## Decision — the lexicon
 
 - **slice** — a *planned* vertical tracer-bullet cut. An INPUT artifact: a
-  `plan.md`. Taxonomy owned by `/to-plan` + `/to-issues` (AFK/HITL tags theirs).
+  `plan.md`. Taxonomy owned by `/mentat-plan` + `/mentat-issues` (AFK/HITL tags theirs).
 - **chunk** — the *running execution* of one slice: worktree + devcontainer +
-  its own branch off `main`, running `/to-implement`. One slice → one chunk.
+  its own branch off `main`, running `/mentat-implement`. One slice → one chunk.
 - **batch** — the full set of chunks in one `mentat-orchestrate` run. The parallel
   fan-out group; lands when all-green, ejects per-chunk on red.
 - **slug** — a chunk's unique id; also its worktree dirname and `mentat_slug`

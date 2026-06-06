@@ -13,7 +13,7 @@ adding it as the single highest-value control.
 
 The obvious implementation — mount the test files read-only in the devcontainer —
 turns out to break the system's founding rule. Hard-to-reverse: it shapes
-`/to-implement`'s contract and the `mentat-bug-reviewer` veto set, so it's locked here.
+`/mentat-implement`'s contract and the `mentat-bug-reviewer` veto set, so it's locked here.
 
 ## The trap we rejected: a driver-built read-only mount
 
@@ -38,7 +38,7 @@ The same pattern ADR 0004 already uses for re-gating (spawn an agent that reads 
 repo's own CLAUDE.md/AGENTS.md and runs *that* project's gates — the driver names
 no tool): the agent holds the project knowledge, the driver holds none.
 
-- **Soft preventive layer — the `/to-implement` contract.** During a TDD slice,
+- **Soft preventive layer — the `/mentat-implement` contract.** During a TDD slice,
   once the failing test is written, the agent works impl-only: it does not modify
   existing test files until the slice is green. The agent already knows which files
   are tests — it had to discover the test runner to run the loop at all. This is a
@@ -85,7 +85,7 @@ See ADR 0003's amended blacklist set for the full list.
 
 ## Consequences
 
-`/to-implement` gains a one-line impl-only-after-red contract clause. `mentat-bug-reviewer`
+`/mentat-implement` gains a one-line impl-only-after-red contract clause. `mentat-bug-reviewer`
 gains the runner-redirection move and keeps all others. The driver and
 `mentat-container-*` scripts are untouched — they never learn what a test file is. This
 ADR is index-only in AGENTS.md (title only; body on demand — ADR 0001's budget).

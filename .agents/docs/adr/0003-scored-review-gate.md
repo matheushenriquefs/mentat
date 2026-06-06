@@ -14,7 +14,7 @@ autonomous as its gate is trustworthy, and a binary verdict with no false-pass
 record can't be trusted to reject unattended. We ground-truthed Mastra's eval
 scorers (docs + pasted source) and the RAG-faithfulness convention to upgrade
 the gate to numbers. Hard-to-reverse: shapes every reviewer and the
-`/to-implement` step-5 gate, so it's locked here.
+`/mentat-implement` step-5 gate, so it's locked here.
 
 ## Decision
 
@@ -161,6 +161,6 @@ numeric gate stays the first true walk-away target.
 
 ## Consequences
 
-Reviewer defs emit `PASS|FAIL score=…` with a veto field. `/to-implement` step 5
+Reviewer defs emit `PASS|FAIL score=…` with a veto field. `/mentat-implement` step 5
 gates on the full expression above. Provenance for the mapping lives in the
 VERIFIED reviewers↔Mastra handoff; this ADR is the locked decision-of-record.

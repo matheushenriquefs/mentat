@@ -1,4 +1,4 @@
-# ADR 0002: Holding branch + `/to-rebase` over plain merge
+# ADR 0002: Holding branch + `/mentat-rebase` over plain merge
 
 Status: Accepted (locked)
 Date: 2026-05-31
@@ -17,7 +17,7 @@ Use plain `git worktree` + ff-only rebase instead of host-side `git merge`:
 
 - Planner session holds `branch/<feature>` with no commits of its own.
 - Each agent worktree branches from `main`.
-- The implementer agent runs `/to-rebase` at the end of its session to
+- The implementer agent runs `/mentat-rebase` at the end of its session to
   fast-forward the holding branch onto its tip.
 - Because the holding branch has no commits beyond its merge-base, the rebase is
   fast-forward — no `git commit` fires, so no host-side pre-commit fires.
@@ -27,7 +27,7 @@ Use plain `git worktree` + ff-only rebase instead of host-side `git merge`:
 
 - **Host-side `git merge`.** Host-side commit+merge fails under container-side
   pre-commit (the whole reason this ADR exists).
-- **Manual rebase from the planner pane** (the original flow). `/to-rebase`
+- **Manual rebase from the planner pane** (the original flow). `/mentat-rebase`
   lifts it into the agent session. `git -C $ROOT rebase` runs against the shared
   `.git/` without the agent checking out the holding branch (which would
   conflict with the planner's checkout). `git merge-base --is-ancestor` aborts
@@ -36,6 +36,6 @@ Use plain `git worktree` + ff-only rebase instead of host-side `git merge`:
 
 ## Consequences
 
-`/to-rebase` is pure git, runs from the implementer session. The planner session
+`/mentat-rebase` is pure git, runs from the implementer session. The planner session
 re-engages only for `git push` + `gh pr create`. Setup and skill docs reference
 this ADR rather than re-explaining the host pre-commit constraint inline.

@@ -5,7 +5,7 @@ Date: 2026-06-03
 
 ## Context
 
-`/to-plan` and `/to-issues` already cut work into tracer-bullet vertical
+`/mentat-plan` and `/mentat-issues` already cut work into tracer-bullet vertical
 slices, tagged AFK (gate clears unattended) or HITL. That taxonomy is theirs.
 Undocumented: how `mentat-orchestrate` *executes* slices — many in parallel, onto
 one holding branch — and the hard-to-reverse choices in the driver and the
@@ -17,12 +17,12 @@ chunks → one holding branch.
 - **The slice is the unit because vertical cuts compose.** Two thin end-to-end
   cuts touch disjoint code and rebase cleanly; two horizontal cuts fight over
   the same files. "Many thin over few thick" is the precondition for safe
-  fan-out, not an aesthetic. Un-sliceable plan → babysit one `/to-implement`.
+  fan-out, not an aesthetic. Un-sliceable plan → babysit one `/mentat-implement`.
 - **Fan-out parallel, land serial.** Chunks implement concurrently, each in its
   own worktree + devcontainer. Land one at a time — can't move one ref
   concurrently, and serial landing lets sibling divergence resolve by rebasing
   onto the tip the previous chunk left. Break-even ≥ 2 AFK chunks; cap 3.
-- **Each chunk holds its OWN branch.** `/to-implement`'s `/to-rebase` self-no-ops
+- **Each chunk holds its OWN branch.** `/mentat-implement`'s `/mentat-rebase` self-no-ops
   (ff-to-self, no host commit, no holding-branch prompt to stall headless). The
   cross-branch land is the driver's: rebase onto `$HOLDING` *in-container*
   (pre-commit fires where tools live — ADR 0002), re-gate, host `merge --ff-only`.
