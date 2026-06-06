@@ -1,0 +1,315 @@
+#!/bin/bash
+# ~/.agents/bin/devcontainer-up — bring up the devcontainer for a worktree.
+# Project-agnostic. Auto-detects:
+#   - image / Dockerfile / docker-compose shape
+#   - bare docker-compose (no .devcontainer/): synthesize a minimal wrapping
+#     devcontainer.json so the devcontainer CLI drives it like any other
+#   - which compose services hardcode container_name (and !reset null them)
+#   - which host ports compose declares via ${VAR:-N}:N (and offsets VAR per slug)
+#   - which gitignored dependency dirs to symlink from the main repo
+set -euo pipefail
+
+[ -f "$PWD/.git" ] || { echo "devcontainer-up: must run from inside a git worktree" >&2; exit 2; }
+
+WT="$PWD"
+SLUG=$(basename "$WT")
+
+# Resolve a REAL python3 for this script's OWN json-parsing, bypassing the
+# asdf/mise shim (aborts in a worktree with no .tool-versions). Host-side
+# parse only; project interpreter version is irrelevant here (ADR 0004).
+_real_python3() {
+  local p
+  for p in $(command -v -a python3 2>/dev/null); do
+    case "$p" in
+      *"/.asdf/shims/"*|*"/shims/"*|*"/mise/"*) continue ;;
+      *) printf '%s\n' "$p"; return 0 ;;
+    esac
+  done
+  printf '%s\n' /usr/bin/python3
+}
+PY3="$(_real_python3)"
+
+workspace_folder() {
+  "$PY3" -c '
+import json, re, sys
+p = sys.argv[1] + "/.devcontainer/devcontainer.json"
+src = open(p).read()
+data = json.loads(re.sub(r"//.*", "", src))
+print(data.get("workspaceFolder", "/workspaces/" + sys.argv[2]))
+' "$WT" "$SLUG"
+}
+
+ensure_safe_directory() {
+  devcontainer exec \
+    --workspace-folder "$WT" \
+    --id-label "dmux_slug=$SLUG" \
+    bash -lc "git config --global --add safe.directory $(printf %q "$1")" \
+    >/dev/null 2>&1 || true
+}
+
+# Synthesize a minimal .devcontainer/devcontainer.json over a bare
+# docker-compose.yml (no authored .devcontainer/). Pick the workspace service
+# by inference: exactly one service with a `build:` OR a bind-mount of the
+# worktree cwd. Zero or many such services → abort loud (don't exec into the
+# wrong container three steps later). workspaceFolder = that service's
+# WORKDIR if discoverable, else /workspaces/<slug>.
+synthesize_devcontainer() {
+  "$PY3" - "$WT" "$SLUG" <<'PY'
+import json, os, re, sys, pathlib
+wt = pathlib.Path(sys.argv[1]); slug = sys.argv[2]
+compose = (wt / "docker-compose.yml").read_text()
+lines = compose.splitlines()
+
+svc_start = next((i for i, l in enumerate(lines)
+                  if re.match(r'^services:\s*$', l)), None)
+if svc_start is None:
+    sys.stderr.write("devcontainer-up: docker-compose.yml has no top-level `services:` key.\n")
+    sys.exit(3)
+
+def indent(l): return len(l) - len(l.lstrip())
+
+child_indent = None
+for l in lines[svc_start+1:]:
+    if not l.strip() or l.lstrip().startswith('#'):
+        continue
+    if indent(l) == 0:
+        break
+    child_indent = indent(l)
+    break
+
+services = {}
+if child_indent is not None:
+    name_re = re.compile(r'^ {%d}([\w.\-]+):\s*$' % child_indent)
+    cur = None
+    for i in range(svc_start+1, len(lines)):
+        l = lines[i]
+        if l.strip() and indent(l) == 0:
+            if cur: services[cur[0]] = (cur[1], i); cur = None
+            break
+        m = name_re.match(l)
+        if m:
+            if cur: services[cur[0]] = (cur[1], i)
+            cur = (m.group(1), i+1)
+    if cur: services[cur[0]] = (cur[1], len(lines))
+
+def block(name):
+    s, e = services[name]
+    return "\n".join(lines[s:e])
+
+cwd_markers = ('.:/', './:', '${PWD}', '$PWD', '..:')
+candidates = []
+for name in services:
+    b = block(name)
+    has_build = re.search(r'^\s+build:', b, re.M) is not None
+    has_cwd_mount = any(mk in b for mk in cwd_markers)
+    if has_build or has_cwd_mount:
+        candidates.append(name)
+
+if len(candidates) != 1:
+    how = "none" if not candidates else ", ".join(candidates)
+    sys.stderr.write(
+        "devcontainer-up: cannot infer workspace service from docker-compose.yml "
+        f"(buildable/cwd-mounted services: {how}).\n"
+        "Add a .devcontainer/devcontainer.json naming the `service` + `workspaceFolder`.\n")
+    sys.exit(3)
+
+service = candidates[0]
+ws = "/workspaces/" + slug
+mt = re.search(r'''-\s*['"]?[.$][^:\s]*:(/[^\s:'"]+)''', block(service))
+if mt:
+    ws = mt.group(1)
+
+out = wt / ".devcontainer"
+out.mkdir(exist_ok=True)
+(out / "devcontainer.json").write_text(json.dumps({
+    "name": slug,
+    "dockerComposeFile": ["../docker-compose.yml"],
+    "service": service,
+    "workspaceFolder": ws,
+}, indent=2) + "\n")
+PY
+}
+
+# Synthesize a compose-less devcontainer.json over a bare Dockerfile (no
+# .devcontainer/, no compose). CLI builds the image + bind-mounts cwd; no
+# port/cname machinery. workspaceFolder = last absolute Dockerfile WORKDIR,
+# else /workspaces/<slug>.
+synthesize_devcontainer_from_dockerfile() {
+  "$PY3" - "$WT" "$SLUG" <<'PY'
+import json, re, sys, pathlib
+wt = pathlib.Path(sys.argv[1]); slug = sys.argv[2]
+
+# Find the Dockerfile (canonical name preferred; else first Dockerfile*).
+dockerfile = None
+for cand in ["Dockerfile", "dockerfile"]:
+    if (wt / cand).exists():
+        dockerfile = cand
+        break
+if dockerfile is None:
+    hits = sorted(p.name for p in wt.glob("Dockerfile*") if p.is_file())
+    if hits:
+        dockerfile = hits[0]
+if dockerfile is None:
+    sys.stderr.write("devcontainer-up: no Dockerfile found in worktree.\n")
+    sys.exit(3)
+
+# workspaceFolder: a Dockerfile WORKDIR (absolute, last one wins) if present,
+# else the CLI default /workspaces/<slug>.
+ws = "/workspaces/" + slug
+text = (wt / dockerfile).read_text()
+workdirs = re.findall(r'(?im)^\s*WORKDIR\s+(\S+)\s*$', text)
+abs_workdirs = [w for w in workdirs if w.startswith("/")]
+if abs_workdirs:
+    ws = abs_workdirs[-1]
+
+out = wt / ".devcontainer"
+out.mkdir(exist_ok=True)
+(out / "devcontainer.json").write_text(json.dumps({
+    "name": slug,
+    "build": {"dockerfile": "../" + dockerfile, "context": ".."},
+    "workspaceFolder": ws,
+    "workspaceMount":
+        "source=${localWorkspaceFolder},target=" + ws + ",type=bind",
+}, indent=2) + "\n")
+PY
+}
+
+# Already running? safe.directory anyway (must fire on EVERY path — a container
+# up from before this fix never got it; surfaces as "dubious ownership" on first
+# in-container git — handoff Issue 4). Idempotent.
+if [ -n "$(docker ps -q --filter "label=dmux_slug=$SLUG")" ]; then
+  ensure_safe_directory "$(workspace_folder)"
+  exit 0
+fi
+
+# Stopped container exists? Start it.
+STOPPED=$(docker ps -aq --filter "label=dmux_slug=$SLUG" --filter "status=exited")
+if [ -n "$STOPPED" ]; then
+  docker start "$STOPPED" >/dev/null
+  ensure_safe_directory "$(workspace_folder)"
+  exit 0
+fi
+
+# Cold start. Need a .devcontainer/ — synthesize one if absent. Order of
+# preference: docker-compose (.yml or .yaml) → bare Dockerfile. Docker is
+# required (ADR 0004); we are language-agnostic, not runtime-agnostic.
+if [ ! -d "$WT/.devcontainer" ]; then
+  # Normalize compose spelling: the rest of the script keys off
+  # docker-compose.yml; symlink a .yaml so a single code path serves both.
+  if [ ! -f "$WT/docker-compose.yml" ] && [ -f "$WT/docker-compose.yaml" ]; then
+    ln -s docker-compose.yaml "$WT/docker-compose.yml"
+  fi
+  if [ -f "$WT/docker-compose.yml" ]; then
+    synthesize_devcontainer
+  elif ls "$WT"/Dockerfile* >/dev/null 2>&1; then
+    synthesize_devcontainer_from_dockerfile
+  else
+    echo "devcontainer-up: no .devcontainer/, no docker-compose.yml, no Dockerfile in worktree" >&2
+    exit 1
+  fi
+fi
+
+WS="$(workspace_folder)"
+
+GIT_TARGET=$(awk '{print $2}' "$WT/.git")
+ROOT="${GIT_TARGET%/.git/worktrees/*}"
+
+# Symlink known gitignored dep dirs from the main repo so cold worktrees
+# don't have to re-run composer/npm/etc. Each guarded; no-op if absent.
+# Python .venv intentionally excluded (interpreter paths bake in absolute cwd).
+for d in vendor node_modules; do
+  [ -d "$ROOT/$d" ] && [ ! -e "$WT/$d" ] && ln -s "$ROOT/$d" "$WT/$d"
+done
+
+# Reuse the main repo's .env if any (gitignored, but compose needs it).
+[ -f "$ROOT/.env" ] && [ ! -e "$WT/.env" ] && cp "$ROOT/.env" "$WT/.env"
+
+# ----- compose-only adjustments (skipped for image/Dockerfile devcontainers) -----
+HAS_DOCKER_COMPOSE=0
+if [ -f "$WT/docker-compose.yml" ] && \
+   "$PY3" -c '
+import json, re, sys
+src = open(sys.argv[1]).read()
+data = json.loads(re.sub(r"//.*", "", src))
+files = data.get("dockerComposeFile")
+sys.exit(0 if files else 1)
+' "$WT/.devcontainer/devcontainer.json" 2>/dev/null; then
+  HAS_DOCKER_COMPOSE=1
+fi
+
+if [ "$HAS_DOCKER_COMPOSE" = 1 ]; then
+  OFFSET=$(( 0x$(printf %s "$SLUG" | shasum | cut -c1-2) % 90 + 10 ))
+
+  # Discover which compose services hardcode container_name AND which host-port
+  # env vars (${VAR:-N}:N) compose declares; emit a worktree-local override file
+  # that !reset-nulls those names and write per-slug port offsets into .env.
+  "$PY3" - "$WT" "$OFFSET" <<'PY'
+import os, re, sys, pathlib
+wt = pathlib.Path(sys.argv[1])
+offset = int(sys.argv[2])
+compose = (wt / "docker-compose.yml").read_text()
+
+# Container names: top-level service with `container_name: foo`.
+# Lightweight scan, no YAML dep; assumes 4-space service indent (Sail/Compose default).
+svc_re = re.compile(r'^[ \t]{2,4}([\w.\-]+):\s*$', re.M)
+cname_re = re.compile(r'^[ \t]{4,8}container_name:\s*([\w.\-]+)\s*$', re.M)
+services_with_cname = []
+for m in svc_re.finditer(compose):
+    svc = m.group(1)
+    block_start = m.end()
+    next_m = svc_re.search(compose, block_start)
+    block = compose[block_start : next_m.start() if next_m else len(compose)]
+    if cname_re.search(block):
+        services_with_cname.append(svc)
+
+override = wt / "docker-compose.dmux.yml"
+if services_with_cname and not override.exists():
+    lines = ["services:"]
+    pad = max(len(s) for s in services_with_cname)
+    for s in services_with_cname:
+        lines.append(f"  {s.ljust(pad)}: {{ container_name: !reset null }}")
+    override.write_text("\n".join(lines) + "\n")
+
+# Host-port env vars: `- '${FOO:-1234}:5678'` patterns. Add offset to each
+# default so every var lands on a distinct host port (the prefix-replace trick
+# collapsed ports of similar magnitude — e.g. 7700/8900/9000 all → 2700).
+port_re = re.compile(r'\$\{([A-Z][A-Z0-9_]*):-(\d+)\}\s*:')
+overrides = {var: str(int(default) + offset) for var, default in port_re.findall(compose)}
+
+env_path = wt / ".env"
+if overrides and env_path.exists():
+    MARK = "# --- dmux per-worktree overrides"
+    body = env_path.read_text()
+    # Strip any previous dmux block so re-runs refresh stale ports.
+    body = re.split(rf"\n?{re.escape(MARK)}.*", body, maxsplit=1, flags=re.S)[0].rstrip() + "\n"
+    block = [f"\n{MARK} (slug={wt.name}, offset={offset}) ---"]
+    for k, v in sorted(overrides.items()):
+        block.append(f"{k}={v}")
+    env_path.write_text(body + "\n".join(block) + "\n")
+PY
+
+  # Inject the override file into devcontainer.json's dockerComposeFile list.
+  if ! grep -q docker-compose.dmux.yml "$WT/.devcontainer/devcontainer.json" \
+     && [ -f "$WT/docker-compose.dmux.yml" ]; then
+    "$PY3" -c '
+import json, re, sys
+p = sys.argv[1]
+src = open(p).read()
+data = json.loads(re.sub(r"//.*", "", src))
+files = data.get("dockerComposeFile", [])
+if isinstance(files, str): files = [files]
+files.append("../docker-compose.dmux.yml")
+data["dockerComposeFile"] = files
+open(p, "w").write(json.dumps(data, indent=2) + "\n")
+' "$WT/.devcontainer/devcontainer.json"
+  fi
+fi
+
+devcontainer up \
+  --workspace-folder "$WT" \
+  --mount "type=bind,source=$ROOT/.git,target=$ROOT/.git" \
+  --remote-env "GIT_DIR=$GIT_TARGET" \
+  --remote-env "GIT_WORK_TREE=$WS" \
+  --id-label "dmux_slug=$SLUG"
+
+ensure_safe_directory "$WS"

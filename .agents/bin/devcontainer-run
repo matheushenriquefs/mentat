@@ -1,0 +1,48 @@
+#!/bin/bash
+# ~/.agents/bin/devcontainer-run — run one command INSIDE the worktree's
+# devcontainer. The single seam through which all project-interpreter work
+# (uv / ruff / pre-commit / python / php / node / test commands) must pass:
+# the host runs none of it (ADR 0004). Brings the container up first if needed.
+set -euo pipefail
+
+CMD="${*:-}"
+[ -z "$CMD" ] && { echo "usage: devcontainer-run '<command>'" >&2; exit 2; }
+[ -f "$PWD/.git" ] || { echo "devcontainer-run: must run from inside a git worktree" >&2; exit 2; }
+
+WT="$PWD"
+SLUG=$(basename "$WT")
+
+# Resolve a REAL python3 for this script's OWN json-parsing, bypassing the
+# asdf/mise shim (aborts in a worktree with no .tool-versions). Host-side
+# parse only; project interpreter version is irrelevant here (ADR 0004).
+_real_python3() {
+  local p
+  for p in $(command -v -a python3 2>/dev/null); do
+    case "$p" in
+      *"/.asdf/shims/"*|*"/shims/"*|*"/mise/"*) continue ;;
+      *) printf '%s\n' "$p"; return 0 ;;
+    esac
+  done
+  printf '%s\n' /usr/bin/python3
+}
+PY3="$(_real_python3)"
+
+workspace_folder() {
+  "$PY3" -c '
+import json, re, sys
+p = sys.argv[1] + "/.devcontainer/devcontainer.json"
+src = open(p).read()
+data = json.loads(re.sub(r"//.*", "", src))
+print(data.get("workspaceFolder", "/workspaces/" + sys.argv[2]))
+' "$WT" "$SLUG"
+}
+
+WS="$(workspace_folder)"
+
+# Ensure the container is up (idempotent; no-op if already running).
+"$(dirname "$0")/devcontainer-up" >/dev/null
+
+exec devcontainer exec \
+  --workspace-folder "$WT" \
+  --id-label "dmux_slug=$SLUG" \
+  bash -lc "cd $(printf %q "$WS") && $CMD"

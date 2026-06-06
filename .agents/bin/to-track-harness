@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# to-track-harness — colored, slug-prefixed line-feed over the per-chunk stream-json
+# tees that to-orchestrate already writes to .dmux/logs/<slug>.jsonl.
+#
+# Replaces the folded `tail -F | awk` watcher. Harness-agnostic: one
+# harness-map.jq, two input schemas (claude-code + cursor-agent). Runs inline
+# in the launching terminal; killed in to-orchestrate's EXIT trap.
+#
+# Two state sources, never conflated:
+#   1. the stream  -> live narration of the IMPLEMENTING phase (text/tool/…)
+#   2. the land loop + process exit code -> the authoritative END STATE
+#      (landed / forensics / agent-error). result/success in the stream is
+#      NOT "landed" — it only means /to-implement returned.
+#
+# The two share ONE sink per worktree: .dmux/logs/<slug>.jsonl carries the live
+# stream AND, as its final line, a synthetic terminal record the driver appends
+# (landed | eject, with the tip/reason) — so one file per worktree tells the whole
+# story regardless of outcome. Both lines normalize through harness-map.jq to the
+# existing result/error kinds (no new kind).
+#
+# Usage:
+#   to-track-harness <logdir> <slug>...           # standalone: start feeds for N<=3 chunks
+#
+# When sourced by to-orchestrate, the land loop calls these functions:
+#   to_track_phase <slug> <phase>         # implementing|landing
+#   to_track_exit  <slug> <state> [note]  # landed|forensics|agent-error
+#
+# Sourced by to-orchestrate; also runnable standalone for one log.
+
+set -uo pipefail
+JQ="${JQ:-jq}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MAP="${TO_TRACK_MAP:-$HERE/harness-map.jq}"
+THINK="${TO_TRACK_THINK:-0}"          # 1 = show claude thinking lines
+
+# ---- palette (degrade to no-color when not a tty) ---------------------------
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  c_dim=$'\e[2m'; c_rst=$'\e[0m'; c_bold=$'\e[1m'
+  c_blue=$'\e[34m'; c_cyan=$'\e[36m'; c_green=$'\e[32m'
+  c_yellow=$'\e[33m'; c_red=$'\e[31m'; c_mag=$'\e[35m'
+else
+  c_dim=; c_rst=; c_bold=; c_blue=; c_cyan=; c_green=; c_yellow=; c_red=; c_mag=
+fi
+
+# stable per-slug color so 3 concurrent feeds stay visually separable
+_slug_color() {
+  local h=0 i; for ((i=0;i<${#1};i++)); do h=$(( (h*31 + $(printf '%d' "'${1:$i:1}")) % 6 )); done
+  case $h in 0)echo "$c_blue";;1)echo "$c_cyan";;2)echo "$c_mag";;
+             3)echo "$c_green";;4)echo "$c_yellow";;*)echo "$c_bold";;esac
+}
+
+# kind -> glyph+color for the event body
+_paint() { # $1=kind $2=summary
+  local g col
+  case "$1" in
+    init)   g="◆"; col="$c_dim";;
+    text)   g="·"; col="$c_rst";;
+    tool)   g="⚙"; col="$c_cyan";;
+    think)  g="∴"; col="$c_dim";;
+    info)   g="↻"; col="$c_yellow";;
+    result) g="✓"; col="$c_green";;
+    error)  g="✗"; col="$c_red";;
+    raw)    g="?"; col="$c_dim";;
+    *)      g="·"; col="$c_rst";;
+  esac
+  printf '%s%s %s%s' "$col" "$g" "$2" "$c_rst"
+}
+
+# one feed: tail -F a chunk's tee, normalize, prefix with slug, paint.
+# `tail -F` retries until the file appears (devcontainer cold-start safe) and
+# survives rotation. Silent chunk = no lines, not a fabricated "running" spam.
+_feed() { # $1=slug $2=logfile
+  local slug="$1" log="$2" scol; scol="$(_slug_color "$slug")"
+  local tag; printf -v tag '%s%-10s%s' "$scol" "[$slug]" "$c_rst"
+  tail -n +1 -F "$log" 2>/dev/null \
+  | "$JQ" -rc -f "$MAP" 2>/dev/null \
+  | while IFS=$'\t' read -r kind summary; do
+      [[ "$kind" == "think" && "$THINK" != "1" ]] && continue
+      printf '%s %s\n' "$tag" "$(_paint "$kind" "$summary")"
+    done
+}
+
+# ---- phase / end-state cells (driven by land loop, NOT the stream) ----------
+_banner() { # $1=slug $2=glyph $3=color $4=label [$5=note]
+  local scol; scol="$(_slug_color "$1")"
+  printf '%s%-10s%s %s%s %s%s%s' "$scol" "[$1]" "$c_rst" "$3" "$2" "$c_bold" "$4" "$c_rst"
+  [[ -n "${5:-}" ]] && printf ' %s%s%s' "$c_dim" "$5" "$c_rst"
+  printf '\n'
+}
+to_track_phase() { # slug implementing|landing
+  case "$2" in
+    implementing) _banner "$1" "⛏" "$c_blue"   "implementing";;
+    landing)      _banner "$1" "↧" "$c_yellow" "landing";;
+    *)            _banner "$1" "·"  "$c_dim"    "$2";;
+  esac
+}
+to_track_exit() { # slug landed|forensics|agent-error [note]
+  case "$2" in
+    landed)      _banner "$1" "✓" "$c_green"  "landed"      "${3:-}";;
+    forensics)   _banner "$1" "✗" "$c_red"    "left up — forensics" "${3:-}";;
+    agent-error) _banner "$1" "✗" "$c_red"    "agent error" "${3:-}";;
+    *)           _banner "$1" "·" "$c_dim"    "$2"          "${3:-}";;
+  esac
+}
+
+# ---- entrypoint -------------------------------------------------------------
+_pids=()
+to_track_start() { # logdir slug...
+  local logdir="$1"; shift
+  local slug
+  for slug in "$@"; do
+    to_track_phase "$slug" implementing
+    _feed "$slug" "$logdir/$slug.jsonl" &
+    _pids+=("$!")
+  done
+}
+to_track_stop() { local p; for p in "${_pids[@]:-}"; do kill "$p" 2>/dev/null; done; }
+
+# standalone: `to-track-harness <logdir> <slug>...` then wait (Ctrl-C / trap to stop)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  [[ $# -lt 2 ]] && { echo "usage: to-track-harness <logdir> <slug>..." >&2; exit 2; }
+  trap to_track_stop EXIT INT TERM
+  to_track_start "$@"
+  wait
+fi
