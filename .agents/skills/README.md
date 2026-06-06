@@ -1,8 +1,8 @@
 # Skills
 
-Skills are organized by bucket. Install via `bin/mentat-sync-upstream` or Claude Code's skill manager.
+Skills are organized by bucket. Install via `bin/mentat-update` or Claude Code's skill manager.
 
-See [AGENTS.md](../AGENTS.md) for workflow rules and [upstreams.jsonc](../../upstreams.jsonc) for vendored sources.
+See [AGENTS.md](../AGENTS.md) for workflow rules and [vendir.yml](../../vendir.yml) for vendored sources.
 
 ## Buckets
 
@@ -17,5 +17,5 @@ See [AGENTS.md](../AGENTS.md) for workflow rules and [upstreams.jsonc](../../ups
 
 ## Upstream skills
 
-Skills from external upstreams (mattpocock/skills, vercel-labs/skills) are installed via
-[`bin/mentat-sync-upstream`](../bin/mentat-sync-upstream). See [upstreams.jsonc](../../upstreams.jsonc) for pins.
+Skills from external upstreams (mattpocock/skills, juliusbrussee/caveman, mastra-ai/mastra) are vendored via
+[`bin/mentat-update`](../bin/mentat-update) (wraps `vendir sync`). See [vendir.yml](../../vendir.yml) for pins.

@@ -57,7 +57,7 @@ The constraint is Docker. Everything else is a text file.
 bin/mentat-setup
 
 # Skip upstream sync (offline install)
-bin/mentat-setup --minimal
+bin/mentat-setup --offline
 
 # Dry-run
 bin/mentat-setup --dry-run
@@ -65,4 +65,4 @@ bin/mentat-setup --dry-run
 
 ## Vendored skills
 
-Third-party skills are declared in `upstreams.jsonc` (keys: `<user>/<repo>`) and pinned in `upstreams.lock.jsonc`. The vendor tree (`.agents/skills/vendor/`) is gitignored — `bin/mentat-setup` materializes it on install. Attributions are auto-generated in [CREDITS.md](CREDITS.md).
+Third-party skills are declared in [`vendir.yml`](vendir.yml) and pinned in `vendir.lock.yml`. The vendor tree (`.agents/skills/vendor/`) is gitignored — `bin/mentat-setup` materializes it on install via `vendir sync`. Attributions are in [CREDITS.md](CREDITS.md); regenerate with `bin/mentat-update`.

@@ -24,10 +24,10 @@ Mentat cuts planned work into vertical slices, runs each slice as an isolated ch
 : Mentat's category label. Contrast with *meta-harness* (Lee et al. arxiv 2603.28052 — a different architecture) and *meta-skill* (revfactory/harness). Mentat orchestrates parallel coding agents across multiple headless agent CLIs (`cursor-agent`, `claude-code`). _Avoid_: "meta-harness", "the harness" as a self-description of Mentat.
 
 **Vendor skill**
-: A third-party skill synced via `bin/mentat-sync-upstream` from `upstreams.jsonc`. Installed under `.agents/skills/vendor/<upstream>/`. Attributions recorded in `CREDITS.md`. _Avoid_: treating vendor skills as first-party; always check `upstreams.jsonc` before modifying.
+: A third-party skill vendored via `bin/mentat-update` (wraps `vendir sync`) from `vendir.yml`. Installed under `.agents/skills/vendor/<user>/<repo>/`. Attributions recorded in `CREDITS.md`. _Avoid_: treating vendor skills as first-party; always check `vendir.yml` before modifying.
 
-**Sync log**
-: JSONL freshness ledger at `~/.agents/mentat/logs/sync-upstream.jsonl`. Written by `bin/mentat-sync-upstream`; read by `bin/mentat-sync-check` to detect stale upstreams. _Avoid_: deleting or rotating this file manually.
+**Vendor pins**
+: `vendir.lock.yml` — SHA-pinned lockfile written by `vendir sync`. Track in git. Check staleness with `vendir sync --diff`. _Avoid_: editing the lockfile manually.
 
 **Mentat (system)**
 : The harness itself — the `bin/`, `.agents/`, and orchestration contracts. Not a person, not an agent. _Avoid_: "the Mentat", "the AI", "the bot".

@@ -1,9 +1,9 @@
-"""P4: vendor namespace, credits gen, sync freshness gate, release exclude list."""
-import json
+"""P4: vendor namespace, credits gen, vendir lock, release exclude list."""
 import os
 import subprocess
 import tempfile
-import time
+
+import yaml
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 AGENTS = os.path.join(ROOT, ".agents")
@@ -11,6 +11,7 @@ BIN = os.path.join(AGENTS, "bin")
 SKILLS = os.path.join(AGENTS, "skills")
 VENDOR = os.path.join(SKILLS, "vendor")
 GITIGNORE = os.path.join(ROOT, ".gitignore")
+VENDIR_YML = os.path.join(ROOT, "vendir.yml")
 
 
 def _sh(cmd: str, cwd: str = ROOT, env: dict = None) -> subprocess.CompletedProcess:
@@ -19,192 +20,140 @@ def _sh(cmd: str, cwd: str = ROOT, env: dict = None) -> subprocess.CompletedProc
     return subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=cwd, env=e)
 
 
-def _parse_upstreams() -> list:
-    manifest = os.path.join(ROOT, "upstreams.jsonc")
-    with open(manifest) as f:
-        raw = "\n".join(
-            line for line in f if not line.strip().startswith("//")
-        )
-    return json.loads(raw)["upstreams"]
+def _parse_vendir() -> list:
+    with open(VENDIR_YML) as f:
+        cfg = yaml.safe_load(f)
+    entries = []
+    for d in cfg.get("directories", []):
+        for c in d.get("contents", []):
+            entries.append({"path": c["path"], "dir": d["path"]})
+    return entries
 
 
-# ── C1: vendor/ namespace ────────────────────────────────────────────────────
+# ── C1: vendir.yml + vendor/ namespace ───────────────────────────────────────
 
-def test_vendor_dir_exists():
-    assert os.path.isdir(VENDOR), f"Expected .agents/skills/vendor/ at {VENDOR}"
+def test_vendir_yml_exists():
+    assert os.path.isfile(VENDIR_YML), f"vendir.yml not found at {VENDIR_YML}"
+
+
+def test_vendir_yml_parseable():
+    entries = _parse_vendir()
+    assert len(entries) > 0, "vendir.yml must declare at least one upstream"
+
+
+def test_gitignore_excludes_vendor():
+    with open(GITIGNORE) as f:
+        gi = f.read()
+    assert ".agents/skills/vendor/" in gi, ".gitignore must exclude .agents/skills/vendor/"
+
+
+def test_upstreams_jsonc_absent():
+    assert not os.path.isfile(os.path.join(ROOT, "upstreams.jsonc")), (
+        "upstreams.jsonc must be deleted — replaced by vendir.yml"
+    )
 
 
 def test_setup_matt_pocock_not_directly_under_skills():
     direct = os.path.join(SKILLS, "setup-matt-pocock-skills")
     assert not os.path.isdir(direct), (
-        "setup-matt-pocock-skills must not sit directly in skills/ — move to vendor/matt-pocock/"
+        "setup-matt-pocock-skills must not sit directly in skills/ — lives in vendor/mattpocock/skills/"
     )
 
 
-def test_upstreams_vendor_paths_use_skills_vendor():
-    for up in _parse_upstreams():
-        vp = up["vendor_path"]
-        assert ".agents/skills/vendor/" in vp, (
-            f"upstream '{up['name']}' vendor_path '{vp}' must use .agents/skills/vendor/"
-        )
+# ── C2: CREDITS.md ───────────────────────────────────────────────────────────
 
-
-def test_upstreams_no_vendored_path():
-    for up in _parse_upstreams():
-        vp = up["vendor_path"]
-        assert ".agents/vendored/" not in vp, (
-            f"upstream '{up['name']}' still uses legacy .agents/vendored/ path"
-        )
-
-
-def test_gitignore_has_vendor_paths_for_non_commit_upstreams():
-    with open(GITIGNORE) as f:
-        gi = f.read()
-    for up in _parse_upstreams():
-        if not up.get("commit", True):
-            vp = up["vendor_path"]
-            assert vp in gi or vp + "/" in gi, (
-                f"upstream '{up['name']}' has commit:false but vendor_path '{vp}' not in .gitignore"
-            )
-
-
-# ── C2: CREDITS.md auto-gen ──────────────────────────────────────────────────
-
-def test_mentat_credits_gen_exists():
-    p = os.path.join(BIN, "mentat-credits-gen")
-    assert os.path.isfile(p), "bin/mentat-credits-gen not found"
-
-
-def test_mentat_credits_gen_executable():
-    p = os.path.join(BIN, "mentat-credits-gen")
-    assert os.access(p, os.X_OK), "bin/mentat-credits-gen must be executable"
-
-
-def test_mentat_credits_gen_syntax():
-    p = os.path.join(BIN, "mentat-credits-gen")
-    r = _sh(f"bash -n {p}")
-    assert r.returncode == 0, r.stderr
-
-
-def test_mentat_credits_gen_outputs_table():
-    r = _sh(f"{BIN}/mentat-credits-gen")
-    assert r.returncode == 0, f"mentat-credits-gen failed: {r.stderr}"
-    assert "| " in r.stdout, "output must be a Markdown table"
-    assert "mattpocock-skills" in r.stdout
-
-
-def test_mentat_credits_gen_idempotent():
-    r1 = _sh(f"{BIN}/mentat-credits-gen")
-    r2 = _sh(f"{BIN}/mentat-credits-gen")
-    assert r1.stdout == r2.stdout, "mentat-credits-gen must be idempotent"
-
-
-def test_credits_md_has_autogen_header():
+def test_credits_md_exists():
     path = os.path.join(ROOT, "CREDITS.md")
     assert os.path.isfile(path), "CREDITS.md must exist"
-    with open(path) as f:
+
+
+def test_credits_md_has_vendored_section():
+    with open(os.path.join(ROOT, "CREDITS.md")) as f:
         content = f.read()
-    assert "AUTO-GENERATED" in content, "CREDITS.md must contain AUTO-GENERATED marker"
-    assert "mentat-credits-gen" in content, "CREDITS.md must reference mentat-credits-gen"
+    assert "## Vendored" in content, "CREDITS.md must have ## Vendored section"
 
 
-def test_credits_md_lists_all_upstreams():
-    path = os.path.join(ROOT, "CREDITS.md")
-    with open(path) as f:
+def test_credits_md_has_inspired_by_section():
+    with open(os.path.join(ROOT, "CREDITS.md")) as f:
         content = f.read()
-    for up in _parse_upstreams():
-        assert up["name"] in content, f"CREDITS.md missing upstream '{up['name']}'"
+    assert "## Inspired by" in content, "CREDITS.md must have ## Inspired by section"
 
 
-# ── C3: sync freshness JSONL log + mentat-sync-check ────────────────────────
-
-def test_mentat_sync_check_exists():
-    p = os.path.join(BIN, "mentat-sync-check")
-    assert os.path.isfile(p), "bin/mentat-sync-check not found"
-
-
-def test_mentat_sync_check_executable():
-    p = os.path.join(BIN, "mentat-sync-check")
-    assert os.access(p, os.X_OK), "bin/mentat-sync-check must be executable"
+def test_credits_md_has_runtime_deps_section():
+    with open(os.path.join(ROOT, "CREDITS.md")) as f:
+        content = f.read()
+    assert "## Runtime tool dependencies" in content
 
 
-def test_mentat_sync_check_syntax():
-    p = os.path.join(BIN, "mentat-sync-check")
+def test_mentat_credits_gen_absent():
+    p = os.path.join(BIN, "mentat-credits-gen")
+    assert not os.path.isfile(p), "bin/mentat-credits-gen must be deleted — superseded by mentat-update"
+
+
+# ── C3: mentat-update (replaces mentat-sync-upstream + mentat-sync-check) ────
+
+def test_mentat_update_exists():
+    p = os.path.join(BIN, "mentat-update")
+    assert os.path.isfile(p), "bin/mentat-update not found"
+
+
+def test_mentat_update_executable():
+    p = os.path.join(BIN, "mentat-update")
+    assert os.access(p, os.X_OK), "bin/mentat-update must be executable"
+
+
+def test_mentat_update_syntax():
+    p = os.path.join(BIN, "mentat-update")
     r = _sh(f"bash -n {p}")
     assert r.returncode == 0, r.stderr
 
 
-def test_mentat_sync_check_stale_no_log():
+def test_mentat_update_offline_flag_requires_lockfile():
     with tempfile.TemporaryDirectory() as tmpdir:
-        log = os.path.join(tmpdir, "sync-upstream.jsonl")
-        r = _sh(f"{BIN}/mentat-sync-check", env={"MENTAT_SYNC_LOG": log})
-    assert r.returncode != 0, "sync-check must exit non-zero when log absent"
-    assert "STALE" in r.stdout or "STALE" in r.stderr, "must print STALE when log absent"
+        fake_vendir = os.path.join(tmpdir, "vendir.yml")
+        with open(fake_vendir, "w") as f:
+            f.write("apiVersion: vendir.k14s.io/v1alpha1\nkind: Config\ndirectories: []\n")
+        r = _sh(f"VENDIR_YML={fake_vendir} {BIN}/mentat-update --offline", cwd=tmpdir)
+    assert r.returncode != 0, "--offline without lockfile must exit non-zero"
 
 
-def test_mentat_sync_check_stale_old_entry():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        log = os.path.join(tmpdir, "sync-upstream.jsonl")
-        old_ts = "2000-01-01T00:00:00Z"
-        with open(log, "w") as f:
-            for up in _parse_upstreams():
-                f.write(json.dumps({"ts": old_ts, "upstream": up["name"], "sha": "abc", "status": "ok"}) + "\n")
-        r = _sh(f"{BIN}/mentat-sync-check", env={"MENTAT_SYNC_LOG": log})
-    assert r.returncode != 0, "sync-check must exit non-zero for old entries"
-    assert "STALE" in r.stdout or "STALE" in r.stderr
+def test_mentat_sync_upstream_absent():
+    p = os.path.join(BIN, "mentat-sync-upstream")
+    assert not os.path.isfile(p), "bin/mentat-sync-upstream must be deleted — superseded by mentat-update"
 
 
-def test_mentat_sync_check_fresh():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        log = os.path.join(tmpdir, "sync-upstream.jsonl")
-        fresh_ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        with open(log, "w") as f:
-            for up in _parse_upstreams():
-                f.write(json.dumps({"ts": fresh_ts, "upstream": up["name"], "sha": "abc", "status": "ok"}) + "\n")
-        r = _sh(f"{BIN}/mentat-sync-check", env={"MENTAT_SYNC_LOG": log})
-    assert r.returncode == 0, f"sync-check must exit 0 for fresh log: {r.stdout}{r.stderr}"
+def test_mentat_sync_check_absent():
+    p = os.path.join(BIN, "mentat-sync-check")
+    assert not os.path.isfile(p), "bin/mentat-sync-check must be deleted — use vendir sync --diff"
 
 
-# ── C4: mentat-release exclude list ─────────────────────────────────────────
+# ── C4: mentat-release / mentat-setup exclude list ───────────────────────────
 
-def _dry_run_output() -> str:
+def _setup_dry_run_output() -> str:
     with tempfile.TemporaryDirectory() as dest:
         env = {**os.environ, "HOME": dest}
         r = subprocess.run(
-            [os.path.join(BIN, "mentat-release"), "--dry-run"],
+            [os.path.join(BIN, "mentat-setup"), "--dry-run", "--yes"],
             capture_output=True, text=True, cwd=ROOT, env=env,
         )
-    # rsync --dry-run output: lines like "sending incremental file list"
-    # then file paths — filter out diagnostic mentat-release: prefix lines
-    return "\n".join(
-        l for l in (r.stdout + r.stderr).splitlines()
-        if not l.startswith("mentat-release:")
-    )
+    return r.stdout + r.stderr
 
 
-def test_mentat_release_dry_run_excludes_sync_upstream():
-    out = _dry_run_output()
-    assert "mentat-sync-upstream" not in out, (
-        f"mentat-release --dry-run must not transfer mentat-sync-upstream:\n{out}"
-    )
+def test_setup_dry_run_excludes_sync_upstream():
+    out = _setup_dry_run_output()
+    assert "mentat-sync-upstream" not in out
 
 
-def test_mentat_release_dry_run_excludes_upstreams_jsonc():
-    out = _dry_run_output()
-    assert "upstreams.jsonc" not in out, (
-        f"mentat-release --dry-run must not transfer upstreams.jsonc:\n{out}"
-    )
+def test_setup_dry_run_excludes_upstreams_jsonc():
+    out = _setup_dry_run_output()
+    assert "upstreams.jsonc" not in out
 
 
-def test_mentat_release_dry_run_excludes_credits_gen():
-    out = _dry_run_output()
-    assert "mentat-credits-gen" not in out, (
-        f"mentat-release --dry-run must not transfer mentat-credits-gen:\n{out}"
-    )
+def test_setup_dry_run_excludes_credits_gen():
+    out = _setup_dry_run_output()
+    assert "mentat-credits-gen" not in out
 
 
-def test_mentat_release_dry_run_excludes_sync_check():
-    out = _dry_run_output()
-    assert "mentat-sync-check" not in out, (
-        f"mentat-release --dry-run must not transfer mentat-sync-check:\n{out}"
-    )
+def test_setup_dry_run_excludes_sync_check():
+    out = _setup_dry_run_output()
+    assert "mentat-sync-check" not in out
