@@ -328,3 +328,60 @@ def test_orchestrate_mentat_gate_in_land_chunk():
     land_chunk_body = src[start:next_fn]
     assert "mentat-gate" in land_chunk_body or "mentat_gate" in land_chunk_body, \
         "mentat-gate not found inside land_chunk() body — must be a pre-land step"
+
+
+# ── B5: gate_shell advisory shellcheck path ───────────────────────────────────
+
+def test_gate_shell_passes_despite_shellcheck_warning():
+    """Shell file that is bash -n valid but has a shellcheck warning still passes.
+
+    gate_shell() ends with `|| true` on shellcheck, so it is advisory only.
+    Using a sc2006 style backtick substitution which shellcheck warns about but bash accepts.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".sh", mode="w", delete=False, dir=LIB) as f:
+        # SC2006: use $() instead of backticks — bash accepts both, shellcheck warns
+        f.write("#!/usr/bin/env bash\nset -euo pipefail\nval=`echo hello`\necho \"$val\"\n")
+        name = f.name
+    try:
+        r = _gate(name)
+        assert r.returncode == 0, \
+            f"Shell file with shellcheck warning (advisory) should still pass gate:\n{r.stderr}"
+    finally:
+        os.unlink(name)
+
+
+# ── B6: gate_jsonc positive (URL strings) ────────────────────────────────────
+
+def test_gate_jsonc_passes_with_url_strings():
+    """JSONC file with https:// URLs in string values must pass gate (not stripped by sed)."""
+    with tempfile.NamedTemporaryFile(suffix=".jsonc", mode="w", delete=False) as f:
+        f.write('{\n  "url": "https://example.com/path",\n  "other": "value"\n}\n')
+        name = f.name
+    try:
+        r = _gate(name)
+        assert r.returncode == 0, \
+            f"JSONC with https:// URL values should pass gate:\n{r.stderr}\n{r.stdout}"
+    finally:
+        os.unlink(name)
+
+
+# ── B7: mentat_gate dispatcher behavioral routing ────────────────────────────
+
+def test_gate_dispatches_to_adr_checker_by_path():
+    """File in docs/adr/ path triggers gate_adr; valid ADR with all 3 sections exits 0."""
+    path = os.path.join(ADR_DIR, os.listdir(ADR_DIR)[0]) if os.path.isdir(ADR_DIR) else None
+    if path is None:
+        return  # no ADR dir — skip
+    r = _gate(path)
+    assert r.returncode == 0, f"Valid ADR file should route to gate_adr and pass:\n{r.stderr}"
+
+
+def test_gate_dispatches_to_skill_checker_by_path():
+    """File in agents/ path triggers gate_skill; valid skill with frontmatter exits 0."""
+    skill_files = [os.path.join(AGENTS_DIR, f)
+                   for f in os.listdir(AGENTS_DIR) if f.endswith(".md")] \
+        if os.path.isdir(AGENTS_DIR) else []
+    assert skill_files, "No skill files found for dispatcher routing test"
+    r = _gate(skill_files[0])
+    assert r.returncode == 0, \
+        f"Valid skill file should route to gate_skill and pass:\n{r.stderr}"
