@@ -105,15 +105,19 @@ _sync_one() {
   trap 'rm -rf "$tmpdir"' EXIT
 
   echo "mentat-sync-upstream: cloning $key at $pin ..."
-  git clone --depth=1 "$url" "$tmpdir/repo" 2>/dev/null
-
-  if [ "$pin" != "HEAD" ]; then
-    git -C "$tmpdir/repo" fetch --depth=1 origin "$pin" 2>/dev/null || true
-    if ! git -C "$tmpdir/repo" checkout "$pin" 2>/dev/null; then
-      local actual; actual=$(git -C "$tmpdir/repo" rev-parse HEAD)
-      echo "mentat-sync-upstream: WARNING: could not checkout pin '$pin'; at $actual" >&2
-      echo "mentat-sync-upstream: verify pin is a reachable ref — aborting" >&2
-      exit 1
+  if [ "$pin" = "HEAD" ]; then
+    git clone --depth=1 "$url" "$tmpdir/repo" 2>/dev/null
+  else
+    # Clone directly at the pinned tag/branch; falls back to detached HEAD clone + checkout for SHAs
+    if ! git clone --depth=1 --branch "$pin" "$url" "$tmpdir/repo" 2>/dev/null; then
+      # pin is likely a SHA — clone HEAD then fetch by SHA
+      git clone --depth=1 "$url" "$tmpdir/repo" 2>/dev/null
+      git -C "$tmpdir/repo" fetch --depth=1 origin "$pin" 2>/dev/null || true
+      if ! git -C "$tmpdir/repo" checkout "$pin" 2>/dev/null; then
+        echo "mentat-sync-upstream: WARNING: could not checkout pin '$pin'" >&2
+        echo "mentat-sync-upstream: verify pin is a reachable ref — aborting" >&2
+        exit 1
+      fi
     fi
   fi
 
