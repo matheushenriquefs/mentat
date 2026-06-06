@@ -12,6 +12,25 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLASS="${1:?usage: mentat-precommit <class> <file> [...]}"
 shift
 
+# Infer and run the appropriate gate for a file based on its path.
+# Returns 1 if the gate fails, 0 if it passes or no gate applies.
+gate_auto() {
+  local f="$1"
+  case "$f" in
+    */docs/adr/*.md)             gate_adr      "$f" ;;
+    */skills/*/SKILL.md)         gate_skill    "$f" ;;
+    */commands/*.md)             gate_command  "$f" ;;
+    */.github/workflows/*.yml|\
+    */.github/workflows/*.yaml)  gate_workflow "$f" ;;
+    # harness before *.sh — harness files match both; more-specific wins
+    */bin/lib/harness/*.sh)      gate_harness  "$f" ;;
+    *.sh)                        gate_shell    "$f" ;;
+    *.jsonc)                     gate_jsonc    "$f" ;;
+    *.jq)                        gate_jq       "$f" ;;
+    *) return 0 ;;  # no gate for this file type
+  esac
+}
+
 fail=0
 for f in "$@"; do
   [ -f "$f" ] || continue
@@ -24,19 +43,7 @@ for f in "$@"; do
     jsonc)    gate_jsonc    "$f" || fail=1 ;;
     jq)       gate_jq       "$f" || fail=1 ;;
     harness)  gate_harness  "$f" || fail=1 ;;
-    auto)
-      case "$f" in
-        */docs/adr/*.md)              gate_adr      "$f" || fail=1 ;;
-        */skills/*/SKILL.md)          gate_skill    "$f" || fail=1 ;;
-        */commands/*.md)              gate_command  "$f" || fail=1 ;;
-        */.github/workflows/*.yml|\
-        */.github/workflows/*.yaml)   gate_workflow "$f" || fail=1 ;;
-        */bin/lib/harness/*.sh)       gate_harness  "$f" || fail=1 ;;
-        *.sh)                         gate_shell    "$f" || fail=1 ;;
-        *.jsonc)                      gate_jsonc    "$f" || fail=1 ;;
-        *.jq)                         gate_jq       "$f" || fail=1 ;;
-        *) ;;  # no gate for this file type
-      esac ;;
+    auto)     gate_auto     "$f" || fail=1 ;;
     *) echo "mentat-precommit: unknown class '$CLASS'" >&2; exit 1 ;;
   esac
 done
