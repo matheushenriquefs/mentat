@@ -8,3 +8,9 @@ harness_gemini_cmd() {  # $1 = prompt string; prints NUL-delimited argv
 }
 
 harness_gemini_output_format() { printf 'stream-json\n'; }
+
+harness_gemini_normalize() {
+  # Gemini emits a single final JSON blob; wrap it once
+  jq -cs --arg agent "gemini" --arg sess "${MENTAT_SESSION:-unknown}" \
+    '.[0] as $blob | {ts:(now|todate), agent:$agent, session:$sess, event:"gemini.final", payload:$blob}'
+}

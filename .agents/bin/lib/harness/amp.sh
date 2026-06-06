@@ -8,3 +8,8 @@ harness_amp_cmd() {  # $1 = prompt string; prints NUL-delimited argv
 }
 
 harness_amp_output_format() { printf 'stream-json\n'; }
+
+harness_amp_normalize() {
+  jq -c --arg agent "amp" --arg sess "${MENTAT_SESSION:-unknown}" \
+    '{ts:(now|todate), agent:$agent, session:$sess, event:(.type // "unknown" | tostring), payload:(. - {type})}'
+}

@@ -8,3 +8,12 @@ harness_copilot_cmd() {  # $1 = prompt string; prints NUL-delimited argv
 }
 
 harness_copilot_output_format() { printf 'text\n'; }
+
+harness_copilot_normalize() {
+  # Copilot emits plain text; wrap each line as stderr.line
+  local sess="${MENTAT_SESSION:-unknown}"
+  while IFS= read -r line; do
+    jq -cn --arg agent "copilot" --arg sess "$sess" --arg line "$line" \
+      '{ts:(now|todate), agent:$agent, session:$sess, event:"stderr.line", payload:{line:$line}}'
+  done
+}

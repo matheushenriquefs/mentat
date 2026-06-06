@@ -49,6 +49,8 @@ gate_harness() {
     || { echo "$1: missing harness_${name}_cmd"; return 1; }
   bash -c "source $(printf %q "$1"); declare -f harness_${name}_output_format >/dev/null" \
     || { echo "$1: missing harness_${name}_output_format"; return 1; }
+  bash -c "source $(printf %q "$1"); declare -f harness_${name}_normalize >/dev/null" \
+    || { echo "$1: missing harness_${name}_normalize"; return 1; }
 }
 
 mentat_gate() {

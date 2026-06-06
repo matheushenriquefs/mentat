@@ -8,3 +8,9 @@ harness_openhands_cmd() {  # $1 = prompt string; prints NUL-delimited argv
 }
 
 harness_openhands_output_format() { printf 'text\n'; }
+
+harness_openhands_normalize() {
+  # OpenHands emits event-stream NDJSON; event = .action or .observation
+  jq -c --arg agent "openhands" --arg sess "${MENTAT_SESSION:-unknown}" \
+    '{ts:(now|todate), agent:$agent, session:$sess, event:(.action // .observation // "unknown" | tostring), payload:(. - {action,observation})}'
+}

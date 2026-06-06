@@ -8,3 +8,9 @@ harness_codex_cmd() {  # $1 = prompt string; prints NUL-delimited argv
 }
 
 harness_codex_output_format() { printf 'stream-json\n'; }
+
+harness_codex_normalize() {
+  # Codex emits cumulative usage totals; normalize same as stream-json
+  jq -c --arg agent "codex" --arg sess "${MENTAT_SESSION:-unknown}" \
+    '{ts:(now|todate), agent:$agent, session:$sess, event:(.type // "unknown" | tostring), payload:(. - {type})}'
+}

@@ -89,7 +89,12 @@ run_chunk() {
   ( cd "$wt" && ~/.agents/bin/mentat-container-up )
   local cmd=()
   while IFS= read -r -d '' tok; do cmd+=("$tok"); done < <(build_cmd "/to-implement $plan $slug")
-  ( cd "$wt" && "${cmd[@]}" ) >>"$logf" 2>&1
+  local hfile="$_LIB/harness/${HARNESS}.sh"
+  . "$hfile"
+  local norm_fn="harness_${HARNESS//-/_}_normalize"
+  local stdout_f="${logf%.jsonl}.stdout"
+  # Pipe raw harness output: tee to .stdout, normalize to canonical JSONL
+  ( cd "$wt" && "${cmd[@]}" ) 2>&1 | tee "$stdout_f" | "$norm_fn" >>"$logf"
 }
 
 land_chunk() {
