@@ -74,17 +74,28 @@ VENDOR_PATH=$(echo "$UPSTREAM" | jq -r '.vendor_path')
 SUBTREE=$(echo "$UPSTREAM" | jq -r '.subtree_path // ""')
 COMMIT_FLAG=$(echo "$UPSTREAM" | jq -r '.commit')
 
-FULL_VENDOR="$REPO_ROOT/$VENDOR_PATH"
+# Guard against path traversal: vendor_path must resolve inside REPO_ROOT
+FULL_VENDOR="$(cd "$REPO_ROOT" && realpath -m "$VENDOR_PATH")"
+if [[ "$FULL_VENDOR" != "$REPO_ROOT"/* ]]; then
+  echo "mentat-sync-upstream: vendor_path '$VENDOR_PATH' escapes repo root — refusing" >&2
+  exit 1
+fi
+
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 echo "mentat-sync-upstream: cloning $NAME at $PIN ..."
-git clone --depth=1 "$URL" "$TMPDIR/repo" 2>/dev/null
+git clone --depth=1 "$URL" "$TMPDIR/repo"
 
 if [ "$PIN" != "HEAD" ]; then
   # Fetch the specific commit if shallow clone didn't get it
   git -C "$TMPDIR/repo" fetch --depth=1 origin "$PIN" 2>/dev/null || true
-  git -C "$TMPDIR/repo" checkout "$PIN" 2>/dev/null || true
+  if ! git -C "$TMPDIR/repo" checkout "$PIN" 2>/dev/null; then
+    ACTUAL=$(git -C "$TMPDIR/repo" rev-parse HEAD)
+    echo "mentat-sync-upstream: WARNING: could not checkout pin '$PIN'; at $ACTUAL" >&2
+    echo "mentat-sync-upstream: verify pin is a reachable ref — aborting to avoid syncing wrong tree" >&2
+    exit 1
+  fi
 fi
 
 SRC="$TMPDIR/repo"
