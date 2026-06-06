@@ -89,7 +89,7 @@ run_chunk() {
   export MENTAT_WORKTREE="$wt"
   ( cd "$wt" && ~/.agents/bin/mentat-container-up )
   local cmd=()
-  while IFS= read -r -d '' tok; do cmd+=("$tok"); done < <(build_cmd "/to-implement $plan $slug")
+  while IFS= read -r -d '' tok; do cmd+=("$tok"); done < <(build_cmd "/mentat-implement $plan")
   local hfile="$_LIB/harness/${HARNESS}.sh"
   . "$hfile"
   local norm_fn="harness_${HARNESS//-/_}_normalize"
