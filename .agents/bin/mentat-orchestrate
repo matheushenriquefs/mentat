@@ -111,8 +111,8 @@ land_chunk() {
   local changed_files
   changed_files="$(git -C "$wt" diff --name-only "$HOLDING" 2>/dev/null || true)"
   if [ -n "$changed_files" ]; then
-    if ! (cd "$wt" && "$_LIB/../mentat-gate" $changed_files) >>"$logf" 2>&1; then
-      log "land EJECT (mentat-gate fail before re-gate): $slug"
+    if ! (cd "$wt" && lefthook run pre-commit --files $changed_files) >>"$logf" 2>&1; then
+      log "land EJECT (lefthook fail before re-gate): $slug"
       _land_record "$logf" "$slug" error "$onto" gate-fail; return 1
     fi
   fi

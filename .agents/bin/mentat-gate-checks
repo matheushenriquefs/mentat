@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# bin/mentat-gate-checks — dispatch per-class gate check, invoked by lefthook.
+# Usage: mentat-gate-checks <class> <file> [<file> ...]
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+. "$HERE/lib/strict.sh"
+# shellcheck source=/dev/null
+. "$HERE/lib/gates.sh"
+
+CLASS="${1:?usage: mentat-gate-checks <class> <file> [...]}"
+shift
+
+fail=0
+for f in "$@"; do
+  [ -f "$f" ] || continue
+  case "$CLASS" in
+    adr)      gate_adr      "$f" || fail=1 ;;
+    skill)    gate_skill    "$f" || fail=1 ;;
+    command)  gate_command  "$f" || fail=1 ;;
+    workflow) gate_workflow "$f" || fail=1 ;;
+    shell)    gate_shell    "$f" || fail=1 ;;
+    jsonc)    gate_jsonc    "$f" || fail=1 ;;
+    jq)       gate_jq       "$f" || fail=1 ;;
+    harness)  gate_harness  "$f" || fail=1 ;;
+    *) echo "mentat-gate-checks: unknown class '$CLASS'" >&2; exit 1 ;;
+  esac
+done
+exit "$fail"

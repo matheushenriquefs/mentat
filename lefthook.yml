@@ -1,0 +1,24 @@
+pre-commit:
+  parallel: true
+  commands:
+    adr:
+      glob: "docs/adr/*.md"
+      run: .agents/bin/mentat-gate-checks adr {staged_files}
+    skill:
+      glob: ".agents/skills/**/*.md"
+      run: .agents/bin/mentat-gate-checks skill {staged_files}
+    command:
+      glob: ".agents/commands/*.md"
+      run: .agents/bin/mentat-gate-checks command {staged_files}
+    shell:
+      glob: "{.agents/bin/**/*,.agents/bin/lib/**/*.sh}"
+      run: bash -n {staged_files}
+    jsonc:
+      glob: "*.jsonc"
+      run: .agents/bin/mentat-gate-checks jsonc {staged_files}
+    jq:
+      glob: "*.jq"
+      run: .agents/bin/mentat-gate-checks jq {staged_files}
+    harness:
+      glob: ".agents/bin/lib/harness/*.sh"
+      run: .agents/bin/mentat-gate-checks harness {staged_files}

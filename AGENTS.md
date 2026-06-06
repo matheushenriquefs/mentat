@@ -162,8 +162,9 @@ Bash + `jq` only on the host (ADR 0004). Target-repo tools run via `mentat-conta
 ## Quality Gates
 
 Every modified file must pass its class checker before commit.
-Run locally: `.agents/bin/mentat-gate $(git diff --name-only "$base")`.
-Wired into `mentat-orchestrate` pre-land step (host-side; harness tools only — ADR 0004).
+Run locally: `lefthook run pre-commit --files $(git diff --name-only "$base")`.
+Wired into `mentat-orchestrate` pre-land step via lefthook (host-side; harness tools only — ADR 0004).
+Checker dispatch: [.agents/bin/mentat-gate-checks](.agents/bin/mentat-gate-checks) (invoked by lefthook).
 
 | Class | Glob | Check |
 |-------|------|-------|

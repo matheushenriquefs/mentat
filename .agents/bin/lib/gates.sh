@@ -37,6 +37,11 @@ gate_jsonc() {
   sed '/^[[:space:]]*\/\//d' "$1" | jq -e '.' >/dev/null || { echo "$1: jq parse fail"; return 1; }
 }
 
+# @class: JQ  # @glob: *.jq  # @check: jq -n -c -f <file> parse check
+gate_jq() {
+  jq -n -c -f "$1" < /dev/null >/dev/null || { echo "$1: jq parse fail"; return 1; }
+}
+
 # @class: Harness  # @glob: bin/lib/harness/*.sh  # @check: harness_<name>_cmd and harness_<name>_output_format both defined
 gate_harness() {
   local name; name="$(basename "$1" .sh | tr - _)"
@@ -57,6 +62,7 @@ mentat_gate() {
                         gate_workflow "$f" ;;
     */bin/lib/harness/*.sh)
                         gate_harness  "$f" ;;
+    *.jq)               gate_jq       "$f" ;;
     *.sh|*/bin/mentat-*|*/bin/lib/*)
                         gate_shell    "$f" ;;
     *.jsonc)            gate_jsonc    "$f" ;;

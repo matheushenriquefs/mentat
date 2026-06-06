@@ -8,14 +8,23 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 . "$HERE/lib/strict.sh"
 
-FORCE=0
+FORCE_DIRTY=0
+FORCE_GATE=0
+YES=0
 DRY_RUN=0
 
 for arg in "$@"; do
   case "$arg" in
-    --force)   FORCE=1 ;;
-    --dry-run) DRY_RUN=1 ;;
-    *) echo "usage: mentat-release [--force] [--dry-run]" >&2; exit 1 ;;
+    --force-dirty) FORCE_DIRTY=1 ;;
+    --force-gate)  FORCE_GATE=1 ;;
+    --yes)         YES=1 ;;
+    --dry-run)     DRY_RUN=1 ;;
+    --force)
+      echo "mentat-release: --force removed; use --force-dirty (uncommitted) or --force-gate (gate failure)" >&2
+      exit 1 ;;
+    *)
+      echo "usage: mentat-release [--force-dirty] [--force-gate] [--yes] [--dry-run]" >&2
+      exit 1 ;;
   esac
 done
 
@@ -29,10 +38,10 @@ fi
 
 cd "$REPO_ROOT"
 
-if [ "$FORCE" -eq 0 ]; then
+if [ "$FORCE_DIRTY" -eq 0 ]; then
   UNCOMMITTED=$(git -C "$REPO_ROOT" status --porcelain "$AGENTS_DIR" 2>/dev/null | grep -c '^[MADRCU?]') || UNCOMMITTED=0
   if [ "$UNCOMMITTED" -gt 0 ]; then
-    echo "mentat-release: $UNCOMMITTED uncommitted change(s) in .agents/ — commit first or use --force" >&2
+    echo "mentat-release: $UNCOMMITTED uncommitted change(s) in .agents/ — commit first or use --force-dirty" >&2
     exit 1
   fi
 fi
@@ -48,7 +57,11 @@ if [ -n "$TRACKED_FILES" ]; then
   done <<< "$TRACKED_FILES"
   if [ "$GATE_FAIL" -ne 0 ]; then
     echo "mentat-release: gate check failed — fix errors above before releasing" >&2
-    [ "$FORCE" -eq 0 ] && exit 1
+    if [ "$FORCE_GATE" -eq 1 ]; then
+      echo "mentat-release: WARNING: proceeding with --force-gate despite gate failure" >&2
+    else
+      exit 1
+    fi
   fi
 fi
 
@@ -73,6 +86,22 @@ RSYNC_ARGS=(-av --delete -L
 if [ "$DRY_RUN" -eq 1 ]; then
   RSYNC_ARGS+=(-n)
   echo "mentat-release: dry-run — no files will be written"
+fi
+
+# Require explicit confirmation before destructive delete (non-dry-run, non-yes).
+if [ "$DRY_RUN" -eq 0 ] && [ "$YES" -eq 0 ]; then
+  DELETE_LIST=$(rsync "${RSYNC_ARGS[@]}" -n "$AGENTS_DIR/" "$HOME/.agents/" 2>/dev/null \
+    | grep '^deleting ' || true)
+  if [ -n "$DELETE_LIST" ]; then
+    echo "mentat-release: files to delete from ~/.agents/:"
+    echo "$DELETE_LIST"
+    printf 'Proceed? [y/N] '
+    read -r reply
+    case "$reply" in
+      [Yy]*) ;;
+      *) echo "mentat-release: aborted"; exit 1 ;;
+    esac
+  fi
 fi
 
 rsync "${RSYNC_ARGS[@]}" "$AGENTS_DIR/" "$HOME/.agents/"

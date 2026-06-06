@@ -4,13 +4,14 @@ import stat
 import subprocess
 import tempfile
 
-BIN = os.path.join(os.path.dirname(__file__), "..", "..", "bin")
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+BIN = os.path.join(ROOT, ".agents", "bin")
 LIB = os.path.join(BIN, "lib")
-AGENTS_MD = os.path.join(os.path.dirname(__file__), "..", "..", "AGENTS.md")
-MENTAT_GATE = os.path.join(BIN, "mentat-gate")
+AGENTS_MD = os.path.join(ROOT, "AGENTS.md")
+GATE_CHECKS = os.path.join(BIN, "mentat-gate-checks")
 GATES_SH = os.path.join(LIB, "gates.sh")
-ADR_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "adr")
-AGENTS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "agents")
+ADR_DIR = os.path.join(ROOT, ".agents", "docs", "adr")
+AGENTS_DIR = os.path.join(ROOT, ".agents", "agents")
 
 
 def _read(path: str) -> str:
@@ -23,8 +24,25 @@ def _bash_n(path: str):
     assert r.returncode == 0, f"bash -n failed: {r.stderr}"
 
 
+def _infer_class(path: str) -> str | None:
+    import fnmatch
+    if "/docs/adr/" in path and path.endswith(".md"): return "adr"
+    if "/agents/" in path and path.endswith(".md"): return "skill"
+    if "/commands/" in path and path.endswith(".md"): return "command"
+    if os.path.basename(path) in ("AGENTS.md", "CONTEXT.md", "README.md"): return "workflow"
+    if "/bin/lib/harness/" in path and path.endswith(".sh"): return "harness"
+    if path.endswith(".sh") or "/bin/mentat-" in path or "/bin/lib/" in path: return "shell"
+    if path.endswith(".jsonc"): return "jsonc"
+    if path.endswith(".jq"): return "jq"
+    return None  # unknown → pass silently
+
+
 def _gate(path: str) -> subprocess.CompletedProcess:
-    return subprocess.run([MENTAT_GATE, path], capture_output=True, text=True)
+    cls = _infer_class(path)
+    if cls is None:
+        # Unknown class — silent pass (mentat_gate returns 0 for unknown)
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+    return subprocess.run([GATE_CHECKS, cls, path], capture_output=True, text=True)
 
 
 # ── S5.1: gates.sh exists + syntax ───────────────────────────────────────────
@@ -79,12 +97,12 @@ def test_agents_md_has_quality_gates_section():
     assert "## Quality Gates" in _read(AGENTS_MD)
 
 
-def test_agents_md_quality_gates_mentions_mentat_gate():
+def test_agents_md_quality_gates_mentions_lefthook():
     src = _read(AGENTS_MD)
     idx = src.find("## Quality Gates")
     assert idx != -1
     section = src[idx:]
-    assert "mentat-gate" in section
+    assert "lefthook" in section or "mentat-gate-checks" in section
 
 
 def test_agents_md_quality_gates_has_table():
@@ -105,26 +123,26 @@ def test_agents_md_quality_gates_cross_ref_links():
     assert re.search(r'\[.+\]\(.+\.(?:md|sh)\)', section), "No cross-ref link in Quality Gates section"
 
 
-# ── S5.3: mentat-gate binary ─────────────────────────────────────────────────
+# ── S5.3: mentat-gate-checks binary ──────────────────────────────────────────
 
-def test_mentat_gate_exists():
-    assert os.path.isfile(MENTAT_GATE)
-
-
-def test_mentat_gate_is_executable():
-    assert os.access(MENTAT_GATE, os.X_OK)
+def test_mentat_gate_checks_exists():
+    assert os.path.isfile(GATE_CHECKS)
 
 
-def test_mentat_gate_syntax():
-    _bash_n(MENTAT_GATE)
+def test_mentat_gate_checks_is_executable():
+    assert os.access(GATE_CHECKS, os.X_OK)
 
 
-def test_mentat_gate_sources_gates_sh():
-    assert "gates.sh" in _read(MENTAT_GATE)
+def test_mentat_gate_checks_syntax():
+    _bash_n(GATE_CHECKS)
 
 
-def test_mentat_gate_sources_strict():
-    assert "strict.sh" in _read(MENTAT_GATE)
+def test_mentat_gate_checks_sources_gates_sh():
+    assert "gates.sh" in _read(GATE_CHECKS)
+
+
+def test_mentat_gate_checks_sources_strict():
+    assert "strict.sh" in _read(GATE_CHECKS)
 
 
 # ── S5.4: positive fixtures — real repo files pass ───────────────────────────
@@ -140,11 +158,6 @@ def test_gate_passes_existing_adr():
 def test_gate_passes_gates_sh():
     r = _gate(GATES_SH)
     assert r.returncode == 0, f"gate_shell failed on gates.sh:\n{r.stderr}\n{r.stdout}"
-
-
-def test_gate_passes_mentat_gate():
-    r = _gate(MENTAT_GATE)
-    assert r.returncode == 0, f"gate_shell failed on mentat-gate:\n{r.stderr}\n{r.stdout}"
 
 
 def test_gate_passes_unknown_extension():
@@ -311,23 +324,21 @@ def test_gate_workflow_fails_without_cross_ref_link():
 
 # ── S5.3: orchestrate wire-in ─────────────────────────────────────────────────
 
-def test_orchestrate_references_mentat_gate():
-    """mentat-orchestrate must call mentat-gate as pre-land step."""
+def test_orchestrate_references_lefthook():
+    """mentat-orchestrate must call lefthook as pre-land step."""
     src = _read(os.path.join(BIN, "mentat-orchestrate"))
-    assert "mentat-gate" in src or "mentat_gate" in src
+    assert "lefthook" in src
 
 
-def test_orchestrate_mentat_gate_in_land_chunk():
-    """mentat-gate call must appear inside land_chunk function (pre-land context)."""
+def test_orchestrate_lefthook_in_land_chunk():
+    """lefthook call must appear inside land_chunk function (pre-land context)."""
     src = _read(os.path.join(BIN, "mentat-orchestrate"))
-    # Find land_chunk function body
     start = src.find("land_chunk()")
     assert start != -1, "land_chunk() not found in mentat-orchestrate"
-    # Find the next top-level function definition after land_chunk
     next_fn = src.find("\n}", start)
     land_chunk_body = src[start:next_fn]
-    assert "mentat-gate" in land_chunk_body or "mentat_gate" in land_chunk_body, \
-        "mentat-gate not found inside land_chunk() body — must be a pre-land step"
+    assert "lefthook" in land_chunk_body, \
+        "lefthook not found inside land_chunk() body — must be a pre-land step"
 
 
 # ── B5: gate_shell advisory shellcheck path ───────────────────────────────────
