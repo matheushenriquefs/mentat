@@ -5,6 +5,7 @@
 set -euo pipefail
 
 [ -f "$PWD/.git" ] || { echo "mentat-container-up: must run from inside a git worktree" >&2; exit 2; }
+df -k . | awk 'NR==2 && $5+0 >= 95 {print "mentat-container-up: ERR disk " $5 "% full — free space before building container"; exit 1}'
 
 WT="$PWD"
 SLUG=$(basename "$WT")

@@ -1,4 +1,4 @@
-"""P5: quality gates — bin/lib/gates.sh, bin/mentat-gate, AGENTS.md section."""
+"""P5: quality gates — bin/lib/precommit-gates.sh, bin/mentat-precommit, AGENTS.md section."""
 import os
 import stat
 import subprocess
@@ -8,8 +8,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 BIN = os.path.join(ROOT, ".agents", "bin")
 LIB = os.path.join(BIN, "lib")
 AGENTS_MD = os.path.join(ROOT, "AGENTS.md")
-GATE_CHECKS = os.path.join(BIN, "mentat-gate-checks")
-GATES_SH = os.path.join(LIB, "gates.sh")
+GATE_CHECKS = os.path.join(BIN, "mentat-precommit")
+GATES_SH = os.path.join(LIB, "precommit-gates.sh")
 ADR_DIR = os.path.join(ROOT, ".agents", "docs", "adr")
 AGENTS_DIR = os.path.join(ROOT, ".agents", "agents")
 
@@ -45,7 +45,7 @@ def _gate(path: str) -> subprocess.CompletedProcess:
     return subprocess.run([GATE_CHECKS, cls, path], capture_output=True, text=True)
 
 
-# ── S5.1: gates.sh exists + syntax ───────────────────────────────────────────
+# ── S5.1: precommit-gates.sh exists + syntax ───────────────────────────────────────────
 
 def test_gates_sh_exists():
     assert os.path.isfile(GATES_SH)
@@ -102,7 +102,7 @@ def test_agents_md_quality_gates_mentions_lefthook():
     idx = src.find("## Quality Gates")
     assert idx != -1
     section = src[idx:]
-    assert "lefthook" in section or "mentat-gate-checks" in section
+    assert "lefthook" in section or "mentat-precommit" in section
 
 
 def test_agents_md_quality_gates_has_table():
@@ -123,7 +123,7 @@ def test_agents_md_quality_gates_cross_ref_links():
     assert re.search(r'\[.+\]\(.+\.(?:md|sh)\)', section), "No cross-ref link in Quality Gates section"
 
 
-# ── S5.3: mentat-gate-checks binary ──────────────────────────────────────────
+# ── S5.3: mentat-precommit binary ──────────────────────────────────────────
 
 def test_mentat_gate_checks_exists():
     assert os.path.isfile(GATE_CHECKS)
@@ -138,7 +138,7 @@ def test_mentat_gate_checks_syntax():
 
 
 def test_mentat_gate_checks_sources_gates_sh():
-    assert "gates.sh" in _read(GATE_CHECKS)
+    assert "precommit-gates.sh" in _read(GATE_CHECKS)
 
 
 def test_mentat_gate_checks_sources_strict():
@@ -157,7 +157,7 @@ def test_gate_passes_existing_adr():
 
 def test_gate_passes_gates_sh():
     r = _gate(GATES_SH)
-    assert r.returncode == 0, f"gate_shell failed on gates.sh:\n{r.stderr}\n{r.stdout}"
+    assert r.returncode == 0, f"gate_shell failed on precommit-gates.sh:\n{r.stderr}\n{r.stdout}"
 
 
 def test_gate_passes_unknown_extension():
@@ -325,14 +325,14 @@ def test_gate_workflow_fails_without_cross_ref_link():
 # ── S5.3: orchestrate wire-in ─────────────────────────────────────────────────
 
 def test_orchestrate_gates_files_in_land_chunk():
-    """land_chunk must gate changed files via gates.sh (not mentat-gate binary)."""
+    """land_chunk must gate changed files via precommit-gates.sh (not mentat-gate binary)."""
     src = _read(os.path.join(BIN, "mentat-orchestrate"))
     start = src.find("land_chunk()")
     assert start != -1, "land_chunk() not found in mentat-orchestrate"
     next_fn = src.find("\n}", start)
     land_chunk_body = src[start:next_fn]
-    assert "gates.sh" in land_chunk_body or "mentat_gate" in land_chunk_body, \
-        "land_chunk() must source gates.sh / call mentat_gate() for pre-land gate"
+    assert "precommit-gates.sh" in land_chunk_body or "mentat_gate" in land_chunk_body, \
+        "land_chunk() must source precommit-gates.sh / call mentat_gate() for pre-land gate"
 
 
 def test_orchestrate_land_chunk_no_mentat_gate_binary():
