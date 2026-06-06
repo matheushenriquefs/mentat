@@ -1,0 +1,210 @@
+"""P3: config loader + harness matrix — static + behavioral assertions."""
+import os
+import subprocess
+import json
+import tempfile
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+AGENTS = os.path.join(ROOT, ".agents")
+BIN = os.path.join(AGENTS, "bin")
+LIB = os.path.join(BIN, "lib")
+DOCS = os.path.join(AGENTS, "docs")
+
+HARNESSES = ["claude-code", "cursor", "aider", "codex", "copilot", "gemini", "openhands", "amp"]
+
+
+def _sh(cmd: str, cwd: str = ROOT, env: dict = None) -> subprocess.CompletedProcess:
+    import os as _os
+    e = {**_os.environ, **(env or {})}
+    return subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=cwd, env=e)
+
+
+# S3.1 — lib/config.sh exists and exports mentat_config()
+
+def test_config_sh_exists():
+    assert os.path.isfile(os.path.join(LIB, "config.sh"))
+
+
+def test_config_sh_syntax_ok():
+    r = _sh(f"bash -n {LIB}/config.sh")
+    assert r.returncode == 0, r.stderr
+
+
+def test_config_sh_defines_mentat_config():
+    with open(os.path.join(LIB, "config.sh")) as f:
+        body = f.read()
+    assert "mentat_config()" in body or "mentat_config ()" in body
+
+
+def test_config_sh_defines_mentat_config_validate():
+    with open(os.path.join(LIB, "config.sh")) as f:
+        body = f.read()
+    assert "mentat_config_validate()" in body or "mentat_config_validate ()" in body
+
+
+def test_mentat_config_reads_harness_name():
+    cfg = '{"harness":{"name":"claude-code","model":"sonnet"},"agents":{"max_concurrent":3},"diff":{"tool":"delta"},"editor":{"name":"cursor"},"plugins":[]}'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
+        f.write(cfg)
+        cfgpath = f.name
+    try:
+        r = _sh(
+            f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config harness.name\'',
+        )
+        assert r.returncode == 0, r.stderr
+        assert r.stdout.strip() == "claude-code"
+    finally:
+        os.unlink(cfgpath)
+
+
+def test_mentat_config_reads_max_concurrent():
+    cfg = '{"harness":{"name":"cursor","model":""},"agents":{"max_concurrent":5},"diff":{"tool":""},"editor":{"name":""},"plugins":[]}'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
+        f.write(cfg)
+        cfgpath = f.name
+    try:
+        r = _sh(
+            f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config agents.max_concurrent\'',
+        )
+        assert r.returncode == 0, r.stderr
+        assert r.stdout.strip() == "5"
+    finally:
+        os.unlink(cfgpath)
+
+
+def test_mentat_config_validate_fails_bad_harness():
+    cfg = '{"harness":{"name":"badname","model":""},"agents":{"max_concurrent":3},"diff":{"tool":""},"editor":{"name":""},"plugins":[]}'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
+        f.write(cfg)
+        cfgpath = f.name
+    try:
+        r = _sh(
+            f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'',
+        )
+        assert r.returncode != 0, "validate must fail for unknown harness name"
+    finally:
+        os.unlink(cfgpath)
+
+
+def test_mentat_config_validate_passes_valid():
+    cfg = '{"harness":{"name":"claude-code","model":"sonnet"},"agents":{"max_concurrent":3},"diff":{"tool":"delta"},"editor":{"name":"cursor"},"plugins":[]}'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
+        f.write(cfg)
+        cfgpath = f.name
+    try:
+        r = _sh(
+            f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'',
+        )
+        assert r.returncode == 0, r.stderr
+    finally:
+        os.unlink(cfgpath)
+
+
+# S3.2 — schema example + default config
+
+def test_mentat_jsonc_example_exists():
+    assert os.path.isfile(os.path.join(AGENTS, ".mentat.jsonc.example"))
+
+
+def test_mentat_jsonc_exists():
+    assert os.path.isfile(os.path.join(AGENTS, ".mentat.jsonc"))
+
+
+def test_mentat_jsonc_valid_json_after_comment_strip():
+    path = os.path.join(AGENTS, ".mentat.jsonc")
+    r = _sh(f"sed 's|//.*||g' {path} | jq -e '.'")
+    assert r.returncode == 0, f"jq parse failed: {r.stderr}"
+
+
+def test_mentat_jsonc_has_required_keys():
+    path = os.path.join(AGENTS, ".mentat.jsonc")
+    r = _sh(f"sed 's|//.*||g' {path} | jq -r '.harness.name,.agents.max_concurrent,.diff.tool,.editor.name'")
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.strip().splitlines()
+    assert len(lines) == 4, f"expected 4 lines, got: {lines}"
+
+
+# S3.3 — mentat-orchestrate reads config; CLI flags override
+
+def test_orchestrate_sources_config_sh():
+    with open(os.path.join(BIN, "mentat-orchestrate")) as f:
+        body = f.read()
+    assert "config.sh" in body, "mentat-orchestrate must source lib/config.sh"
+
+
+def test_orchestrate_uses_mentat_config_for_harness():
+    with open(os.path.join(BIN, "mentat-orchestrate")) as f:
+        body = f.read()
+    assert "mentat_config harness.name" in body or "mentat_config" in body
+
+
+def test_orchestrate_flag_still_accepted():
+    # --harness flag must still be parseable (override path)
+    with open(os.path.join(BIN, "mentat-orchestrate")) as f:
+        body = f.read()
+    assert "--harness=" in body
+
+
+def test_orchestrate_parallel_cap_from_config():
+    with open(os.path.join(BIN, "mentat-orchestrate")) as f:
+        body = f.read()
+    assert "max_concurrent" in body or "PARALLEL_CAP" in body
+
+
+# S3.3b — per-harness lib/harness-<name>.sh files
+
+def test_harness_files_exist():
+    for h in HARNESSES:
+        path = os.path.join(LIB, f"harness-{h}.sh")
+        assert os.path.isfile(path), f"Missing: {path}"
+
+
+def test_harness_files_syntax_ok():
+    for h in HARNESSES:
+        path = os.path.join(LIB, f"harness-{h}.sh")
+        r = _sh(f"bash -n {path}")
+        assert r.returncode == 0, f"bash -n failed for harness-{h}.sh: {r.stderr}"
+
+
+def test_harness_files_define_cmd_function():
+    for h in HARNESSES:
+        path = os.path.join(LIB, f"harness-{h}.sh")
+        with open(path) as f:
+            body = f.read()
+        fn = f"harness_{h.replace('-', '_')}_cmd"
+        assert fn + "()" in body or fn + " ()" in body, f"{path} must define {fn}()"
+
+
+def test_orchestrate_dispatches_harness_files():
+    with open(os.path.join(BIN, "mentat-orchestrate")) as f:
+        body = f.read()
+    assert "harness-${HARNESS}.sh" in body or 'harness-"$HARNESS".sh' in body or "harness_${HARNESS}_cmd" in body
+
+
+# S3.4 — diff/editor knobs wired from config
+
+def test_orchestrate_no_hardcoded_cursor_agent():
+    with open(os.path.join(BIN, "mentat-orchestrate")) as f:
+        body = f.read()
+    # cursor-agent invocation should now live in harness-cursor.sh, not inlined
+    assert "cursor-agent" not in body, "cursor-agent must move to harness-cursor.sh"
+
+
+def test_orchestrate_no_hardcoded_claude_p():
+    with open(os.path.join(BIN, "mentat-orchestrate")) as f:
+        body = f.read()
+    assert "claude -p" not in body, "claude -p must move to harness-claude-code.sh"
+
+
+# S3.5 — harness matrix doc
+
+def test_harness_matrix_doc_exists():
+    assert os.path.isfile(os.path.join(DOCS, "harness-matrix.md"))
+
+
+def test_harness_matrix_covers_all_harnesses():
+    path = os.path.join(DOCS, "harness-matrix.md")
+    with open(path) as f:
+        body = f.read()
+    for h in HARNESSES:
+        assert h in body, f"harness-matrix.md missing entry for {h}"

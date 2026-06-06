@@ -10,23 +10,28 @@ _LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
 . "$_LIB/strict.sh"
 . "$_LIB/log.sh"
 . "$_LIB/here.sh"
+. "$_LIB/config.sh"
 _LOG_PREFIX=mentat-orchestrate
 
-HARNESS=cursor; MODEL=""
+# Load config defaults; CLI flags override (last-write-wins)
+HARNESS="$(mentat_config harness.name)"; HARNESS="${HARNESS:-cursor}"
+MODEL="$(mentat_config harness.model)"; MODEL="${MODEL:-}"
+PARALLEL_CAP="$(mentat_config agents.max_concurrent)"; PARALLEL_CAP="${PARALLEL_CAP:-3}"
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --harness=*) HARNESS="${1#*=}"; shift ;;
     --model=*)   MODEL="${1#*=}";   shift ;;
     --) shift; break ;;
-    -*) die "unknown flag $1 (usage: mentat-orchestrate [--harness=cursor|claude-code] [--model=<slug>] <holding-branch> <plan.md> [...])" ;;
+    -*) die "unknown flag $1 (usage: mentat-orchestrate [--harness=<name>] [--model=<slug>] <holding-branch> <plan.md> [...])" ;;
     *)  break ;;
   esac
 done
 
-HOLDING="${1:?usage: mentat-orchestrate [--harness=cursor|claude-code] [--model=<slug>] <holding-branch> <plan.md> [<plan.md> ...]}"
+HOLDING="${1:?usage: mentat-orchestrate [--harness=<name>] [--model=<slug>] <holding-branch> <plan.md> [<plan.md> ...]}"
 shift
 [ "$#" -ge 1 ] || die "need at least one plan path"
-[ "$#" -le 3 ] || die "max 3 parallel chunks (merge-conflict scaling — ADR 0004)"
+[ "$#" -le "$PARALLEL_CAP" ] || die "max $PARALLEL_CAP parallel chunks (merge-conflict scaling — ADR 0004)"
 
 ROOT="$PWD"
 LOGDIR="$ROOT/.mentat/logs"
@@ -49,20 +54,11 @@ _land_record() { # $1=logf $2=slug $3=success|error [$4=sha] [$5=reason]
 
 build_cmd() {
   local prompt="$1"
-  case "$HARNESS" in
-    cursor)
-      local m=("${MODEL:+--model=$MODEL}")
-      printf '%s\0' cursor-agent -p --output-format stream-json --force "${m[@]}" "$prompt"
-      ;;
-    claude-code)
-      local m=("${MODEL:--model=sonnet}")
-      printf '%s\0' claude -p --output-format stream-json --verbose \
-        --permission-mode acceptEdits \
-        --allowedTools "Bash,Read,Edit,Write,Agent" \
-        "${m[@]}" "$prompt"
-      ;;
-    *) die "unknown harness '$HARNESS' (cursor|claude-code)" ;;
-  esac
+  local hfile="$_LIB/harness-${HARNESS}.sh"
+  [ -f "$hfile" ] || die "unknown harness '$HARNESS' — no $hfile"
+  . "$hfile"
+  local fn="harness_${HARNESS//-/_}_cmd"
+  "$fn" "$prompt"
 }
 
 run_chunk() {
