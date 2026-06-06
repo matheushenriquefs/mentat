@@ -25,7 +25,7 @@ pre-commit:
     stale-ref:
       glob: "**/*"
       run: |
-        out=$(rg -n '\bmentat-setup\b|\bmentat-sync-upstream\b|upstreams\.jsonc|/to-(rebase|commit|plan|implement|scaffold|eval)\b' {staged_files} 2>/dev/null || true)
+        out=$(rg -n '\bmentat-install\b|\bmentat-update\b|\bmentat-credits-gen\b|upstreams\.jsonc|/to-(rebase|commit|plan|implement|scaffold|eval)\b' {staged_files} 2>/dev/null || true)
         [ -z "$out" ] && exit 0
         echo "stale-ref advisory: $out" && exit 0
     docs-sync:

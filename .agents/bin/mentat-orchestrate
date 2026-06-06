@@ -189,6 +189,13 @@ this project runs its checks. Do not modify code."
     '{reviewer:$reviewer, score:$score, veto:$veto, findings:[], base:$base, tip:$tip}')"
 }
 
+_run_doctor() { # $1=slug $2=reason
+  MENTAT_SLUG="$1" MENTAT_SESSION="$MENTAT_SESSION" MENTAT_REPO="$MENTAT_REPO" \
+    "$HERE/mentat-doctor" "$1" --reason="$2" \
+    >"$LOGDIR/diagnosis-$1.md" 2>&1 || true
+  log "diagnosis: $LOGDIR/diagnosis-$1.md"
+}
+
 declare -a PIDS PLANS SLUGS LOGS
 for plan in "$@"; do
   slug="mentat-$(date +%s)-$$-$RANDOM"; logf="$LOGDIR/$slug.jsonl"; : > "$logf"
@@ -212,10 +219,7 @@ for i in "${!PIDS[@]}"; do
     to_track_exit "${SLUGS[$i]}" agent-error "implement failed"
     _land_record "${LOGS[$i]}" "${SLUGS[$i]}" error "" implement-fail
     log "CHUNK FAILED (implement): ${PLANS[$i]} — worktree $ROOT/.mentat/worktrees/${SLUGS[$i]}"
-    MENTAT_SLUG="${SLUGS[$i]}" MENTAT_SESSION="$MENTAT_SESSION" MENTAT_REPO="$MENTAT_REPO" \
-      "$HERE/mentat-doctor" "${SLUGS[$i]}" --reason="agent-exit-nonzero" \
-      >"$LOGDIR/diagnosis-${SLUGS[$i]}.md" 2>&1 || true
-    log "diagnosis: $LOGDIR/diagnosis-${SLUGS[$i]}.md"
+    _run_doctor "${SLUGS[$i]}" agent-exit-nonzero
   fi
 done
 
@@ -230,10 +234,7 @@ for i in "${IMPL_OK[@]}"; do
   else
     to_track_exit "${SLUGS[$i]}" forensics "${LOGS[$i]}"
     log "left up for forensics: ${PLANS[$i]} — log ${LOGS[$i]}"
-    MENTAT_SLUG="${SLUGS[$i]}" MENTAT_SESSION="$MENTAT_SESSION" MENTAT_REPO="$MENTAT_REPO" \
-      "$HERE/mentat-doctor" "${SLUGS[$i]}" --reason="land-fail" \
-      >"$LOGDIR/diagnosis-${SLUGS[$i]}.md" 2>&1 || true
-    log "diagnosis: $LOGDIR/diagnosis-${SLUGS[$i]}.md"
+    _run_doctor "${SLUGS[$i]}" land-fail
   fi
 done
 
