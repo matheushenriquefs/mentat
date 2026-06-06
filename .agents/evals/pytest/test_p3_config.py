@@ -81,7 +81,67 @@ def test_mentat_config_validate_fails_bad_harness():
         r = _sh(
             f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'',
         )
-        assert r.returncode != 0, "validate must fail for unknown harness name"
+        assert r.returncode == 2, f"validate must exit 2 for unknown harness, got {r.returncode}"
+    finally:
+        os.unlink(cfgpath)
+
+
+def test_mentat_config_validate_fails_bad_max_concurrent_zero():
+    cfg = '{"harness":{"name":"cursor","model":""},"agents":{"max_concurrent":0},"diff":{"tool":""},"editor":{"name":""},"plugins":[]}'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
+        f.write(cfg)
+        cfgpath = f.name
+    try:
+        r = _sh(f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'')
+        assert r.returncode == 2, f"validate must exit 2 for max_concurrent=0, got {r.returncode}"
+    finally:
+        os.unlink(cfgpath)
+
+
+def test_mentat_config_validate_fails_bad_max_concurrent_over():
+    cfg = '{"harness":{"name":"cursor","model":""},"agents":{"max_concurrent":11},"diff":{"tool":""},"editor":{"name":""},"plugins":[]}'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
+        f.write(cfg)
+        cfgpath = f.name
+    try:
+        r = _sh(f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'')
+        assert r.returncode == 2, f"validate must exit 2 for max_concurrent=11, got {r.returncode}"
+    finally:
+        os.unlink(cfgpath)
+
+
+def test_mentat_config_validate_fails_bad_max_concurrent_string():
+    cfg = '{"harness":{"name":"cursor","model":""},"agents":{"max_concurrent":"three"},"diff":{"tool":""},"editor":{"name":""},"plugins":[]}'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
+        f.write(cfg)
+        cfgpath = f.name
+    try:
+        r = _sh(f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'')
+        assert r.returncode == 2, f"validate must exit 2 for max_concurrent=string, got {r.returncode}"
+    finally:
+        os.unlink(cfgpath)
+
+
+def test_mentat_config_validate_fails_diff_tool_not_string():
+    cfg = '{"harness":{"name":"cursor","model":""},"agents":{"max_concurrent":3},"diff":{"tool":42},"editor":{"name":""},"plugins":[]}'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
+        f.write(cfg)
+        cfgpath = f.name
+    try:
+        r = _sh(f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'')
+        assert r.returncode == 2, f"validate must exit 2 for non-string diff.tool, got {r.returncode}"
+    finally:
+        os.unlink(cfgpath)
+
+
+def test_mentat_config_validate_fails_plugins_not_array():
+    cfg = '{"harness":{"name":"cursor","model":""},"agents":{"max_concurrent":3},"diff":{"tool":""},"editor":{"name":""},"plugins":"bad"}'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
+        f.write(cfg)
+        cfgpath = f.name
+    try:
+        r = _sh(f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'')
+        assert r.returncode == 2, f"validate must exit 2 for non-array plugins, got {r.returncode}"
     finally:
         os.unlink(cfgpath)
 
@@ -135,11 +195,22 @@ def test_orchestrate_sources_config_sh():
 def test_orchestrate_uses_mentat_config_for_harness():
     with open(os.path.join(BIN, "mentat-orchestrate")) as f:
         body = f.read()
-    assert "mentat_config harness.name" in body or "mentat_config" in body
+    assert "mentat_config harness.name" in body
+
+
+def test_orchestrate_reads_model_from_config():
+    with open(os.path.join(BIN, "mentat-orchestrate")) as f:
+        body = f.read()
+    assert "mentat_config harness.model" in body
+
+
+def test_orchestrate_reads_parallel_cap_from_config():
+    with open(os.path.join(BIN, "mentat-orchestrate")) as f:
+        body = f.read()
+    assert "mentat_config agents.max_concurrent" in body
 
 
 def test_orchestrate_flag_still_accepted():
-    # --harness flag must still be parseable (override path)
     with open(os.path.join(BIN, "mentat-orchestrate")) as f:
         body = f.read()
     assert "--harness=" in body
@@ -148,7 +219,48 @@ def test_orchestrate_flag_still_accepted():
 def test_orchestrate_parallel_cap_from_config():
     with open(os.path.join(BIN, "mentat-orchestrate")) as f:
         body = f.read()
-    assert "max_concurrent" in body or "PARALLEL_CAP" in body
+    assert "PARALLEL_CAP" in body
+
+
+def test_orchestrate_calls_mentat_config_validate():
+    with open(os.path.join(BIN, "mentat-orchestrate")) as f:
+        body = f.read()
+    assert "mentat_config_validate" in body
+
+
+def test_orchestrate_dry_run_flag_exists():
+    with open(os.path.join(BIN, "mentat-orchestrate")) as f:
+        body = f.read()
+    assert "--dry-run" in body
+
+
+def test_orchestrate_dry_run_exits_zero():
+    """--dry-run must print plan info and exit 0 without launching worktrees."""
+    cfg_path = os.path.join(AGENTS, ".mentat.jsonc")
+    r = _sh(
+        f'MENTAT_CONFIG_PATH={cfg_path} {BIN}/mentat-orchestrate --dry-run feat/x /dev/null',
+        cwd=ROOT,
+    )
+    assert r.returncode == 0, f"--dry-run must exit 0: {r.stderr}"
+    assert "dry-run" in r.stdout or "dry-run" in r.stderr
+
+
+def test_orchestrate_dry_run_uses_config_harness():
+    """--dry-run output must reflect harness from config, not hardcoded default."""
+    cfg = '{"harness":{"name":"aider","model":""},"agents":{"max_concurrent":3},"diff":{"tool":""},"editor":{"name":""},"plugins":[]}'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
+        f.write(cfg)
+        cfgpath = f.name
+    try:
+        r = _sh(
+            f'MENTAT_CONFIG_PATH={cfgpath} {BIN}/mentat-orchestrate --dry-run feat/x /dev/null',
+            cwd=ROOT,
+        )
+        assert r.returncode == 0, f"dry-run failed: {r.stderr}"
+        combined = r.stdout + r.stderr
+        assert "aider" in combined, f"dry-run must show harness=aider from config: {combined}"
+    finally:
+        os.unlink(cfgpath)
 
 
 # S3.3b — per-harness lib/harness-<name>.sh files

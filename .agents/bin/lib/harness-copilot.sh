@@ -3,6 +3,6 @@
 # Source this file; do not execute directly.
 
 harness_copilot_cmd() {  # $1 = prompt string; prints NUL-delimited argv
-  local m=("${MODEL:+--model=$MODEL}")
+  local m=(); [ -n "${MODEL:-}" ] && m=("--model=$MODEL")
   printf '%s\0' copilot -p "${m[@]}" "$1"
 }
