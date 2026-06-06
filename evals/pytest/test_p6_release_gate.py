@@ -111,6 +111,50 @@ def test_force_gate_flag_recognized():
     )
 
 
+def test_force_dirty_bypasses_uncommitted_guard():
+    """--force-dirty bypasses uncommitted-changes guard; source must show conditional."""
+    with open(MENTAT_RELEASE) as f:
+        src = f.read()
+    # Guard: only check when FORCE_DIRTY -eq 0
+    assert 'FORCE_DIRTY" -eq 0' in src or "FORCE_DIRTY -eq 0" in src, \
+        "mentat-release must guard uncommitted check with FORCE_DIRTY == 0"
+    # Error message when dirty without --force-dirty
+    assert "uncommitted" in src and "force-dirty" in src, \
+        "error message must mention 'uncommitted' and '--force-dirty'"
+    # Runtime: --force-dirty --dry-run must not error with 'uncommitted' message
+    with tempfile.TemporaryDirectory() as dest:
+        env = {**os.environ, "HOME": dest}
+        r = subprocess.run(
+            [MENTAT_RELEASE, "--force-dirty", "--force-gate", "--yes", "--dry-run"],
+            capture_output=True, text=True, cwd=ROOT, env=env,
+        )
+    assert "uncommitted" not in r.stderr, \
+        f"--force-dirty must suppress uncommitted error:\n{r.stderr}"
+
+
+def test_force_gate_bypasses_gate_failure_with_warning():
+    """--force-gate allows release past gate failure and prints WARNING."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        agents = os.path.join(tmpdir, ".agents")
+        os.makedirs(agents)
+        bad_jsonc = os.path.join(agents, "bad.jsonc")
+        with open(bad_jsonc, "w") as f:
+            f.write('{ "x": 1, }')  # trailing comma — invalid JSON
+        subprocess.run(["git", "init", tmpdir], capture_output=True)
+        subprocess.run(["git", "-C", tmpdir, "config", "user.email", "t@t.com"], capture_output=True)
+        subprocess.run(["git", "-C", tmpdir, "config", "user.name", "T"], capture_output=True)
+        subprocess.run(["git", "-C", tmpdir, "add", "."], capture_output=True)
+        subprocess.run(["git", "-C", tmpdir, "commit", "-m", "add bad jsonc"], capture_output=True)
+        env = {**os.environ, "HOME": tempfile.mkdtemp()}
+        r = subprocess.run(
+            [MENTAT_RELEASE, "--force-dirty", "--force-gate", "--yes", "--dry-run"],
+            capture_output=True, text=True, cwd=tmpdir, env=env,
+        )
+    combined = r.stdout + r.stderr
+    assert "WARNING" in combined, \
+        f"--force-gate must print WARNING when bypassing gate failure:\n{combined}"
+
+
 # ── B3: jq gate for .jq files ────────────────────────────────────────────────
 
 def test_jq_file_passes_gate():
