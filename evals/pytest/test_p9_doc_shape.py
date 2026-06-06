@@ -246,3 +246,46 @@ def test_install_no_credits_gen_exclude():
     assert "credits-gen" not in text, (
         "mentat-install must not exclude deleted mentat-credits-gen bin"
     )
+
+
+# --- S3 (v2): lefthook stale-ref pattern refresh ---
+
+def _lefthook_rg_line():
+    text = LEFTHOOK.read_text()
+    return next((l for l in text.splitlines() if "rg -n" in l and "mentat" in l.lower()), "")
+
+
+def test_lefthook_stale_ref_drops_mentat_setup():
+    rg_line = _lefthook_rg_line()
+    assert r"\bmentat-setup\b" not in rg_line, (
+        r"lefthook stale-ref pattern must drop \bmentat-setup\b (renamed to mentat-install)"
+    )
+
+
+def test_lefthook_stale_ref_drops_mentat_sync_upstream():
+    rg_line = _lefthook_rg_line()
+    assert r"\bmentat-sync-upstream\b" not in rg_line, (
+        r"lefthook stale-ref pattern must drop \bmentat-sync-upstream\b (renamed to mentat-update)"
+    )
+
+
+def test_lefthook_stale_ref_adds_current_names():
+    rg_line = _lefthook_rg_line()
+    assert "mentat-install" in rg_line or "mentat-update" in rg_line, (
+        "lefthook stale-ref pattern must include current bin names (mentat-install or mentat-update)"
+    )
+
+
+# --- S7 (v2): 22-smell comprehensive coverage ---
+
+def test_smell_reviewer_covers_all_22_refactoring_guru_smells():
+    text = SMELL_REVIEWER.read_text().lower()
+    all_22 = [
+        "long method", "large class", "primitive obsession", "long parameter list", "data clumps",
+        "switch statements", "temporary field", "refused bequest", "alternative classes",
+        "divergent change", "shotgun surgery", "parallel inheritance",
+        "comments", "duplicate code", "lazy class", "data class", "dead code", "speculative generality",
+        "feature envy", "inappropriate intimacy", "message chains", "middle man",
+    ]
+    missing = [s for s in all_22 if s not in text]
+    assert not missing, f"smell-reviewer missing refactoring.guru smells: {missing}"
