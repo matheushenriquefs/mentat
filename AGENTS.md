@@ -187,6 +187,31 @@ See [.agents/bin/lib/gates.sh](.agents/bin/lib/gates.sh) for checker implementat
 
 **Vendor-pins gate:** If `vendir.yml` is modified, or >24 h since last sync, run `vendir sync --diff` before commit. `vendir sync --diff` is the shipped equivalent of the former `mentat-sync-check` binary.
 
+## Audit emission
+
+Every command (`mentat-plan`, `mentat-implement`, `mentat-rebase`, `mentat-eval`, `mentat-release`) must emit start + complete events via `mentat_audit`. Source `audit.sh` first:
+
+```sh
+source ~/.agents/bin/lib/audit.sh
+mentat_audit <agent> <verb>.start '{}'
+# ... do work ...
+mentat_audit <agent> <verb>.complete '{...}'
+```
+
+Event verb registry (canonical verbs per ADR-0009):
+
+| Actor | Verbs |
+|---|---|
+| mentat-plan | `plan.start`, `plan.complete` |
+| mentat-implement | `implement.start`, `implement.complete`, `implement.preflight` |
+| mentat-rebase | `rebase.start`, `rebase.complete`, `rebase.conflict` |
+| mentat-eval | `eval.start`, `eval.complete` |
+| mentat-release | `release.start`, `release.complete` |
+| mentat-orchestrate | `land.complete`, `review.final` |
+| mentat-update | `sync.complete` |
+
+Payload schema: see `.agents/lib/audit_schema.py`. Reviewer outputs must use `ReviewVerdictPayload`. Never write raw `printf` to a `.jsonl` file outside `audit.sh`.
+
 ## Platform Support
 
 Mentat targets POSIX shells (bash 4+, zsh) on Linux + macOS. Windows is out of scope — relies on POSIX `rename(2)`, `ln` hardlink atomicity, and standard GNU/BSD coreutils. WSL works as a Linux environment, not native Windows.
