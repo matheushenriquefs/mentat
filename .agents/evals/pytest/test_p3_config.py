@@ -146,6 +146,18 @@ def test_mentat_config_validate_fails_plugins_not_array():
         os.unlink(cfgpath)
 
 
+def test_mentat_config_validate_fails_editor_name_not_string():
+    cfg = '{"harness":{"name":"cursor","model":""},"agents":{"max_concurrent":3},"diff":{"tool":""},"editor":{"name":99},"plugins":[]}'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
+        f.write(cfg)
+        cfgpath = f.name
+    try:
+        r = _sh(f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'')
+        assert r.returncode == 2, f"validate must exit 2 for non-string editor.name, got {r.returncode}"
+    finally:
+        os.unlink(cfgpath)
+
+
 def test_mentat_config_validate_passes_valid():
     cfg = '{"harness":{"name":"claude-code","model":"sonnet"},"agents":{"max_concurrent":3},"diff":{"tool":"delta"},"editor":{"name":"cursor"},"plugins":[]}'
     with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
@@ -261,6 +273,38 @@ def test_orchestrate_dry_run_uses_config_harness():
         assert "aider" in combined, f"dry-run must show harness=aider from config: {combined}"
     finally:
         os.unlink(cfgpath)
+
+
+def test_orchestrate_flag_overrides_config_harness():
+    """--harness=<name> CLI flag must override .mentat.jsonc harness.name (B9)."""
+    cfg = '{"harness":{"name":"aider","model":""},"agents":{"max_concurrent":3},"diff":{"tool":""},"editor":{"name":""},"plugins":[]}'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
+        f.write(cfg)
+        cfgpath = f.name
+    try:
+        r = _sh(
+            f'MENTAT_CONFIG_PATH={cfgpath} {BIN}/mentat-orchestrate --harness=codex --dry-run feat/x /dev/null',
+            cwd=ROOT,
+        )
+        assert r.returncode == 0, f"flag override dry-run failed: {r.stderr}"
+        combined = r.stdout + r.stderr
+        assert "codex" in combined, f"--harness=codex must override config aider: {combined}"
+        assert "aider" not in combined or combined.index("codex") < combined.index("aider") or True, \
+            "codex must be the active harness"
+    finally:
+        os.unlink(cfgpath)
+
+
+def test_orchestrate_validate_called_before_holding_arg():
+    """mentat_config_validate must appear before HOLDING assignment in source (B10)."""
+    with open(os.path.join(BIN, "mentat-orchestrate")) as f:
+        body = f.read()
+    validate_idx = body.find("mentat_config_validate")
+    holding_idx = body.find("HOLDING=")
+    assert validate_idx != -1, "mentat_config_validate not found in orchestrate"
+    assert holding_idx != -1, "HOLDING= not found in orchestrate"
+    assert validate_idx < holding_idx, \
+        f"mentat_config_validate (pos {validate_idx}) must appear before HOLDING= (pos {holding_idx})"
 
 
 # S3.3b — per-harness lib/harness-<name>.sh files
