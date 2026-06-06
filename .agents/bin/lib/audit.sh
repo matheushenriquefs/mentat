@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# audit.sh — global JSONL audit log emitter (locked decision 3)
+# audit.sh — global JSONL audit log emitter (see docs/adr/0009-audit-log-format.md)
 # Schema: {ts, agent, session, event, payload}
 # Payload: verdicts/scores/file:line refs only — never raw diff/file content
 

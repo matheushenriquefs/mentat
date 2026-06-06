@@ -146,7 +146,7 @@ numeric gate stays the first true walk-away target.
 
 - **Mirror Mastra's `createScorer` API in-harness.** Adds a code dependency for
   math we can state in a prompt. Reimplement.
-- **Prompt Alignment `both` mode.** Unfinished stub (sub-decision 2). Banned.
+- **Prompt Alignment `both` mode.** Unfinished stub — never implemented. Banned.
 - **Answer-relevancy as the new mentat-bug-reviewer lens.** Source-confirmed
   (`llm/answer-relevancy/index.ts` generateScore: yes=1, unsure=0.3, no=0 over
   output-statements-vs-input): it measures does-the-answer-address-the-question —

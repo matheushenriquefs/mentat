@@ -15,7 +15,7 @@ model the harness offers.
 
 The project's interpreters, formatters, linters, hooks, and test runner —
 whatever this repo uses — run only via `mentat-container-run '<cmd>'`, never on the
-host. The host pins no interpreter (asdf shim aborts in a bare worktree) and host
+host. The host pins no interpreter (host interpreters may be unset in bare worktrees) and host
 commits fire pre-commit where container-only tools aren't installed (ADR 0002).
 If `mentat-container-run` fails, fix bring-up — don't fall back to host or
 `docker exec`. Why: ADR 0004.

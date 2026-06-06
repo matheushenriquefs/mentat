@@ -86,6 +86,8 @@ Asked re plan-completeness → `Wrong lens. Spawn mentat-plan-reviewer.`
 
 ## Toolchain discovery
 
+> Detector patterns — mentat is tool-agnostic; tool names below are read from the target repo's manifests, not prescribed.
+
 Never assume a tool exists. Inside the container, read the repo's declarations to discover what to run:
 - `Taskfile.yml` → `task <target>`
 - `package.json` scripts → `npm run <script>` / `pnpm run <script>`
