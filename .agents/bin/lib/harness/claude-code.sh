@@ -15,5 +15,5 @@ harness_claude_code_output_format() { printf 'stream-json\n'; }
 harness_claude_code_normalize() {
   # stdin: stream-json NDJSON; stdout: canonical audit NDJSON
   jq -c --arg agent "claude-code" --arg sess "${MENTAT_SESSION:-unknown}" \
-    '{ts:(now|todate), agent:$agent, session:$sess, event:(.type // "unknown" | tostring), payload:(. - {type})}'
+    '{ts:(now|todate), agent:$agent, session:$sess, event:(.type // "unknown" | tostring), payload:(del(.type))}'
 }
