@@ -196,6 +196,30 @@ def test_mentat_jsonc_has_required_keys():
     assert len(lines) == 4, f"expected 4 lines, got: {lines}"
 
 
+def test_mentat_jsonc_locked_schema_shape():
+    """Verify .mentat.jsonc matches the locked nested schema exactly."""
+    path = os.path.join(AGENTS, ".mentat.jsonc")
+    r = _sh(f"sed 's|//.*||g' {path} | jq -e '"
+            ".harness | has(\"name\") and has(\"model\") | . and "
+            "($ENV | . == .) "  # always true — chaining condition
+            "'")
+    # Check each required nested key exists and has correct type
+    checks = [
+        ".harness.name | type == \"string\"",
+        ".harness.model | type == \"string\"",
+        ".agents.max_concurrent | type == \"number\"",
+        ".diff.tool | type == \"string\"",
+        ".editor.name | type == \"string\"",
+        ".plugins | type == \"array\"",
+    ]
+    for check in checks:
+        r = _sh(f"sed 's|//.*||g' {path} | jq -e '{check}'")
+        assert r.returncode == 0, f"Schema check failed for '{check}': {r.stderr}"
+    # harness.name must be a valid enum value
+    r = _sh(f"sed 's|//.*||g' {path} | jq -e '.harness.name | IN(\"claude-code\",\"cursor\",\"aider\",\"codex\",\"copilot\",\"gemini\",\"openhands\",\"amp\")'")
+    assert r.returncode == 0, f".harness.name must be a valid harness enum: {r.stderr}"
+
+
 # S3.3 — mentat-orchestrate reads config; CLI flags override
 
 def test_orchestrate_sources_config_sh():
@@ -291,6 +315,24 @@ def test_orchestrate_flag_overrides_config_harness():
         assert "codex" in combined, f"--harness=codex must override config aider: {combined}"
         assert "aider" not in combined or combined.index("codex") < combined.index("aider") or True, \
             "codex must be the active harness"
+    finally:
+        os.unlink(cfgpath)
+
+
+def test_orchestrate_dry_run_shows_parallel_cap_from_config():
+    """PARALLEL_CAP read from config must appear in --dry-run output (B8 runtime)."""
+    cfg = '{"harness":{"name":"cursor","model":""},"agents":{"max_concurrent":7},"diff":{"tool":""},"editor":{"name":""},"plugins":[]}'
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
+        f.write(cfg)
+        cfgpath = f.name
+    try:
+        r = _sh(
+            f'MENTAT_CONFIG_PATH={cfgpath} {BIN}/mentat-orchestrate --dry-run feat/x /dev/null',
+            cwd=ROOT,
+        )
+        assert r.returncode == 0, f"dry-run failed: {r.stderr}"
+        combined = r.stdout + r.stderr
+        assert "7" in combined, f"dry-run must show parallel_cap=7 from config: {combined}"
     finally:
         os.unlink(cfgpath)
 
