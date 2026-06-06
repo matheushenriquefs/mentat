@@ -255,6 +255,19 @@ def test_each_harness_exposes_cmd():
 def test_gate_harness_in_gates():
     src = _read(os.path.join(LIB, "gates.sh"))
     assert "gate_harness" in src, "gate_harness missing from gates.sh"
+    assert "declare -f" in src, "gate_harness must use declare -f for structural contract check"
+    assert "output_format" in src, "gate_harness must check for output_format function"
+
+
+def test_gate_harness_rejects_missing_output_format(tmp_path):
+    stub = tmp_path / "fake.sh"
+    stub.write_text("#!/bin/bash\nharness_fake_cmd() { printf 'fake\\0'; }\n")
+    gates = os.path.join(LIB, "gates.sh")
+    result = subprocess.run(
+        ["bash", "-c", f"source {gates} && gate_harness {stub}"],
+        capture_output=True, text=True
+    )
+    assert result.returncode != 0, "gate_harness must fail when output_format function is missing"
 
 
 def test_orchestrate_uses_harness_subdir():
