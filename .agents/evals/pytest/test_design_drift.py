@@ -1,5 +1,5 @@
 """S4.3: design_drift surface — MEDIUM drift items separate from findings[]."""
-from conftest import read_agent, read_fixture
+from utils import read_agent, read_fixture
 
 
 def test_design_drift_in_prompt():

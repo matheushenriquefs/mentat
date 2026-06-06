@@ -1,5 +1,5 @@
 """Verify HIGH sev veto logic present and correctly scoped in crew-review-bugs."""
-from conftest import read_agent
+from utils import read_agent
 
 
 def test_high_sev_veto_present():

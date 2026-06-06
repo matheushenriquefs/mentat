@@ -1,5 +1,5 @@
 """ADR 0006 trajectory blacklist veto — reward-hacking moves caught."""
-from conftest import read_agent
+from utils import read_agent
 
 
 def test_blacklist_section_present():

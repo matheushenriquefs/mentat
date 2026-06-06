@@ -1,5 +1,5 @@
 """S4.2: non_pytest_gate carve-out for config-only diffs."""
-from conftest import read_agent, read_fixture
+from utils import read_agent, read_fixture
 
 
 def test_non_pytest_gate_in_prompt():

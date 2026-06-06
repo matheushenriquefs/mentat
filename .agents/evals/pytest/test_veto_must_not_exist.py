@@ -1,5 +1,5 @@
 """S4.1: must_not_exist veto fires when plan removes entities still present in diff."""
-from conftest import read_agent, read_fixture
+from utils import read_agent, read_fixture
 
 
 def test_must_not_exist_veto_in_prompt():
