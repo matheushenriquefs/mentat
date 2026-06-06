@@ -53,11 +53,15 @@ mv "$tmp" ".mentat/tasks/$id-$slug.md"
 **claim `<file>` `<agent>` `<ttl_seconds>`**
 ```sh
 f=".mentat/tasks/$file"
-ln "$f" "$f.claim" 2>/dev/null || { echo "already claimed"; exit 1; }
+lock="$f.lock"
+# Atomic O_EXCL create — POSIX atomic test-and-set. Lock sentinel is separate
+# from the content file so rename(2) on content never rebinds the guard inode.
+( set -C; : > "$lock" ) 2>/dev/null || { echo "already claimed"; exit 1; }
 expires=$(date -u -v+${ttl_seconds}S '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -d "+${ttl_seconds} seconds" '+%Y-%m-%dT%H:%M:%SZ')
 tmp="$f.$$.tmp"; cp "$f" "$tmp"
 yq -i ".claimed_by = \"$agent\" | .claim_expires_at = \"$expires\" | .status = \"in-progress\"" "$tmp"
 mv "$tmp" "$f"
+# lock remains until release
 ```
 
 **release `<file>`**
@@ -65,7 +69,7 @@ mv "$tmp" "$f"
 f=".mentat/tasks/$file"
 tmp="$f.$$.tmp"; cp "$f" "$tmp"
 yq -i '.claimed_by = "" | .claim_expires_at = "" | .status = "todo"' "$tmp"
-mv "$tmp" "$f"; rm -f "$f.claim"
+mv "$tmp" "$f"; rm -f "$f.lock"
 ```
 
 **refresh `<file>` `<ttl_seconds>`** — bump `claim_expires_at`:
@@ -79,7 +83,7 @@ yq -i ".claim_expires_at = \"$expires\"" "$tmp"; mv "$tmp" "$f"
 ```sh
 tmp="$f.$$.tmp"; cp "$f" "$tmp"
 yq -i ".status = \"done\" | .claimed_by = \"\" | .claim_expires_at = \"\"" "$tmp"
-mv "$tmp" "$f"; rm -f "$f.claim"
+mv "$tmp" "$f"; rm -f "$f.lock"
 ```
 
 ## Pick gate
@@ -87,7 +91,7 @@ mv "$tmp" "$f"; rm -f "$f.claim"
 Pick only if:
 1. `status` is `todo`, or `in-progress` with `claim_expires_at < now` (stale — release then re-claim).
 2. `class` is set (`HITL` or `AFK`). Never pick untriaged.
-3. No `.claim` hardlink exists for a non-expired claim.
+3. No `.lock` sentinel exists for a non-expired claim.
 
 ## Atomic-write invariant
 
@@ -97,7 +101,7 @@ umask 077; tmp="$f.$$.tmp"
 cp "$f" "$tmp" && yq -i "$patch" "$tmp" && mv "$tmp" "$f"
 ```
 
-Skip `flock` — unreliable on macOS APFS. `ln` + `rename(2)` is sufficient.
+Skip `flock` — unreliable on macOS APFS. `set -C` noclobber (O_EXCL) + `rename(2)` is the correct POSIX primitive: noclobber for exclusive claim creation, rename for atomic content update. The lock sentinel (`.lock`) is separate from the content file so rename never rebinds the guard inode.
 
 ## Boundary with other skills
 
