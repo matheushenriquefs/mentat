@@ -11,10 +11,12 @@ _LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
 SLUG=""
 REASON=""
 
+AUDIT_TAIL_LINES=100
+CONTAINER_TAIL_LINES=200
+
 for arg in "$@"; do
   case "$arg" in
     --reason=*) REASON="${arg#*=}" ;;
-    --since=*)  : ;;  # reserved for v2
     --) ;;
     -*) echo "usage: mentat-doctor [<session-slug>] [--reason=<str>]" >&2; exit 1 ;;
     *)  SLUG="$arg" ;;
@@ -24,7 +26,8 @@ done
 [ -z "$SLUG" ] && SLUG="${MENTAT_SLUG:-$$}"
 
 LOG_DIR="${MENTAT_LOG_DIR:-$HOME/.agents/mentat/logs}"
-REPO="${MENTAT_REPO:=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")}"
+MENTAT_REPO="${MENTAT_REPO:-$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")}"
+REPO="$MENTAT_REPO"
 SESSION="${MENTAT_SESSION:=$(date +%s)-$$}"
 
 # Resolve session log JSONL (most recent matching this slug)
@@ -73,9 +76,9 @@ _ver() { "$@" 2>/dev/null || echo "n/a"; }
   echo ""
   echo "## Logs"
   if [ -n "$SESSION_LOG" ] && [ -f "$SESSION_LOG" ]; then
-    echo "### Audit excerpt (last 100 events)"
+    echo "### Audit excerpt (last ${AUDIT_TAIL_LINES} events)"
     echo '```json'
-    tail -100 "$SESSION_LOG"
+    tail -"$AUDIT_TAIL_LINES" "$SESSION_LOG"
     echo '```'
   else
     echo "- Audit log: not found (slug: ${SLUG}, dir: ${LOG_DIR})"
@@ -83,9 +86,9 @@ _ver() { "$@" 2>/dev/null || echo "n/a"; }
   echo ""
   CONTAINER_ID="$(docker ps -q --filter "label=mentat_slug=${SLUG}" 2>/dev/null | head -1 || true)"
   if [ -n "$CONTAINER_ID" ]; then
-    echo "### Container logs (last 200 lines)"
+    echo "### Container logs (last ${CONTAINER_TAIL_LINES} lines)"
     echo '```'
-    docker logs "$CONTAINER_ID" --tail 200 2>&1 || true
+    docker logs "$CONTAINER_ID" --tail "$CONTAINER_TAIL_LINES" 2>&1 || true
     echo '```'
   fi
   echo ""
@@ -106,8 +109,10 @@ _ver() { "$@" 2>/dev/null || echo "n/a"; }
   echo "  re-attempt with matching config but Mentat makes no replay guarantee."
 } > "$OUT.tmp"
 
-# Privacy sanitization: strip lines containing KEY|TOKEN|SECRET|PASSWORD|API=<value>
+# Privacy sanitization: strip KEY|TOKEN|SECRET|PASSWORD|API=<value> patterns
+trap 'rm -f "$OUT.tmp"' EXIT
 sed -E 's/(KEY|TOKEN|SECRET|PASSWORD|API)[^=]*=[^ ]*/\1=<redacted>/gi' "$OUT.tmp" > "$OUT"
-rm "$OUT.tmp"
+rm -f "$OUT.tmp"
+trap - EXIT
 
 echo "mentat-doctor: diagnosis written to $OUT"
