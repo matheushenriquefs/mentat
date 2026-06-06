@@ -73,7 +73,11 @@ if [ "$MINIMAL" -eq 0 ]; then
       echo "mentat-setup: dry-run — would run: mentat-update"
     else
       echo "mentat-setup: syncing vendored upstreams ..."
-      "$UPDATE_CMD"
+      if ! "$UPDATE_CMD"; then
+        echo "mentat-setup: WARNING: mentat-update failed (vendir not installed?). Skipping vendor sync." >&2
+        echo "mentat-setup: Install vendir: https://carvel.dev/vendir/docs/latest/install/" >&2
+        echo "mentat-setup: Re-run without --offline after installing vendir, or run: mentat-update" >&2
+      fi
     fi
   fi
 fi
