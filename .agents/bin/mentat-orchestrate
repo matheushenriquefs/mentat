@@ -225,7 +225,7 @@ done
 
 LAND_BASE="$(git -C "$ROOT" rev-parse "$HOLDING" 2>/dev/null || echo "$HOLDING")"
 LANDED=0
-for i in "${IMPL_OK[@]}"; do
+for i in ${IMPL_OK[@]+"${IMPL_OK[@]}"}; do
   to_track_phase "${SLUGS[$i]}" landing
   if land_chunk "${SLUGS[$i]}" "${LOGS[$i]}"; then
     LANDED=$((LANDED + 1)); to_track_exit "${SLUGS[$i]}" landed "-> $HOLDING"
