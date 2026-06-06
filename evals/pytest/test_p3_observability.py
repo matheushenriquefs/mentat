@@ -60,6 +60,22 @@ def test_audit_sh_emits_valid_jsonl():
         assert rec["session"] == "sess1"
 
 
+def test_audit_sh_invalid_payload_falls_back_to_null():
+    """Non-JSON payload must not crash audit — falls back to null."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        import subprocess as _sp
+        script = f"source {LIB}/audit.sh && mentat_audit myagent testevent 'not valid json at all'"
+        env = {**os.environ, "MENTAT_LOG_DIR": tmpdir, "MENTAT_REPO": "r2",
+               "MENTAT_SESSION": "s2", "MENTAT_SLUG": "sl2"}
+        r = _sp.run(["bash"], input=script, capture_output=True, text=True, env=env)
+        assert r.returncode == 0, r.stderr
+        log_path = os.path.join(tmpdir, "r2", "s2", "myagent-sl2.jsonl")
+        assert os.path.isfile(log_path)
+        with open(log_path) as f:
+            rec = json.loads(f.readline())
+        assert rec["payload"] is None  # fell back to null
+
+
 def test_audit_sh_log_dir_chmod_700():
     with tempfile.TemporaryDirectory() as tmpdir:
         _sh(

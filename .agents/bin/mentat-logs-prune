@@ -60,8 +60,8 @@ while IFS= read -r -d '' sess_dir; do
     tar czf "$archive_file" -C "$(dirname "$sess_dir")" "$sess" 2>/dev/null || true
     rm -rf "$sess_dir"
   fi
-done < <(find "$LOG_DIR" -mindepth 2 -maxdepth 2 -type d -mtime "+$ARCHIVE_AFTER" -print0 2>/dev/null \
-         | grep -vz '_archive')
+done < <(find "$LOG_DIR" -mindepth 2 -maxdepth 2 -type d -mtime "+$ARCHIVE_AFTER" \
+         -not -path "*/_archive/*" -print0 2>/dev/null)
 
 # Delete archive tarballs older than DELETE_AFTER days
 while IFS= read -r -d '' f; do
