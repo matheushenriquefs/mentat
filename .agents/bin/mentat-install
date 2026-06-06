@@ -49,11 +49,9 @@ fi
 TRACKED_FILES=$(git -C "$REPO_ROOT" ls-files "$AGENTS_DIR" 2>/dev/null) || TRACKED_FILES=""
 if [ -n "$TRACKED_FILES" ]; then
   GATE_FAIL=0
-  # shellcheck source=/dev/null
-  . "$HERE/lib/precommit-gates.sh"
   while IFS= read -r f; do
     [ -z "$f" ] && continue
-    mentat_gate "$f" || GATE_FAIL=1
+    "$HERE/mentat-precommit" auto "$f" || GATE_FAIL=1
   done <<< "$TRACKED_FILES"
   if [ "$GATE_FAIL" -ne 0 ]; then
     echo "mentat-install: gate check failed — fix errors above before installing" >&2
