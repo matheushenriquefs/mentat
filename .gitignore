@@ -1,5 +1,8 @@
 context/mattpocock-skills/
 .mentat/worktrees/
+context
+.dmux
+.dmux-hooks
 
 __pycache__/
 *.pyc
