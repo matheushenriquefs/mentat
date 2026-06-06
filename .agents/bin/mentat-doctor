@@ -46,9 +46,7 @@ fi
 
 _ver() { "$@" 2>/dev/null || echo "n/a"; }
 
-{
-  echo "# Diagnosis — ${SLUG}"
-  echo ""
+_emit_versions() {
   echo "## Tool versions"
   echo "- mentat: $(_ver git -C "$(dirname "$_LIB")" describe --tags --always)"
   echo "- docker: $(_ver docker --version | head -1)"
@@ -56,6 +54,9 @@ _ver() { "$@" 2>/dev/null || echo "n/a"; }
   echo "- python: $(_ver python3 --version)"
   echo "- bash: ${BASH_VERSION:-n/a}"
   echo ""
+}
+
+_emit_system() {
   echo "## System"
   echo "- OS: $(_ver uname -s)"
   echo "- Kernel: $(_ver uname -r)"
@@ -63,6 +64,9 @@ _ver() { "$@" 2>/dev/null || echo "n/a"; }
   echo "- Terminal: ${TERM:-n/a}"
   echo "- Shell: ${SHELL:-n/a}"
   echo ""
+}
+
+_emit_repro() {
   echo "## Repro"
   echo "- Holding branch: $(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo 'n/a')"
   echo "- Worktree branch: $(_ver git rev-parse --abbrev-ref HEAD)"
@@ -74,6 +78,9 @@ _ver() { "$@" 2>/dev/null || echo "n/a"; }
   echo "- Expected: <describe expected outcome>"
   echo "- Actual: <describe actual outcome>"
   echo ""
+}
+
+_emit_logs() {
   echo "## Logs"
   if [ -n "$SESSION_LOG" ] && [ -f "$SESSION_LOG" ]; then
     echo "### Audit excerpt (last ${AUDIT_TAIL_LINES} events)"
@@ -84,29 +91,43 @@ _ver() { "$@" 2>/dev/null || echo "n/a"; }
     echo "- Audit log: not found (slug: ${SLUG}, dir: ${LOG_DIR})"
   fi
   echo ""
-  CONTAINER_ID="$(docker ps -q --filter "label=mentat_slug=${SLUG}" 2>/dev/null | head -1 || true)"
-  if [ -n "$CONTAINER_ID" ]; then
+  local container_id
+  container_id="$(docker ps -q --filter "label=mentat_slug=${SLUG}" 2>/dev/null | head -1 || true)"
+  if [ -n "$container_id" ]; then
     echo "### Container logs (last ${CONTAINER_TAIL_LINES} lines)"
     echo '```'
-    docker logs "$CONTAINER_ID" --tail "$CONTAINER_TAIL_LINES" 2>&1 || true
+    docker logs "$container_id" --tail "$CONTAINER_TAIL_LINES" 2>&1 || true
     echo '```'
   fi
   echo ""
+}
+
+_emit_footer() {
   echo "## Regression"
   echo "- Last known good commit: <provide commit SHA>"
   echo "- Is regression: unknown"
   echo ""
   echo "## Stage"
-  LAST_EVENT=""
+  local last_event=""
   if [ -n "$SESSION_LOG" ] && [ -f "$SESSION_LOG" ]; then
-    LAST_EVENT="$(jq -r '.event // empty' "$SESSION_LOG" 2>/dev/null | tail -1 || true)"
+    last_event="$(jq -r '.event // empty' "$SESSION_LOG" 2>/dev/null | tail -1 || true)"
   fi
-  echo "- Phase: ${LAST_EVENT:-unknown}"
+  echo "- Phase: ${last_event:-unknown}"
   echo ""
   echo "## Non-determinism"
   echo "- determinism_warnings: [\"non_deterministic_inference\"]"
   echo "- Note: LLM execution is non-deterministic. Recorded sampling params allow"
   echo "  re-attempt with matching config but Mentat makes no replay guarantee."
+}
+
+{
+  echo "# Diagnosis — ${SLUG}"
+  echo ""
+  _emit_versions
+  _emit_system
+  _emit_repro
+  _emit_logs
+  _emit_footer
 } > "$OUT.tmp"
 
 # Privacy sanitization: strip KEY|TOKEN|SECRET|PASSWORD|API=<value> patterns
