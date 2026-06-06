@@ -203,6 +203,9 @@ for plan in "$@"; do
   log "chunk: $plan -> $slug | $logf"
 done
 
+log "watch live: ~/.agents/bin/mentat-track $LOGDIR mentat-*.jsonl"
+log "or in this repo: mentat-track"
+log "or via harness slash-command: /mentat-track"
 to_track_start "$LOGDIR" "${SLUGS[@]}"
 cleanup() { to_track_stop; }
 trap cleanup EXIT INT TERM

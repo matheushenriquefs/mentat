@@ -107,6 +107,45 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 rsync "${RSYNC_ARGS[@]}" "$AGENTS_DIR/" "$HOME/.agents/"
+
+# Harness command symlinks — mentat-* only, never vendor content.
+ln_safe() {
+  local src="$1" dest="$2"
+  if [ -e "$dest" ] && [ ! -L "$dest" ]; then
+    echo "mentat-install: skip: $dest is real file/dir — refusing to clobber"
+    return 0
+  fi
+  ln -sfn "$src" "$dest"
+}
+link_into() {
+  local src="$1" dest="$2" glob="$3"
+  [ -d "$dest" ] || return 0
+  for f in "$src"/$glob; do
+    [ -e "$f" ] || continue
+    ln_safe "$f" "$dest/$(basename "$f")"
+  done
+}
+link_into "$HOME/.agents/commands" "$HOME/.claude/commands" "mentat-*.md"
+link_into "$HOME/.agents/commands" "$HOME/.codex/prompts"   "mentat-*.md"
+
+# Harness skill symlinks — mentat-* + matt categories, never caveman vendor.
+MENTAT_SKILLS_GLOB="mentat-*"
+MATT_ROOT="$HOME/.agents/skills/vendor/mattpocock/skills/skills"
+for harness_skill_dir in "$HOME/.claude/skills" "$HOME/.cursor/skills" "$HOME/.codex/skills"; do
+  link_into "$HOME/.agents/skills" "$harness_skill_dir" "$MENTAT_SKILLS_GLOB"
+  for cat in deprecated engineering in-progress misc personal productivity; do
+    [ -d "$MATT_ROOT/$cat" ] || continue
+    link_into "$MATT_ROOT/$cat" "$harness_skill_dir" "*"
+  done
+done
+
+# Bin + docs umbrella symlinks per harness.
+for hdir in "$HOME/.claude" "$HOME/.cursor" "$HOME/.codex"; do
+  [ -d "$hdir" ] || continue
+  ln_safe "$HOME/.agents/bin"  "$hdir/bin"
+  ln_safe "$HOME/.agents/docs" "$hdir/docs"
+done
+
 echo "mentat-install: done"
 
 # Orphan advisory: files present in ~/.agents/ but not in source tree.
