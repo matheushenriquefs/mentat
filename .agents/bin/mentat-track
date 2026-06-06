@@ -95,7 +95,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     LOG_ROOT="${MENTAT_LOG_DIR:-$HOME/.agents/mentat/logs}"
     REPO="$(basename "$PWD")"
     [ -d "$LOG_ROOT/$REPO" ] || { echo "mentat-track: no log dir for repo '$REPO' at $LOG_ROOT/$REPO" >&2; exit 1; }
-    SESS="$(ls -t "$LOG_ROOT/$REPO" 2>/dev/null | head -1)"
+    SESS="$(find "$LOG_ROOT/$REPO" -mindepth 1 -maxdepth 1 -type d | sort -r | head -1 | xargs basename 2>/dev/null || true)"
     [ -n "$SESS" ] || { echo "mentat-track: no sessions under $LOG_ROOT/$REPO" >&2; exit 1; }
     shopt -s nullglob
     SLUG_LOGS=("$LOG_ROOT/$REPO/$SESS"/mentat-*.jsonl)
