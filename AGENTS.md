@@ -178,7 +178,7 @@ Checker dispatch: [.agents/bin/mentat-gate-checks](.agents/bin/mentat-gate-check
 
 Unknown file classes pass silently (gate is additive, not a whitelist).
 
-See [.agents/bin/lib/gates.sh](.agents/bin/lib/gates.sh) for checker implementations and [.agents/bin/mentat-gate](.agents/bin/mentat-gate) for the driver.
+See [.agents/bin/lib/gates.sh](.agents/bin/lib/gates.sh) for checker implementations and [.agents/bin/mentat-gate-checks](.agents/bin/mentat-gate-checks) for the dispatch script.
 
 **Doc-freshness gate (advisory):** Any change in `.agents/bin/`, `.agents/skills/`, `.agents/commands/`, or `docs/adr/` that alters public surface must include a corresponding update to `README.md` or `CONTEXT.md`. The gate lists affected docs; the LLM reviewer flags actual staleness.
 
@@ -190,11 +190,11 @@ Modifying certain file classes requires additional checks before commit:
 
 | Trigger | Required action |
 |---|---|
-| `agents/*.md` or `skills/*/SKILL.md` modified | Run `.agents/bin/mentat-gate <file>` + skill's promptfoo eval (`npx promptfoo eval --filter-providers <skill-name>`) |
+| `agents/*.md` or `skills/*/SKILL.md` modified | Run `lefthook run pre-commit --all-files` + skill's promptfoo eval (`npx promptfoo eval --filter-providers <skill-name>`) |
 | `docs/adr/*.md` modified | File must include `**Decided:** <YYYY-MM-DD>` and `**Author:** <handle>` lines |
 | `agents/mentat-*-reviewer.md` modified | Must bump ADR-0003 weight rationale (add/update reasoning for any changed dimension weight) |
 
-Enforced by convention during review. `.agents/bin/mentat-gate` flags structural violations; the LLM reviewer flags missing promptfoo eval evidence in the PR diff.
+Enforced by convention during review. `lefthook run pre-commit` flags structural violations; the LLM reviewer flags missing promptfoo eval evidence in the PR diff.
 
 ## See also
 

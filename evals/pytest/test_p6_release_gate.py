@@ -52,6 +52,31 @@ def test_dry_run_excludes_skill_lock():
     )
 
 
+def test_dry_run_excludes_mentat_dir():
+    """--exclude='mentat/' must suppress the entire mentat/ subtree."""
+    out = _dry_run_output()
+    # mentat/ (bare) should not appear in deletion list
+    lines = [l for l in out.splitlines() if l.startswith("deleting")]
+    for line in lines:
+        assert not line.startswith("deleting mentat/"), (
+            f"--dry-run must not list mentat/ subtree for deletion:\n{line}"
+        )
+
+
+# ── B1e/B1f: confirmation prompt behavior ────────────────────────────────────
+
+def test_force_dirty_yes_bypasses_prompt():
+    """--yes must skip confirmation prompt (no 'Proceed?' shown) in dry-run."""
+    with tempfile.TemporaryDirectory() as dest:
+        env = {**os.environ, "HOME": dest}
+        r = subprocess.run(
+            [MENTAT_RELEASE, "--force-dirty", "--force-gate", "--yes", "--dry-run"],
+            capture_output=True, text=True, cwd=ROOT, env=env,
+        )
+    combined = r.stdout + r.stderr
+    assert "Proceed?" not in combined, "--yes must not show confirmation prompt:\n" + combined
+
+
 # ── B2: flag semantics ───────────────────────────────────────────────────────
 
 def test_force_flag_unknown():
@@ -237,16 +262,34 @@ def test_confirmation_prompt_aborts_on_n():
 
 # ── B2d: gate failure must hard-abort without --force-gate ───────────────────
 
-def test_release_source_gate_fail_exits_without_force_gate():
-    """mentat-release source: gate failure path must exit 1 when FORCE_GATE != 1."""
-    with open(MENTAT_RELEASE) as f:
-        src = f.read()
-    # Verify the conditional guard is present and structured correctly
-    assert "FORCE_GATE" in src, "FORCE_GATE variable must appear in mentat-release"
-    assert "gate check failed" in src, "gate check failed message must be in mentat-release"
-    # Verify --force-gate alone does NOT bypass (requires explicit opt-in)
-    assert 'FORCE_GATE" -eq 1' in src or "FORCE_GATE -eq 1" in src, (
-        "gate bypass must be guarded by FORCE_GATE == 1 check"
+def test_release_gate_fail_aborts_without_force_gate():
+    """Gate failure (bad .jsonc in tracked .agents/) → exit non-zero without --force-gate."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        agents = os.path.join(tmpdir, ".agents")
+        agents_bin = os.path.join(agents, "bin")
+        os.makedirs(agents_bin)
+        # Add a bad .jsonc that gate_jsonc will reject
+        bad_jsonc = os.path.join(agents, "bad.jsonc")
+        with open(bad_jsonc, "w") as f:
+            f.write('{ "x": 1, }')  # trailing comma → invalid JSON
+        # Init a git repo so ls-files works
+        subprocess.run(["git", "init", tmpdir], capture_output=True)
+        subprocess.run(["git", "-C", tmpdir, "config", "user.email", "t@t.com"], capture_output=True)
+        subprocess.run(["git", "-C", tmpdir, "config", "user.name", "T"], capture_output=True)
+        subprocess.run(["git", "-C", tmpdir, "add", "."], capture_output=True)
+        subprocess.run(["git", "-C", tmpdir, "commit", "-m", "init", "--allow-empty"], capture_output=True)
+        subprocess.run(["git", "-C", tmpdir, "add", bad_jsonc], capture_output=True)
+        subprocess.run(["git", "-C", tmpdir, "commit", "-m", "add bad jsonc"], capture_output=True)
+        env = {**os.environ, "HOME": tempfile.mkdtemp()}
+        r = subprocess.run(
+            [MENTAT_RELEASE, "--force-dirty"],
+            capture_output=True, text=True, cwd=tmpdir, env=env,
+        )
+    assert r.returncode != 0, (
+        "mentat-release must exit non-zero when gate fails and --force-gate absent"
+    )
+    assert "gate check failed" in r.stderr, (
+        f"must print 'gate check failed' on gate failure:\n{r.stderr}"
     )
 
 
