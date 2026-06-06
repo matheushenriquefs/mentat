@@ -56,9 +56,24 @@ fi
 echo "mentat-release: creating tag $TAG at $(git rev-parse --short HEAD)"
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "mentat-release: dry-run — would run: git tag $TAG && git push origin $TAG"
+  echo "mentat-release: dry-run — would bundle .agents/skills/vendor/ → mentat-vendor-${TAG}.tar.gz"
+  echo "mentat-release: dry-run — would run: gh release create $TAG <tarball> --generate-notes --verify-tag"
   exit 0
 fi
 
 git tag "$TAG"
 git push origin "$TAG"
-echo "mentat-release: done — $TAG pushed"
+
+# Bundle vendor/ into a release tarball so consumers without vendir can install.
+VENDOR_DIR="$REPO_ROOT/.agents/skills/vendor"
+if [ -d "$VENDOR_DIR" ] && command -v gh >/dev/null 2>&1; then
+  TARBALL="/tmp/mentat-vendor-${TAG}.tar.gz"
+  tar -czf "$TARBALL" -C "$REPO_ROOT/.agents/skills" vendor/
+  gh release create "$TAG" "$TARBALL" \
+    --title "$TAG" \
+    --generate-notes \
+    --verify-tag
+  echo "mentat-release: release created — $TAG (vendor tarball attached)"
+else
+  echo "mentat-release: done — $TAG pushed (no vendor tarball: gh or vendor/ missing)"
+fi
