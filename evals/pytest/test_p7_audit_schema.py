@@ -16,40 +16,29 @@ def _load_pyproject() -> dict:
         return tomllib.load(f)
 
 
-def test_pyproject_dev_group_has_ruff():
+def _dev_deps() -> list[str]:
     cfg = _load_pyproject()
-    deps = [d.split(">=")[0].split("==")[0] for d in cfg["dependency-groups"]["dev"]]
-    assert "ruff" in deps, "ruff missing from [dependency-groups].dev"
+    return [d.split(">=")[0].split("==")[0].strip() for d in cfg["dependency-groups"]["dev"]]
+
+
+def test_pyproject_dev_group_has_ruff():
+    assert "ruff" in _dev_deps(), "ruff missing from [dependency-groups].dev"
 
 
 def test_pyproject_dev_group_has_pyright():
-    cfg = _load_pyproject()
-    deps = [d.split(">=")[0].split("==")[0] for d in cfg["dependency-groups"]["dev"]]
-    assert "pyright" in deps, "pyright missing from [dependency-groups].dev"
+    assert "pyright" in _dev_deps(), "pyright missing from [dependency-groups].dev"
 
 
 def test_pyproject_dev_group_has_pydantic():
-    cfg = _load_pyproject()
-    deps = [d.split(">=")[0].split("==")[0] for d in cfg["dependency-groups"]["dev"]]
-    assert "pydantic" in deps, "pydantic missing from [dependency-groups].dev"
+    assert "pydantic" in _dev_deps(), "pydantic missing from [dependency-groups].dev"
 
 
 def test_pyproject_build_backend_not_broken():
     cfg = _load_pyproject()
     backend = cfg.get("build-system", {}).get("build-backend", "")
     assert backend != "setuptools.backends.legacy:build", (
-        "broken build-backend still present — should be removed or set to setuptools.build_meta"
+        "broken build-backend still present"
     )
-
-
-def test_pyproject_ruff_config_present():
-    cfg = _load_pyproject()
-    assert "ruff" in cfg.get("tool", {}), "[tool.ruff] section missing from pyproject.toml"
-
-
-def test_pyproject_pyright_config_present():
-    cfg = _load_pyproject()
-    assert "pyright" in cfg.get("tool", {}), "[tool.pyright] section missing from pyproject.toml"
 
 
 def test_pyproject_ruff_target_version():
@@ -57,79 +46,110 @@ def test_pyproject_ruff_target_version():
     assert cfg["tool"]["ruff"].get("target-version") == "py311"
 
 
+def test_pyproject_ruff_lint_select():
+    cfg = _load_pyproject()
+    select = cfg["tool"]["ruff"]["lint"].get("select", [])
+    for code in ("E", "F", "W", "I", "UP", "B", "SIM"):
+        assert code in select, f"ruff lint missing rule group: {code}"
+
+
+def test_pyproject_ruff_format_quote_style():
+    cfg = _load_pyproject()
+    assert cfg["tool"]["ruff"]["format"].get("quote-style") == "double"
+
+
 def test_pyproject_pyright_includes_evals():
     cfg = _load_pyproject()
-    includes = cfg["tool"]["pyright"].get("include", [])
-    assert "evals/pytest" in includes
+    assert "evals/pytest" in cfg["tool"]["pyright"].get("include", [])
 
 
-# ── S2: AGENTS.md Python gate rows ───────────────────────────────────────────
+def test_pyproject_pyright_python_version():
+    cfg = _load_pyproject()
+    assert cfg["tool"]["pyright"].get("pythonVersion") == "3.11"
 
-def _agents_md() -> str:
+
+def test_pyproject_pyright_type_checking_mode():
+    cfg = _load_pyproject()
+    assert cfg["tool"]["pyright"].get("typeCheckingMode") == "standard"
+
+
+# ── S2: AGENTS.md Python gate rows in Quality Gates table ────────────────────
+
+def _quality_gates_section() -> str:
+    """Extract text from ## Quality Gates section only."""
     with open(AGENTS_MD) as f:
+        content = f.read()
+    start = content.find("## Quality Gates")
+    assert start != -1, "## Quality Gates section not found in AGENTS.md"
+    # End at next ## section
+    end = content.find("\n## ", start + 1)
+    return content[start:end] if end != -1 else content[start:]
+
+
+def test_agents_md_quality_gates_has_ruff_check():
+    section = _quality_gates_section()
+    assert "ruff check" in section, "Quality Gates table missing ruff check row"
+
+
+def test_agents_md_quality_gates_has_ruff_format():
+    section = _quality_gates_section()
+    assert "ruff format" in section, "Quality Gates table missing ruff format row"
+
+
+def test_agents_md_quality_gates_has_pyright():
+    section = _quality_gates_section()
+    assert "pyright" in section, "Quality Gates table missing pyright row"
+
+
+def test_agents_md_quality_gates_uses_container_run():
+    section = _quality_gates_section()
+    assert "mentat-container-run" in section, (
+        "Python gate rows must use mentat-container-run per plan S2"
+    )
+
+
+# ── S3: audit_schema.py pydantic models ──────────────────────────────────────
+
+def _schema_source() -> str:
+    with open(AUDIT_SCHEMA) as f:
         return f.read()
 
-
-def test_agents_md_has_ruff_check_gate():
-    content = _agents_md()
-    assert "ruff check" in content, "AGENTS.md missing ruff check gate row"
-
-
-def test_agents_md_has_ruff_format_gate():
-    content = _agents_md()
-    assert "ruff format" in content, "AGENTS.md missing ruff format gate row"
-
-
-def test_agents_md_has_pyright_gate():
-    content = _agents_md()
-    assert "pyright" in content, "AGENTS.md missing pyright gate row"
-
-
-# ── S3: audit_schema.py ───────────────────────────────────────────────────────
 
 def test_audit_schema_file_exists():
     assert os.path.isfile(AUDIT_SCHEMA), f"audit_schema.py not found at {AUDIT_SCHEMA}"
 
 
 def test_audit_schema_syntax_valid():
-    with open(AUDIT_SCHEMA) as f:
-        source = f.read()
-    ast.parse(source)  # raises SyntaxError if invalid
+    ast.parse(_schema_source())
 
 
-def test_audit_schema_has_audit_envelope():
-    with open(AUDIT_SCHEMA) as f:
-        source = f.read()
-    assert "class AuditEnvelope" in source
-
-
-def test_audit_schema_has_chunk_result_payload():
-    with open(AUDIT_SCHEMA) as f:
-        source = f.read()
-    assert "class ChunkResultPayload" in source
-
-
-def test_audit_schema_has_review_verdict_payload():
-    with open(AUDIT_SCHEMA) as f:
-        source = f.read()
-    assert "class ReviewVerdictPayload" in source
-
-
-def test_audit_schema_has_dispatch_payload():
-    with open(AUDIT_SCHEMA) as f:
-        source = f.read()
-    assert "def dispatch_payload" in source
-
-
-def test_audit_schema_envelope_has_required_fields():
-    with open(AUDIT_SCHEMA) as f:
-        source = f.read()
+def test_audit_envelope_fields():
+    src = _schema_source()
+    assert "class AuditEnvelope" in src
     for field in ("ts:", "agent:", "session:", "event:", "payload:"):
-        assert field in source, f"AuditEnvelope missing field: {field}"
+        assert field in src, f"AuditEnvelope missing field: {field}"
 
 
-def test_audit_schema_review_verdict_has_score_veto():
-    with open(AUDIT_SCHEMA) as f:
-        source = f.read()
-    assert "score: float" in source
-    assert "veto: bool" in source
+def test_chunk_result_payload_fields():
+    src = _schema_source()
+    assert "class ChunkResultPayload" in src
+    for field in ("slug:", "outcome:", "tip:", "reason:"):
+        assert field in src, f"ChunkResultPayload missing field: {field}"
+
+
+def test_review_verdict_payload_fields():
+    src = _schema_source()
+    assert "class ReviewVerdictPayload" in src
+    for field in ("reviewer:", "score: float", "veto: bool", "findings:"):
+        assert field in src, f"ReviewVerdictPayload missing field: {field}"
+
+
+def test_dispatch_payload_routes_land_complete():
+    src = _schema_source()
+    assert "def dispatch_payload" in src
+    assert "land.complete" in src, "dispatch_payload missing land.complete verb mapping"
+
+
+def test_dispatch_payload_routes_review_final():
+    src = _schema_source()
+    assert "review.final" in src, "dispatch_payload missing review.final verb mapping"
