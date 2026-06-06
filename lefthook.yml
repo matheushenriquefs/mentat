@@ -22,3 +22,9 @@ pre-commit:
     harness:
       glob: ".agents/bin/lib/harness/*.sh"
       run: .agents/bin/mentat-gate-checks harness {staged_files}
+    stale-ref:
+      glob: "**/*"
+      run: |
+        out=$(rg -n '\bmentat-setup\b|\bmentat-sync-upstream\b|upstreams\.jsonc|/to-(rebase|commit|plan|implement|scaffold|eval)\b' {staged_files} 2>/dev/null || true)
+        [ -z "$out" ] && exit 0
+        echo "stale-ref advisory: $out" && exit 0
