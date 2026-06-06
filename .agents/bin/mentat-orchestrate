@@ -57,16 +57,13 @@ mkdir -p "$LOGDIR"
 command -v jq >/dev/null || die "jq not found (needed by mentat-track)"
 . "$HERE/mentat-track"
 
-# Append terminal record to chunk's own jsonl. ADR 0004
-_land_record() { # $1=logf $2=slug $3=success|error [$4=sha] [$5=reason]
-  local logf="$1" slug="$2" outcome="$3" sha="${4:-}" reason="${5:-}"
-  if [ "$outcome" = success ]; then
-    printf '{"type":"result","subtype":"success","slug":"%s","landed":true,"tip":"%s"}\n' \
-      "$slug" "$sha" >>"$logf"
-  else
-    printf '{"type":"result","subtype":"error","slug":"%s","landed":false,"reason":"%s","sibling_tip":"%s"}\n' \
-      "$slug" "$reason" "$sha" >>"$logf"
-  fi
+# Emit canonical land.complete audit event. ADR 0004 ADR 0009
+_land_record() { # $1=logf(unused,kept for compat) $2=slug $3=success|error [$4=sha] [$5=reason]
+  local slug="$2" outcome="$3" sha="${4:-}" reason="${5:-}"
+  MENTAT_SLUG="$slug" mentat_audit mentat-orchestrate land.complete "$(jq -cn \
+    --arg slug "$slug" --arg outcome "$outcome" \
+    --arg tip "$sha" --arg reason "$reason" \
+    '{slug:$slug, outcome:$outcome, tip:$tip, reason:$reason}')"
 }
 
 build_cmd() {
@@ -153,7 +150,7 @@ any gate is red. Report only PASS or FAIL."
 # End-of-queue review over final landed tip — advisory. ADR 0003 ADR 0004
 final_review() {
   local base="$1"
-  local logf="$LOGDIR/final-review.jsonl"
+  local logf="$LOGDIR/mentat-orchestrate-$MENTAT_SESSION.jsonl"
   log "end-of-queue review: spawning ADR-0003 reviewers over $base..$HOLDING"
   ( cd "$ROOT" && ~/.agents/bin/mentat-container-up ) >>"$logf" 2>&1 || {
     log "end-of-queue review SKIPPED (mentat-container-up failed at $ROOT)"; return 0; }
@@ -165,11 +162,17 @@ threshold), and report each score + the verdict. Read CLAUDE.md/AGENTS.md for ho
 this project runs its checks. Do not modify code."
   local rcmd=()
   while IFS= read -r -d '' tok; do rcmd+=("$tok"); done < <(build_cmd "$prompt")
+  local verdict="success"
   if ( cd "$ROOT" && "${rcmd[@]}" ) >>"$logf" 2>&1; then
     log "end-of-queue review done (see $logf)"
   else
+    verdict="flagged"
     log "end-of-queue review FLAGGED a miss (see $logf). Landed ref unchanged (advisory)."
   fi
+  mentat_audit mentat-orchestrate review.final "$(jq -cn \
+    --arg reviewer "adr-0003-composite" --arg outcome "$verdict" \
+    --arg base "$base" --arg tip "$HOLDING" \
+    '{reviewer:$reviewer, outcome:$outcome, base:$base, tip:$tip}')"
 }
 
 declare -a PIDS PLANS SLUGS LOGS
