@@ -1,108 +1,64 @@
 #!/usr/bin/env bash
-# mentat-release — rsync .agents/ to ~/.agents/ as a clean harness install.
-# Excludes dev-only paths. Pre-flight runs mentat-gate on tracked files.
-# ADR 0004.
+# mentat-release — git release management (tag, status).
+# For consumer harness install, use mentat-setup.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=/dev/null
-. "$HERE/lib/strict.sh"
+REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
-FORCE_DIRTY=0
-FORCE_GATE=0
-YES=0
+TAG=""
 DRY_RUN=0
 
 for arg in "$@"; do
   case "$arg" in
-    --force-dirty) FORCE_DIRTY=1 ;;
-    --force-gate)  FORCE_GATE=1 ;;
-    --yes)         YES=1 ;;
-    --dry-run)     DRY_RUN=1 ;;
-    --force)
-      echo "mentat-release: --force removed; use --force-dirty (uncommitted) or --force-gate (gate failure)" >&2
-      exit 1 ;;
+    --tag=*) TAG="${arg#--tag=}" ;;
+    --dry-run) DRY_RUN=1 ;;
+    --help|-h)
+      echo "usage: mentat-release [--tag=<v>] [--dry-run]"
+      echo ""
+      echo "No args: show release status (last tag, commits since)."
+      echo "--tag=<v>: create and push git tag <v>."
+      echo ""
+      echo "For harness install: use mentat-setup instead."
+      exit 0 ;;
     *)
-      echo "usage: mentat-release [--force-dirty] [--force-gate] [--yes] [--dry-run]" >&2
+      echo "mentat-release: unknown arg '$arg'" >&2
+      echo "usage: mentat-release [--tag=<v>] [--dry-run]" >&2
       exit 1 ;;
   esac
 done
 
-REPO_ROOT="$(cd "$HERE/../.." && pwd)"
-AGENTS_DIR="$REPO_ROOT/.agents"
+cd "$REPO_ROOT"
 
-if [ ! -d "$AGENTS_DIR" ]; then
-  echo "mentat-release: .agents/ not found at $AGENTS_DIR" >&2
+if [ -z "$TAG" ]; then
+  LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "(no tags)")
+  echo "mentat-release: last tag: $LAST_TAG"
+  if [ "$LAST_TAG" != "(no tags)" ]; then
+    COUNT=$(git rev-list "${LAST_TAG}..HEAD" --count 2>/dev/null || echo 0)
+    echo "mentat-release: commits since $LAST_TAG: $COUNT"
+    if [ "$COUNT" -gt 0 ]; then
+      git log --oneline "${LAST_TAG}..HEAD"
+    fi
+  fi
+  exit 0
+fi
+
+if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+  echo "mentat-release: tag must match v<major>.<minor>.<patch> (got: $TAG)" >&2
   exit 1
 fi
 
-cd "$REPO_ROOT"
-
-if [ "$FORCE_DIRTY" -eq 0 ]; then
-  UNCOMMITTED=$(git -C "$REPO_ROOT" status --porcelain "$AGENTS_DIR" 2>/dev/null | grep -c '^[MADRCU?]') || UNCOMMITTED=0
-  if [ "$UNCOMMITTED" -gt 0 ]; then
-    echo "mentat-release: $UNCOMMITTED uncommitted change(s) in .agents/ — commit first or use --force-dirty" >&2
-    exit 1
-  fi
+if git rev-parse "$TAG" >/dev/null 2>&1; then
+  echo "mentat-release: tag '$TAG' already exists" >&2
+  exit 1
 fi
 
-TRACKED_FILES=$(git -C "$REPO_ROOT" ls-files "$AGENTS_DIR" 2>/dev/null) || TRACKED_FILES=""
-if [ -n "$TRACKED_FILES" ]; then
-  GATE_FAIL=0
-  # shellcheck source=/dev/null
-  . "$HERE/lib/gates.sh"
-  while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    mentat_gate "$f" || GATE_FAIL=1
-  done <<< "$TRACKED_FILES"
-  if [ "$GATE_FAIL" -ne 0 ]; then
-    echo "mentat-release: gate check failed — fix errors above before releasing" >&2
-    if [ "$FORCE_GATE" -eq 1 ]; then
-      echo "mentat-release: WARNING: proceeding with --force-gate despite gate failure" >&2
-    else
-      exit 1
-    fi
-  fi
-fi
-
-RSYNC_ARGS=(-av --delete -L
-  --exclude='evals/'
-  --exclude='.dmux-hooks/'
-  --exclude='vendored/'
-  --exclude='*.bak.*'
-  --exclude='.DS_Store'
-  --exclude='bin/mentat-sync-upstream'
-  --exclude='bin/mentat-credits-gen'
-  --exclude='bin/mentat-release'
-  --exclude='bin/mentat-sync-check'
-  --exclude='upstreams.jsonc'
-  --exclude='.skill-lock.json'
-  --exclude='plans/'
-  --exclude='mentat/'
-  --exclude='skills/vendor/matt-pocock/'
-  --exclude='skills/vendor/mastra-evals/'
-)
-
+echo "mentat-release: creating tag $TAG at $(git rev-parse --short HEAD)"
 if [ "$DRY_RUN" -eq 1 ]; then
-  RSYNC_ARGS+=(-n)
-  echo "mentat-release: dry-run — no files will be written"
+  echo "mentat-release: dry-run — would run: git tag $TAG && git push origin $TAG"
+  exit 0
 fi
 
-# Require explicit confirmation before destructive delete (non-dry-run, non-yes).
-if [ "$DRY_RUN" -eq 0 ] && [ "$YES" -eq 0 ]; then
-  DELETE_LIST=$(rsync "${RSYNC_ARGS[@]}" -n "$AGENTS_DIR/" "$HOME/.agents/" 2>/dev/null \
-    | grep '^deleting ' || true)
-  if [ -n "$DELETE_LIST" ]; then
-    echo "mentat-release: files to delete from ~/.agents/:"
-    echo "$DELETE_LIST"
-    printf 'Proceed? [y/N] '
-    read -r reply </dev/tty || reply=""
-    case "$reply" in
-      [Yy]*) ;;
-      *) echo "mentat-release: aborted"; exit 1 ;;
-    esac
-  fi
-fi
-
-rsync "${RSYNC_ARGS[@]}" "$AGENTS_DIR/" "$HOME/.agents/"
-echo "mentat-release: done"
+git tag "$TAG"
+git push origin "$TAG"
+echo "mentat-release: done — $TAG pushed"

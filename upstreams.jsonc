@@ -1,36 +1,35 @@
 {
-  // Upstream vendored dependencies. Canonical source for CREDITS.md and mentat-sync-upstream.
-  // Run: bin/mentat-sync-upstream <name>  to update a vendor copy.
-  // Run: bin/mentat-credits-gen  to regenerate CREDITS.md.
-  "upstreams": [
-    {
-      "name": "mattpocock-skills",
-      "url": "https://github.com/mattpocock/skills.git",
-      "pin": "17972a1bdbf5909b9dbdc435ad348f0bf45f8664",
-      "vendor_path": ".agents/skills/vendor/matt-pocock",
-      "commit": false,
+  // Upstream vendored dependencies.
+  // Keys: <user>/<repo> GitHub handles (lowercase).
+  // Vendor path: .agents/skills/vendor/<user>/<repo>/ (derived from key — not stored here).
+  // Pin: tag if upstream publishes releases, SHA otherwise.
+  // Run: bin/mentat-sync-upstream <user>/<repo>
+  // Run: bin/mentat-sync-upstream --all   to update all
+  // Run: bin/mentat-credits-gen           to regenerate CREDITS.md
+  "upstreams": {
+    "juliusbrussee/caveman": {
+      "url": "https://github.com/JuliusBrussee/caveman",
       "license": "MIT",
-      "description": "Engineering and productivity skills for Claude Code"
-    },
-    {
-      "name": "caveman",
-      "url": "https://github.com/mattpocock/skills.git",
-      "pin": "17972a1bdbf5909b9dbdc435ad348f0bf45f8664",
-      "vendor_path": ".agents/skills/vendor/caveman",
-      "commit": true,
-      "subtree_path": "skills/productivity/caveman",
-      "license": "MIT",
+      "subpath": ".",
+      "pin": "v1.8.2",
+      "skills": ["caveman"],
       "description": "Token-optimized terse communication mode skill"
     },
-    {
-      "name": "mastra-evals",
-      "url": "https://github.com/mastra-ai/mastra.git",
-      "pin": "HEAD",
-      "vendor_path": ".agents/skills/vendor/mastra-evals",
-      "commit": false,
-      "subtree_path": "packages/evals",
+    "mattpocock/skills": {
+      "url": "https://github.com/mattpocock/skills",
+      "license": "MIT",
+      "subpath": ".",
+      "pin": "aaf2453fbdfe",
+      "skills": ["setup-matt-pocock-skills"],
+      "description": "Engineering and productivity skills for Claude Code"
+    },
+    "mastra-ai/mastra": {
+      "url": "https://github.com/mastra-ai/mastra",
       "license": "Apache-2.0",
+      "subpath": "packages/evals",
+      "pin": "@mastra/core@1.41.0",
+      "skills": ["mastra-evals"],
       "description": "Mastra eval scorers used in ADR-0003 review gate"
     }
-  ]
+  }
 }

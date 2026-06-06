@@ -9,6 +9,5 @@ __pycache__/
 .pytest_cache/
 node_modules/
 
-# vendored upstreams (commit: false) — managed by mentat-sync-upstream
-.agents/skills/vendor/matt-pocock/
-.agents/skills/vendor/mastra-evals/
+# vendored upstreams — materialized by mentat-setup, not committed
+.agents/skills/vendor/*/

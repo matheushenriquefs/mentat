@@ -50,6 +50,19 @@ No SDK, no orchestration framework, no platform lock. The driver (`mentat-orches
 
 The constraint is Docker. Everything else is a text file.
 
+## Install
+
+```bash
+# Install / update the harness into ~/.agents/ (syncs vendored upstreams first)
+bin/mentat-setup
+
+# Skip upstream sync (offline install)
+bin/mentat-setup --minimal
+
+# Dry-run
+bin/mentat-setup --dry-run
+```
+
 ## Vendored skills
 
-Third-party skills are synced from `upstreams.jsonc` via `bin/mentat-sync-upstream` and installed under `.agents/skills/vendor/<upstream>/`. Attributions are auto-generated in [CREDITS.md](CREDITS.md).
+Third-party skills are declared in `upstreams.jsonc` (keys: `<user>/<repo>`) and pinned in `upstreams.lock.jsonc`. The vendor tree (`.agents/skills/vendor/`) is gitignored — `bin/mentat-setup` materializes it on install. Attributions are auto-generated in [CREDITS.md](CREDITS.md).
