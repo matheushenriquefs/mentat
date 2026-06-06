@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# bin/mentat-gate — run per-class deterministic gate on each file argument
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$HERE/lib/strict.sh"
+source "$HERE/lib/gates.sh"
+
+fail=0
+for f in "$@"; do
+  [ -f "$f" ] || continue
+  mentat_gate "$f" || fail=1
+done
+exit "$fail"

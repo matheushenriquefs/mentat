@@ -52,6 +52,25 @@ in a repo. Index (titles only; read on demand):
 - Docstring/header for public entry points only. No narrative essays inside functions.
 - Remove duplicate comment blocks. One canonical statement per fact.
 
+## Quality Gates
+
+Every modified file must pass its class checker before commit.
+Run locally: `mentat-gate $(git diff --name-only "$base")`.
+Wired into `mentat-orchestrate` pre-land step (host-side; harness tools only — ADR 0004).
+
+| File class | Glob | Check |
+|---|---|---|
+| ADR | `docs/adr/*.md` | All three sections present: `## Context`, `## Decision`, `## Consequences` |
+| Skill / agent | `agents/*.md` | YAML frontmatter present (first 10 lines contain `---`) |
+| Command | `commands/*.md` | YAML frontmatter present (first 10 lines contain `---`) |
+| Workflow doc | `AGENTS.md`, `CONTEXT.md`, `STYLE.md`, `README.md` | Cross-ref links present (`[text](*.md)` syntax) |
+| Shell | `bin/**/*`, `lib/**/*.sh` | `bash -n` + `shellcheck` (advisory if absent) |
+| Config | `*.jsonc` | `sed \| jq -e` validates JSON structure |
+
+Unknown file classes pass silently (gate is additive, not a whitelist).
+
+See [bin/lib/gates.sh](bin/lib/gates.sh) for checker implementations and [bin/mentat-gate](bin/mentat-gate) for the driver.
+
 ## Project docs
 
 - [../README.md](../README.md) — public overview, quickstart, no-framework thesis.
