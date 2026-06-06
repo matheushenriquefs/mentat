@@ -9,7 +9,7 @@ A lean, agnostic **multi-harness orchestrator** for parallel coding agents.
 
 ## How it works
 
-1. **Cut.** `/to-plan` slices a feature into vertical tracer-bullet cuts — each a `plan.md`. AFK slices gate and land unattended; HITL slices pause for review.
+1. **Cut.** `/mentat-plan` slices a feature into vertical tracer-bullet cuts — each a `plan.md`. AFK slices gate and land unattended; HITL slices pause for review.
 2. **Fan out.** `bin/mentat-orchestrate` launches each slice as a chunk: isolated worktree, devcontainer, and branch off `main`. Up to 3 run in parallel.
 3. **Re-gate on land.** The serial land pass is a merge queue. Per chunk: rebase onto the live holding-branch tip inside the container, re-gate with the target repo's own quality gates, then `merge --ff-only`. Semantic breakage from a sibling's land is caught here. Red → eject; queue continues.
 4. **Hold, don't merge.** The holding branch (`branch/<feature>`) carries no commits of its own — every land is a fast-forward. No host-side pre-commit ever fires.
@@ -31,7 +31,7 @@ bin/mentat-container-run '<test command>'
 bin/mentat-orchestrate branch/my-feature plan1.md plan2.md plan3.md
 
 # Run quality gates on changed files
-bin/mentat-gate $(git diff --name-only main)
+.agents/bin/mentat-gate $(git diff --name-only main)
 ```
 
 ## Requirements

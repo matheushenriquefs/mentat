@@ -33,10 +33,10 @@ Mentat cuts planned work into vertical slices, runs each slice as an isolated ch
 : The harness itself — the `bin/`, `.agents/`, and orchestration contracts. Not a person, not an agent. _Avoid_: "the Mentat", "the AI", "the bot".
 
 **Slice**
-: A *planned* vertical tracer-bullet cut. An input artifact: a `plan.md`. Taxonomy owned by `/to-plan` and `/to-issues`; AFK/HITL tags are theirs. _Avoid_: using "slice" for the running execution.
+: A *planned* vertical tracer-bullet cut. An input artifact: a `plan.md`. Taxonomy owned by `/mentat-plan` and `/mentat-issues`; AFK/HITL tags are theirs. _Avoid_: using "slice" for the running execution.
 
 **Chunk**
-: The *running execution* of one slice — worktree + devcontainer + its own branch off `main`, running `/to-implement`. One slice → one chunk. _Avoid_: "chunk" for the plan document or the group.
+: The *running execution* of one slice — worktree + devcontainer + its own branch off `main`, running `/mentat-implement`. One slice → one chunk. _Avoid_: "chunk" for the plan document or the group.
 
 **Batch**
 : The full set of chunks in one `mentat-orchestrate` run. Borrowed from Laravel (noun only — not their semantics; landing is serial, not independent). _Avoid_: `batch` to imply parallel independence or Laravel's `then()`/`catch()` pattern.
@@ -109,7 +109,7 @@ Mentat cuts planned work into vertical slices, runs each slice as an isolated ch
 | # | Title | Summary |
 |---|---|---|
 | 0001 | Sub-agent delegation | Cavecrew by default; vanilla only for prose/rationale. `/mentat-researcher` is procedure, not persona. No hardcoded model. |
-| 0002 | Holding branch + `/to-rebase` | Use plain `git worktree` + ff-only merge; no merge commits. Holding branch carries no commits; all lands are ff-only in-container. |
+| 0002 | Holding branch + `/mentat-rebase` | Use plain `git worktree` + ff-only merge; no merge commits. Holding branch carries no commits; all lands are ff-only in-container. |
 | 0003 | Scored review gate | Three reviewers map to Mastra scorers. Never average; veto > threshold. LLM never self-promotes. |
 | 0004 | Parallel-slicing orchestration | Fan-out parallel, land serial. Cap 3 chunks. Re-gate after land rebase. Docker required. Driver names no project tool. |
 | 0005 | Ubiquitous lexicon | Slice/chunk/batch vocabulary. One Laravel borrow (batch, noun only). |
