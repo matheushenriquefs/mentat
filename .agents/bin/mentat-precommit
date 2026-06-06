@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# bin/mentat-gate-checks — dispatch per-class gate check, invoked by lefthook.
-# Usage: mentat-gate-checks <class> <file> [<file> ...]
+# bin/mentat-precommit — dispatch per-class precommit check, invoked by lefthook.
+# Usage: mentat-precommit <class> <file> [<file> ...]
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 . "$HERE/lib/strict.sh"
 # shellcheck source=/dev/null
-. "$HERE/lib/gates.sh"
+. "$HERE/lib/precommit-gates.sh"
 
-CLASS="${1:?usage: mentat-gate-checks <class> <file> [...]}"
+CLASS="${1:?usage: mentat-precommit <class> <file> [...]}"
 shift
 
 fail=0
@@ -24,7 +24,7 @@ for f in "$@"; do
     jsonc)    gate_jsonc    "$f" || fail=1 ;;
     jq)       gate_jq       "$f" || fail=1 ;;
     harness)  gate_harness  "$f" || fail=1 ;;
-    *) echo "mentat-gate-checks: unknown class '$CLASS'" >&2; exit 1 ;;
+    *) echo "mentat-precommit: unknown class '$CLASS'" >&2; exit 1 ;;
   esac
 done
 exit "$fail"

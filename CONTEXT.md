@@ -1,6 +1,4 @@
-# Mentat
-
-A lean, agnostic **multi-harness orchestrator** for parallel coding agents.
+# Mentat — Context
 
 ## What this is
 

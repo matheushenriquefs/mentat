@@ -50,7 +50,7 @@ TRACKED_FILES=$(git -C "$REPO_ROOT" ls-files "$AGENTS_DIR" 2>/dev/null) || TRACK
 if [ -n "$TRACKED_FILES" ]; then
   GATE_FAIL=0
   # shellcheck source=/dev/null
-  . "$HERE/lib/gates.sh"
+  . "$HERE/lib/precommit-gates.sh"
   while IFS= read -r f; do
     [ -z "$f" ] && continue
     mentat_gate "$f" || GATE_FAIL=1
@@ -97,6 +97,11 @@ RSYNC_ARGS=(-av --delete -L
   --exclude='.skill-lock.json'
   --exclude='plans/'
   --exclude='mentat/'
+  --exclude='context/'
+  --exclude='.dmux/'
+  --exclude='.mentat/'
+  --exclude='evals/'
+  --exclude='skills/vendor/'
 )
 
 if [ "$DRY_RUN" -eq 1 ]; then
