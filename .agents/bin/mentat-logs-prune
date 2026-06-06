@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# mentat-logs-prune — rotate ~/.agents/mentat/logs/ JSONL files (user-invoked, no cron)
+# Usage: mentat-logs-prune [--gzip-after DAYS] [--archive-after DAYS] [--delete-after DAYS] [--dry-run]
+set -euo pipefail
+
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+. "$_LIB/strict.sh"
+. "$_LIB/log.sh"
+_LOG_PREFIX=mentat-logs-prune
+
+GZIP_AFTER=30
+ARCHIVE_AFTER=90
+DELETE_AFTER=180
+DRY_RUN=0
+LOG_DIR="${MENTAT_LOG_DIR:-$HOME/.agents/mentat/logs}"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --gzip-after)    GZIP_AFTER="$2";    shift 2 ;;
+    --archive-after) ARCHIVE_AFTER="$2"; shift 2 ;;
+    --delete-after)  DELETE_AFTER="$2";  shift 2 ;;
+    --dry-run)       DRY_RUN=1; shift ;;
+    --help|-h)
+      echo "usage: mentat-logs-prune [--gzip-after DAYS] [--archive-after DAYS] [--delete-after DAYS] [--dry-run]"
+      echo "  --gzip-after N     gzip .jsonl files older than N days (default 30)"
+      echo "  --archive-after N  tar+gz session dirs older than N days (default 90)"
+      echo "  --delete-after N   delete archives older than N days (default 180)"
+      echo "  --dry-run          print planned ops without executing"
+      exit 0 ;;
+    *) die "unknown arg $1" ;;
+  esac
+done
+
+[ -d "$LOG_DIR" ] || { log "log dir $LOG_DIR not found — nothing to prune"; exit 0; }
+
+_dry_or_run() {
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "dry-run: $*"
+  else
+    "$@"
+  fi
+}
+
+# Gzip .jsonl files older than GZIP_AFTER days
+while IFS= read -r -d '' f; do
+  log "gzip: $f"
+  _dry_or_run gzip "$f"
+done < <(find "$LOG_DIR" -name "*.jsonl" -mtime "+$GZIP_AFTER" -print0 2>/dev/null)
+
+# Archive session dirs older than ARCHIVE_AFTER days
+while IFS= read -r -d '' sess_dir; do
+  repo="$(basename "$(dirname "$sess_dir")")"
+  sess="$(basename "$sess_dir")"
+  month="${sess:0:7}"  # YYYY-MM from epoch prefix; fallback: use date
+  archive_dir="$LOG_DIR/_archive/$repo"
+  archive_file="$archive_dir/${month}.tar.gz"
+  log "archive: $sess_dir -> $archive_file"
+  if [ "$DRY_RUN" -eq 0 ]; then
+    mkdir -p "$archive_dir"
+    tar czf "$archive_file" -C "$(dirname "$sess_dir")" "$sess" 2>/dev/null || true
+    rm -rf "$sess_dir"
+  fi
+done < <(find "$LOG_DIR" -mindepth 2 -maxdepth 2 -type d -mtime "+$ARCHIVE_AFTER" -print0 2>/dev/null \
+         | grep -vz '_archive')
+
+# Delete archive tarballs older than DELETE_AFTER days
+while IFS= read -r -d '' f; do
+  log "delete: $f"
+  _dry_or_run rm -f "$f"
+done < <(find "$LOG_DIR/_archive" -name "*.tar.gz" -mtime "+$DELETE_AFTER" -print0 2>/dev/null)
+
+log "done."
