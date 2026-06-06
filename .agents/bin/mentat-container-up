@@ -15,7 +15,7 @@ SLUG=$(basename "$WT")
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/compose-synth.sh"
 
 workspace_folder() {
-  sed 's|//.*||g' "$WT/.devcontainer/devcontainer.json" \
+  grep -v '^\s*//' "$WT/.devcontainer/devcontainer.json" \
     | jq -r --arg slug "$SLUG" '.workspaceFolder // ("/workspaces/" + $slug)'
 }
 
@@ -70,7 +70,7 @@ done
 
 HAS_DOCKER_COMPOSE=0
 if [ -f "$WT/docker-compose.yml" ]; then
-  if sed 's|//.*||g' "$WT/.devcontainer/devcontainer.json" \
+  if grep -v '^\s*//' "$WT/.devcontainer/devcontainer.json" \
        | jq -e '.dockerComposeFile' >/dev/null 2>&1; then
     HAS_DOCKER_COMPOSE=1
   fi
@@ -120,7 +120,7 @@ if [ "$HAS_DOCKER_COMPOSE" = 1 ]; then
   dcj="$WT/.devcontainer/devcontainer.json"
   if ! grep -q 'docker-compose.mentat.yml' "$dcj" \
      && [ -f "$WT/docker-compose.mentat.yml" ]; then
-    tmp=$(sed 's|//.*||g' "$dcj" \
+    tmp=$(grep -v '^\s*//' "$dcj" \
       | jq '.dockerComposeFile |= (if type == "array" then . else [.] end) + ["../docker-compose.mentat.yml"]')
     printf '%s\n' "$tmp" > "$dcj"
   fi

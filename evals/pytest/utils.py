@@ -1,7 +1,7 @@
 import os
 
 AGENTS_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "agents")
+    os.path.join(os.path.dirname(__file__), "..", "..", ".agents", "agents")
 )
 FIXTURES_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "promptfoo", "fixtures")
