@@ -1,0 +1,11 @@
+diff --git a/Taskfile.yml b/Taskfile.yml
+index abc1234..def5678 100644
+--- a/Taskfile.yml
++++ b/Taskfile.yml
+@@ -10,8 +10,9 @@ tasks:
+   build:test:
+     desc: Run test suite
++    dir: /workspaces/mentat
+     cmds:
+-      - pytest tests/
++      - pytest tests/ --tb=short

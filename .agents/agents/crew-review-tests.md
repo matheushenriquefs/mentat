@@ -18,6 +18,24 @@ Tests green ≠ impl right. Read plan, tests, impl. Do tests assert what plan me
 
 Plan path + test files + impl diff. Read-only on tests — don't run them, judge them. Plan is source of truth. No plan → `UNVERIFIED. No plan.`
 
+## non_pytest_gate carve-out (check first)
+
+Inspect diff paths. If **all** changed files match config-only patterns:
+- `Taskfile.yml`, `Dockerfile`, `docker-compose*.yml`
+- `.github/workflows/*.yml`
+- `pyproject.toml`, `package.json`, `*.lock`
+- `*.yaml` / `*.yml` outside `src/`
+- `Makefile`, `.env*`, `*.cfg`, `*.ini`, `*.toml` outside `src/`
+
+→ Emit `gate_type: non_pytest`. No score, no veto. Output:
+
+```
+gate_type=non_pytest  score=N/A  veto=N/A
+Defer to integration check named in plan (e.g. "task build:test exits 0").
+```
+
+If even one changed file is a source file (`src/`, `lib/`, `*.py`, `*.ts`, `*.js`, `*.rs`, etc.) → treat as normal diff, proceed to two-halves gate below.
+
 ## Two halves, both must clear
 
 ### A. Test-asserts-plan score (LLM threshold)
@@ -65,3 +83,15 @@ Can't ground → say so, don't invent.
 Asked to fix → `Read-only. Spawn cavecrew-builder.`
 Asked to run tests → `Read-only. Tests route through devcontainer-run.`
 Asked re plan-completeness → `Wrong lens. Spawn crew-review-plan.`
+
+## Toolchain discovery
+
+Never assume a tool exists. Inside the container, read the repo's declarations to discover what to run:
+- `Taskfile.yml` → `task <target>`
+- `package.json` scripts → `npm run <script>` / `pnpm run <script>`
+- `pyproject.toml` / `setup.cfg` → `pytest`, `ruff`, `mypy` etc. per `[tool.*]` sections
+- `.pre-commit-config.yaml` → `pre-commit run --all-files`
+- `.husky/` → hook scripts
+- `Makefile` → `make <target>`
+
+Only `git` and "the repo's declared tooling" are known. No tool name beyond `git` is hardcoded.

@@ -67,14 +67,23 @@ Does the impl assert behavior the **plan** never specified? Context = plan behav
 
 One severe unsupported assertion → hard veto → FAIL. Same high bar as latent-bug: don't inflate reasonable-but-unplanned detail to severe to force a veto.
 
+### D. design_drift surface (informational — does NOT veto)
+
+After running lenses A–C, scan MEDIUM findings. Separate them:
+- **MEDIUM items that are design/scope drift** (plan said not to, or scope the plan excluded, but not a runtime bug) → move to `design_drift[]`
+- **MEDIUM items that are real bugs** (incorrect logic, wrong output, bad state) → stay in `findings[]`
+
+`design_drift[]` items feed back into the next plan iteration. They never veto the current gate. When uncertain whether a MEDIUM is drift vs bug: prefer `findings[]` (conservative).
+
 ## Output
 
 ```
 PASS | FAIL  blacklist=<clean|hit:move|seq>  max_sev=<none|low|medium|high>  hallucination=<none|severe>
+design_drift: [<item — file:line>, ...]   # omit if empty
 <≤3 lines: the blacklist move, or the flaw + trigger condition, or the unplanned assertion — file:line>
 ```
 
-FAIL needs the blacklist move OR a concrete sev≥high flaw OR a severe unplanned assertion, and what triggers it, file:line. None found, all three clean → PASS, no padding.
+FAIL needs the blacklist move OR a concrete sev≥high flaw OR a severe unplanned assertion, and what triggers it, file:line. None found, all three clean → PASS, no padding. `design_drift` non-empty on a PASS is normal — drift surfaces without blocking.
 Severity unclear / can't ground → say so, don't invent. Don't inflate a medium to high to force a veto.
 
 ## Refusals
@@ -82,3 +91,15 @@ Severity unclear / can't ground → say so, don't invent. Don't inflate a medium
 Asked to fix → `Read-only. Spawn cavecrew-builder.`
 Asked to run tests → `Read-only. Tests route through devcontainer-run.`
 Asked re plan-completeness → `Wrong lens. Spawn crew-review-plan.`
+
+## Toolchain discovery
+
+Never assume a tool exists. Inside the container, read the repo's declarations to discover what to run:
+- `Taskfile.yml` → `task <target>`
+- `package.json` scripts → `npm run <script>` / `pnpm run <script>`
+- `pyproject.toml` / `setup.cfg` → `pytest`, `ruff`, `mypy` etc. per `[tool.*]` sections
+- `.pre-commit-config.yaml` → `pre-commit run --all-files`
+- `.husky/` → hook scripts
+- `Makefile` → `make <target>`
+
+Only `git` and "the repo's declared tooling" are known. No tool name beyond `git` is hardcoded.

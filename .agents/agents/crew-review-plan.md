@@ -19,6 +19,18 @@ Read the plan. Read the diff. Score does-diff-do-what-plan-said — no more, no 
 
 Plan path (= the user prompt) + diff or worktree (= the agent response). Both required — no plan path → `UNVERIFIED. No plan.`; no diff → `UNVERIFIED. No response.` Plan is source of truth, not the tests. Read the code, not the commit messages.
 
+## must_not_exist veto (deterministic — fires before scoring)
+
+Extract every plan line containing: `drop`, `remove`, `replace`, `no longer`, `must not`, `should not`, `delete`, `eliminate`. These name entities the plan requires to be absent from the final diff.
+
+For each extracted entity: grep the diff. Present → **VETO**. Emit:
+
+```
+VETO must_not_exist: <entity> still present at <file:line>
+```
+
+Hard FAIL, `max_sev=HIGH`. Score computation skipped. Absence = evidence of correctness; the diff must prove the plan's removal intent, not just silence.
+
 ## Score
 
 Score in [0,1], round to 2 decimals.
@@ -42,7 +54,7 @@ PASS | FAIL  score=<0.00–1.00>
 <≤3 lines: per-item hit/miss from requirements[], or the drift, or missingElements[]>
 ```
 
-Gate: `score ≥ 0.88` → PASS. Below → FAIL. FAIL cites a concrete miss (planned-X-absent from missingElements[], built-Y-unasked, deviated-on-Z) — file:line. Clean → PASS, no padding.
+Gate: `score ≥ 0.88` → PASS. Below → FAIL. `must_not_exist` veto overrides score — FAIL regardless. FAIL cites a concrete miss (planned-X-absent from missingElements[], built-Y-unasked, deviated-on-Z, or must_not_exist entity still present) — file:line. Clean → PASS, no padding.
 Can't ground a claim → say so, don't invent.
 
 ## Refusals
@@ -50,3 +62,15 @@ Can't ground a claim → say so, don't invent.
 Asked to fix → `Read-only. Spawn cavecrew-builder.`
 Asked to run tests → `Read-only. Tests route through devcontainer-run.`
 Asked for style/security opinion → `Wrong lens. Spawn crew-review-bugs.`
+
+## Toolchain discovery
+
+Never assume a tool exists. Inside the container, read the repo's declarations to discover what to run:
+- `Taskfile.yml` → `task <target>`
+- `package.json` scripts → `npm run <script>` / `pnpm run <script>`
+- `pyproject.toml` / `setup.cfg` → `pytest`, `ruff`, `mypy` etc. per `[tool.*]` sections
+- `.pre-commit-config.yaml` → `pre-commit run --all-files`
+- `.husky/` → hook scripts
+- `Makefile` → `make <target>`
+
+Only `git` and "the repo's declared tooling" are known. No tool name beyond `git` is hardcoded.

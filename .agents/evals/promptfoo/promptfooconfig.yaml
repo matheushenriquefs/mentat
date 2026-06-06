@@ -1,0 +1,49 @@
+description: "crew-reviewer eval suite — P4 drift-class fixtures"
+
+providers:
+  - id: anthropic:messages:claude-haiku-4-5-20251001
+    config:
+      max_tokens: 1024
+
+tests:
+  # S4.1: must_not_exist veto fires when plan says drop routes but diff keeps them
+  - description: "handoff2-routes-not-dropped: must_not_exist veto fires"
+    vars:
+      plan: "file://fixtures/handoff2-routes-not-dropped/plan.md"
+      diff: "file://fixtures/handoff2-routes-not-dropped/diff.patch"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/crew-review-plan.md"
+        threshold: 0.9
+      - type: contains
+        value: "VETO must_not_exist"
+      - type: contains
+        value: "FAIL"
+
+  # S4.2: config-only diff → non_pytest_gate, no score/veto
+  - description: "handoff4-taskfile-only: non_pytest_gate emitted, no score"
+    vars:
+      plan: "file://fixtures/handoff4-taskfile-only/plan.md"
+      diff: "file://fixtures/handoff4-taskfile-only/diff.patch"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/crew-review-tests.md"
+        threshold: 0.9
+      - type: contains
+        value: "gate_type=non_pytest"
+      - type: not-contains
+        value: "FAIL"
+
+  # S4.3: design drift surfaces without veto
+  - description: "handoff2-design-drift: design_drift non-empty, no HIGH finding"
+    vars:
+      plan: "file://fixtures/handoff2-design-drift/plan.md"
+      diff: "file://fixtures/handoff2-design-drift/diff.patch"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/crew-review-bugs.md"
+        threshold: 0.9
+      - type: contains
+        value: "design_drift"
+      - type: not-contains
+        value: "max_sev=high"
