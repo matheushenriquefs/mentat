@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # bin/lib/gates.sh — per-class deterministic file checkers for mentat-gate
 
+# @class: ADR  # @glob: docs/adr/*.md  # @check: All three sections present: ## Context, ## Decision, ## Consequences
 gate_adr() {
   local ok=1
   grep -q '^## Context'      "$1" || { echo "$1: missing '## Context'";      ok=0; }
@@ -9,28 +10,34 @@ gate_adr() {
   return $((1 - ok))
 }
 
+# @class: Skill/agent  # @glob: agents/*.md  # @check: YAML frontmatter present (first 10 lines contain ---)
 gate_skill() {
   head -10 "$1" | grep -q '^---$' || { echo "$1: missing YAML frontmatter"; return 1; }
 }
 
+# @class: Command  # @glob: commands/*.md  # @check: YAML frontmatter present (first 10 lines contain ---)
 gate_command() {
   head -10 "$1" | grep -q '^---$' || { echo "$1: missing YAML frontmatter"; return 1; }
 }
 
+# @class: Workflow doc  # @glob: AGENTS.md,CONTEXT.md,STYLE.md,README.md  # @check: Cross-ref links present ([text](*.md) syntax)
 gate_workflow() {
   grep -qE '\[.+\]\(.+\.md\)' "$1" || { echo "$1: no cross-ref links found"; return 1; }
 }
 
+# @class: Shell  # @glob: bin/**/*,lib/**/*.sh  # @check: bash -n + shellcheck (advisory if absent)
 gate_shell() {
   bash -n "$1" || return 1
   command -v shellcheck >/dev/null && shellcheck "$1" || true
 }
 
+# @class: Config  # @glob: *.jsonc  # @check: sed | jq -e validates JSON structure
 gate_jsonc() {
   # Delete pure // comment lines only — avoids breaking https:// URLs in string values
   sed '/^[[:space:]]*\/\//d' "$1" | jq -e '.' >/dev/null || { echo "$1: jq parse fail"; return 1; }
 }
 
+# @class: Harness  # @glob: bin/lib/harness/*.sh  # @check: harness_<name>_cmd and harness_<name>_output_format both defined
 gate_harness() {
   local name; name="$(basename "$1" .sh | tr - _)"
   bash -c "source $(printf %q "$1"); declare -f harness_${name}_cmd >/dev/null" \

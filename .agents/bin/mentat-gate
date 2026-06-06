@@ -5,6 +5,22 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HERE/lib/strict.sh"
 source "$HERE/lib/gates.sh"
 
+_print_policy() {
+  printf '| Class | Glob | Check |\n'
+  printf '|-------|------|-------|\n'
+  grep -E '^# @class:' "$HERE/lib/gates.sh" | while IFS= read -r line; do
+    class="$(echo "$line" | sed 's/.*@class: \([^#]*\).*/\1/' | sed 's/[[:space:]]*$//')"
+    glob="$(echo "$line"  | sed 's/.*@glob: \([^#]*\).*/\1/'  | sed 's/[[:space:]]*$//')"
+    check="$(echo "$line" | sed 's/.*@check: \(.*\)/\1/'      | sed 's/[[:space:]]*$//')"
+    printf '| %s | %s | %s |\n' "$class" "$glob" "$check"
+  done
+}
+
+if [ "${1:-}" = "--print-policy" ]; then
+  _print_policy
+  exit 0
+fi
+
 fail=0
 for f in "$@"; do
   [ -f "$f" ] || continue

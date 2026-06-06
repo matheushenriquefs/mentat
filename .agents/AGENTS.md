@@ -58,14 +58,17 @@ Every modified file must pass its class checker before commit.
 Run locally: `mentat-gate $(git diff --name-only "$base")`.
 Wired into `mentat-orchestrate` pre-land step (host-side; harness tools only — ADR 0004).
 
-| File class | Glob | Check |
-|---|---|---|
-| ADR | `docs/adr/*.md` | All three sections present: `## Context`, `## Decision`, `## Consequences` |
-| Skill / agent | `agents/*.md` | YAML frontmatter present (first 10 lines contain `---`) |
-| Command | `commands/*.md` | YAML frontmatter present (first 10 lines contain `---`) |
-| Workflow doc | `AGENTS.md`, `CONTEXT.md`, `STYLE.md`, `README.md` | Cross-ref links present (`[text](*.md)` syntax) |
-| Shell | `bin/**/*`, `lib/**/*.sh` | `bash -n` + `shellcheck` (advisory if absent) |
-| Config | `*.jsonc` | `sed \| jq -e` validates JSON structure |
+<!-- BEGIN generated: mentat-gate --print-policy -->
+| Class | Glob | Check |
+|-------|------|-------|
+| ADR | docs/adr/*.md | All three sections present: ## Context, ## Decision, ## Consequences |
+| Skill/agent | agents/*.md | YAML frontmatter present (first 10 lines contain ---) |
+| Command | commands/*.md | YAML frontmatter present (first 10 lines contain ---) |
+| Workflow doc | AGENTS.md,CONTEXT.md,STYLE.md,README.md | Cross-ref links present ([text](*.md) syntax) |
+| Shell | bin/**/*,lib/**/*.sh | bash -n + shellcheck (advisory if absent) |
+| Config | *.jsonc | sed | jq -e validates JSON structure |
+| Harness | bin/lib/harness/*.sh | harness_<name>_cmd and harness_<name>_output_format both defined |
+<!-- END generated -->
 
 Unknown file classes pass silently (gate is additive, not a whitelist).
 
