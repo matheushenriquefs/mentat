@@ -220,6 +220,25 @@ Mentat targets POSIX shells (bash 4+, zsh) on Linux + macOS. Windows is out of s
 
 When you borrow a concept, schema, or protocol from another repo without vendoring its code, add an entry to `CREDITS.md` under `## Inspired by` citing the upstream URL, the upstream's GitHub repo description verbatim (via `gh repo view <user>/<repo> --json description -q .description`), and one sentence naming the specific primitive borrowed. Never fabricate the description. Vendored code is auto-credited from `vendir.lock.yml`; inspiration credits are hand-maintained.
 
+## Slice completion discipline (S11)
+
+**Slice tags in commit subjects are aspirational.** A commit subject like `feat: ... (S3-S5)` records intent, not verified completion. Verify artifacts on disk via the slice's predicate before claiming a slice is done. Never skip a slice unless the pre-flight table marks it DONE.
+
+**Stale-ref registry.** After any rename or delete, run `rg` for the old name before committing. Known recently-renamed terms — agents run this sweep:
+
+| Old term | Renamed/deleted | Check command |
+|---|---|---|
+| `mentat-setup` | → `mentat-install` | `rg -n '\bmentat-setup\b' . --count` |
+| `mentat-sync-upstream` | deleted | `rg -n 'mentat-sync-upstream' . --count` |
+| `upstreams.jsonc` | deleted | `rg -n 'upstreams\.jsonc' . --count` |
+| `/to-rebase` | → `/mentat-rebase` | `rg -n '/to-rebase' .agents/ --count` |
+| `/to-implement` | → `/mentat-implement` | `rg -n '/to-implement' .agents/ --count` |
+| `/to-plan` | → `/mentat-plan` | `rg -n '/to-plan' .agents/ --count` |
+
+Non-zero hit = abort commit. Emit `staleref.sweep {terms, hits}` audit event.
+
+**Reviewer score floor = hard halt.** Any reviewer below threshold is a veto — read every line of output. To dismiss a finding, emit `review.dismiss` with `reason` enumerating each refuted finding and the artifact check that disproved it.
+
 ## Test-when-modified
 
 Modifying certain file classes requires additional checks before commit:
