@@ -74,6 +74,12 @@ VENDOR_PATH=$(echo "$UPSTREAM" | jq -r '.vendor_path')
 SUBTREE=$(echo "$UPSTREAM" | jq -r '.subtree_path // ""')
 COMMIT_FLAG=$(echo "$UPSTREAM" | jq -r '.commit')
 
+# Enforce vendor/ namespace convention: all vendor paths must live under skills/vendor/
+if [[ "$VENDOR_PATH" != ".agents/skills/vendor/"* ]]; then
+  echo "mentat-sync-upstream: vendor_path '$VENDOR_PATH' must be under .agents/skills/vendor/ — update upstreams.jsonc" >&2
+  exit 1
+fi
+
 # Guard against path traversal: vendor_path must resolve inside REPO_ROOT
 # realpath -m (GNU) not available on macOS; use Python as portable fallback
 if command -v python3 >/dev/null 2>&1; then
@@ -136,6 +142,20 @@ else
     sed -i.bak "\|$VENDOR_PATH|d" "$GITIGNORE" && rm -f "$GITIGNORE.bak"
     echo "mentat-sync-upstream: removed $VENDOR_PATH/ from .gitignore"
   fi
+fi
+
+# Append JSONL sync log entry
+SYNC_LOG="${MENTAT_SYNC_LOG:-$HOME/.agents/mentat/logs/sync-upstream.jsonl}"
+mkdir -p "$(dirname "$SYNC_LOG")"
+ACTUAL_SHA=$(git -C "$TMPDIR/repo" rev-parse HEAD 2>/dev/null || echo "unknown")
+jq -cn --arg upstream "$NAME" --arg sha "$ACTUAL_SHA" \
+  '{ts:(now|todate), upstream:$upstream, sha:$sha, status:"ok"}' >> "$SYNC_LOG"
+
+# Regenerate CREDITS.md after successful sync
+CREDITS_GEN="$HERE/mentat-credits-gen"
+if [ -x "$CREDITS_GEN" ]; then
+  "$CREDITS_GEN" > /dev/null
+  echo "mentat-sync-upstream: regenerated CREDITS.md"
 fi
 
 echo "mentat-sync-upstream: done — review diff and integrate what you need"

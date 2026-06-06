@@ -1,13 +1,13 @@
 {
   // Upstream vendored dependencies. Canonical source for CREDITS.md and mentat-sync-upstream.
   // Run: bin/mentat-sync-upstream <name>  to update a vendor copy.
-  // Run: bin/mentat-sync-upstream --print-credits  to regenerate CREDITS.md.
+  // Run: bin/mentat-credits-gen  to regenerate CREDITS.md.
   "upstreams": [
     {
       "name": "mattpocock-skills",
       "url": "https://github.com/mattpocock/skills.git",
       "pin": "17972a1bdbf5909b9dbdc435ad348f0bf45f8664",
-      "vendor_path": ".agents/vendored/mattpocock-skills",
+      "vendor_path": ".agents/skills/vendor/matt-pocock",
       "commit": false,
       "license": "MIT",
       "description": "Engineering and productivity skills for Claude Code"
@@ -16,7 +16,7 @@
       "name": "caveman",
       "url": "https://github.com/mattpocock/skills.git",
       "pin": "17972a1bdbf5909b9dbdc435ad348f0bf45f8664",
-      "vendor_path": ".agents/vendored/caveman",
+      "vendor_path": ".agents/skills/vendor/caveman",
       "commit": true,
       "subtree_path": "skills/productivity/caveman",
       "license": "MIT",
@@ -26,7 +26,7 @@
       "name": "mastra-evals",
       "url": "https://github.com/mastra-ai/mastra.git",
       "pin": "HEAD",
-      "vendor_path": ".agents/vendored/mastra-evals",
+      "vendor_path": ".agents/skills/vendor/mastra-evals",
       "commit": false,
       "subtree_path": "packages/evals",
       "license": "Apache-2.0",

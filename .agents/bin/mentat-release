@@ -58,6 +58,16 @@ RSYNC_ARGS=(-av --delete -L
   --exclude='vendored/'
   --exclude='*.bak.*'
   --exclude='.DS_Store'
+  --exclude='bin/mentat-sync-upstream'
+  --exclude='bin/mentat-credits-gen'
+  --exclude='bin/mentat-release'
+  --exclude='bin/mentat-sync-check'
+  --exclude='upstreams.jsonc'
+  --exclude='.skill-lock.json'
+  --exclude='plans/'
+  --exclude='mentat/'
+  --exclude='skills/vendor/matt-pocock/'
+  --exclude='skills/vendor/mastra-evals/'
 )
 
 if [ "$DRY_RUN" -eq 1 ]; then
