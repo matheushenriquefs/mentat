@@ -130,6 +130,7 @@ def test_holding_branch_guard_uses_symbolic_ref_fallback():
 def test_holding_branch_guard_no_hardcoded_main():
     text = LEFTHOOK.read_text()
     guard_start = text.find("holding-branch-guard")
+    assert guard_start != -1, "holding-branch-guard must be present in lefthook.yml"
     guard_end = text.find("\n    ", guard_start + len("holding-branch-guard") + 50)
     guard_block = text[guard_start:guard_end + 200] if guard_end > 0 else text[guard_start:]
     assert '= "main"' not in guard_block and "= 'main'" not in guard_block, (
