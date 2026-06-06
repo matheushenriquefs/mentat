@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # mentat-release — git release management (tag, status).
-# For consumer harness install, use mentat-setup.
+# For consumer harness install, use mentat-install.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,7 +19,7 @@ for arg in "$@"; do
       echo "No args: show release status (last tag, commits since)."
       echo "--tag=<v>: create and push git tag <v>."
       echo ""
-      echo "For harness install: use mentat-setup instead."
+      echo "For harness install: use mentat-install instead."
       exit 0 ;;
     *)
       echo "mentat-release: unknown arg '$arg'" >&2

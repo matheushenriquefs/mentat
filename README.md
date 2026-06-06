@@ -54,15 +54,15 @@ The constraint is Docker. Everything else is a text file.
 
 ```bash
 # Install / update the harness into ~/.agents/ (syncs vendored upstreams first)
-bin/mentat-setup
+bin/mentat-install
 
 # Skip upstream sync (offline install)
-bin/mentat-setup --offline
+bin/mentat-install --offline
 
 # Dry-run
-bin/mentat-setup --dry-run
+bin/mentat-install --dry-run
 ```
 
 ## Vendored skills
 
-Third-party skills are declared in [`vendir.yml`](vendir.yml) and pinned in `vendir.lock.yml`. The vendor tree (`.agents/skills/vendor/`) is gitignored — `bin/mentat-setup` materializes it on install via `vendir sync`. Attributions are in [CREDITS.md](CREDITS.md); regenerate with `bin/mentat-update`.
+Third-party skills are declared in [`vendir.yml`](vendir.yml) and pinned in `vendir.lock.yml`. The vendor tree (`.agents/skills/vendor/`) is gitignored — `bin/mentat-install` materializes it on install via `vendir sync`. Attributions are in [CREDITS.md](CREDITS.md); regenerate with `bin/mentat-update`.

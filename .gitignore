@@ -9,5 +9,5 @@ __pycache__/
 .pytest_cache/
 node_modules/
 
-# vendored upstreams — materialized by mentat-setup, not committed
+# vendored upstreams — materialized by mentat-install, not committed
 .agents/skills/vendor/

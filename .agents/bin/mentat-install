@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mentat-setup — install mentat harness into ~/.agents/.
+# mentat-install — install mentat harness into ~/.agents/.
 # Syncs vendored upstreams then rsyncs .agents/ to ~/.agents/.
 # ADR 0004.
 set -euo pipefail
@@ -12,7 +12,7 @@ FORCE_DIRTY=0
 FORCE_GATE=0
 YES=0
 DRY_RUN=0
-MINIMAL=0
+OFFLINE=0
 
 for arg in "$@"; do
   case "$arg" in
@@ -20,10 +20,10 @@ for arg in "$@"; do
     --force-gate)  FORCE_GATE=1 ;;
     --yes)         YES=1 ;;
     --dry-run)     DRY_RUN=1 ;;
-    --minimal)     MINIMAL=1 ;;
+    --offline)     OFFLINE=1 ;;
     *)
-      echo "usage: mentat-setup [--force-dirty] [--force-gate] [--yes] [--dry-run] [--minimal]" >&2
-      echo "  --minimal  skip upstream vendor sync (offline install)" >&2
+      echo "usage: mentat-install [--force-dirty] [--force-gate] [--yes] [--dry-run] [--offline]" >&2
+      echo "  --offline  skip upstream vendor sync (use existing vendir.lock.yml)" >&2
       exit 1 ;;
   esac
 done
@@ -32,7 +32,7 @@ REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 AGENTS_DIR="$REPO_ROOT/.agents"
 
 if [ ! -d "$AGENTS_DIR" ]; then
-  echo "mentat-setup: .agents/ not found at $AGENTS_DIR" >&2
+  echo "mentat-install: .agents/ not found at $AGENTS_DIR" >&2
   exit 1
 fi
 
@@ -41,7 +41,7 @@ cd "$REPO_ROOT"
 if [ "$FORCE_DIRTY" -eq 0 ]; then
   UNCOMMITTED=$(git -C "$REPO_ROOT" status --porcelain "$AGENTS_DIR" 2>/dev/null | { grep -c '^[MADRCU?]' || true; })
   if [ "$UNCOMMITTED" -gt 0 ]; then
-    echo "mentat-setup: $UNCOMMITTED uncommitted change(s) in .agents/ — commit first or use --force-dirty" >&2
+    echo "mentat-install: $UNCOMMITTED uncommitted change(s) in .agents/ — commit first or use --force-dirty" >&2
     exit 1
   fi
 fi
@@ -56,27 +56,27 @@ if [ -n "$TRACKED_FILES" ]; then
     mentat_gate "$f" || GATE_FAIL=1
   done <<< "$TRACKED_FILES"
   if [ "$GATE_FAIL" -ne 0 ]; then
-    echo "mentat-setup: gate check failed — fix errors above before installing" >&2
+    echo "mentat-install: gate check failed — fix errors above before installing" >&2
     if [ "$FORCE_GATE" -eq 1 ]; then
-      echo "mentat-setup: WARNING: proceeding with --force-gate despite gate failure" >&2
+      echo "mentat-install: WARNING: proceeding with --force-gate despite gate failure" >&2
     else
       exit 1
     fi
   fi
 fi
 
-# Sync vendored upstreams (unless --minimal)
-if [ "$MINIMAL" -eq 0 ]; then
+# Sync vendored upstreams (unless --offline)
+if [ "$OFFLINE" -eq 0 ]; then
   UPDATE_CMD="$HERE/mentat-update"
   if [ -x "$UPDATE_CMD" ]; then
     if [ "$DRY_RUN" -eq 1 ]; then
-      echo "mentat-setup: dry-run — would run: mentat-update"
+      echo "mentat-install: dry-run — would run: mentat-update"
     else
-      echo "mentat-setup: syncing vendored upstreams ..."
+      echo "mentat-install: syncing vendored upstreams ..."
       if ! "$UPDATE_CMD"; then
-        echo "mentat-setup: WARNING: mentat-update failed (vendir not installed?). Skipping vendor sync." >&2
-        echo "mentat-setup: Install vendir: https://carvel.dev/vendir/docs/latest/install/" >&2
-        echo "mentat-setup: Re-run without --offline after installing vendir, or run: mentat-update" >&2
+        echo "mentat-install: WARNING: mentat-update failed (vendir not installed?). Skipping vendor sync." >&2
+        echo "mentat-install: Install vendir: https://carvel.dev/vendir/docs/latest/install/" >&2
+        echo "mentat-install: Re-run without --offline after installing vendir, or run: mentat-update" >&2
       fi
     fi
   fi
@@ -88,11 +88,9 @@ RSYNC_ARGS=(-av --delete -L
   --exclude='vendored/'
   --exclude='*.bak.*'
   --exclude='.DS_Store'
-  --exclude='bin/mentat-sync-upstream'
   --exclude='bin/mentat-credits-gen'
   --exclude='bin/mentat-release'
-  --exclude='bin/mentat-setup'
-  --exclude='bin/mentat-sync-check'
+  --exclude='bin/mentat-install'
   --exclude='bin/mentat-update'
   --exclude='upstreams.jsonc'
   --exclude='upstreams.lock.jsonc'
@@ -103,23 +101,23 @@ RSYNC_ARGS=(-av --delete -L
 
 if [ "$DRY_RUN" -eq 1 ]; then
   RSYNC_ARGS+=(-n)
-  echo "mentat-setup: dry-run — no files will be written"
+  echo "mentat-install: dry-run — no files will be written"
 fi
 
 if [ "$DRY_RUN" -eq 0 ] && [ "$YES" -eq 0 ]; then
   DELETE_LIST=$(rsync "${RSYNC_ARGS[@]}" -n "$AGENTS_DIR/" "$HOME/.agents/" 2>/dev/null \
     | grep '^deleting ' || true)
   if [ -n "$DELETE_LIST" ]; then
-    echo "mentat-setup: files to delete from ~/.agents/:"
+    echo "mentat-install: files to delete from ~/.agents/:"
     echo "$DELETE_LIST"
     printf 'Proceed? [y/N] '
     read -r reply </dev/tty || reply=""
     case "$reply" in
       [Yy]*) ;;
-      *) echo "mentat-setup: aborted"; exit 1 ;;
+      *) echo "mentat-install: aborted"; exit 1 ;;
     esac
   fi
 fi
 
 rsync "${RSYNC_ARGS[@]}" "$AGENTS_DIR/" "$HOME/.agents/"
-echo "mentat-setup: done"
+echo "mentat-install: done"
