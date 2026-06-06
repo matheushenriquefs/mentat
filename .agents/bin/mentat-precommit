@@ -24,6 +24,19 @@ for f in "$@"; do
     jsonc)    gate_jsonc    "$f" || fail=1 ;;
     jq)       gate_jq       "$f" || fail=1 ;;
     harness)  gate_harness  "$f" || fail=1 ;;
+    auto)
+      case "$f" in
+        */docs/adr/*.md)              gate_adr      "$f" || fail=1 ;;
+        */skills/*/SKILL.md)          gate_skill    "$f" || fail=1 ;;
+        */commands/*.md)              gate_command  "$f" || fail=1 ;;
+        */.github/workflows/*.yml|\
+        */.github/workflows/*.yaml)   gate_workflow "$f" || fail=1 ;;
+        */bin/lib/harness/*.sh)       gate_harness  "$f" || fail=1 ;;
+        *.sh)                         gate_shell    "$f" || fail=1 ;;
+        *.jsonc)                      gate_jsonc    "$f" || fail=1 ;;
+        *.jq)                         gate_jq       "$f" || fail=1 ;;
+        *) ;;  # no gate for this file type
+      esac ;;
     *) echo "mentat-precommit: unknown class '$CLASS'" >&2; exit 1 ;;
   esac
 done
