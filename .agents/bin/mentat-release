@@ -68,12 +68,18 @@ git push origin "$TAG"
 VENDOR_DIR="$REPO_ROOT/.agents/skills/vendor"
 if [ -d "$VENDOR_DIR" ] && command -v gh >/dev/null 2>&1; then
   TARBALL="/tmp/mentat-vendor-${TAG}.tar.gz"
+  trap 'rm -f "$TARBALL"' EXIT
   tar -czf "$TARBALL" -C "$REPO_ROOT/.agents/skills" vendor/
-  gh release create "$TAG" "$TARBALL" \
-    --title "$TAG" \
-    --generate-notes \
-    --verify-tag
-  echo "mentat-release: release created — $TAG (vendor tarball attached)"
+  if gh release view "$TAG" >/dev/null 2>&1; then
+    gh release upload "$TAG" "$TARBALL"
+    echo "mentat-release: tarball uploaded to existing release $TAG"
+  else
+    gh release create "$TAG" "$TARBALL" \
+      --title "$TAG" \
+      --generate-notes \
+      --verify-tag
+    echo "mentat-release: release created — $TAG (vendor tarball attached)"
+  fi
 else
   echo "mentat-release: done — $TAG pushed (no vendor tarball: gh or vendor/ missing)"
 fi
