@@ -11,6 +11,7 @@ _LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
 . "$_LIB/log.sh"
 . "$_LIB/here.sh"
 . "$_LIB/config.sh"
+. "$_LIB/audit.sh"
 _LOG_PREFIX=mentat-orchestrate
 
 # Load config defaults; CLI flags override (last-write-wins)
@@ -46,7 +47,11 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 ROOT="$PWD"
-LOGDIR="$ROOT/.mentat/logs"
+MENTAT_REPO="$(basename "$ROOT")"
+export MENTAT_REPO
+MENTAT_SESSION="$(date +%s)-$$"
+export MENTAT_SESSION
+LOGDIR="${MENTAT_LOG_DIR:-$HOME/.agents/mentat/logs}/$MENTAT_REPO/$MENTAT_SESSION"
 mkdir -p "$LOGDIR"
 
 command -v jq >/dev/null || die "jq not found (needed by mentat-track)"
@@ -142,7 +147,7 @@ any gate is red. Report only PASS or FAIL."
 # End-of-queue review over final landed tip — advisory. ADR 0003 ADR 0004
 final_review() {
   local base="$1"
-  local logf="$LOGDIR/final-review.jsonl"; : > "$logf"
+  local logf="$LOGDIR/final-review.jsonl"
   log "end-of-queue review: spawning ADR-0003 reviewers over $base..$HOLDING"
   ( cd "$ROOT" && ~/.agents/bin/mentat-container-up ) >>"$logf" 2>&1 || {
     log "end-of-queue review SKIPPED (mentat-container-up failed at $ROOT)"; return 0; }
