@@ -113,9 +113,9 @@ echo "mentat-install: done"
 
 # Orphan advisory: files present in ~/.agents/ but not in source tree.
 # mentat-install never deletes. Review these and remove manually if stale.
-ORPHANS=$(comm -23 \
-  <(find "$HOME/.agents" -type f | sort) \
-  <(cd "$AGENTS_DIR" && find . -type f | sed "s|^\./|$HOME/.agents/|" | sort) \
+ORPHANS=$(LC_ALL=C comm -23 \
+  <(find "$HOME/.agents" -type f | LC_ALL=C sort) \
+  <(cd "$AGENTS_DIR" && find . -type f | sed "s|^\./|$HOME/.agents/|" | LC_ALL=C sort) \
   2>/dev/null || true)
 if [ -n "$ORPHANS" ]; then
   echo ""
