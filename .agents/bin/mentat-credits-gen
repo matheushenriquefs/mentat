@@ -32,6 +32,19 @@ _parse() {
     " | " + (.description // "") +
     " |"'
   echo ""
+  echo "## Notices"
+  echo ""
+
+  _parse | jq -r '.upstreams[].vendor_path' | while IFS= read -r vp; do
+    notice="$REPO_ROOT/$vp/NOTICE"
+    if [ -f "$notice" ]; then
+      echo "### $(basename "$vp")"
+      echo ""
+      cat "$notice"
+      echo ""
+    fi
+  done
+
   echo "_Regenerate: \`bin/mentat-credits-gen\`. Edit \`upstreams.jsonc\`, not this file._"
 } > "$CREDITS"
 
