@@ -91,6 +91,22 @@ to_track_start() { # logdir slug...
 to_track_stop() { local p; for p in "${_pids[@]:-}"; do kill "$p" 2>/dev/null || true; done; }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  if [ "$#" -eq 0 ]; then
+    LOG_ROOT="${MENTAT_LOG_DIR:-$HOME/.agents/mentat/logs}"
+    REPO="$(basename "$PWD")"
+    [ -d "$LOG_ROOT/$REPO" ] || { echo "mentat-track: no log dir for repo '$REPO' at $LOG_ROOT/$REPO" >&2; exit 1; }
+    SESS="$(ls -t "$LOG_ROOT/$REPO" 2>/dev/null | head -1)"
+    [ -n "$SESS" ] || { echo "mentat-track: no sessions under $LOG_ROOT/$REPO" >&2; exit 1; }
+    shopt -s nullglob
+    SLUG_LOGS=("$LOG_ROOT/$REPO/$SESS"/mentat-*.jsonl)
+    [ "${#SLUG_LOGS[@]}" -gt 0 ] || { echo "mentat-track: no slug logs in $LOG_ROOT/$REPO/$SESS" >&2; exit 1; }
+    SLUGS_ONLY=()
+    for _sf in "${SLUG_LOGS[@]}"; do
+      _base="$(basename "$_sf" .jsonl)"
+      SLUGS_ONLY+=("$_base")
+    done
+    set -- "$LOG_ROOT/$REPO/$SESS" "${SLUGS_ONLY[@]}"
+  fi
   [[ $# -lt 2 ]] && { echo "usage: mentat-track <logdir> <slug>..." >&2; exit 2; }
   trap to_track_stop EXIT INT TERM
   to_track_start "$@"
