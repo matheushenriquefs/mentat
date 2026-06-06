@@ -15,7 +15,7 @@ def test_promptfoo_config_exists():
 
 def test_promptfoo_rubrics_exist():
     rubrics_dir = os.path.join(EVALS_ROOT, "promptfoo", "rubrics")
-    for name in ["crew-review-plan.md", "crew-review-tests.md", "crew-review-bugs.md"]:
+    for name in ["mentat-plan-reviewer.md", "mentat-test-reviewer.md", "mentat-bug-reviewer.md"]:
         path = os.path.join(rubrics_dir, name)
         assert os.path.isfile(path), f"Missing rubric: {path}"
 

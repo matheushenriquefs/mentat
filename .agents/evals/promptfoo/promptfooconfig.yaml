@@ -13,7 +13,7 @@ tests:
       diff: "file://fixtures/handoff2-routes-not-dropped/diff.patch"
     assert:
       - type: llm-rubric
-        value: "file://rubrics/crew-review-plan.md"
+        value: "file://rubrics/mentat-plan-reviewer.md"
         threshold: 0.9
       - type: contains
         value: "VETO must_not_exist"
@@ -27,7 +27,7 @@ tests:
       diff: "file://fixtures/handoff4-taskfile-only/diff.patch"
     assert:
       - type: llm-rubric
-        value: "file://rubrics/crew-review-tests.md"
+        value: "file://rubrics/mentat-test-reviewer.md"
         threshold: 0.9
       - type: contains
         value: "gate_type=non_pytest"
@@ -41,7 +41,7 @@ tests:
       diff: "file://fixtures/handoff2-design-drift/diff.patch"
     assert:
       - type: llm-rubric
-        value: "file://rubrics/crew-review-bugs.md"
+        value: "file://rubrics/mentat-bug-reviewer.md"
         threshold: 0.9
       - type: contains
         value: "design_drift"

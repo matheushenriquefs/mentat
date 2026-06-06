@@ -1,9 +1,9 @@
-"""Behaviors 3/10/11: promptfoo assertions, devcontainer-run wiring, to-orchestrate hook."""
+"""Behaviors 3/10/11: promptfoo assertions, mentat-container-run wiring, mentat-orchestrate hook."""
 import os
 import inspect
 
 MENTAT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-TO_ORCHESTRATE = os.path.expanduser("~/.agents/bin/to-orchestrate")
+TO_ORCHESTRATE = os.path.expanduser("~/.agents/bin/mentat-orchestrate")
 PROMPTFOO_CONFIG = os.path.join(MENTAT_ROOT, ".agents", "evals", "promptfoo", "promptfooconfig.yaml")
 
 
@@ -46,28 +46,28 @@ def test_conftest_defines_devcontainer_run():
     assert "devcontainer_run" in content, (
         "conftest.py must define devcontainer_run for container-routed eval invocation"
     )
-    assert "devcontainer-run" in content, (
-        "devcontainer_run must call ~/.agents/bin/devcontainer-run"
+    assert "mentat-container-run" in content, (
+        "devcontainer_run must call ~/.agents/bin/mentat-container-run"
     )
 
 
-# Behavior 11: to-orchestrate runs end-of-queue evals
+# Behavior 11: mentat-orchestrate runs end-of-queue evals
 
 def test_to_orchestrate_has_end_of_queue_eval():
-    """to-orchestrate must run .agents/evals/pytest at end of queue when all chunks land."""
-    assert os.path.isfile(TO_ORCHESTRATE), f"to-orchestrate not found: {TO_ORCHESTRATE}"
+    """mentat-orchestrate must run .agents/evals/pytest at end of queue when all chunks land."""
+    assert os.path.isfile(TO_ORCHESTRATE), f"mentat-orchestrate not found: {TO_ORCHESTRATE}"
     with open(TO_ORCHESTRATE) as f:
         content = f.read()
     assert "evals" in content, (
-        "to-orchestrate must reference .agents/evals for end-of-queue eval run"
+        "mentat-orchestrate must reference .agents/evals for end-of-queue eval run"
     )
     assert "pytest" in content, (
-        "to-orchestrate must invoke pytest as part of end-of-queue eval harness"
+        "mentat-orchestrate must invoke pytest as part of end-of-queue eval harness"
     )
 
 
 def test_to_orchestrate_evals_conditional_on_all_pass():
-    """to-orchestrate must only run evals when FAILED -eq 0 (all chunks passed)."""
+    """mentat-orchestrate must only run evals when FAILED -eq 0 (all chunks passed)."""
     with open(TO_ORCHESTRATE) as f:
         content = f.read()
     # The eval invocation must appear in the FAILED==0 branch, not the failure branch

@@ -6,7 +6,7 @@ See [CONTEXT.md](CONTEXT.md) for the full glossary and ADR index. See [STYLE.md]
 
 ## Critical Constraints
 
-- **Devcontainer-only execution for target-repo work.** All target-repo commands run via `bin/devcontainer-run '<cmd>'`. Never call project tools (linters, test runners, formatters, interpreters) on the host. (ADR 0004)
+- **Devcontainer-only execution for target-repo work.** All target-repo commands run via `bin/mentat-container-run '<cmd>'`. Never call project tools (linters, test runners, formatters, interpreters) on the host. (ADR 0004)
 - **Never fabricate.** If a verification step fails or an ADR doesn't cover a case, say so. Don't invent citations or outcomes.
 - **No secrets.** No API keys, tokens, or credentials in any file — not in comments, not in examples.
 - **Mentat names no target-repo toolchain.** The driver and all Mentat files are agnostic — they do not reference specific languages, test frameworks, or build tools. Those live in the target repo's own docs (ADR 0004).
@@ -15,11 +15,10 @@ See [CONTEXT.md](CONTEXT.md) for the full glossary and ADR index. See [STYLE.md]
 
 | Layer | Convention | Examples |
 |---|---|---|
-| Skills | kebab-case, verb-noun or role-noun | `caveman`, `crew-research`, `to-implement` |
-| Commands (`to-*`) | kebab-case, `to-` prefix | `to-plan`, `to-rebase`, `to-scaffold` |
-| Crew agents | kebab-case, `crew-` prefix | `crew-review-plan`, `crew-review-bugs` |
+| Skills / agents | kebab-case, `mentat-` prefix or role-noun | `caveman`, `mentat-bug-reviewer`, `to-implement` |
+| Commands | kebab-case, `mentat-` prefix | `mentat-plan`, `to-rebase`, `to-scaffold` |
 | ADRs | `NNNN-kebab.md` | `0004-parallel-slicing-orchestration.md` |
-| Worktree slugs | `dmux-<epoch>-<pid>-<rand>` | `dmux-1780705140700` |
+| Worktree slugs | `mentat-<epoch>-<pid>-<rand>` | `mentat-1780705140700` |
 
 Reference [STYLE.md](STYLE.md) for frontmatter shapes and body structure per file class.
 
@@ -28,7 +27,7 @@ Reference [STYLE.md](STYLE.md) for frontmatter shapes and body structure per fil
 When editing prompt files in `.agents/`:
 
 1. Read the relevant ADRs for the area you're touching (`docs/adr/`). System ADRs always; the target repo's `docs/adr/` when working there.
-2. Run verification with `bin/devcontainer-run '<test cmd>'` if the target repo has one.
+2. Run verification with `bin/mentat-container-run '<test cmd>'` if the target repo has one.
 3. Commit via `/to-commit` (routes through devcontainer if one exists).
 
 ### Promotion workflow

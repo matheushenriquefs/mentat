@@ -7,7 +7,7 @@ Date: 2026-06-03
 
 `/to-plan` and `/to-issues` already cut work into tracer-bullet vertical
 slices, tagged AFK (gate clears unattended) or HITL. That taxonomy is theirs.
-Undocumented: how `to-orchestrate` *executes* slices — many in parallel, onto
+Undocumented: how `mentat-orchestrate` *executes* slices — many in parallel, onto
 one holding branch — and the hard-to-reverse choices in the driver and the
 `devcontainer-*` scripts. Locked here. One plan → many slices → many parallel
 chunks → one holding branch.
@@ -49,15 +49,15 @@ chunks → one holding branch.
   inspect-after until they earn a false-pass record) — a red end-of-queue review
   warns, it does not roll back a landed ref.
 - **Language- and harness-agnostic; Docker required.** Any Unix, `cursor` or
-  `claude-code` (one stream-json model via `to-track-harness` + `harness-map.jq`),
-  any language. NOT runtime-agnostic. `devcontainer-up` prefers authored
+  `claude-code` (one stream-json model via `mentat-track` + `harness-map.jq`),
+  any language. NOT runtime-agnostic. `mentat-container-up` prefers authored
   `.devcontainer/`, else synthesizes over `docker-compose.yml`/`.yaml`, else over
   a bare `Dockerfile`. None of those → abort loud.
 - **Project tools run in-container, never host** (imperative in AGENTS.md). The
   driver and the rule name no specific tool — whatever interpreters, linters,
-  hooks, or test runner a repo uses, they run via `devcontainer-run`. Two
+  hooks, or test runner a repo uses, they run via `mentat-container-run`. Two
   unconflated failures drove this: (1) the *agent* reaching for host project tools
-  — already container work per ADR 0002, fixed by a reliable `devcontainer-run` +
+  — already container work per ADR 0002, fixed by a reliable `mentat-container-run` +
   the rule; (2) the *scripts'* own `python3`, which parses `devcontainer.json` on
   the host before any container exists and gets hijacked by an asdf shim in a
   `.tool-versions`-less worktree — fixed by resolving a real non-shim `python3`
@@ -86,6 +86,6 @@ chunks → one holding branch.
 
 ## Consequences
 
-`to-orchestrate` stays a thin driver over slices others produce — no planning, no
+`mentat-orchestrate` stays a thin driver over slices others produce — no planning, no
 grilling. `devcontainer-*` own runtime-shape detection and host-`python3` hygiene.
 New harness = extend the stream-json map, not the control flow.

@@ -1,10 +1,10 @@
 #!/bin/bash
-# devcontainer-up — bring up the devcontainer for a worktree.
+# mentat-container-up — bring up the devcontainer for a worktree.
 # Auto-detects image/Dockerfile/docker-compose shape; synthesizes devcontainer.json
 # if absent. Deps: git, jq, docker. ADR 0004.
 set -euo pipefail
 
-[ -f "$PWD/.git" ] || { echo "devcontainer-up: must run from inside a git worktree" >&2; exit 2; }
+[ -f "$PWD/.git" ] || { echo "mentat-container-up: must run from inside a git worktree" >&2; exit 2; }
 
 WT="$PWD"
 SLUG=$(basename "$WT")
@@ -22,19 +22,19 @@ workspace_folder() {
 ensure_safe_directory() {
   devcontainer exec \
     --workspace-folder "$WT" \
-    --id-label "dmux_slug=$SLUG" \
+    --id-label "mentat_slug=$SLUG" \
     bash -lc "git config --global --add safe.directory $(printf %q "$1")" \
     >/dev/null 2>&1 || true
 }
 
 # Already running — safe.directory must fire every path (handoff Issue 4).
-if [ -n "$(docker ps -q --filter "label=dmux_slug=$SLUG")" ]; then
+if [ -n "$(docker ps -q --filter "label=mentat_slug=$SLUG")" ]; then
   ensure_safe_directory "$(workspace_folder)"
   exit 0
 fi
 
 # Stopped container — start it.
-STOPPED=$(docker ps -aq --filter "label=dmux_slug=$SLUG" --filter "status=exited")
+STOPPED=$(docker ps -aq --filter "label=mentat_slug=$SLUG" --filter "status=exited")
 if [ -n "$STOPPED" ]; then
   docker start "$STOPPED" >/dev/null
   ensure_safe_directory "$(workspace_folder)"
@@ -51,7 +51,7 @@ if [ ! -d "$WT/.devcontainer" ]; then
   elif ls "$WT"/Dockerfile* >/dev/null 2>&1; then
     synthesize_devcontainer_from_dockerfile
   else
-    echo "devcontainer-up: no .devcontainer/, no docker-compose.yml, no Dockerfile in worktree" >&2
+    echo "mentat-container-up: no .devcontainer/, no docker-compose.yml, no Dockerfile in worktree" >&2
     exit 1
   fi
 fi
@@ -89,7 +89,7 @@ if [ "$HAS_DOCKER_COMPOSE" = 1 ]; then
     END { if (cur && has_cname) print cur }
   ' "$WT/docker-compose.yml")
 
-  override="$WT/docker-compose.dmux.yml"
+  override="$WT/docker-compose.mentat.yml"
   if [ -n "$local_cnames" ] && [ ! -f "$override" ]; then
     printf 'services:\n' > "$override"
     while IFS= read -r svc; do
@@ -99,7 +99,7 @@ if [ "$HAS_DOCKER_COMPOSE" = 1 ]; then
   fi
 
   if [ -f "$WT/.env" ]; then
-    MARK="# --- dmux per-worktree overrides"
+    MARK="# --- mentat per-worktree overrides"
     body=$(sed "/^${MARK}/,\$d" "$WT/.env")
     printf '%s\n' "$body" > "$WT/.env"
 
@@ -118,10 +118,10 @@ if [ "$HAS_DOCKER_COMPOSE" = 1 ]; then
   fi
 
   dcj="$WT/.devcontainer/devcontainer.json"
-  if ! grep -q 'docker-compose.dmux.yml' "$dcj" \
-     && [ -f "$WT/docker-compose.dmux.yml" ]; then
+  if ! grep -q 'docker-compose.mentat.yml' "$dcj" \
+     && [ -f "$WT/docker-compose.mentat.yml" ]; then
     tmp=$(sed 's|//.*||g' "$dcj" \
-      | jq '.dockerComposeFile |= (if type == "array" then . else [.] end) + ["../docker-compose.dmux.yml"]')
+      | jq '.dockerComposeFile |= (if type == "array" then . else [.] end) + ["../docker-compose.mentat.yml"]')
     printf '%s\n' "$tmp" > "$dcj"
   fi
 fi
@@ -131,6 +131,6 @@ devcontainer up \
   --mount "type=bind,source=$ROOT/.git,target=$ROOT/.git" \
   --remote-env "GIT_DIR=$GIT_TARGET" \
   --remote-env "GIT_WORK_TREE=$WS" \
-  --id-label "dmux_slug=$SLUG"
+  --id-label "mentat_slug=$SLUG"
 
 ensure_safe_directory "$WS"

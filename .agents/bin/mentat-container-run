@@ -1,0 +1,32 @@
+#!/bin/bash
+# mentat-container-run — exec one command inside the worktree's devcontainer.
+# All project-interpreter work must pass through here. ADR 0004.
+# Exits 99 if container not running (caller must mentat-container-up first).
+set -euo pipefail
+
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+. "$_LIB/strict.sh"
+
+CMD="${*:-}"
+[ -z "$CMD" ] && { echo "usage: mentat-container-run '<command>'" >&2; exit 2; }
+[ -f "$PWD/.git" ] || { echo "mentat-container-run: must run from inside a git worktree" >&2; exit 2; }
+
+WT="$PWD"
+SLUG=$(basename "$WT")
+
+workspace_folder() {
+  sed 's|//.*||g' "$WT/.devcontainer/devcontainer.json" \
+    | jq -r --arg slug "$SLUG" '.workspaceFolder // ("/workspaces/" + $slug)'
+}
+
+if [ -z "$(docker ps -q --filter "label=mentat_slug=$SLUG")" ]; then
+  echo "mentat-container-run: container not running for slug $SLUG (run mentat-container-up first)" >&2
+  exit 99
+fi
+
+WS="$(workspace_folder)"
+
+exec devcontainer exec \
+  --workspace-folder "$WT" \
+  --id-label "mentat_slug=$SLUG" \
+  bash -lc "cd $(printf %q "$WS") && $CMD"

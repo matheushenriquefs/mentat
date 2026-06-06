@@ -10,7 +10,7 @@ A lean, agnostic harness for orchestrating parallel coding agents.
 ## How it works
 
 1. **Cut.** `/to-plan` slices a feature into vertical tracer-bullet cuts — each a `plan.md`. AFK slices gate and land unattended; HITL slices pause for review.
-2. **Fan out.** `bin/to-orchestrate` launches each slice as a chunk: isolated worktree, devcontainer, and branch off `main`. Up to 3 run in parallel.
+2. **Fan out.** `bin/mentat-orchestrate` launches each slice as a chunk: isolated worktree, devcontainer, and branch off `main`. Up to 3 run in parallel.
 3. **Re-gate on land.** The serial land pass is a merge queue. Per chunk: rebase onto the live holding-branch tip inside the container, re-gate with the target repo's own quality gates, then `merge --ff-only`. Semantic breakage from a sibling's land is caught here. Red → eject; queue continues.
 4. **Hold, don't merge.** The holding branch (`branch/<feature>`) carries no commits of its own — every land is a fast-forward. No host-side pre-commit ever fires.
 
@@ -22,13 +22,13 @@ See [CONTEXT.md](CONTEXT.md) for the full glossary and ADR index.
 
 ```bash
 # Bring up the devcontainer for a worktree
-bin/devcontainer-up
+bin/mentat-container-up
 
 # Run a command inside the container
-bin/devcontainer-run 'npm test'
+bin/mentat-container-run 'npm test'
 
 # Fan out planned slices onto a holding branch
-bin/to-orchestrate branch/my-feature plan1.md plan2.md plan3.md
+bin/mentat-orchestrate branch/my-feature plan1.md plan2.md plan3.md
 ```
 
 ## Requirements
@@ -43,6 +43,6 @@ No language toolchain on the host. Mentat declares no interpreter, formatter, li
 
 Bash + jq + prompts.
 
-No SDK, no orchestration framework, no platform lock. The driver (`to-orchestrate`) is ~260 lines of shell. The gate logic is in reviewer prompt files. The harness abstraction (`to-track-harness`, `harness-map.jq`) normalizes `cursor-agent` and `claude-code` stream-json — swapping harnesses is a config change, not a rewrite.
+No SDK, no orchestration framework, no platform lock. The driver (`mentat-orchestrate`) is ~260 lines of shell. The gate logic is in reviewer prompt files. The harness abstraction (`mentat-track`, `harness-map.jq`) normalizes `cursor-agent` and `claude-code` stream-json — swapping harnesses is a config change, not a rewrite.
 
 The constraint is Docker. Everything else is a text file.

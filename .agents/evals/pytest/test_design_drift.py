@@ -4,13 +4,13 @@ from utils import read_agent, read_fixture
 
 def test_design_drift_in_prompt():
     """Reviewer prompt must contain design_drift output field."""
-    prompt = read_agent("crew-review-bugs")
-    assert "design_drift" in prompt, "crew-review-bugs.md missing design_drift surface"
+    prompt = read_agent("mentat-bug-reviewer")
+    assert "design_drift" in prompt, "mentat-bug-reviewer.md missing design_drift surface"
 
 
 def test_design_drift_does_not_veto():
     """Prompt must explicitly state design_drift does not veto."""
-    prompt = read_agent("crew-review-bugs")
+    prompt = read_agent("mentat-bug-reviewer")
     # Must clarify drift ≠ veto
     assert "not veto" in prompt.lower() or "does not veto" in prompt.lower() or "never veto" in prompt.lower() or "don't veto" in prompt.lower() or "doesn't veto" in prompt.lower() or "does NOT veto" in prompt, (
         "design_drift must be explicitly non-vetoing"
@@ -31,7 +31,7 @@ def test_design_drift_fixture_has_out_of_scope_items():
 
 def test_design_drift_output_format():
     """design_drift must appear as a separate output field, not inside findings."""
-    prompt = read_agent("crew-review-bugs")
+    prompt = read_agent("mentat-bug-reviewer")
     # design_drift should be a named field in output block
     assert "design_drift:" in prompt or "design_drift[]" in prompt, (
         "design_drift must be a named output field"

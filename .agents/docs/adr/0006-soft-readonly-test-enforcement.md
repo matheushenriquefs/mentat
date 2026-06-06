@@ -13,12 +13,12 @@ adding it as the single highest-value control.
 
 The obvious implementation — mount the test files read-only in the devcontainer —
 turns out to break the system's founding rule. Hard-to-reverse: it shapes
-`/to-implement`'s contract and the `crew-review-bugs` veto set, so it's locked here.
+`/to-implement`'s contract and the `mentat-bug-reviewer` veto set, so it's locked here.
 
 ## The trap we rejected: a driver-built read-only mount
 
 Mounting tests read-only requires *knowing which files are tests*. There is no
-agnostic way for the driver or `devcontainer-up` to know that:
+agnostic way for the driver or `mentat-container-up` to know that:
 
 - Many projects have no single `tests/` dir. JS/TS routinely co-locate `foo.ts`
   with `foo.test.ts`, or scatter `__tests__/` through `src/`.
@@ -46,7 +46,7 @@ no tool): the agent holds the project knowledge, the driver holds none.
   ImpossibleBench effect) without the driver knowing a single test path.
 
 - **Hard detective layer — the trajectory blacklist (ADR 0003).** The real gate
-  stays where it is already agnostic and deterministic: `crew-review-bugs` reads
+  stays where it is already agnostic and deterministic: `mentat-bug-reviewer` reads
   the agent's own edit/tool trajectory. A test-file write during the impl phase, a
   weakened assertion, a redirected runner — all surface as blacklisted *moves*
   regardless of language or layout, because the lens reads *what the agent did*,
@@ -85,7 +85,7 @@ See ADR 0003's amended blacklist set for the full list.
 
 ## Consequences
 
-`/to-implement` gains a one-line impl-only-after-red contract clause. `crew-review-bugs`
+`/to-implement` gains a one-line impl-only-after-red contract clause. `mentat-bug-reviewer`
 gains the runner-redirection move and keeps all others. The driver and
 `devcontainer-*` scripts are untouched — they never learn what a test file is. This
 ADR is index-only in AGENTS.md (title only; body on demand — ADR 0001's budget).

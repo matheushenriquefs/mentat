@@ -33,7 +33,7 @@ tools: [Tool1, Tool2]
 ```
 `tools` is a hard read-only guarantee — no read-write tools unless the agent must write (rare). Multi-line via `>` YAML anchor.
 
-Exemplar: `.agents/agents/crew-research.md` — `description: > Read-only fact locator…`
+Exemplar: `.agents/agents/mentat-researcher.md` — `description: > Read-only fact locator…`
 
 **to-* command:**
 ```yaml
@@ -59,7 +59,7 @@ Phase naming: `Phase N — <Name>` (from `diagnose`, `tdd`, `triage`). Step nami
 ```
 No `###`. No sub-sections. Caveman-ultra fragments. No code blocks unless the output schema requires exact formatting.
 
-Exemplar: `.agents/agents/crew-review-bugs.md` — flat `## Output`, `## Blacklist`, `## Refusals`.
+Exemplar: `.agents/agents/mentat-bug-reviewer.md` — flat `## Output`, `## Blacklist`, `## Refusals`.
 
 **to-* command:** Numbered list, no headers.
 ```
@@ -109,4 +109,4 @@ In to-* commands, reference skills by invocation: `/skill-name`. No inline links
 
 ## Shell conventions
 
-Bash + `jq` only on the host (ADR 0004). Target-repo tools run via `devcontainer-run '<cmd>'` — never called directly on the host. No host `python3`/`node`/`uv` references in Mentat files. Language tag `bash` required on shell blocks.
+Bash + `jq` only on the host (ADR 0004). Target-repo tools run via `mentat-container-run '<cmd>'` — never called directly on the host. No host `python3`/`node`/`uv` references in Mentat files. Language tag `bash` required on shell blocks.

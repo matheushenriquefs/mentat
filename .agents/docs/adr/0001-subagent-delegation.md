@@ -25,9 +25,9 @@ a context-budget argument, not a quality one.
 The delegation rule lives in global AGENTS.md, not command bodies, so it holds
 across Claude Code / Codex / Cursor and changes in one place.
 
-## Decision 2 — `/crew-research` is procedure, not persona
+## Decision 2 — `/mentat-researcher` is procedure, not persona
 
-`/crew-research` is operating loop + output contract + primary-source gate. No
+`/mentat-researcher` is operating loop + output contract + primary-source gate. No
 "you are an expert researcher" preamble.
 
 Rejected: persona-based research agents. Primary sources are consistent that
@@ -38,7 +38,7 @@ is recall-dependent, so a persona would hurt the one thing the agent is for.
 
 ## Decision 3 — no hardcoded model
 
-`/crew-research` omits the `model` frontmatter field; the body says "cheapest
+`/mentat-researcher` omits the `model` frontmatter field; the body says "cheapest
 capable model the harness offers."
 
 Rejected: `model: haiku`. It's vendor-coupled (Anthropic alias) and not even

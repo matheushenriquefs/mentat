@@ -9,7 +9,7 @@ The system's terms (`slice`, `chunk`, `slug`, holding branch, land) grew across
 ADRs 0001-0004 and the `to-*`/`devcontainer-*` scripts. They were *consistent
 in spirit* but never collected, and two gaps bit: (1) `slice` and `chunk` were
 used near-interchangeably in prose though they name different layers; (2) there
-was no noun for "the whole set of chunks in one `to-orchestrate` run" — code
+was no noun for "the whole set of chunks in one `mentat-orchestrate` run" — code
 said `SLUGS[@]`, prose said "the queue" / "the whole run". One word imported
 from Laravel (`batch`) closes that gap; nothing else there maps. Locked here so
 every command, ADR, and script speaks one vocabulary.
@@ -20,19 +20,19 @@ every command, ADR, and script speaks one vocabulary.
   `plan.md`. Taxonomy owned by `/to-plan` + `/to-issues` (AFK/HITL tags theirs).
 - **chunk** — the *running execution* of one slice: worktree + devcontainer +
   its own branch off `main`, running `/to-implement`. One slice → one chunk.
-- **batch** — the full set of chunks in one `to-orchestrate` run. The parallel
+- **batch** — the full set of chunks in one `mentat-orchestrate` run. The parallel
   fan-out group; lands when all-green, ejects per-chunk on red.
-- **slug** — a chunk's unique id; also its worktree dirname and `dmux_slug`
-  container label. (`dmux-<epoch>-<pid>-<rand>`.)
+- **slug** — a chunk's unique id; also its worktree dirname and `mentat_slug`
+  container label. (`mentat-<epoch>-<pid>-<rand>`.)
 - **harness** — the headless agent CLI (`cursor-agent` | `claude`). The thing
-  `--harness=` selects, `to-track-harness` watches, `harness-map.jq` normalizes,
+  `--harness=` selects, `mentat-track` watches, `harness-map.jq` normalizes,
   and `harness_cmd()` builds an invocation of. Never "build" (collides with
-  Docker `build:` in `devcontainer-up`).
+  Docker `build:` in `mentat-container-up`).
 - **holding branch** (`$HOLDING`, `branch/<feature>`) — own-branch land target
   with no commits of its own (ADR 0002).
 - **land** — the cross-branch move: rebase the chunk onto `$HOLDING`
-  in-container, re-gate, host `merge --ff-only` (ADR 0004). Never "merge"
-  (dmux's Merge is the rejected thing — ADR 0002).
+  in-container, re-gate, host `merge --ff-only` (ADR 0004). Never plain
+  "merge" — host-side `git merge` is the rejected mechanism (ADR 0002).
 
 slice : chunk :: plan : process. If a sentence is about the cut, say slice; if
 it's about the worktree/container/branch doing the work, say chunk; if it's
@@ -73,7 +73,7 @@ comments) — prose with a human in chat is exempt.
 
 ## Consequences
 
-`harness_cmd` replaces `build_cmd` in `to-orchestrate` (this lexicon's rename).
+`harness_cmd` replaces `build_cmd` in `mentat-orchestrate` (this lexicon's rename).
 ADRs and AGENTS.md use slice/chunk/batch per the layers above. New terms join
 this table rather than drifting in inline. This ADR is index-only in AGENTS.md
 (titles-only; body on demand — ADR 0001's context budget).

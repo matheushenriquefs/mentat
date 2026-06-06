@@ -10,10 +10,10 @@ ADR_DIR = os.path.join(MENTAT_ROOT, ".agents", "docs", "adr")
 
 def test_absence_as_evidence_phrasing():
     """Prompt must frame absence as proof, not just grep keyword list."""
-    prompt = read_agent("crew-review-plan")
+    prompt = read_agent("mentat-plan-reviewer")
     # The instruction says "Absence = evidence of correctness" or similar
     assert "absence" in prompt.lower() or "absent" in prompt.lower(), (
-        "crew-review-plan must frame absence-as-evidence for must_not_exist"
+        "mentat-plan-reviewer must frame absence-as-evidence for must_not_exist"
     )
     assert "grep" in prompt.lower() or "grep-absent" in prompt.lower(), (
         "must_not_exist rule must reference grep check"
@@ -24,7 +24,7 @@ def test_absence_as_evidence_phrasing():
 
 def test_non_pytest_gate_source_file_fallback_documented():
     """Prompt must specify that source files revert to normal two-halves gate."""
-    prompt = read_agent("crew-review-tests")
+    prompt = read_agent("mentat-test-reviewer")
     # Carve-out only applies when ALL files are config-only
     assert "all" in prompt.lower() or "only" in prompt.lower(), (
         "non_pytest_gate must require all files to be config-only"
@@ -38,9 +38,9 @@ def test_non_pytest_gate_source_file_fallback_documented():
 
 def test_medium_real_bugs_stay_in_findings():
     """Prompt must keep real MEDIUM bugs in findings[], not in design_drift."""
-    prompt = read_agent("crew-review-bugs")
+    prompt = read_agent("mentat-bug-reviewer")
     # findings[] should be mentioned as the destination for real bugs
-    assert "findings" in prompt, "crew-review-bugs must reference findings[] for real bugs"
+    assert "findings" in prompt, "mentat-bug-reviewer must reference findings[] for real bugs"
     assert "real bug" in prompt.lower() or "real bugs" in prompt.lower() or "incorrect logic" in prompt.lower() or "wrong output" in prompt.lower(), (
         "MEDIUM real bugs must be distinguished from drift in the prompt"
     )
@@ -48,7 +48,7 @@ def test_medium_real_bugs_stay_in_findings():
 
 def test_design_drift_conservative_fallback():
     """When uncertain, prompt defaults to findings[] not design_drift."""
-    prompt = read_agent("crew-review-bugs")
+    prompt = read_agent("mentat-bug-reviewer")
     assert "conservative" in prompt.lower() or "uncertain" in prompt.lower() or "unsure" in prompt.lower() or "prefer" in prompt.lower(), (
         "prompt must specify conservative fallback: uncertain → findings[]"
     )

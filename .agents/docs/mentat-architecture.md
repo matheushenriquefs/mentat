@@ -16,7 +16,7 @@ bind-mounted out of the container), and fires from the host shell where
 its tools aren't installed.
 
 The fix: route every `git commit` through the container via
-`devcontainer-run`, and don't use dmux's Merge. Instead, the planner
+`mentat-container-run`, and don't use dmux's Merge. Instead, the planner
 pane holds `branch/<feature>` with no commits of its own, each dmux
 worktree branches from `main`, and the implementer agent runs
 `/to-rebase` at the end of its session to fast-forward the holding
@@ -41,7 +41,7 @@ So `/to-commit`:
 
 - Stages the changes.
 - Invokes `/caveman-commit` for the message.
-- Runs the actual `git commit` via `devcontainer-run`.
+- Runs the actual `git commit` via `mentat-container-run`.
 
 Slice scoping is implicit from *when* `/to-commit` runs — after each
 green slice, when the only dirty files are that slice's. No need for
@@ -79,7 +79,7 @@ directly, so the same rule holds whichever tool drives the worktree.
 `skill-creator` (in `/to-scaffold`) stays vanilla — specialized drafting, not
 a generic builder.
 
-## `/crew-research` is a context firewall
+## `/mentat-researcher` is a context firewall
 
 The 90% delegation case is ground-truthing: check a fact against
 docs/papers/repos, return a synthesized answer, so the planner/implementer
@@ -95,7 +95,7 @@ recall (see ADR 0001 for the source evidence). So it's operating loop, output
 contract, and a hard primary-source-over-blogs gate, no persona preamble.
 
 External-knowledge sibling of `cavecrew-investigator` — investigator greps
-*inside* the repo, `/crew-research` traces facts *outside* it.
+*inside* the repo, `/mentat-researcher` traces facts *outside* it.
 
 ## Devcontainer CLI overrides instead of editing devcontainer.json
 
@@ -106,7 +106,7 @@ the worktree's `.git` is a pointer file referencing
 workspace-only mount.
 
 `devcontainer up` accepts `--mount` and `--remote-env` flags that
-layer over the committed config *per invocation*. `devcontainer-up`
+layer over the committed config *per invocation*. `mentat-container-up`
 injects:
 
 - `--mount type=bind,source=$ROOT/.git,target=$ROOT/.git` — so the
@@ -120,7 +120,7 @@ Two gotchas verified empirically:
   `target`, `external` parse. Bind being read-write into the container
   is harmless; git ops route through `GIT_DIR` to worktree-local refs.
 - The host's uid owning `.git` triggers `fatal: detected dubious
-  ownership` for the container's `vscode` user. `devcontainer-up` runs
+  ownership` for the container's `vscode` user. `mentat-container-up` runs
   `git config --global --add safe.directory` post-up to fix.
 
 ## Why `/to-commit` is a slash command, not a helper script

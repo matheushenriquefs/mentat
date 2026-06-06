@@ -4,25 +4,25 @@
 
 Want the finding in ~1/3 the tokens → spawn a cavecrew variant
 (`cavecrew-investigator` to locate repo code, `cavecrew-builder` for ≤2-file
-edits, `cavecrew-reviewer` for diffs, `crew-research` for external facts).
+edits, `cavecrew-reviewer` for diffs, `mentat-researcher` for external facts).
 Want prose — rationale, alternatives, architecture — → spawn vanilla
 (`Explore`, `Code Reviewer`) or use the main thread.
 
-`skill-creator` stays vanilla. `crew-research` runs on the cheapest capable
+`skill-creator` stays vanilla. `mentat-researcher` runs on the cheapest capable
 model the harness offers.
 
 ## Run project tools in the container, never the host
 
 The project's interpreters, formatters, linters, hooks, and test runner —
-whatever this repo uses — run only via `devcontainer-run '<cmd>'`, never on the
+whatever this repo uses — run only via `mentat-container-run '<cmd>'`, never on the
 host. The host pins no interpreter (asdf shim aborts in a bare worktree) and host
 commits fire pre-commit where container-only tools aren't installed (ADR 0002).
-If `devcontainer-run` fails, fix bring-up — don't fall back to host or
+If `mentat-container-run` fails, fix bring-up — don't fall back to host or
 `docker exec`. Why: ADR 0004.
 
 ## Land gate (orchestrated runs)
 
-`to-orchestrate`'s serial land pass is a merge queue. Per chunk it rebases onto
+`mentat-orchestrate`'s serial land pass is a merge queue. Per chunk it rebases onto
 the live holding tip, then re-gates by spawning a `cavecrew-builder` that reads
 this repo's own docs and runs its quality gates — the driver names no tool, so it
 stays project-agnostic. A red gate ejects that chunk (left up for repair). When the

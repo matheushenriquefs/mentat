@@ -1,4 +1,5 @@
 context/mattpocock-skills/
+.mentat/worktrees/
 
 __pycache__/
 *.pyc

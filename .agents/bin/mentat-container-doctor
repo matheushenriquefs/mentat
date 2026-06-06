@@ -1,5 +1,5 @@
 #!/bin/bash
-# devcontainer-doctor — assert mentat's minimum deps inside the container.
+# mentat-container-doctor — assert mentat's minimum deps inside the container.
 # Does NOT check language toolchains — those are the target repo's contract.
 set -euo pipefail
 

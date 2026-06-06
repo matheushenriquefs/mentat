@@ -12,7 +12,7 @@ Mentat cuts planned work into vertical slices, runs each slice as an isolated ch
 
 **Merge queue / re-gate.** Per chunk: rebase onto current holding tip in-container, re-gate using the target repo's own quality gates, then ff-only. A red gate ejects the chunk; the queue continues. This catches semantic breakage a sibling's land introduced (ADR 0004).
 
-**Deterministic gating + anti-cheat.** Two enforcement layers, both agnostic (ADR 0006): (1) impl-only-after-red contract — agent writes implementation code only after a failing test; (2) trajectory blacklist in `crew-review-bugs` — forbidden reward-hacking moves → hard 0.0 veto (ADR 0003). The driver names no project tool.
+**Deterministic gating + anti-cheat.** Two enforcement layers, both agnostic (ADR 0006): (1) impl-only-after-red contract — agent writes implementation code only after a failing test; (2) trajectory blacklist in `mentat-bug-reviewer` — forbidden reward-hacking moves → hard 0.0 veto (ADR 0003). The driver names no project tool.
 
 **AFK operator.** AFK-tagged slices gate and land without human input. HITL-tagged slices stall for review. The scored gate (ADR 0003) — never average, veto > threshold — is what makes AFK trustworthy.
 
@@ -30,16 +30,16 @@ Mentat cuts planned work into vertical slices, runs each slice as an isolated ch
 : The *running execution* of one slice — worktree + devcontainer + its own branch off `main`, running `/to-implement`. One slice → one chunk. _Avoid_: "chunk" for the plan document or the group.
 
 **Batch**
-: The full set of chunks in one `to-orchestrate` run. Borrowed from Laravel (noun only — not their semantics; landing is serial, not independent). _Avoid_: `batch` to imply parallel independence or Laravel's `then()`/`catch()` pattern.
+: The full set of chunks in one `mentat-orchestrate` run. Borrowed from Laravel (noun only — not their semantics; landing is serial, not independent). _Avoid_: `batch` to imply parallel independence or Laravel's `then()`/`catch()` pattern.
 
 **Holding branch**
 : `branch/<feature>` — a moving pointer with no commits of its own. All chunks fast-forward onto it. _Avoid_: "merge branch", "integration branch".
 
 **Land**
-: The cross-branch move — rebase the chunk onto `$HOLDING` in-container, re-gate, host `merge --ff-only`. _Avoid_: "merge" (dmux's Merge is the rejected mechanism — ADR 0002).
+: The cross-branch move — rebase the chunk onto `$HOLDING` in-container, re-gate, host `merge --ff-only`. _Avoid_: "merge" (plain `git merge` is the rejected mechanism — ADR 0002).
 
 **Merge queue**
-: The serial land pass in `to-orchestrate`. Per chunk: rebase onto live holding tip → re-gate → ff-only or eject. _Avoid_: "CI queue", "build queue".
+: The serial land pass in `mentat-orchestrate`. Per chunk: rebase onto live holding tip → re-gate → ff-only or eject. _Avoid_: "CI queue", "build queue".
 
 **Re-gate**
 : Running the target repo's quality gates on the rebased tree after landing. Distinct from the chunk's own gate during implementation. _Avoid_: "re-test", "re-check".
@@ -54,28 +54,28 @@ Mentat cuts planned work into vertical slices, runs each slice as an isolated ch
 : The codebase a batch implements against. Mentat is agnostic to its toolchain; all target-repo commands run in-container. _Avoid_: "the project" (ambiguous between Mentat and target).
 
 **Devcontainer**
-: Docker container for a chunk's target repo — where all project tools run. `devcontainer-up` brings it up; `devcontainer-run` executes commands inside. _Avoid_: "the container", "the Docker".
+: Docker container for a chunk's target repo — where all project tools run. `mentat-container-up` brings it up; `mentat-container-run` executes commands inside. _Avoid_: "the container", "the Docker".
 
 **Headless agent CLI**
-: The harness CLI — `cursor-agent` or `claude-code`. What `--harness=` selects; `to-track-harness` watches it; `harness-map.jq` normalizes its stream-json. _Avoid_: "build" (collides with Docker `build:` in `devcontainer-up`).
+: The harness CLI — `cursor-agent` or `claude-code`. What `--harness=` selects; `mentat-track` watches it; `harness-map.jq` normalizes its stream-json. _Avoid_: "build" (collides with Docker `build:` in `mentat-container-up`).
 
 **Reviewer gate**
-: The three ADR-0003 reviewers (`crew-review-plan`, `crew-review-tests`, `crew-review-bugs`) run once at end-of-queue over the final landed tip. Advisory (inspect-after) until they earn a false-pass record. _Avoid_: conflating this with the per-chunk land gate.
+: The three ADR-0003 reviewers (`mentat-plan-reviewer`, `mentat-test-reviewer`, `mentat-bug-reviewer`) run once at end-of-queue over the final landed tip. Advisory (inspect-after) until they earn a false-pass record. _Avoid_: conflating this with the per-chunk land gate.
 
 **Blacklist**
-: Set of forbidden reward-hacking moves in `crew-review-bugs`. Any hit → 0.0 veto. Overrides all graded scores. _Avoid_: "denylist" (different mental model — this is a trajectory scan, not an access control).
+: Set of forbidden reward-hacking moves in `mentat-bug-reviewer`. Any hit → 0.0 veto. Overrides all graded scores. _Avoid_: "denylist" (different mental model — this is a trajectory scan, not an access control).
 
 **must_not_exist veto**
-: A veto triggered when `crew-review-tests` finds the implementation asserts behavior the plan did not ask for (hallucination). Inverted polarity: higher hallucination score = worse. _Avoid_: treating this as a threshold to meet.
+: A veto triggered when `mentat-test-reviewer` finds the implementation asserts behavior the plan did not ask for (hallucination). Inverted polarity: higher hallucination score = worse. _Avoid_: treating this as a threshold to meet.
 
 **Harness tool**
 : A MCP/skill resource the orchestration layer uses — `bash`, `grep`, `Read`, `Agent`. Not a target-repo tool. _Avoid_: bare 'tool' when the distinction matters.
 
 **Project tool**
-: A target-repo command — linter, test runner, formatter, interpreter. Runs only via `devcontainer-run`, never on the host. _Avoid_: bare 'tool' when the distinction matters.
+: A target-repo command — linter, test runner, formatter, interpreter. Runs only via `mentat-container-run`, never on the host. _Avoid_: bare 'tool' when the distinction matters.
 
 **Slug**
-: A chunk's unique id — also its worktree dirname and `dmux_slug` container label. Format: `dmux-<epoch>-<pid>-<rand>`. _Avoid_: "id", "name", "tag".
+: A chunk's unique id — also its worktree dirname and `mentat_slug` container label. Format: `mentat-<epoch>-<pid>-<rand>`. _Avoid_: "id", "name", "tag".
 
 ## Relationships
 
@@ -87,7 +87,7 @@ Mentat cuts planned work into vertical slices, runs each slice as an isolated ch
 
 ## Flagged ambiguities
 
-**"build" vs "land."** "Build" collides with Docker's `build:` stanza in `devcontainer-up` and with the generic sense of "compile". Mentat uses "land" for the cross-branch move and avoids "build" in orchestration prose.
+**"build" vs "land."** "Build" collides with Docker's `build:` stanza in `mentat-container-up` and with the generic sense of "compile". Mentat uses "land" for the cross-branch move and avoids "build" in orchestration prose.
 
 **"tool" — Mentat-internal vs. target-repo.** A "tool" inside Mentat means a MCP/skill resource (bash, grep, agent). A "tool" in the target repo means its linter/test runner/formatter. Context usually disambiguates; when unclear, say "harness tool" vs. "project tool".
 
@@ -99,8 +99,8 @@ Mentat cuts planned work into vertical slices, runs each slice as an isolated ch
 
 | # | Title | Summary |
 |---|---|---|
-| 0001 | Sub-agent delegation | Cavecrew by default; vanilla only for prose/rationale. `/crew-research` is procedure, not persona. No hardcoded model. |
-| 0002 | Holding branch + `/to-rebase` | Don't use dmux's Merge. Holding branch carries no commits; all lands are ff-only in-container. |
+| 0001 | Sub-agent delegation | Cavecrew by default; vanilla only for prose/rationale. `/mentat-researcher` is procedure, not persona. No hardcoded model. |
+| 0002 | Holding branch + `/to-rebase` | Use plain `git worktree` + ff-only merge; no merge commits. Holding branch carries no commits; all lands are ff-only in-container. |
 | 0003 | Scored review gate | Three reviewers map to Mastra scorers. Never average; veto > threshold. LLM never self-promotes. |
 | 0004 | Parallel-slicing orchestration | Fan-out parallel, land serial. Cap 3 chunks. Re-gate after land rebase. Docker required. Driver names no project tool. |
 | 0005 | Ubiquitous lexicon | Slice/chunk/batch vocabulary. One Laravel borrow (batch, noun only). |

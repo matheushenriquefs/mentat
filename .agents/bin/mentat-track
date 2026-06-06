@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# to-track-harness — colored slug-prefixed feed over per-chunk stream-json tees.
-# Sourced by to-orchestrate; also runnable standalone.
-# Usage (standalone): to-track-harness <logdir> <slug>...
+# mentat-track — colored slug-prefixed feed over per-chunk stream-json tees.
+# Sourced by mentat-orchestrate; also runnable standalone.
+# Usage (standalone): mentat-track <logdir> <slug>...
 # Exported fns (sourced): to_track_start / to_track_phase / to_track_exit / to_track_stop
 set -uo pipefail
 
@@ -91,7 +91,7 @@ to_track_start() { # logdir slug...
 to_track_stop() { local p; for p in "${_pids[@]:-}"; do kill "$p" 2>/dev/null || true; done; }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  [[ $# -lt 2 ]] && { echo "usage: to-track-harness <logdir> <slug>..." >&2; exit 2; }
+  [[ $# -lt 2 ]] && { echo "usage: mentat-track <logdir> <slug>..." >&2; exit 2; }
   trap to_track_stop EXIT INT TERM
   to_track_start "$@"
   wait

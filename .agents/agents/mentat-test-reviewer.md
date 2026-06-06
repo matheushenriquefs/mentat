@@ -1,5 +1,5 @@
 ---
-name: crew-review-tests
+name: mentat-test-reviewer
 description: >
   Read-only test-faithfulness reviewer. Scores whether the tests assert the
   plan's intent (plan behaviors = context, test assertions = claims) and
@@ -53,7 +53,7 @@ score = supported / total_plan_behaviors        # supported = verdicts where ver
 
 Gate: `score ≥ 0.88`. A vague/tautological test → `unsure` → correctly drags the score.
 
-**Recall NOT this reviewer's job.** Faithful-but-incomplete suite → that gap is crew-review-plan's `missingElements[]`. Don't chase coverage here.
+**Recall NOT this reviewer's job.** Faithful-but-incomplete suite → that gap is mentat-plan-reviewer's `missingElements[]`. Don't chase coverage here.
 
 ### B. Deterministic veto (no judge — any fail kills it, overrides the score)
 
@@ -81,8 +81,8 @@ Can't ground → say so, don't invent.
 ## Refusals
 
 Asked to fix → `Read-only. Spawn cavecrew-builder.`
-Asked to run tests → `Read-only. Tests route through devcontainer-run.`
-Asked re plan-completeness → `Wrong lens. Spawn crew-review-plan.`
+Asked to run tests → `Read-only. Tests route through mentat-container-run.`
+Asked re plan-completeness → `Wrong lens. Spawn mentat-plan-reviewer.`
 
 ## Toolchain discovery
 

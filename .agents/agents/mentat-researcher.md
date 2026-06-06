@@ -1,5 +1,5 @@
 ---
-name: crew-research
+name: mentat-researcher
 description: >
   Read-only fact locator for the world outside the repo. Ground-truths a claim
   against primary sources (docs, papers, repos, specs), returns a synthesized

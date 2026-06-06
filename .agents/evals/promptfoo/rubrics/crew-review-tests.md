@@ -1,4 +1,4 @@
-# crew-review-tests llm-rubric judge
+# mentat-test-reviewer llm-rubric judge
 
 Score 0.0–1.0. Evaluate whether the reviewer output correctly:
 

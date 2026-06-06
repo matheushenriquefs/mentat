@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bin/lib/compose-synth.sh — synthesize .devcontainer/devcontainer.json from
 # docker-compose.yml or a bare Dockerfile when no .devcontainer/ exists.
-# Source from devcontainer-up; requires WT and SLUG to be set by the caller.
+# Source from mentat-container-up; requires WT and SLUG to be set by the caller.
 
 # Infer workspace service from docker-compose.yml and write devcontainer.json.
 # Exits 3 if zero or multiple buildable/cwd-mounted services are found.
@@ -27,7 +27,7 @@ synthesize_devcontainer() {
 
   if [ "$count" -ne 1 ]; then
     local how="${candidates:-none}"
-    echo "devcontainer-up: cannot infer workspace service from docker-compose.yml (buildable/cwd-mounted: $how)." >&2
+    echo "mentat-container-up: cannot infer workspace service from docker-compose.yml (buildable/cwd-mounted: $how)." >&2
     echo "Add a .devcontainer/devcontainer.json naming the \`service\` + \`workspaceFolder\`." >&2
     exit 3
   fi
@@ -65,7 +65,7 @@ synthesize_devcontainer_from_dockerfile() {
     first=$(ls "$WT"/Dockerfile* 2>/dev/null | head -1)
     [ -n "$first" ] && dockerfile="$(basename "$first")"
   fi
-  [ -n "$dockerfile" ] || { echo "devcontainer-up: no Dockerfile found in worktree." >&2; exit 3; }
+  [ -n "$dockerfile" ] || { echo "mentat-container-up: no Dockerfile found in worktree." >&2; exit 3; }
 
   local ws="/workspaces/$SLUG"
   local last_workdir

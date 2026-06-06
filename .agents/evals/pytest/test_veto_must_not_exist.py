@@ -4,8 +4,8 @@ from utils import read_agent, read_fixture
 
 def test_must_not_exist_veto_in_prompt():
     """Reviewer prompt must contain must_not_exist logic."""
-    prompt = read_agent("crew-review-plan")
-    assert "must_not_exist" in prompt, "crew-review-plan.md missing must_not_exist veto"
+    prompt = read_agent("mentat-plan-reviewer")
+    assert "must_not_exist" in prompt, "mentat-plan-reviewer.md missing must_not_exist veto"
     assert "drop" in prompt.lower() or "remove" in prompt.lower(), (
         "must_not_exist rule must mention drop/remove keywords"
     )
@@ -28,6 +28,6 @@ def test_must_not_exist_fixture_has_retained_entities():
 
 def test_must_not_exist_rule_covers_all_keywords():
     """Prompt must trigger on all required removal keywords."""
-    prompt = read_agent("crew-review-plan")
+    prompt = read_agent("mentat-plan-reviewer")
     for keyword in ["drop", "remove", "replace", "no longer", "must not", "should not"]:
         assert keyword in prompt, f"must_not_exist rule missing keyword: {keyword}"

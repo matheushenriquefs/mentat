@@ -1,7 +1,7 @@
 #!/bin/bash
-# to-orchestrate — headless batch driver: fan out planned chunks in parallel,
+# mentat-orchestrate — headless batch driver: fan out planned chunks in parallel,
 # land each onto the holding branch serially. No planning; human does that.
-# Usage: to-orchestrate [--harness=cursor|claude-code] [--model=<slug>] \
+# Usage: mentat-orchestrate [--harness=cursor|claude-code] [--model=<slug>] \
 #                       <holding-branch> <plan.md> [<plan.md> ...]
 # ADR 0004
 set -euo pipefail
@@ -10,7 +10,7 @@ _LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
 . "$_LIB/strict.sh"
 . "$_LIB/log.sh"
 . "$_LIB/here.sh"
-_LOG_PREFIX=to-orchestrate
+_LOG_PREFIX=mentat-orchestrate
 
 HARNESS=cursor; MODEL=""
 while [ "$#" -gt 0 ]; do
@@ -18,22 +18,22 @@ while [ "$#" -gt 0 ]; do
     --harness=*) HARNESS="${1#*=}"; shift ;;
     --model=*)   MODEL="${1#*=}";   shift ;;
     --) shift; break ;;
-    -*) die "unknown flag $1 (usage: to-orchestrate [--harness=cursor|claude-code] [--model=<slug>] <holding-branch> <plan.md> [...])" ;;
+    -*) die "unknown flag $1 (usage: mentat-orchestrate [--harness=cursor|claude-code] [--model=<slug>] <holding-branch> <plan.md> [...])" ;;
     *)  break ;;
   esac
 done
 
-HOLDING="${1:?usage: to-orchestrate [--harness=cursor|claude-code] [--model=<slug>] <holding-branch> <plan.md> [<plan.md> ...]}"
+HOLDING="${1:?usage: mentat-orchestrate [--harness=cursor|claude-code] [--model=<slug>] <holding-branch> <plan.md> [<plan.md> ...]}"
 shift
 [ "$#" -ge 1 ] || die "need at least one plan path"
 [ "$#" -le 3 ] || die "max 3 parallel chunks (merge-conflict scaling — ADR 0004)"
 
 ROOT="$PWD"
-LOGDIR="$ROOT/.dmux/logs"
+LOGDIR="$ROOT/.mentat/logs"
 mkdir -p "$LOGDIR"
 
-command -v jq >/dev/null || die "jq not found (needed by to-track-harness)"
-. "$HERE/to-track-harness"
+command -v jq >/dev/null || die "jq not found (needed by mentat-track)"
+. "$HERE/mentat-track"
 
 # Append terminal record to chunk's own jsonl. ADR 0004
 _land_record() { # $1=logf $2=slug $3=success|error [$4=sha] [$5=reason]
@@ -67,9 +67,9 @@ build_cmd() {
 
 run_chunk() {
   local plan="$1" slug="$2" logf="$3"
-  local wt="$ROOT/.dmux/worktrees/$slug"
+  local wt="$ROOT/.mentat/worktrees/$slug"
   git worktree add -b "$slug" "$wt" main
-  ( cd "$wt" && ~/.agents/bin/devcontainer-up )
+  ( cd "$wt" && ~/.agents/bin/mentat-container-up )
   local cmd=()
   while IFS= read -r -d '' tok; do cmd+=("$tok"); done < <(build_cmd "/to-implement $plan $slug")
   ( cd "$wt" && "${cmd[@]}" ) >>"$logf" 2>&1
@@ -77,11 +77,11 @@ run_chunk() {
 
 land_chunk() {
   local slug="$1" logf="$2"
-  local wt="$ROOT/.dmux/worktrees/$slug"
+  local wt="$ROOT/.mentat/worktrees/$slug"
   local onto; onto="$(git -C "$ROOT" rev-parse --short "$HOLDING" 2>/dev/null || echo "$HOLDING")"
 
   # Rebase inside container so pre-commit fires where tools live. ADR 0002
-  ( cd "$wt" && ~/.agents/bin/devcontainer-run "git rebase $(printf %q "$HOLDING")" ) >>"$logf" 2>&1 || {
+  ( cd "$wt" && ~/.agents/bin/mentat-container-run "git rebase $(printf %q "$HOLDING")" ) >>"$logf" 2>&1 || {
     log "land EJECT (rebase conflict onto $onto): $slug — worktree $wt"
     ( cd "$wt" && git rebase --abort >/dev/null 2>&1 || true )
     _land_record "$logf" "$slug" error "$onto" rebase-conflict; return 1
@@ -91,7 +91,7 @@ land_chunk() {
   local gate_prompt
   gate_prompt="Spawn cavecrew-builder in this worktree. Read CLAUDE.md/AGENTS.md, \
 run this project's quality gates (lint/types/tests/etc as the project defines them) \
-via devcontainer-run on the current rebased tree, fix nothing, and exit non-zero if \
+via mentat-container-run on the current rebased tree, fix nothing, and exit non-zero if \
 any gate is red. Report only PASS or FAIL."
   local gcmd=()
   while IFS= read -r -d '' tok; do gcmd+=("$tok"); done < <(build_cmd "$gate_prompt")
@@ -119,12 +119,12 @@ final_review() {
   local base="$1"
   local logf="$LOGDIR/final-review.jsonl"; : > "$logf"
   log "end-of-queue review: spawning ADR-0003 reviewers over $base..$HOLDING"
-  ( cd "$ROOT" && ~/.agents/bin/devcontainer-up ) >>"$logf" 2>&1 || {
-    log "end-of-queue review SKIPPED (devcontainer-up failed at $ROOT)"; return 0; }
+  ( cd "$ROOT" && ~/.agents/bin/mentat-container-up ) >>"$logf" 2>&1 || {
+    log "end-of-queue review SKIPPED (mentat-container-up failed at $ROOT)"; return 0; }
   local prompt
   prompt="The merge queue landed every chunk onto $HOLDING. Run the full ADR-0003 \
-review gate over the cumulative diff $base..HEAD: spawn crew-review-plan, \
-crew-review-tests, crew-review-bugs, apply the gate (never average, veto > \
+review gate over the cumulative diff $base..HEAD: spawn mentat-plan-reviewer, \
+mentat-test-reviewer, mentat-bug-reviewer, apply the gate (never average, veto > \
 threshold), and report each score + the verdict. Read CLAUDE.md/AGENTS.md for how \
 this project runs its checks. Do not modify code."
   local rcmd=()
@@ -138,7 +138,7 @@ this project runs its checks. Do not modify code."
 
 declare -a PIDS PLANS SLUGS LOGS
 for plan in "$@"; do
-  slug="dmux-$(date +%s)-$$-$RANDOM"; logf="$LOGDIR/$slug.jsonl"; : > "$logf"
+  slug="mentat-$(date +%s)-$$-$RANDOM"; logf="$LOGDIR/$slug.jsonl"; : > "$logf"
   SLUGS+=("$slug"); LOGS+=("$logf"); PLANS+=("$plan")
   log "chunk: $plan -> $slug | $logf"
 done
@@ -158,7 +158,7 @@ for i in "${!PIDS[@]}"; do
   else
     to_track_exit "${SLUGS[$i]}" agent-error "implement failed"
     _land_record "${LOGS[$i]}" "${SLUGS[$i]}" error "" implement-fail
-    log "CHUNK FAILED (implement): ${PLANS[$i]} — worktree $ROOT/.dmux/worktrees/${SLUGS[$i]}"
+    log "CHUNK FAILED (implement): ${PLANS[$i]} — worktree $ROOT/.mentat/worktrees/${SLUGS[$i]}"
   fi
 done
 
@@ -168,8 +168,8 @@ for i in "${IMPL_OK[@]}"; do
   to_track_phase "${SLUGS[$i]}" landing
   if land_chunk "${SLUGS[$i]}" "${LOGS[$i]}"; then
     LANDED=$((LANDED + 1)); to_track_exit "${SLUGS[$i]}" landed "-> $HOLDING"
-    ( cd "$ROOT/.dmux/worktrees/${SLUGS[$i]}" && ~/.agents/bin/devcontainer-down ) || true
-    git -C "$ROOT" worktree remove "$ROOT/.dmux/worktrees/${SLUGS[$i]}" || true
+    ( cd "$ROOT/.mentat/worktrees/${SLUGS[$i]}" && ~/.agents/bin/devcontainer-down ) || true
+    git -C "$ROOT" worktree remove "$ROOT/.mentat/worktrees/${SLUGS[$i]}" || true
   else
     to_track_exit "${SLUGS[$i]}" forensics "${LOGS[$i]}"
     log "left up for forensics: ${PLANS[$i]} — log ${LOGS[$i]}"
@@ -186,6 +186,6 @@ if [ "$LANDED" -eq "$TOTAL" ]; then
 else
   log "$LANDED/$TOTAL chunk(s) landed; $((TOTAL - LANDED)) left up."
   log "end-of-queue review skipped — repair ejected chunks first."
-  log "logs: $LOGDIR/  worktrees: $ROOT/.dmux/worktrees/"
+  log "logs: $LOGDIR/  worktrees: $ROOT/.mentat/worktrees/"
   exit 1
 fi
