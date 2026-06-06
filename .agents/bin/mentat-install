@@ -82,13 +82,12 @@ if [ "$OFFLINE" -eq 0 ]; then
   fi
 fi
 
-RSYNC_ARGS=(-av --delete -L
+RSYNC_ARGS=(-av -L
   --exclude='evals/'
   --exclude='.dmux-hooks/'
   --exclude='vendored/'
   --exclude='*.bak.*'
   --exclude='.DS_Store'
-  --exclude='bin/mentat-credits-gen'
   --exclude='bin/mentat-release'
   --exclude='bin/mentat-install'
   --exclude='bin/mentat-update'
@@ -109,20 +108,17 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "mentat-install: dry-run — no files will be written"
 fi
 
-if [ "$DRY_RUN" -eq 0 ] && [ "$YES" -eq 0 ]; then
-  DELETE_LIST=$(rsync "${RSYNC_ARGS[@]}" -n "$AGENTS_DIR/" "$HOME/.agents/" 2>/dev/null \
-    | grep '^deleting ' || true)
-  if [ -n "$DELETE_LIST" ]; then
-    echo "mentat-install: files to delete from ~/.agents/:"
-    echo "$DELETE_LIST"
-    printf 'Proceed? [y/N] '
-    read -r reply </dev/tty || reply=""
-    case "$reply" in
-      [Yy]*) ;;
-      *) echo "mentat-install: aborted"; exit 1 ;;
-    esac
-  fi
-fi
-
 rsync "${RSYNC_ARGS[@]}" "$AGENTS_DIR/" "$HOME/.agents/"
 echo "mentat-install: done"
+
+# Orphan advisory: files present in ~/.agents/ but not in source tree.
+# mentat-install never deletes. Review these and remove manually if stale.
+ORPHANS=$(comm -23 \
+  <(find "$HOME/.agents" -type f | sort) \
+  <(cd "$AGENTS_DIR" && find . -type f | sed "s|^\./|$HOME/.agents/|" | sort) \
+  2>/dev/null || true)
+if [ -n "$ORPHANS" ]; then
+  echo ""
+  echo "mentat-install: orphan files (in ~/.agents/ but not in source — remove manually if stale):"
+  echo "$ORPHANS"
+fi

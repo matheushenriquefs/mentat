@@ -4,7 +4,12 @@ description: Implement a plan using TDD inside the devcontainer. Score-gate the 
 
 $ARGUMENTS
 
-0. **Worktree preflight.** Run `pwd`. Must contain `.dmux/worktrees/` or `.mentat/worktrees/`. If `MENTAT_WORKTREE` is set, verify it matches `pwd`. If check fails: halt immediately, emit `mentat_audit mentat-implement implement.preflight.fail "{\"cwd\":\"$(pwd)\",\"expected\":\"worktree\"}"`, and do not proceed.
+0. **Worktree preflight.** Run `pwd`. Resolution order:
+   a) `$MENTAT_WORKTREE` is set → cwd must equal it. PASS.
+   b) cwd matches `.*/\.mentat/worktrees/[^/]+/?$` (mentat-canonical). PASS.
+   c) cwd matches `.*/worktrees/[^/]+/?$` (agnostic fallback — any parent harness). PASS.
+   Else: halt immediately, emit `mentat_audit mentat-implement implement.preflight.fail "{\"cwd\":\"$(pwd)\",\"expected\":\"worktree\"}"`, and do not proceed.
+   Note: (a) covers orchestrate-spawned chunks; (b) covers manual mentat-canonical runs; (c) covers parent-harness worktrees (dmux, conductor, custom) — Mentat trusts the parent harness and refuses to enumerate harness names.
 1. Emit start: `source ~/.agents/bin/lib/audit.sh && mentat_audit mentat-implement implement.start "{\"plan\":\"$ARGUMENTS\"}"`.
 2. **Pre-flight artifact check (mandatory).** Parse the plan's slice list. For each slice derive its artifact predicate (file exists / file absent / grep returns N hits). Run predicates as bash one-liners. Emit `implement.preflight` audit event with `{slices:[{id,status,predicate}]}` table. Refuse to implement slices already marked DONE. Refuse to skip slices unless table marks DONE.
 3. `/caveman ultra`.
