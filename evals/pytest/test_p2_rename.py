@@ -38,8 +38,8 @@ def test_mentat_container_doctor_exists():
     assert os.path.isfile(os.path.join(BIN, "mentat-container-doctor"))
 
 
-def test_harness_map_in_lib():
-    assert os.path.isfile(os.path.join(LIB, "harness-map.jq"))
+def test_harness_map_deleted():
+    assert not os.path.isfile(os.path.join(LIB, "harness-map.jq")), "harness-map.jq must be deleted (S2.1)"
 
 
 def test_old_bin_names_gone():
@@ -215,3 +215,76 @@ def test_syntax_mentat_track():         _bash_n(os.path.join(BIN, "mentat-track"
 def test_syntax_mentat_container_up():  _bash_n(os.path.join(BIN, "mentat-container-up"))
 def test_syntax_mentat_container_run(): _bash_n(os.path.join(BIN, "mentat-container-run"))
 def test_syntax_mentat_container_doctor(): _bash_n(os.path.join(BIN, "mentat-container-doctor"))
+
+
+# S2.1 — harness subdir + output_format contract
+
+HARNESS_DIR = os.path.join(LIB, "harness")
+HARNESS_NAMES = ["aider", "amp", "claude-code", "codex", "copilot", "cursor", "gemini", "openhands"]
+
+
+def test_harness_subdir_has_8_files():
+    files = [f for f in os.listdir(HARNESS_DIR) if f.endswith(".sh")]
+    assert len(files) == 8, f"Expected 8 harness/*.sh, got: {files}"
+
+
+def test_harness_files_in_subdir_not_flat():
+    for name in HARNESS_NAMES:
+        assert not os.path.isfile(os.path.join(LIB, f"harness-{name}.sh")), \
+            f"harness-{name}.sh still in lib/ flat (must be in lib/harness/)"
+        assert os.path.isfile(os.path.join(HARNESS_DIR, f"{name}.sh")), \
+            f"lib/harness/{name}.sh missing"
+
+
+def test_each_harness_exposes_output_format():
+    for name in HARNESS_NAMES:
+        fn_name = "harness_" + name.replace("-", "_") + "_output_format"
+        path = os.path.join(HARNESS_DIR, f"{name}.sh")
+        src = _read(path)
+        assert fn_name in src, f"{name}.sh missing {fn_name}"
+
+
+def test_each_harness_exposes_cmd():
+    for name in HARNESS_NAMES:
+        fn_name = "harness_" + name.replace("-", "_") + "_cmd"
+        path = os.path.join(HARNESS_DIR, f"{name}.sh")
+        src = _read(path)
+        assert fn_name in src, f"{name}.sh missing {fn_name}"
+
+
+def test_gate_harness_in_gates():
+    src = _read(os.path.join(LIB, "gates.sh"))
+    assert "gate_harness" in src, "gate_harness missing from gates.sh"
+
+
+def test_orchestrate_uses_harness_subdir():
+    src = _read(os.path.join(BIN, "mentat-orchestrate"))
+    assert "harness/${HARNESS}" in src or 'harness/"$HARNESS"' in src or "lib/harness/" in src, \
+        "mentat-orchestrate must source from lib/harness/ subdir"
+    assert "harness-${HARNESS}" not in src, \
+        "mentat-orchestrate still uses old flat harness-${HARNESS} path"
+
+
+# S2.2 — evals promoted to repo root
+
+def test_evals_at_repo_root():
+    assert os.path.isdir(os.path.join(ROOT, "evals", "pytest")), "evals/pytest must be at repo root"
+    assert os.path.isdir(os.path.join(ROOT, "evals", "promptfoo")), "evals/promptfoo must be at repo root"
+
+
+def test_agents_evals_gone():
+    assert not os.path.isdir(os.path.join(AGENTS, "evals")), ".agents/evals must be deleted (moved to evals/)"
+
+
+def test_pyproject_testpaths_updated():
+    src = _read(os.path.join(ROOT, "pyproject.toml"))
+    assert '"evals/pytest"' in src or "'evals/pytest'" in src or "evals/pytest" in src, \
+        "pyproject.toml testpaths must point to evals/pytest"
+    assert ".agents/evals" not in src, "pyproject.toml still references .agents/evals"
+
+
+def test_package_json_eval_script_updated():
+    src = _read(os.path.join(ROOT, "package.json"))
+    assert "evals/promptfoo/promptfooconfig.yaml" in src, \
+        "package.json eval script must reference evals/promptfoo/promptfooconfig.yaml"
+    assert ".agents/evals" not in src, "package.json still references .agents/evals"

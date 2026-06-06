@@ -1,7 +1,8 @@
 # Harness Matrix
 
-Supported headless AI coding harnesses. Each has a corresponding `bin/lib/harness-<name>.sh`
-exposing `harness_<name>_cmd <prompt>` that prints the NUL-delimited argv.
+Supported headless AI coding harnesses. Each has a corresponding `bin/lib/harness/<name>.sh`
+exposing `harness_<name>_cmd <prompt>` (NUL-delimited argv) and `harness_<name>_output_format`
+(prints `stream-json`, `text`, or `event-stream`).
 
 | Name | Binary | Headless flag | Stream output | Auth model |
 |---|---|---|---|---|
@@ -18,8 +19,8 @@ Cline/Roo/Continue/Cody: IDE-only or deprecated — not in enum.
 
 ## Adding a harness
 
-1. Add a `bin/lib/harness-<name>.sh` file defining `harness_<name>_cmd <prompt>`.
-2. Add `<name>` to the `_MENTAT_HARNESSES` list in `bin/lib/config.sh`.
+1. Drop `bin/lib/harness/<name>.sh` defining `harness_<name>_cmd <prompt>` and `harness_<name>_output_format`.
+2. `mentat-gate` validates the contract on commit; no other changes required.
 3. Update this table.
 
-No edits to `mentat-orchestrate` core needed.
+No edits to `mentat-orchestrate` core or `config.sh` needed — enum is auto-discovered from `ls bin/lib/harness/*.sh`.
