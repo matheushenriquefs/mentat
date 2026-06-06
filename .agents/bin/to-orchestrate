@@ -9,6 +9,7 @@ set -euo pipefail
 _LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
 . "$_LIB/strict.sh"
 . "$_LIB/log.sh"
+. "$_LIB/here.sh"
 _LOG_PREFIX=to-orchestrate
 
 HARNESS=cursor; MODEL=""
@@ -31,7 +32,6 @@ ROOT="$PWD"
 LOGDIR="$ROOT/.dmux/logs"
 mkdir -p "$LOGDIR"
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 command -v jq >/dev/null || die "jq not found (needed by to-track-harness)"
 . "$HERE/to-track-harness"
 

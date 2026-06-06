@@ -63,6 +63,11 @@ def test_here_sh_exists():
     assert os.path.isfile(os.path.join(LIB, "here.sh"))
 
 
+def test_here_sh_uses_BASH_SOURCE():
+    """here.sh must resolve path via BASH_SOURCE (not hardcoded)."""
+    assert "BASH_SOURCE" in _read_lib("here.sh")
+
+
 def test_here_sh_sets_HERE():
     assert "HERE=" in _read_lib("here.sh")
 
@@ -75,13 +80,38 @@ def test_here_sh_lte_30_lines():
 
 def test_agents_md_has_comment_hygiene_section():
     with open(AGENTS_MD) as f:
-        assert "## Comment Hygiene" in f.read()
+        src = f.read()
+    assert "## Comment Hygiene" in src
 
 
-# S1.3 — to-orchestrate sources lib/
+def test_agents_md_comment_hygiene_rules():
+    """Five required rules from the plan must be present."""
+    with open(AGENTS_MD) as f:
+        src = f.read()
+    # why-not-what
+    assert "why" in src and "what" in src
+    # no commented-out code
+    assert "commented-out" in src or "commented out" in src
+    # no TODO
+    assert "TODO" in src
+    # docstring / public entry points only
+    assert "public" in src or "entry point" in src
+    # no duplicate comment blocks
+    assert "duplicate" in src
+
+
+# S1.3 — to-orchestrate sources all three lib/ files
 
 def test_to_orchestrate_sources_strict():
     assert "strict.sh" in _read_bin("to-orchestrate")
+
+
+def test_to_orchestrate_sources_log():
+    assert "log.sh" in _read_bin("to-orchestrate")
+
+
+def test_to_orchestrate_sources_here():
+    assert "here.sh" in _read_bin("to-orchestrate")
 
 
 def test_to_orchestrate_comment_lt_30():
