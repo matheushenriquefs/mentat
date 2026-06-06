@@ -57,8 +57,7 @@ mentat_gate() {
     */docs/adr/*.md)    gate_adr      "$f" ;;
     */agents/*.md)      gate_skill    "$f" ;;
     */commands/*.md)    gate_command  "$f" ;;
-    AGENTS.md|CONTEXT.md|README.md|\
-    */AGENTS.md|*/CONTEXT.md|*/README.md)
+    AGENTS.md|CONTEXT.md|STYLE.md|README.md)
                         gate_workflow "$f" ;;
     */bin/lib/harness/*.sh)
                         gate_harness  "$f" ;;
