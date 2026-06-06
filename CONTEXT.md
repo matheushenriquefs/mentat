@@ -57,7 +57,7 @@ Mentat cuts planned work into vertical slices, runs each slice as an isolated ch
 : Docker container for a chunk's target repo — where all project tools run. `mentat-container-up` brings it up; `mentat-container-run` executes commands inside. _Avoid_: "the container", "the Docker".
 
 **Headless agent CLI**
-: The harness CLI — `cursor-agent` or `claude-code`. What `--harness=` selects; `mentat-track` watches it; `harness-map.jq` normalizes its stream-json. _Avoid_: "build" (collides with Docker `build:` in `mentat-container-up`).
+: The harness CLI — `cursor-agent` or `claude-code`. What `--harness=` selects; `mentat-track` watches it; each harness file self-declares its output format via `harness_<name>_output_format`. _Avoid_: "build" (collides with Docker `build:` in `mentat-container-up`).
 
 **Reviewer gate**
 : The three ADR-0003 reviewers (`mentat-plan-reviewer`, `mentat-test-reviewer`, `mentat-bug-reviewer`) run once at end-of-queue over the final landed tip. Advisory (inspect-after) until they earn a false-pass record. _Avoid_: conflating this with the per-chunk land gate.

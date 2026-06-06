@@ -10,13 +10,13 @@ Refactor `mentat/.agents/bin/` and `mentat/.agents/agents/` to use shared lib he
 Write-set: `.agents/bin/lib/strict.sh`, `.agents/bin/lib/log.sh`, `.agents/bin/lib/here.sh`
 Work: create sourced helper files (strict mode, logging, self-locator). No dependency on B, C, or D.
 
-### Group B — rename agents/
-Write-set: `.agents/agents/crew-research.md`, `.agents/agents/crew-review-plan.md`, `.agents/agents/crew-review-bugs.md`, `.agents/agents/crew-review-tests.md`
-Work: rename agent files to `mentat-*` prefix. No dependency on A, C, or D.
+### Group B — add agents/
+Write-set: `.agents/agents/mentat-smell-reviewer.md`, `.agents/agents/mentat-plan-reviewer.md`
+Work: add new reviewer agent files. No dependency on A, C, or D.
 
-### Group C — rename bin/
-Write-set: `.agents/bin/to-orchestrate`, `.agents/bin/devcontainer-up`, `.agents/bin/devcontainer-run`
-Work: rename bin files to `mentat-*` prefix. No dependency on A, B, or D.
+### Group C — add bin/
+Write-set: `.agents/bin/mentat-release`, `.agents/bin/mentat-sync-upstream`, `.agents/bin/mentat-logs-prune`
+Work: add new release + upstream management scripts. No dependency on A, B, or D.
 
 ### Group D — update docs
 Write-set: `.agents/docs/mentat-architecture.md`, `AGENTS.md`, `CONTEXT.md`

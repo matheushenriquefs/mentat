@@ -1,0 +1,12 @@
+#!/bin/bash
+# mentat-container-down — stop the devcontainer for a worktree. ADR 0004.
+set -euo pipefail
+
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/strict.sh"
+
+[ -f "$PWD/.git" ] || { echo "mentat-container-down: must run from inside a git worktree" >&2; exit 2; }
+
+SLUG=$(basename "$PWD")
+ids=$(docker ps -aq --filter "label=mentat_slug=$SLUG")
+[ -n "$ids" ] && docker rm -f $ids

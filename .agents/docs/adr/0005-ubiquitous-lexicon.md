@@ -6,7 +6,7 @@ Date: 2026-06-03
 ## Context
 
 The system's terms (`slice`, `chunk`, `slug`, holding branch, land) grew across
-ADRs 0001-0004 and the `to-*`/`devcontainer-*` scripts. They were *consistent
+ADRs 0001-0004 and the `to-*`/`mentat-container-*` scripts. They were *consistent
 in spirit* but never collected, and two gaps bit: (1) `slice` and `chunk` were
 used near-interchangeably in prose though they name different layers; (2) there
 was no noun for "the whole set of chunks in one `mentat-orchestrate` run" — code
@@ -25,8 +25,8 @@ every command, ADR, and script speaks one vocabulary.
 - **slug** — a chunk's unique id; also its worktree dirname and `mentat_slug`
   container label. (`mentat-<epoch>-<pid>-<rand>`.)
 - **harness** — the headless agent CLI (`cursor-agent` | `claude`). The thing
-  `--harness=` selects, `mentat-track` watches, `harness-map.jq` normalizes,
-  and `harness_cmd()` builds an invocation of. Never "build" (collides with
+  `--harness=` selects, `mentat-track` watches, each harness file self-declares
+  its output format, and `harness_cmd()` builds an invocation of. Never "build" (collides with
   Docker `build:` in `mentat-container-up`).
 - **holding branch** (`$HOLDING`, `branch/<feature>`) — own-branch land target
   with no commits of its own (ADR 0002).

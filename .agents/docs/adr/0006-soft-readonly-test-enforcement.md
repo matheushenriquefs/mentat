@@ -87,7 +87,7 @@ See ADR 0003's amended blacklist set for the full list.
 
 `/to-implement` gains a one-line impl-only-after-red contract clause. `mentat-bug-reviewer`
 gains the runner-redirection move and keeps all others. The driver and
-`devcontainer-*` scripts are untouched — they never learn what a test file is. This
+`mentat-container-*` scripts are untouched — they never learn what a test file is. This
 ADR is index-only in AGENTS.md (title only; body on demand — ADR 0001's budget).
 Why the soft posture: ImpossibleBench is a frequency result, not an impossibility
 proof — runner redirection and impl-only gaming survive any test-file lock, so the

@@ -130,7 +130,7 @@ invoke skill → commit. Bundling them in `/to-commit` gives the ritual
 a name and prevents drift. The agent invokes the skill in-process —
 no subprocess needed, so no bash wrapper either.
 
-Compare `devcontainer-{up,down,run}`: those are bash helpers because
+Compare `mentat-container-{up,down,run}`: those are bash helpers because
 they have two consumers (the agent calls them, and the dmux hooks
 call them from bash). A slash command wouldn't work for the hook side.
 

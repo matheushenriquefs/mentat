@@ -43,6 +43,6 @@ No language toolchain on the host. Mentat declares no interpreter, formatter, li
 
 Bash + jq + prompts.
 
-No SDK, no orchestration framework, no platform lock. The driver (`mentat-orchestrate`) is ~260 lines of shell. The gate logic is in reviewer prompt files. The harness abstraction (`mentat-track`, `harness-map.jq`) normalizes `cursor-agent` and `claude-code` stream-json — swapping harnesses is a config change, not a rewrite.
+No SDK, no orchestration framework, no platform lock. The driver (`mentat-orchestrate`) is ~260 lines of shell. The gate logic is in reviewer prompt files. The harness abstraction (`mentat-track`, `bin/lib/harness/<name>.sh`) normalizes `cursor-agent` and `claude-code` stream-json — swapping harnesses is a config change, not a rewrite.
 
 The constraint is Docker. Everything else is a text file.

@@ -9,7 +9,7 @@ Date: 2026-06-03
 slices, tagged AFK (gate clears unattended) or HITL. That taxonomy is theirs.
 Undocumented: how `mentat-orchestrate` *executes* slices — many in parallel, onto
 one holding branch — and the hard-to-reverse choices in the driver and the
-`devcontainer-*` scripts. Locked here. One plan → many slices → many parallel
+`mentat-container-*` scripts. Locked here. One plan → many slices → many parallel
 chunks → one holding branch.
 
 ## Decision
@@ -49,7 +49,7 @@ chunks → one holding branch.
   inspect-after until they earn a false-pass record) — a red end-of-queue review
   warns, it does not roll back a landed ref.
 - **Language- and harness-agnostic; Docker required.** Any Unix, `cursor` or
-  `claude-code` (one stream-json model via `mentat-track` + `harness-map.jq`),
+  `claude-code` (one stream-json model via `mentat-track`, format self-declared per harness),
   any language. NOT runtime-agnostic. `mentat-container-up` prefers authored
   `.devcontainer/`, else synthesizes over `docker-compose.yml`/`.yaml`, else over
   a bare `Dockerfile`. None of those → abort loud.
@@ -87,5 +87,5 @@ chunks → one holding branch.
 ## Consequences
 
 `mentat-orchestrate` stays a thin driver over slices others produce — no planning, no
-grilling. `devcontainer-*` own runtime-shape detection and host-`python3` hygiene.
+grilling. `mentat-container-*` own runtime-shape detection and host-`python3` hygiene.
 New harness = extend the stream-json map, not the control flow.
