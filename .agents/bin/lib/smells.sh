@@ -9,23 +9,10 @@ SMELL_MAGIC_NUMBERS_SKIP="${SMELL_MAGIC_NUMBERS_SKIP:-0|1|2|-1}"
 SMELL_NESTED_DEPTH="${SMELL_NESTED_DEPTH:-4}"
 
 smell_long_method() {
-  local file="$1" found=0
-  # Detect shell functions > SMELL_LONG_METHOD_LINES lines
-  awk -v limit="$SMELL_LONG_METHOD_LINES" '
-    /^[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*\(\)/ { fn=$0; fn_line=NR; depth=0 }
-    fn_line && /\{/ { depth++ }
-    fn_line && /\}/ {
-      depth--
-      if (depth == 0) {
-        len = NR - fn_line
-        if (len > limit) print FILENAME ":" fn_line ": long-method: " len " lines (limit " limit "). Extract helper functions."
-        fn_line=0
-      }
-    }
-  ' "$file" && return 0 || true
+  local file="$1"
   local out
   out=$(awk -v limit="$SMELL_LONG_METHOD_LINES" '
-    /^[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*\(\)/ { fn=$0; fn_line=NR; depth=0 }
+    /^[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*\(\)/ { fn_line=NR; depth=0 }
     fn_line && /\{/ { depth++ }
     fn_line && /\}/ {
       depth--
@@ -36,10 +23,7 @@ smell_long_method() {
       }
     }
   ' "$file")
-  if [ -n "$out" ]; then
-    echo "$out"
-    return 1
-  fi
+  if [ -n "$out" ]; then echo "$out"; return 1; fi
   return 0
 }
 
