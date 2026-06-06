@@ -175,6 +175,9 @@ Checker dispatch: [.agents/bin/mentat-gate-checks](.agents/bin/mentat-gate-check
 | Shell | bin/**/*,lib/**/*.sh | bash -n + shellcheck (advisory if absent) |
 | Config | *.jsonc | sed \| jq -e validates JSON structure |
 | Harness | bin/lib/harness/*.sh | harness_<name>_cmd and harness_<name>_output_format both defined |
+| Python lint | evals/pytest/**/*.py | `mentat-container-run "uv run ruff check"` |
+| Python format | evals/pytest/**/*.py | `mentat-container-run "uv run ruff format --check"` |
+| Python types | evals/pytest/**/*.py | `mentat-container-run "uv run pyright"` |
 
 Unknown file classes pass silently (gate is additive, not a whitelist).
 
