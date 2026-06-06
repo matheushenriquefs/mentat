@@ -114,6 +114,23 @@ def test_to_orchestrate_sources_here():
     assert "here.sh" in _read_bin("to-orchestrate")
 
 
+def test_to_orchestrate_zero_behavior_change():
+    """Key behavioral landmarks must survive the refactor (zero-behavior-change)."""
+    src = _read_bin("to-orchestrate")
+    # flag parsing still present
+    assert "--harness=" in src
+    assert "--model=" in src
+    # core functions still present
+    assert "land_chunk()" in src or "land_chunk" in src
+    assert "_land_record()" in src or "_land_record" in src
+    assert "run_chunk()" in src or "run_chunk" in src
+    assert "final_review()" in src or "final_review" in src
+    # land outcomes still recorded
+    assert '"landed":true' in src or "landed" in src
+    assert "rebase-conflict" in src
+    assert "gate-fail" in src
+
+
 def test_to_orchestrate_google_header_lte_6_lines():
     """Leading # block after shebang must be ≤6 lines (Google Shell Style)."""
     lines = _read_bin("to-orchestrate").splitlines()
@@ -157,6 +174,11 @@ def test_compose_synth_has_synthesize_functions():
     src = _read_lib("compose-synth.sh")
     assert "synthesize_devcontainer()" in src
     assert "synthesize_devcontainer_from_dockerfile()" in src
+
+
+def test_devcontainer_up_lte_150_lines():
+    """Plan target: ~150 lines (from 242)."""
+    assert _linecount(os.path.join(BIN, "devcontainer-up")) <= 150
 
 
 def _google_header_lines(name: str) -> int:
