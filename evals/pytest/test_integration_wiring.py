@@ -4,7 +4,7 @@ import inspect
 
 MENTAT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 TO_ORCHESTRATE = os.path.expanduser("~/.agents/bin/mentat-orchestrate")
-PROMPTFOO_CONFIG = os.path.join(MENTAT_ROOT, ".agents", "evals", "promptfoo", "promptfooconfig.yaml")
+PROMPTFOO_CONFIG = os.path.join(MENTAT_ROOT, "evals", "promptfoo", "promptfooconfig.yaml")
 
 
 # Behavior 3: promptfooconfig.yaml asserts veto fires on routes-not-dropped fixture
@@ -54,12 +54,12 @@ def test_conftest_defines_devcontainer_run():
 # Behavior 11: mentat-orchestrate runs end-of-queue evals
 
 def test_to_orchestrate_has_end_of_queue_eval():
-    """mentat-orchestrate must run .agents/evals/pytest at end of queue when all chunks land."""
+    """mentat-orchestrate must run evals/pytest at end of queue when all chunks land."""
     assert os.path.isfile(TO_ORCHESTRATE), f"mentat-orchestrate not found: {TO_ORCHESTRATE}"
     with open(TO_ORCHESTRATE) as f:
         content = f.read()
     assert "evals" in content, (
-        "mentat-orchestrate must reference .agents/evals for end-of-queue eval run"
+        "mentat-orchestrate must reference evals for end-of-queue eval run"
     )
     assert "pytest" in content, (
         "mentat-orchestrate must invoke pytest as part of end-of-queue eval harness"

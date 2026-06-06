@@ -66,11 +66,18 @@ _land_record() { # $1=logf $2=slug $3=success|error [$4=sha] [$5=reason]
 
 build_cmd() {
   local prompt="$1"
-  local hfile="$_LIB/harness-${HARNESS}.sh"
+  local hfile="$_LIB/harness/${HARNESS}.sh"
   [ -f "$hfile" ] || die "unknown harness '$HARNESS' — no $hfile"
   . "$hfile"
   local fn="harness_${HARNESS//-/_}_cmd"
   "$fn" "$prompt"
+}
+
+harness_output_format() {
+  local hfile="$_LIB/harness/${HARNESS}.sh"
+  [ -f "$hfile" ] || die "unknown harness '$HARNESS' — no $hfile"
+  . "$hfile"
+  "harness_${HARNESS//-/_}_output_format"
 }
 
 run_chunk() {

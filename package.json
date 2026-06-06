@@ -6,6 +6,6 @@
     "promptfoo": "^0.100.0"
   },
   "scripts": {
-    "eval": "promptfoo eval --config .agents/evals/promptfoo/promptfooconfig.yaml"
+    "eval": "promptfoo eval --config evals/promptfoo/promptfooconfig.yaml"
   }
 }

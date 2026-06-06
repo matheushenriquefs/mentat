@@ -1,5 +1,5 @@
 #!/bin/bash
-# bin/lib/harness-claude-code.sh — claude-code headless invocation
+# bin/lib/harness/claude-code.sh — claude-code headless invocation
 # Source this file; do not execute directly.
 
 harness_claude_code_cmd() {  # $1 = prompt string; prints NUL-delimited argv
@@ -9,3 +9,5 @@ harness_claude_code_cmd() {  # $1 = prompt string; prints NUL-delimited argv
     --allowedTools "Bash,Read,Edit,Write,Agent" \
     --model "$model" "$1"
 }
+
+harness_claude_code_output_format() { printf 'stream-json\n'; }

@@ -2,7 +2,8 @@
 # bin/lib/config.sh — load + validate .mentat.jsonc (nested schema)
 # Source this file; do not execute directly.
 
-_MENTAT_HARNESSES="claude-code cursor aider codex copilot gemini openhands amp"
+_MENTAT_HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/harness"
+_MENTAT_HARNESSES="$(ls "$_MENTAT_HARNESS_DIR"/*.sh 2>/dev/null | xargs -I{} basename {} .sh | tr '\n' ' ')"
 
 _mentat_config_file() {
   # Allow test injection via MENTAT_CONFIG_PATH

@@ -31,6 +31,14 @@ gate_jsonc() {
   sed '/^[[:space:]]*\/\//d' "$1" | jq -e '.' >/dev/null || { echo "$1: jq parse fail"; return 1; }
 }
 
+gate_harness() {
+  local name; name="$(basename "$1" .sh | tr - _)"
+  bash -c "source $(printf %q "$1"); declare -f harness_${name}_cmd >/dev/null" \
+    || { echo "$1: missing harness_${name}_cmd"; return 1; }
+  bash -c "source $(printf %q "$1"); declare -f harness_${name}_output_format >/dev/null" \
+    || { echo "$1: missing harness_${name}_output_format"; return 1; }
+}
+
 mentat_gate() {
   local f="$1"
   case "$f" in
@@ -40,6 +48,8 @@ mentat_gate() {
     AGENTS.md|CONTEXT.md|STYLE.md|README.md|\
     */AGENTS.md|*/CONTEXT.md|*/STYLE.md|*/README.md)
                         gate_workflow "$f" ;;
+    */bin/lib/harness/*.sh)
+                        gate_harness  "$f" ;;
     *.sh|*/bin/mentat-*|*/bin/lib/*)
                         gate_shell    "$f" ;;
     *.jsonc)            gate_jsonc    "$f" ;;
