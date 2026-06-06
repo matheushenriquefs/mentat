@@ -10,4 +10,4 @@ __pycache__/
 node_modules/
 
 # vendored upstreams — materialized by mentat-setup, not committed
-.agents/skills/vendor/*/
+.agents/skills/vendor/
