@@ -29,6 +29,12 @@ class ReviewVerdictPayload(BaseModel):
     findings: list[str]
 
 
+class ReviewFinalPayload(ReviewVerdictPayload):
+    """End-of-queue composite verdict emitted by mentat-orchestrate."""
+    base: str | None = None
+    tip: str | None = None
+
+
 class SyncCompletePayload(BaseModel):
     upstreams: list[str]
     changed: int
@@ -56,7 +62,7 @@ class ReviewDismissPayload(BaseModel):
 
 _VERB_MAP: dict[str, type[BaseModel]] = {
     "land.complete": ChunkResultPayload,
-    "review.final": ReviewVerdictPayload,
+    "review.final": ReviewFinalPayload,
     "sync.complete": SyncCompletePayload,
     "implement.preflight": PreflightPayload,
     "rename.complete": RenameDonePayload,

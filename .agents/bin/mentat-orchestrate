@@ -93,8 +93,12 @@ run_chunk() {
   . "$hfile"
   local norm_fn="harness_${HARNESS//-/_}_normalize"
   local stdout_f="${logf%.jsonl}.stdout"
-  # Pipe raw harness output: tee to .stdout, normalize to canonical JSONL
-  ( cd "$wt" && "${cmd[@]}" ) 2>&1 | tee "$stdout_f" | "$norm_fn" >>"$logf"
+  # Export normalize fn so it survives the pipe subshell, then normalize
+  export -f "$norm_fn" 2>/dev/null || true
+  ( cd "$wt" && "${cmd[@]}" ) 2>&1 \
+    | tee "$stdout_f" \
+    | bash -c "source $(printf %q "$hfile") && $norm_fn" \
+    >> "$logf"
 }
 
 land_chunk() {
@@ -174,10 +178,13 @@ this project runs its checks. Do not modify code."
     verdict="flagged"
     log "end-of-queue review FLAGGED a miss (see $logf). Landed ref unchanged (advisory)."
   fi
+  local veto_bool="false"; [ "$verdict" = flagged ] && veto_bool="true"
   mentat_audit mentat-orchestrate review.final "$(jq -cn \
-    --arg reviewer "adr-0003-composite" --arg outcome "$verdict" \
+    --arg reviewer "adr-0003-composite" \
+    --argjson score "$([ "$verdict" = success ] && echo 1.0 || echo 0.0)" \
+    --argjson veto "$veto_bool" \
     --arg base "$base" --arg tip "$HOLDING" \
-    '{reviewer:$reviewer, outcome:$outcome, base:$base, tip:$tip}')"
+    '{reviewer:$reviewer, score:$score, veto:$veto, findings:[], base:$base, tip:$tip}')"
 }
 
 declare -a PIDS PLANS SLUGS LOGS
