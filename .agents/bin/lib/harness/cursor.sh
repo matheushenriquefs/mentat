@@ -4,7 +4,7 @@
 
 harness_cursor_cmd() {  # $1 = prompt string; prints NUL-delimited argv
   local m=(); [ -n "${MODEL:-}" ] && m=("--model=$MODEL")
-  printf '%s\0' cursor-agent -p --output-format stream-json --force "${m[@]}" "$1"
+  printf '%s\0' cursor-agent -p --output-format stream-json --force ${m[@]+"${m[@]}"} "$1"
 }
 
 harness_cursor_output_format() { printf 'stream-json\n'; }
