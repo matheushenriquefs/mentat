@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# mentat-doctor — bundle env + session diagnostics into a markdown file.
+# Usage: mentat-doctor [<session-slug>] [--reason=<str>] [--since=<duration>]
+# Output: ~/.agents/mentat/diagnoses/<ts>-<slug>.md
+set -euo pipefail
+
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+. "$_LIB/strict.sh"
+. "$_LIB/audit.sh"
+
+SLUG=""
+REASON=""
+
+for arg in "$@"; do
+  case "$arg" in
+    --reason=*) REASON="${arg#*=}" ;;
+    --since=*)  : ;;  # reserved for v2
+    --) ;;
+    -*) echo "usage: mentat-doctor [<session-slug>] [--reason=<str>]" >&2; exit 1 ;;
+    *)  SLUG="$arg" ;;
+  esac
+done
+
+[ -z "$SLUG" ] && SLUG="${MENTAT_SLUG:-$$}"
+
+LOG_DIR="${MENTAT_LOG_DIR:-$HOME/.agents/mentat/logs}"
+REPO="${MENTAT_REPO:=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")}"
+SESSION="${MENTAT_SESSION:=$(date +%s)-$$}"
+
+# Resolve session log JSONL (most recent matching this slug)
+SESSION_LOG="$(find "$LOG_DIR" -name "*-${SLUG}.jsonl" 2>/dev/null | sort | tail -1 || true)"
+
+OUT_DIR="$HOME/.agents/mentat/diagnoses"
+mkdir -p "$OUT_DIR"
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+OUT="$OUT_DIR/${TS}-${SLUG}.md"
+# Version bump if file already exists (idempotent reruns)
+if [ -f "$OUT" ]; then
+  i=1
+  while [ -f "${OUT%.md}-${i}.md" ]; do i=$((i+1)); done
+  OUT="${OUT%.md}-${i}.md"
+fi
+
+_ver() { "$@" 2>/dev/null || echo "n/a"; }
+
+{
+  echo "# Diagnosis — ${SLUG}"
+  echo ""
+  echo "## Tool versions"
+  echo "- mentat: $(_ver git -C "$(dirname "$_LIB")" describe --tags --always)"
+  echo "- docker: $(_ver docker --version | head -1)"
+  echo "- jq: $(_ver jq --version)"
+  echo "- python: $(_ver python3 --version)"
+  echo "- bash: ${BASH_VERSION:-n/a}"
+  echo ""
+  echo "## System"
+  echo "- OS: $(_ver uname -s)"
+  echo "- Kernel: $(_ver uname -r)"
+  echo "- Arch: $(_ver uname -m)"
+  echo "- Terminal: ${TERM:-n/a}"
+  echo "- Shell: ${SHELL:-n/a}"
+  echo ""
+  echo "## Repro"
+  echo "- Holding branch: $(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo 'n/a')"
+  echo "- Worktree branch: $(_ver git rev-parse --abbrev-ref HEAD)"
+  echo "- Tip: $(_ver git rev-parse --short HEAD)"
+  echo "- Session: ${SESSION}"
+  echo "- Reason: ${REASON:-<not provided>}"
+  echo ""
+  echo "## Expected vs actual"
+  echo "- Expected: <describe expected outcome>"
+  echo "- Actual: <describe actual outcome>"
+  echo ""
+  echo "## Logs"
+  if [ -n "$SESSION_LOG" ] && [ -f "$SESSION_LOG" ]; then
+    echo "### Audit excerpt (last 100 events)"
+    echo '```json'
+    tail -100 "$SESSION_LOG"
+    echo '```'
+  else
+    echo "- Audit log: not found (slug: ${SLUG}, dir: ${LOG_DIR})"
+  fi
+  echo ""
+  CONTAINER_ID="$(docker ps -q --filter "label=mentat_slug=${SLUG}" 2>/dev/null | head -1 || true)"
+  if [ -n "$CONTAINER_ID" ]; then
+    echo "### Container logs (last 200 lines)"
+    echo '```'
+    docker logs "$CONTAINER_ID" --tail 200 2>&1 || true
+    echo '```'
+  fi
+  echo ""
+  echo "## Regression"
+  echo "- Last known good commit: <provide commit SHA>"
+  echo "- Is regression: unknown"
+  echo ""
+  echo "## Stage"
+  LAST_EVENT=""
+  if [ -n "$SESSION_LOG" ] && [ -f "$SESSION_LOG" ]; then
+    LAST_EVENT="$(jq -r '.event // empty' "$SESSION_LOG" 2>/dev/null | tail -1 || true)"
+  fi
+  echo "- Phase: ${LAST_EVENT:-unknown}"
+  echo ""
+  echo "## Non-determinism"
+  echo "- determinism_warnings: [\"non_deterministic_inference\"]"
+  echo "- Note: LLM execution is non-deterministic. Recorded sampling params allow"
+  echo "  re-attempt with matching config but Mentat makes no replay guarantee."
+} > "$OUT.tmp"
+
+# Privacy sanitization: strip lines containing KEY|TOKEN|SECRET|PASSWORD|API=<value>
+sed -E 's/(KEY|TOKEN|SECRET|PASSWORD|API)[^=]*=[^ ]*/\1=<redacted>/gi' "$OUT.tmp" > "$OUT"
+rm "$OUT.tmp"
+
+echo "mentat-doctor: diagnosis written to $OUT"
