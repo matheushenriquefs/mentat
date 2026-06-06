@@ -5,8 +5,8 @@
     "ghcr.io/devcontainers/features/node:1": { "version": "22" },
     "ghcr.io/devcontainers/features/python:1": { "version": "3.11" }
   },
-  "onCreateCommand": "apt-get update && apt-get install -y jq shellcheck",
-  "postCreateCommand": "pip install pytest && npm install -g promptfoo",
+  "onCreateCommand": "apt-get update && apt-get install -y jq shellcheck && curl -LsSf https://astral.sh/uv/install.sh | sh",
+  "postCreateCommand": "~/.local/bin/uv sync --group dev && npm install -g promptfoo",
   "workspaceFolder": "/workspaces/mentat",
   "runArgs": ["--init"],
   "remoteUser": "vscode"
