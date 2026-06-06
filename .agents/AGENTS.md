@@ -44,6 +44,14 @@ in a repo. Index (titles only; read on demand):
 - **0005** ubiquitous lexicon — slice/chunk/batch, one Laravel borrow (batch, noun only).
 - **0006** soft read-only tests — impl-only-after-red contract + blacklist, driver agnostic.
 
+## Comment Hygiene
+
+- Comment *why*, not *what*. Code names explain what; comments explain motivation.
+- No commented-out code. Delete it.
+- No TODO comments. File an ADR or an issue.
+- Docstring/header for public entry points only. No narrative essays inside functions.
+- Remove duplicate comment blocks. One canonical statement per fact.
+
 ## Project docs
 
 - [../README.md](../README.md) — public overview, quickstart, no-framework thesis.

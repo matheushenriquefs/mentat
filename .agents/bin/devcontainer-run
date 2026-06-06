@@ -1,10 +1,7 @@
 #!/bin/bash
-# ~/.agents/bin/devcontainer-run — run one command INSIDE the worktree's
-# devcontainer. The single seam through which all project-interpreter work
-# (uv / ruff / pre-commit / python / php / node / test commands) must pass:
-# the host runs none of it (ADR 0004). Callers must run devcontainer-up first;
-# if the container is not running this script exits 99 rather than auto-starting.
-# Deps: git, jq, docker. No language toolchain on host (ADR 0004).
+# devcontainer-run — exec one command inside the worktree's devcontainer.
+# All project-interpreter work must pass through here. ADR 0004.
+# Exits 99 if container not running (caller must devcontainer-up first).
 set -euo pipefail
 
 CMD="${*:-}"
@@ -19,7 +16,6 @@ workspace_folder() {
     | jq -r --arg slug "$SLUG" '.workspaceFolder // ("/workspaces/" + $slug)'
 }
 
-# Container not running → exit 99. Callers must devcontainer-up first.
 if [ -z "$(docker ps -q --filter "label=dmux_slug=$SLUG")" ]; then
   echo "devcontainer-run: container not running for slug $SLUG (run devcontainer-up first)" >&2
   exit 99

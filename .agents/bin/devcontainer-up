@@ -1,19 +1,18 @@
 #!/bin/bash
-# ~/.agents/bin/devcontainer-up — bring up the devcontainer for a worktree.
-# Project-agnostic. Auto-detects:
-#   - image / Dockerfile / docker-compose shape
-#   - bare docker-compose (no .devcontainer/): synthesize a minimal wrapping
-#     devcontainer.json so the devcontainer CLI drives it like any other
-#   - which compose services hardcode container_name (and !reset null them)
-#   - which host ports compose declares via ${VAR:-N}:N (and offsets VAR per slug)
-#   - which gitignored dependency dirs to symlink from the main repo
-# Deps: git, jq, docker. No language toolchain on host (ADR 0004).
+# devcontainer-up — bring up the devcontainer for a worktree.
+# Auto-detects image/Dockerfile/docker-compose shape; synthesizes devcontainer.json
+# if absent. Deps: git, jq, docker. ADR 0004.
 set -euo pipefail
 
 [ -f "$PWD/.git" ] || { echo "devcontainer-up: must run from inside a git worktree" >&2; exit 2; }
 
 WT="$PWD"
 SLUG=$(basename "$WT")
+
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/strict.sh"
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/compose-synth.sh"
 
 workspace_folder() {
   sed 's|//.*||g' "$WT/.devcontainer/devcontainer.json" \
@@ -28,105 +27,13 @@ ensure_safe_directory() {
     >/dev/null 2>&1 || true
 }
 
-# Synthesize a minimal .devcontainer/devcontainer.json over a bare
-# docker-compose.yml (no authored .devcontainer/). Pick the workspace service
-# by inference: exactly one service with a `build:` OR a bind-mount of the
-# worktree cwd. Zero or many such services → abort loud (don't exec into the
-# wrong container three steps later). workspaceFolder = that service's mount
-# target if discoverable, else /workspaces/<slug>.
-synthesize_devcontainer() {
-  local compose="$WT/docker-compose.yml"
-
-  # Find candidate services: have `build:` or a cwd-mount marker.
-  # BSD awk compatible (macOS default awk).
-  local candidates
-  candidates=$(awk '
-    /^services:[[:space:]]*$/ { in_svc=1; next }
-    in_svc && /^[^ \t]/ { in_svc=0 }
-    in_svc && /^  [a-zA-Z0-9._-]+:[[:space:]]*$/ {
-      if (cur && (has_build || has_cwd)) print cur
-      s=$0; gsub(/^  /, "", s); gsub(/:.*/, "", s)
-      cur=s; has_build=0; has_cwd=0; next
-    }
-    in_svc && cur && /build:/ { has_build=1 }
-    in_svc && cur && (/\.\.:/ || /\.\/:/ || /\$\{PWD\}/ || /\$PWD/) { has_cwd=1 }
-    END { if (cur && (has_build || has_cwd)) print cur }
-  ' "$compose")
-
-  local count=0
-  [ -n "$candidates" ] && count=$(printf '%s\n' "$candidates" | grep -c '[^[:space:]]')
-
-  if [ "$count" -ne 1 ]; then
-    local how="${candidates:-none}"
-    echo "devcontainer-up: cannot infer workspace service from docker-compose.yml (buildable/cwd-mounted services: $how)." >&2
-    echo "Add a .devcontainer/devcontainer.json naming the \`service\` + \`workspaceFolder\`." >&2
-    exit 3
-  fi
-
-  local service
-  service=$(printf '%s\n' "$candidates" | head -1)
-
-  # Extract mount target path from service block (last :/absolute/path match)
-  local ws="/workspaces/$SLUG"
-  local mt
-  mt=$(awk -v svc="$service" '
-    /^  / && $0 ~ ("^  "svc":") { in_svc=1; next }
-    in_svc && /^  [a-zA-Z0-9]/ { in_svc=0 }
-    in_svc { print }
-  ' "$compose" | grep -oE ':[/][^[:space:]:\x27"]*' | tail -1 | sed 's/^://')
-  [ -n "$mt" ] && ws="$mt"
-
-  mkdir -p "$WT/.devcontainer"
-  jq -n --arg name "$SLUG" --arg svc "$service" --arg ws "$ws" '{
-    name: $name,
-    dockerComposeFile: ["../docker-compose.yml"],
-    service: $svc,
-    workspaceFolder: $ws
-  }' > "$WT/.devcontainer/devcontainer.json"
-}
-
-# Synthesize a compose-less devcontainer.json over a bare Dockerfile (no
-# .devcontainer/, no compose). CLI builds the image + bind-mounts cwd; no
-# port/cname machinery. workspaceFolder = last absolute Dockerfile WORKDIR,
-# else /workspaces/<slug>.
-synthesize_devcontainer_from_dockerfile() {
-  local dockerfile=""
-  for cand in Dockerfile dockerfile; do
-    [ -f "$WT/$cand" ] && dockerfile="$cand" && break
-  done
-  if [ -z "$dockerfile" ]; then
-    local first
-    first=$(ls "$WT"/Dockerfile* 2>/dev/null | head -1)
-    [ -n "$first" ] && dockerfile="$(basename "$first")"
-  fi
-  if [ -z "$dockerfile" ]; then
-    echo "devcontainer-up: no Dockerfile found in worktree." >&2
-    exit 3
-  fi
-
-  local ws="/workspaces/$SLUG"
-  local last_workdir
-  last_workdir=$(grep -iE '^\s*WORKDIR\s+/\S+' "$WT/$dockerfile" | tail -1 | awk '{print $NF}')
-  [ -n "$last_workdir" ] && ws="$last_workdir"
-
-  mkdir -p "$WT/.devcontainer"
-  jq -n --arg name "$SLUG" --arg df "../$dockerfile" --arg ws "$ws" '{
-    name: $name,
-    build: {dockerfile: $df, context: ".."},
-    workspaceFolder: $ws,
-    workspaceMount: ("source=${localWorkspaceFolder},target=" + $ws + ",type=bind")
-  }' > "$WT/.devcontainer/devcontainer.json"
-}
-
-# Already running? safe.directory anyway (must fire on EVERY path — a container
-# up from before this fix never got it; surfaces as "dubious ownership" on first
-# in-container git — handoff Issue 4). Idempotent.
+# Already running — safe.directory must fire every path (handoff Issue 4).
 if [ -n "$(docker ps -q --filter "label=dmux_slug=$SLUG")" ]; then
   ensure_safe_directory "$(workspace_folder)"
   exit 0
 fi
 
-# Stopped container exists? Start it.
+# Stopped container — start it.
 STOPPED=$(docker ps -aq --filter "label=dmux_slug=$SLUG" --filter "status=exited")
 if [ -n "$STOPPED" ]; then
   docker start "$STOPPED" >/dev/null
@@ -134,12 +41,8 @@ if [ -n "$STOPPED" ]; then
   exit 0
 fi
 
-# Cold start. Need a .devcontainer/ — synthesize one if absent. Order of
-# preference: docker-compose (.yml or .yaml) → bare Dockerfile. Docker is
-# required (ADR 0004); we are language-agnostic, not runtime-agnostic.
+# Cold start — synthesize devcontainer.json if absent.
 if [ ! -d "$WT/.devcontainer" ]; then
-  # Normalize compose spelling: the rest of the script keys off
-  # docker-compose.yml; symlink a .yaml so a single code path serves both.
   if [ ! -f "$WT/docker-compose.yml" ] && [ -f "$WT/docker-compose.yaml" ]; then
     ln -s docker-compose.yaml "$WT/docker-compose.yml"
   fi
@@ -154,21 +57,17 @@ if [ ! -d "$WT/.devcontainer" ]; then
 fi
 
 WS="$(workspace_folder)"
-
 GIT_TARGET=$(awk '{print $2}' "$WT/.git")
 ROOT="${GIT_TARGET%/.git/worktrees/*}"
 
-# Symlink known gitignored dep dirs from the main repo so cold worktrees
-# don't have to re-run composer/npm/etc. Each guarded; no-op if absent.
-# Python .venv intentionally excluded (interpreter paths bake in absolute cwd).
+# Symlink gitignored dep dirs from main repo so cold worktrees skip reinstall.
+# Python .venv excluded (interpreter paths bake in absolute cwd).
 for d in vendor node_modules; do
   [ -d "$ROOT/$d" ] && [ ! -e "$WT/$d" ] && ln -s "$ROOT/$d" "$WT/$d"
 done
 
-# Reuse the main repo's .env if any (gitignored, but compose needs it).
 [ -f "$ROOT/.env" ] && [ ! -e "$WT/.env" ] && cp "$ROOT/.env" "$WT/.env"
 
-# ----- compose-only adjustments (skipped for image/Dockerfile devcontainers) -----
 HAS_DOCKER_COMPOSE=0
 if [ -f "$WT/docker-compose.yml" ]; then
   if sed 's|//.*||g' "$WT/.devcontainer/devcontainer.json" \
@@ -180,7 +79,6 @@ fi
 if [ "$HAS_DOCKER_COMPOSE" = 1 ]; then
   OFFSET=$(( 0x$(printf %s "$SLUG" | shasum | cut -c1-2) % 90 + 10 ))
 
-  # Find services with hardcoded container_name → write !reset null override.
   local_cnames=$(awk '
     /^  [a-zA-Z0-9._-]+:[[:space:]]*$/ {
       if (cur && has_cname) print cur
@@ -200,10 +98,8 @@ if [ "$HAS_DOCKER_COMPOSE" = 1 ]; then
     done <<< "$local_cnames"
   fi
 
-  # Host-port env vars: ${VAR:-N}: patterns → offset default port per slug.
   if [ -f "$WT/.env" ]; then
     MARK="# --- dmux per-worktree overrides"
-    # Strip any previous dmux block so re-runs refresh stale ports.
     body=$(sed "/^${MARK}/,\$d" "$WT/.env")
     printf '%s\n' "$body" > "$WT/.env"
 
@@ -221,7 +117,6 @@ if [ "$HAS_DOCKER_COMPOSE" = 1 ]; then
     fi
   fi
 
-  # Inject the override file into devcontainer.json's dockerComposeFile list.
   dcj="$WT/.devcontainer/devcontainer.json"
   if ! grep -q 'docker-compose.dmux.yml' "$dcj" \
      && [ -f "$WT/docker-compose.dmux.yml" ]; then

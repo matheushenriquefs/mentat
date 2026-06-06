@@ -1,68 +1,42 @@
 #!/bin/bash
-# ~/.agents/bin/to-orchestrate — headless batch driver for the dmux flow.
-# Takes ALREADY-PLANNED chunks (plan PATHS) and fans them out in parallel.
-# No planning, no grilling — the human did that up front via /to-plan.
-#
-# Break-even: only with >=2 AFK chunks. One chunk → babysit /to-implement.
-#
-# Contract:
-#   to-orchestrate feat/my-feat plan1.md plan2.md [plan3.md]
-#   → each plan implemented on its own throwaway branch off main, in parallel;
-#     then every passing chunk landed onto feat/my-feat, one at a time.
-#
-# Fan-out is parallel; landing is serial (can't move one ref concurrently).
-# Each chunk runs /to-implement against ITS OWN branch as the holding arg, so
-# the implement-side /to-rebase is a self-no-op (ff-to-self, no host commit,
-# no holding-branch prompt). The cross-branch land is this script's job, done
-# after the parallel wait: rebase the chunk onto $HOLDING INSIDE its container
-# (pre-commit fires container-side, where the tools live — ADR 0002), re-gate
-# (deterministic land-gate — this land pass is a merge queue; see ADR 0004),
-# then host-side fast-forward $HOLDING to the rebased tip. No host-side commit,
-# no merge commit, ever.
-#
-# Usage:
-#   to-orchestrate [--harness=cursor|claude-code] [--model=<slug>] \
-#                  <holding-branch> <plan.md> [<plan.md> ...]
-#
-# Default harness: cursor. Per-chunk stdout (stream-json) is tee'd to
-#   .dmux/logs/<slug>.jsonl
-# and multiplexed live to this terminal while chunks run. The driver appends one
-# synthetic terminal record (landed | eject) to that SAME file on every outcome,
-# so each worktree has a single self-contained log (plan-b unified jsonl).
+# to-orchestrate — headless batch driver: fan out planned chunks in parallel,
+# land each onto the holding branch serially. No planning; human does that.
+# Usage: to-orchestrate [--harness=cursor|claude-code] [--model=<slug>] \
+#                       <holding-branch> <plan.md> [<plan.md> ...]
+# ADR 0004
 set -euo pipefail
 
-HARNESS=cursor
-MODEL=""
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+. "$_LIB/strict.sh"
+. "$_LIB/log.sh"
+_LOG_PREFIX=to-orchestrate
+
+HARNESS=cursor; MODEL=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --harness=*) HARNESS="${1#*=}"; shift ;;
     --model=*)   MODEL="${1#*=}";   shift ;;
     --) shift; break ;;
-    -*) echo "to-orchestrate: unknown flag $1" >&2; exit 2 ;;
+    -*) die "unknown flag $1 (usage: to-orchestrate [--harness=cursor|claude-code] [--model=<slug>] <holding-branch> <plan.md> [...])" ;;
     *)  break ;;
   esac
 done
 
 HOLDING="${1:?usage: to-orchestrate [--harness=cursor|claude-code] [--model=<slug>] <holding-branch> <plan.md> [<plan.md> ...]}"
 shift
-[ "$#" -ge 1 ] || { echo "to-orchestrate: need at least one plan path" >&2; exit 2; }
-[ "$#" -le 3 ] || { echo "to-orchestrate: max 3 parallel chunks (merge-conflict scaling)" >&2; exit 2; }
+[ "$#" -ge 1 ] || die "need at least one plan path"
+[ "$#" -le 3 ] || die "max 3 parallel chunks (merge-conflict scaling — ADR 0004)"
 
 ROOT="$PWD"
 LOGDIR="$ROOT/.dmux/logs"
 mkdir -p "$LOGDIR"
 
-log() { printf '[to-orchestrate] %s\n' "$*" >&2; }
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+command -v jq >/dev/null || die "jq not found (needed by to-track-harness)"
+. "$HERE/to-track-harness"
 
-# Append the AUTHORITATIVE terminal record to a chunk's own per-worktree jsonl
-# (plan-b: one file per worktree carries BOTH the live tracker feed AND the final
-# success/error state, in one schema). Normalizes through harness-map.jq to the
-# existing result/error kinds — no new kind. Written on BOTH paths: clean land and
-# every eject. `slug` keys the file: $LOGDIR/<slug>.jsonl is the one file per chunk.
-#   landed:  {"type":"result","subtype":"success","slug","landed":true,"tip":<sha>}
-#   eject:   {"type":"result","subtype":"error","slug","landed":false,
-#             "reason":<rebase-conflict|gate-fail|not-ff>,"sibling_tip":<sha>}
-_land_record() { # $1=logf $2=slug success|error [$3=tip-or-siblingtip] [$4=reason]
+# Append terminal record to chunk's own jsonl. ADR 0004
+_land_record() { # $1=logf $2=slug $3=success|error [$4=sha] [$5=reason]
   local logf="$1" slug="$2" outcome="$3" sha="${4:-}" reason="${5:-}"
   if [ "$outcome" = success ]; then
     printf '{"type":"result","subtype":"success","slug":"%s","landed":true,"tip":"%s"}\n' \
@@ -73,17 +47,6 @@ _land_record() { # $1=logf $2=slug success|error [$3=tip-or-siblingtip] [$4=reas
   fi
 }
 
-# Live tracker: colored, slug-prefixed feed over the per-chunk tees, plus
-# phase/end-state banners driven by the land loop (NOT the stream). Sibling
-# files in this bin dir; jq is the one hard dep.
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-command -v jq >/dev/null || { echo "to-orchestrate: jq not found (needed by to-track-harness)" >&2; exit 2; }
-# shellcheck source=/dev/null
-. "$HERE/to-track-harness"
-
-# Build the headless command for the chosen harness. Both emit stream-json on
-# stdout. Cursor has no per-tool allowlist; --force is the closest analog to
-# claude's acceptEdits (broader: also auto-confirms shell).
 build_cmd() {
   local prompt="$1"
   case "$HARNESS" in
@@ -98,64 +61,33 @@ build_cmd() {
         --allowedTools "Bash,Read,Edit,Write,Agent" \
         "${m[@]}" "$prompt"
       ;;
-    *)
-      echo "to-orchestrate: unknown harness '$HARNESS' (cursor|claude-code)" >&2
-      exit 2
-      ;;
+    *) die "unknown harness '$HARNESS' (cursor|claude-code)" ;;
   esac
 }
 
-# Implement one chunk on its own branch. No landing here — that's the serial
-# pass below. Holding arg is the chunk's OWN branch: /to-implement's /to-rebase
-# self-no-ops, so the agent finishes green-and-reviewed on $slug without a
-# holding-branch prompt (which would stall a headless run).
 run_chunk() {
   local plan="$1" slug="$2" logf="$3"
   local wt="$ROOT/.dmux/worktrees/$slug"
-
   git worktree add -b "$slug" "$wt" main
   ( cd "$wt" && ~/.agents/bin/devcontainer-up )
-
-  # /to-implement runs /tdd -> /to-commit per slice -> scored review gate -> /to-rebase (self).
   local cmd=()
   while IFS= read -r -d '' tok; do cmd+=("$tok"); done < <(build_cmd "/to-implement $plan $slug")
   ( cd "$wt" && "${cmd[@]}" ) >>"$logf" 2>&1
 }
 
-# Land one already-implemented chunk onto $HOLDING. Merge-queue land step (ADR
-# 0004): rebase onto the CURRENT tip (siblings already landed are in it), re-gate,
-# ff-only. The re-gate catches semantic breakage a sibling's land introduced that
-# the chunk's own green (earned off main) can't see — "both PRs pass alone, main
-# breaks together." The driver names NO project tool: the gate is a headless agent
-# that reads the project's own CLAUDE.md/AGENTS.md and runs its quality gates,
-# so this stays language/project-agnostic (the agent already knows the command
-# from /to-implement). On any red (conflict OR gate fail): eject — leave the
-# worktree up, log the sibling tip, the loop moves on. NEVER loop-retry one chunk
-# (same commits onto same tip → same break; repair needs an agent/human).
 land_chunk() {
   local slug="$1" logf="$2"
   local wt="$ROOT/.dmux/worktrees/$slug"
-
-  # Tip the chunk rebases ONTO — captured for eject-time blame (the code that
-  # moved under the chunk since it earned its own green).
   local onto; onto="$(git -C "$ROOT" rev-parse --short "$HOLDING" 2>/dev/null || echo "$HOLDING")"
 
-  # Rebase onto the CURRENT holding tip inside its container (pre-commit fires
-  # where its tools live — ADR 0002). $HOLDING reachable via the shared .git mount.
+  # Rebase inside container so pre-commit fires where tools live. ADR 0002
   ( cd "$wt" && ~/.agents/bin/devcontainer-run "git rebase $(printf %q "$HOLDING")" ) >>"$logf" 2>&1 || {
     log "land EJECT (rebase conflict onto $onto): $slug — worktree $wt"
     ( cd "$wt" && git rebase --abort >/dev/null 2>&1 || true )
-    _land_record "$logf" "$slug" error "$onto" rebase-conflict
-    return 1
+    _land_record "$logf" "$slug" error "$onto" rebase-conflict; return 1
   }
 
-  # Re-gate via a headless agent — agnostic by construction. cavecrew-builder is
-  # the cheapest variant that can read docs + run commands; its sole job is to run
-  # THIS project's quality gates (which it discovers from CLAUDE.md/AGENTS.md, same
-  # as /to-implement) in-container on the rebased tree and exit non-zero on red.
-  # Deterministic WHERE IT COUNTS (exit code gates the land) without the driver
-  # knowing any tool name. Reviewers are NOT here — they run once at end-of-queue
-  # over the final tip (ADR 0004 token-cadence), not per chunk.
+  # Re-gate via headless agent — project-agnostic, reads CLAUDE.md/AGENTS.md. ADR 0003
   local gate_prompt
   gate_prompt="Spawn cavecrew-builder in this worktree. Read CLAUDE.md/AGENTS.md, \
 run this project's quality gates (lint/types/tests/etc as the project defines them) \
@@ -164,47 +96,31 @@ any gate is red. Report only PASS or FAIL."
   local gcmd=()
   while IFS= read -r -d '' tok; do gcmd+=("$tok"); done < <(build_cmd "$gate_prompt")
   if ! ( cd "$wt" && "${gcmd[@]}" ) >>"$logf" 2>&1; then
-    log "land EJECT (re-gate red after rebase onto $onto — likely a semantic clash"
-    log "             with what landed before it; repair $slug against the new base): worktree $wt"
-    _land_record "$logf" "$slug" error "$onto" gate-fail
-    return 1
+    log "land EJECT (re-gate red after rebase onto $onto): $slug — worktree $wt"
+    _land_record "$logf" "$slug" error "$onto" gate-fail; return 1
   fi
 
-  # Host-side fast-forward. $HOLDING must be checked out at $ROOT (planner pane —
-  # ADR 0002). --ff-only moves the ref with no merge commit and no host pre-commit
-  # (a real ff creates no commit object). Mirrors /to-rebase's contract.
+  # Fast-forward — ff-only, no merge commit. ADR 0002
   if [ "$(git -C "$ROOT" branch --show-current)" != "$HOLDING" ]; then
-    log "land EJECT (holding '$HOLDING' not checked out at $ROOT): $slug — worktree $wt"
-    _land_record "$logf" "$slug" error "$onto" not-ff
-    return 1
+    log "land EJECT (holding '$HOLDING' not checked out at $ROOT): $slug"
+    _land_record "$logf" "$slug" error "$onto" not-ff; return 1
   fi
   if git -C "$ROOT" merge --ff-only "$slug" >>"$logf" 2>&1; then
-    # Authoritative success record on the chunk's own jsonl: the landed tip is the
-    # holding ref after the ff (the rebased chunk tip is now $HOLDING).
     local tip; tip="$(git -C "$ROOT" rev-parse --short "$HOLDING" 2>/dev/null || echo "$HOLDING")"
     _land_record "$logf" "$slug" success "$tip"
-    log "landed: $slug -> $HOLDING (gated on rebase onto $onto)"
-    return 0
+    log "landed: $slug -> $HOLDING (gated on rebase onto $onto)"; return 0
   fi
   log "land EJECT (not fast-forward): $slug — worktree $wt"
-  _land_record "$logf" "$slug" error "$onto" not-ff
-  return 1
+  _land_record "$logf" "$slug" error "$onto" not-ff; return 1
 }
 
-# End-of-queue gate: ONE agent pass over the FINAL landed tip, only when the whole
-# queue drained green (ADR 0004 token-cadence — no point reviewing a tree a later
-# chunk will change, or a partial result where a sibling is mid-repair). Runs at
-# $ROOT where $HOLDING is checked out (per-chunk worktrees are torn down by now).
-# Spawns the three ADR-0003 reviewers over the cumulative landed diff; agnostic —
-# the agent resolves the project's gates from CLAUDE.md/AGENTS.md itself. Advisory
-# by ADR 0003's staged-trust posture (reviewers are inspect-after until they earn a
-# false-pass record), so a red here WARNS, it does not roll back a landed ref.
+# End-of-queue review over final landed tip — advisory. ADR 0003 ADR 0004
 final_review() {
-  local base="$1"   # merge-base the queue started from (pre-land $HOLDING tip)
+  local base="$1"
   local logf="$LOGDIR/final-review.jsonl"; : > "$logf"
-  log "end-of-queue review: spawning ADR-0003 reviewers over $base..$HOLDING (final tip)"
+  log "end-of-queue review: spawning ADR-0003 reviewers over $base..$HOLDING"
   ( cd "$ROOT" && ~/.agents/bin/devcontainer-up ) >>"$logf" 2>&1 || {
-    log "end-of-queue review SKIPPED (devcontainer-up failed at $ROOT) — log $logf"; return 0; }
+    log "end-of-queue review SKIPPED (devcontainer-up failed at $ROOT)"; return 0; }
   local prompt
   prompt="The merge queue landed every chunk onto $HOLDING. Run the full ADR-0003 \
 review gate over the cumulative diff $base..HEAD: spawn crew-review-plan, \
@@ -214,34 +130,25 @@ this project runs its checks. Do not modify code."
   local rcmd=()
   while IFS= read -r -d '' tok; do rcmd+=("$tok"); done < <(build_cmd "$prompt")
   if ( cd "$ROOT" && "${rcmd[@]}" ) >>"$logf" 2>&1; then
-    log "end-of-queue review done (see $logf) — inspect-after per ADR 0003."
+    log "end-of-queue review done (see $logf)"
   else
-    log "end-of-queue review FLAGGED a miss (see $logf). Landed ref unchanged (advisory); inspect before push."
+    log "end-of-queue review FLAGGED a miss (see $logf). Landed ref unchanged (advisory)."
   fi
 }
 
-# Mint slugs and touch log files up front so `tail -F` can attach immediately.
 declare -a PIDS PLANS SLUGS LOGS
 for plan in "$@"; do
-  slug="dmux-$(date +%s)-$$-$RANDOM"
-  logf="$LOGDIR/$slug.jsonl"
-  : > "$logf"
+  slug="dmux-$(date +%s)-$$-$RANDOM"; logf="$LOGDIR/$slug.jsonl"; : > "$logf"
   SLUGS+=("$slug"); LOGS+=("$logf"); PLANS+=("$plan")
   log "chunk: $plan -> $slug | $logf"
 done
 
-# Live tracker over all chunk tees (replaces the old awk multiplexer). Emits an
-# `implementing` banner per slug and starts a colored feed per log. End state is
-# driven below by the land loop + exit codes, never by the stream.
 to_track_start "$LOGDIR" "${SLUGS[@]}"
-
 cleanup() { to_track_stop; }
 trap cleanup EXIT INT TERM
 
-# Fan out chunks; collect per-chunk exit codes so the land pass can't lie.
 for i in "${!SLUGS[@]}"; do
-  run_chunk "${PLANS[$i]}" "${SLUGS[$i]}" "${LOGS[$i]}" &
-  PIDS+=("$!")
+  run_chunk "${PLANS[$i]}" "${SLUGS[$i]}" "${LOGS[$i]}" & PIDS+=("$!")
 done
 
 declare -a IMPL_OK
@@ -250,23 +157,17 @@ for i in "${!PIDS[@]}"; do
     IMPL_OK+=("$i")
   else
     to_track_exit "${SLUGS[$i]}" agent-error "implement failed"
-    # Terminal record on the chunk's own jsonl even when it never reached the land
-    # loop — so every worktree's file ends with an authoritative outcome (plan-b).
     _land_record "${LOGS[$i]}" "${SLUGS[$i]}" error "" implement-fail
     log "CHUNK FAILED (implement): ${PLANS[$i]} — worktree $ROOT/.dmux/worktrees/${SLUGS[$i]}"
   fi
 done
 
-# Serial land pass: only chunks that implemented clean. Each lands onto the tip
-# the previous one left, so sibling divergence resolves via the container-side
-# rebase, not a host merge.
 LAND_BASE="$(git -C "$ROOT" rev-parse "$HOLDING" 2>/dev/null || echo "$HOLDING")"
 LANDED=0
 for i in "${IMPL_OK[@]}"; do
   to_track_phase "${SLUGS[$i]}" landing
   if land_chunk "${SLUGS[$i]}" "${LOGS[$i]}"; then
-    LANDED=$((LANDED + 1))
-    to_track_exit "${SLUGS[$i]}" landed "-> $HOLDING"
+    LANDED=$((LANDED + 1)); to_track_exit "${SLUGS[$i]}" landed "-> $HOLDING"
     ( cd "$ROOT/.dmux/worktrees/${SLUGS[$i]}" && ~/.agents/bin/devcontainer-down ) || true
     git -C "$ROOT" worktree remove "$ROOT/.dmux/worktrees/${SLUGS[$i]}" || true
   else
@@ -276,16 +177,15 @@ for i in "${IMPL_OK[@]}"; do
 done
 
 cleanup
-
 TOTAL="${#SLUGS[@]}"
 if [ "$LANDED" -eq "$TOTAL" ]; then
   log "all $TOTAL chunk(s) landed -> $HOLDING."
   final_review "$LAND_BASE"
-  log "done. Review the end-of-queue findings, then push + PR manually (ADR 0002)."
+  log "done. Review end-of-queue findings, then push + PR manually (ADR 0002)."
   exit 0
 else
   log "$LANDED/$TOTAL chunk(s) landed; $((TOTAL - LANDED)) left up."
-  log "end-of-queue review skipped (queue not all-green — repair ejected chunks first)."
+  log "end-of-queue review skipped — repair ejected chunks first."
   log "logs: $LOGDIR/  worktrees: $ROOT/.dmux/worktrees/"
   exit 1
 fi
