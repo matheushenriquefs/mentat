@@ -67,13 +67,13 @@ fi
 
 # Sync vendored upstreams (unless --minimal)
 if [ "$MINIMAL" -eq 0 ]; then
-  SYNC_CMD="$HERE/mentat-sync-upstream"
-  if [ -x "$SYNC_CMD" ]; then
+  UPDATE_CMD="$HERE/mentat-update"
+  if [ -x "$UPDATE_CMD" ]; then
     if [ "$DRY_RUN" -eq 1 ]; then
-      echo "mentat-setup: dry-run — would run: mentat-sync-upstream --all"
+      echo "mentat-setup: dry-run — would run: mentat-update"
     else
       echo "mentat-setup: syncing vendored upstreams ..."
-      "$SYNC_CMD" --all
+      "$UPDATE_CMD"
     fi
   fi
 fi
@@ -89,6 +89,7 @@ RSYNC_ARGS=(-av --delete -L
   --exclude='bin/mentat-release'
   --exclude='bin/mentat-setup'
   --exclude='bin/mentat-sync-check'
+  --exclude='bin/mentat-update'
   --exclude='upstreams.jsonc'
   --exclude='upstreams.lock.jsonc'
   --exclude='.skill-lock.json'

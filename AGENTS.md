@@ -182,7 +182,15 @@ See [.agents/bin/lib/gates.sh](.agents/bin/lib/gates.sh) for checker implementat
 
 **Doc-freshness gate (advisory):** Any change in `.agents/bin/`, `.agents/skills/`, `.agents/commands/`, or `docs/adr/` that alters public surface must include a corresponding update to `README.md` or `CONTEXT.md`. The gate lists affected docs; the LLM reviewer flags actual staleness.
 
-**Sync-upstream gate:** If `upstreams.jsonc` is modified, a fresh `bin/mentat-sync-upstream` run is required before commit. If >24 h since last sync (per `bin/mentat-sync-check`), a warning is emitted.
+**Vendor-pins gate:** If `vendir.yml` is modified, or >24 h since last sync, run `vendir sync --diff` before commit. `vendir sync --diff` is the shipped equivalent of the former `mentat-sync-check` binary.
+
+## Platform Support
+
+Mentat targets POSIX shells (bash 4+, zsh) on Linux + macOS. Windows is out of scope — relies on POSIX `rename(2)`, `ln` hardlink atomicity, and standard GNU/BSD coreutils. WSL works as a Linux environment, not native Windows.
+
+## Attribution
+
+When you borrow a concept, schema, or protocol from another repo without vendoring its code, add an entry to `CREDITS.md` under `## Inspired by` citing the upstream URL, the upstream's GitHub repo description verbatim (via `gh repo view <user>/<repo> --json description -q .description`), and one sentence naming the specific primitive borrowed. Never fabricate the description. Vendored code is auto-credited from `vendir.lock.yml`; inspiration credits are hand-maintained.
 
 ## Test-when-modified
 
