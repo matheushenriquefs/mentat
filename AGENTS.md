@@ -162,10 +162,9 @@ Bash + `jq` only on the host (ADR 0004). Target-repo tools run via `mentat-conta
 ## Quality Gates
 
 Every modified file must pass its class checker before commit.
-Run locally: `bin/mentat-gate $(git diff --name-only "$base")`.
+Run locally: `lefthook run pre-commit`.
 Wired into `mentat-orchestrate` pre-land step (host-side; harness tools only — ADR 0004).
 
-<!-- BEGIN generated: mentat-gate --print-policy -->
 | Class | Glob | Check |
 |-------|------|-------|
 | ADR | docs/adr/*.md | All three sections present: ## Context, ## Decision, ## Consequences |
@@ -175,11 +174,10 @@ Wired into `mentat-orchestrate` pre-land step (host-side; harness tools only —
 | Shell | bin/**/*,lib/**/*.sh | bash -n + shellcheck (advisory if absent) |
 | Config | *.jsonc | sed \| jq -e validates JSON structure |
 | Harness | bin/lib/harness/*.sh | harness_<name>_cmd and harness_<name>_output_format both defined |
-<!-- END generated -->
 
 Unknown file classes pass silently (gate is additive, not a whitelist).
 
-See [bin/lib/gates.sh](bin/lib/gates.sh) for checker implementations and [bin/mentat-gate](bin/mentat-gate) for the driver.
+See [bin/lib/gates.sh](bin/lib/gates.sh) for checker implementations and [lefthook.yml](lefthook.yml) for the runner config.
 
 **Doc-freshness gate (advisory):** Any change in `.agents/bin/`, `.agents/skills/`, `.agents/commands/`, or `docs/adr/` that alters public surface must include a corresponding update to `README.md` or `CONTEXT.md`. The gate lists affected docs; the LLM reviewer flags actual staleness.
 
@@ -191,11 +189,11 @@ Modifying certain file classes requires additional checks before commit:
 
 | Trigger | Required action |
 |---|---|
-| `agents/*.md` or `skills/*/SKILL.md` modified | Run `bin/mentat-gate <file>` + skill's promptfoo eval (`npx promptfoo eval --filter-providers <skill-name>`) |
+| `agents/*.md` or `skills/*/SKILL.md` modified | Run `lefthook run pre-commit` + skill's promptfoo eval (`npx promptfoo eval --filter-providers <skill-name>`) |
 | `docs/adr/*.md` modified | File must include `**Decided:** <YYYY-MM-DD>` and `**Author:** <handle>` lines |
 | `agents/mentat-*-reviewer.md` modified | Must bump ADR-0003 weight rationale (add/update reasoning for any changed dimension weight) |
 
-Enforced by convention during review. `bin/mentat-gate` flags structural violations; the LLM reviewer flags missing promptfoo eval evidence in the PR diff.
+Enforced by convention during review. Lefthook flags structural violations; the LLM reviewer flags missing promptfoo eval evidence in the PR diff.
 
 ## See also
 

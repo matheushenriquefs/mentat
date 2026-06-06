@@ -20,7 +20,7 @@ gate_command() {
   head -10 "$1" | grep -q '^---$' || { echo "$1: missing YAML frontmatter"; return 1; }
 }
 
-# @class: Workflow doc  # @glob: AGENTS.md,CONTEXT.md,STYLE.md,README.md  # @check: Cross-ref links present ([text](*.md) syntax)
+# @class: Workflow doc  # @glob: AGENTS.md,CONTEXT.md,README.md  # @check: Cross-ref links present ([text](*.md) syntax)
 gate_workflow() {
   grep -qE '\[.+\]\(.+\.md\)' "$1" || { echo "$1: no cross-ref links found"; return 1; }
 }
@@ -52,8 +52,8 @@ mentat_gate() {
     */docs/adr/*.md)    gate_adr      "$f" ;;
     */agents/*.md)      gate_skill    "$f" ;;
     */commands/*.md)    gate_command  "$f" ;;
-    AGENTS.md|CONTEXT.md|STYLE.md|README.md|\
-    */AGENTS.md|*/CONTEXT.md|*/STYLE.md|*/README.md)
+    AGENTS.md|CONTEXT.md|README.md|\
+    */AGENTS.md|*/CONTEXT.md|*/README.md)
                         gate_workflow "$f" ;;
     */bin/lib/harness/*.sh)
                         gate_harness  "$f" ;;
