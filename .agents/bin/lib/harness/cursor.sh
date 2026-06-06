@@ -11,5 +11,5 @@ harness_cursor_output_format() { printf 'stream-json\n'; }
 
 harness_cursor_normalize() {
   jq -c --arg agent "cursor" --arg sess "${MENTAT_SESSION:-unknown}" \
-    '{ts:(now|todate), agent:$agent, session:$sess, event:(.type // "unknown" | tostring), payload:(. - {type})}'
+    '{ts:(now|todate), agent:$agent, session:$sess, event:(.type // "unknown" | tostring), payload:(del(.type))}'
 }
