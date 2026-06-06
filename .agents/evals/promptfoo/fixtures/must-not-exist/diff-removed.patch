@@ -1,0 +1,4 @@
+diff --git a/.agents/bin/devcontainer-down b/.agents/bin/mentat-container-down
+similarity index 100%
+rename from .agents/bin/devcontainer-down
+rename to .agents/bin/mentat-container-down

@@ -40,6 +40,32 @@ tests:
       - type: not-contains
         value: "FAIL"
 
+  # S1.3a: deletion slice WITH must-not-exist tag → no untagged veto
+  - description: "must-not-exist-tagged: plan has tag, no untagged veto"
+    vars:
+      plan: "file://fixtures/must-not-exist/plan-with-tag.md"
+      diff: "file://fixtures/must-not-exist/diff-removed.patch"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/mentat-plan-reviewer.md"
+        threshold: 0.7
+      - type: not-contains
+        value: "must_not_exist_untagged"
+
+  # S1.3b: deletion slice WITHOUT must-not-exist tag → untagged veto fires
+  - description: "must-not-exist-untagged: plan lacks tag, veto fires"
+    vars:
+      plan: "file://fixtures/must-not-exist/plan-missing-tag.md"
+      diff: "file://fixtures/must-not-exist/diff-removed.patch"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/mentat-plan-reviewer.md"
+        threshold: 0.7
+      - type: contains
+        value: "must_not_exist_untagged"
+      - type: contains
+        value: "VETO"
+
   # S4.3: design drift surfaces without veto
   - description: "handoff2-design-drift: design_drift non-empty, no HIGH finding"
     vars:
