@@ -210,9 +210,121 @@ def test_gate_fails_shell_syntax_error():
         os.unlink(name)
 
 
+# ── B2: gate_skill first-10-lines constraint ─────────────────────────────────
+
+def test_gate_skill_passes_with_frontmatter_in_first_10():
+    """Skill file with --- in first 10 lines passes."""
+    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False,
+                                     dir=os.path.join(AGENTS_DIR) if os.path.isdir(AGENTS_DIR) else "/tmp") as f:
+        f.write("---\nname: test-skill\n---\n\n# Body\n")
+        name = f.name
+    try:
+        r = _gate(name)
+        assert r.returncode == 0, f"Skill with frontmatter in first 10 lines should pass:\n{r.stderr}"
+    finally:
+        os.unlink(name)
+
+
+def test_gate_skill_fails_without_frontmatter():
+    """Skill file with no --- in first 10 lines fails."""
+    target_dir = AGENTS_DIR if os.path.isdir(AGENTS_DIR) else "/tmp"
+    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False,
+                                     dir=target_dir) as f:
+        f.write("# Skill Without Frontmatter\n\nSome content here.\n")
+        name = f.name
+    try:
+        r = _gate(name)
+        assert r.returncode != 0, "Skill without frontmatter should fail gate"
+    finally:
+        os.unlink(name)
+
+
+# ── B3: gate_command behavioral ──────────────────────────────────────────────
+
+def _make_commands_dir() -> str:
+    """Return a path ending in /commands/ (matches */commands/*.md glob), creating if needed."""
+    d = os.path.join(tempfile.gettempdir(), "mentat_gate_test", "commands")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def test_gate_command_passes_with_frontmatter():
+    """Command file with --- in first 10 lines passes."""
+    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False,
+                                     dir=_make_commands_dir()) as f:
+        f.write("---\nname: test-cmd\n---\n\n# Command body\n")
+        name = f.name
+    try:
+        r = _gate(name)
+        assert r.returncode == 0, f"Command with frontmatter should pass:\n{r.stderr}"
+    finally:
+        os.unlink(name)
+
+
+def test_gate_command_fails_without_frontmatter():
+    """Command file without --- fails gate."""
+    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False,
+                                     dir=_make_commands_dir()) as f:
+        f.write("# Command Without Frontmatter\n\nSome content.\n")
+        name = f.name
+    try:
+        r = _gate(name)
+        assert r.returncode != 0, "Command without frontmatter should fail gate"
+    finally:
+        os.unlink(name)
+
+
+# ── B4: gate_workflow cross-ref syntax ───────────────────────────────────────
+
+def test_gate_workflow_passes_with_cross_ref_link():
+    """AGENTS.md-style file with [text](file.md) cross-ref passes."""
+    with tempfile.NamedTemporaryFile(suffix="AGENTS.md", mode="w", delete=False) as f:
+        f.write("# Workflow Doc\n\nSee [CONTEXT.md](CONTEXT.md) for details.\n")
+        name = f.name
+    # Rename so it matches the AGENTS.md pattern in mentat_gate
+    agents_name = os.path.join(os.path.dirname(name), "AGENTS.md")
+    import shutil
+    shutil.move(name, agents_name)
+    try:
+        r = _gate(agents_name)
+        assert r.returncode == 0, f"Workflow doc with cross-ref link should pass:\n{r.stderr}"
+    finally:
+        if os.path.exists(agents_name):
+            os.unlink(agents_name)
+
+
+def test_gate_workflow_fails_without_cross_ref_link():
+    """File matching workflow pattern with no [text](*.md) link fails."""
+    with tempfile.NamedTemporaryFile(suffix="AGENTS.md", mode="w", delete=False) as f:
+        f.write("# Workflow Doc\n\nNo links here at all.\n")
+        name = f.name
+    agents_name = os.path.join(os.path.dirname(name), "AGENTS.md")
+    import shutil
+    shutil.move(name, agents_name)
+    try:
+        r = _gate(agents_name)
+        assert r.returncode != 0, "Workflow doc without cross-ref links should fail gate"
+    finally:
+        if os.path.exists(agents_name):
+            os.unlink(agents_name)
+
+
 # ── S5.3: orchestrate wire-in ─────────────────────────────────────────────────
 
 def test_orchestrate_references_mentat_gate():
     """mentat-orchestrate must call mentat-gate as pre-land step."""
     src = _read(os.path.join(BIN, "mentat-orchestrate"))
     assert "mentat-gate" in src or "mentat_gate" in src
+
+
+def test_orchestrate_mentat_gate_in_land_chunk():
+    """mentat-gate call must appear inside land_chunk function (pre-land context)."""
+    src = _read(os.path.join(BIN, "mentat-orchestrate"))
+    # Find land_chunk function body
+    start = src.find("land_chunk()")
+    assert start != -1, "land_chunk() not found in mentat-orchestrate"
+    # Find the next top-level function definition after land_chunk
+    next_fn = src.find("\n}", start)
+    land_chunk_body = src[start:next_fn]
+    assert "mentat-gate" in land_chunk_body or "mentat_gate" in land_chunk_body, \
+        "mentat-gate not found inside land_chunk() body — must be a pre-land step"

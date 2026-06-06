@@ -18,7 +18,7 @@ gate_command() {
 }
 
 gate_workflow() {
-  grep -q '\[.\+\](.\+\.md)' "$1" || { echo "$1: no cross-ref links found"; return 1; }
+  grep -qE '\[.+\]\(.+\.md\)' "$1" || { echo "$1: no cross-ref links found"; return 1; }
 }
 
 gate_shell() {
@@ -27,7 +27,8 @@ gate_shell() {
 }
 
 gate_jsonc() {
-  sed 's|//.*||g' "$1" | jq -e '.' >/dev/null || { echo "$1: jq parse fail"; return 1; }
+  # Delete pure // comment lines only — avoids breaking https:// URLs in string values
+  sed '/^[[:space:]]*\/\//d' "$1" | jq -e '.' >/dev/null || { echo "$1: jq parse fail"; return 1; }
 }
 
 mentat_gate() {
