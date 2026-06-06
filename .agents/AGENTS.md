@@ -42,3 +42,11 @@ in a repo. Index (titles only; read on demand):
 - **0003** scored review gate — Mastra-mapped reviewers, veto > threshold.
 - **0004** parallel-slicing orchestration — fan-out parallel, land serial, Docker-required.
 - **0005** ubiquitous lexicon — slice/chunk/batch, one Laravel borrow (batch, noun only).
+- **0006** soft read-only tests — impl-only-after-red contract + blacklist, driver agnostic.
+
+## Project docs
+
+- [../README.md](../README.md) — public overview, quickstart, no-framework thesis.
+- [../CONTEXT.md](../CONTEXT.md) — glossary (slice/chunk/batch/land/eject/…) + ADR index + flagged ambiguities.
+- [../STYLE.md](../STYLE.md) — frontmatter shapes, body structure, forbidden words, voice rules per file class.
+- [../AGENTS.md](../AGENTS.md) — repo-level agent guidelines (constraints, naming conventions, workflow rules).
