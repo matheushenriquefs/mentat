@@ -28,12 +28,27 @@ done
 [ -z "$SLUG" ] && SLUG="${MENTAT_SLUG:-$$}"
 
 LOG_DIR="${MENTAT_LOG_DIR:-$HOME/.agents/mentat/logs}"
-MENTAT_REPO="${MENTAT_REPO:-$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")}"
-REPO="$MENTAT_REPO"
-SESSION="${MENTAT_SESSION:=$(date +%s)-$$}"
 
-# Resolve session log JSONL (most recent matching this slug)
-SESSION_LOG="$(find "$LOG_DIR" -name "*-${SLUG}.jsonl" 2>/dev/null | sort | tail -1 || true)"
+# Resolve REPO/SESSION from slug's chunk audit file on disk (authoritative).
+CHUNK_LOG="$(find "$LOG_DIR" -type f -name "${SLUG}.jsonl" 2>/dev/null | sort -u | head -1 || true)"
+if [ -n "$CHUNK_LOG" ]; then
+  SESSION_DIR="$(dirname "$CHUNK_LOG")"   # .../<REPO>/<SESSION>
+  SESSION="$(basename "$SESSION_DIR")"
+  REPO="$(basename "$(dirname "$SESSION_DIR")")"
+else
+  # No chunk file on disk — fall back to env (orchestrate injects these) or fail.
+  REPO="${MENTAT_REPO:-$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")}"
+  SESSION="${MENTAT_SESSION:-}"
+  # audit.sh always pre-sets MENTAT_SESSION via :=, so SESSION is never empty here.
+  # Verify the resolved session dir actually exists; otherwise this is a wrong/unknown slug.
+  if [ -z "$SESSION" ] || [ ! -d "$LOG_DIR/$REPO/$SESSION" ]; then
+    echo "mentat-doctor: no chunk audit for slug '$SLUG' under $LOG_DIR; set MENTAT_SESSION or pass a slug whose ${SLUG}.jsonl exists" >&2
+    exit 2
+  fi
+fi
+
+# Resolve orchestrate driver log (most recent for this slug).
+SESSION_LOG="$(find "$LOG_DIR" -type f -name "mentat-orchestrate-${SLUG}.jsonl" 2>/dev/null | sort | tail -1 || true)"
 
 OUT_DIR="$HOME/.agents/mentat/diagnoses"
 mkdir -p "$OUT_DIR"
