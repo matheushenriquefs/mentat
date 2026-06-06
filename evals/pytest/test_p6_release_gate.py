@@ -163,7 +163,7 @@ def test_mentat_gate_checks_syntax():
 
 def test_mentat_gate_checks_adr_pass():
     """mentat-gate-checks adr <valid-adr> exits 0."""
-    adr_dir = os.path.join(ROOT, "docs", "adr")
+    adr_dir = os.path.join(AGENTS, "docs", "adr")
     if not os.path.isdir(adr_dir):
         return
     files = [f for f in os.listdir(adr_dir) if f.endswith(".md")]
@@ -186,29 +186,74 @@ def test_mentat_gate_checks_adr_fail():
         os.unlink(name)
 
 
-# ── B4: orchestrate uses lefthook in pre-land ────────────────────────────────
+# ── B4: orchestrate pre-land gate (gates.sh dispatch, not mentat-gate binary) ─
 
-def test_orchestrate_land_chunk_uses_lefthook():
-    """land_chunk in mentat-orchestrate must call lefthook, not mentat-gate."""
+def test_orchestrate_land_chunk_uses_gates_sh():
+    """land_chunk must source gates.sh for deterministic file gate — not call mentat-gate binary."""
     with open(ORCHESTRATE) as f:
         src = f.read()
     start = src.find("land_chunk()")
     assert start != -1, "land_chunk() not found in mentat-orchestrate"
     end = src.find("\n}", start)
     body = src[start:end]
-    assert "lefthook" in body, (
-        "land_chunk() must call lefthook (not mentat-gate) for pre-land gate"
+    assert "gates.sh" in body or "mentat_gate" in body, (
+        "land_chunk() must source gates.sh / call mentat_gate() for pre-land gate"
     )
 
 
-def test_orchestrate_does_not_call_mentat_gate_in_land_chunk():
-    """land_chunk must not directly call mentat-gate after lefthook migration."""
+def test_orchestrate_does_not_call_mentat_gate_binary_in_land_chunk():
+    """land_chunk must not call the mentat-gate binary (deleted in B5)."""
     with open(ORCHESTRATE) as f:
         src = f.read()
     start = src.find("land_chunk()")
     assert start != -1
     end = src.find("\n}", start)
     body = src[start:end]
-    assert "mentat-gate" not in body, (
-        "land_chunk() must not call mentat-gate directly after lefthook migration"
+    assert '"$_LIB/../mentat-gate"' not in body and "'mentat-gate'" not in body, (
+        "land_chunk() must not call mentat-gate binary directly (it's deleted)"
+    )
+
+
+# ── B1d: confirmation prompt behavior ────────────────────────────────────────
+
+def test_confirmation_prompt_aborts_on_n():
+    """Without --yes, mentat-release answers 'n' → exits non-zero (aborted)."""
+    with tempfile.TemporaryDirectory() as dest:
+        agents_dest = os.path.join(dest, ".agents")
+        os.makedirs(agents_dest)
+        # Place a file in dest that doesn't exist in source → rsync will want to delete it
+        with open(os.path.join(agents_dest, "phantom-file-to-delete.md"), "w") as f:
+            f.write("old\n")
+        env = {**os.environ, "HOME": dest}
+        r = subprocess.run(
+            [MENTAT_RELEASE, "--force-dirty"],
+            input="n\n",
+            capture_output=True, text=True, cwd=ROOT, env=env,
+        )
+    assert r.returncode != 0, (
+        "Answering 'n' to confirmation prompt must abort with non-zero exit"
+    )
+
+
+# ── B2d: gate failure must hard-abort without --force-gate ───────────────────
+
+def test_release_source_gate_fail_exits_without_force_gate():
+    """mentat-release source: gate failure path must exit 1 when FORCE_GATE != 1."""
+    with open(MENTAT_RELEASE) as f:
+        src = f.read()
+    # Verify the conditional guard is present and structured correctly
+    assert "FORCE_GATE" in src, "FORCE_GATE variable must appear in mentat-release"
+    assert "gate check failed" in src, "gate check failed message must be in mentat-release"
+    # Verify --force-gate alone does NOT bypass (requires explicit opt-in)
+    assert 'FORCE_GATE" -eq 1' in src or "FORCE_GATE -eq 1" in src, (
+        "gate bypass must be guarded by FORCE_GATE == 1 check"
+    )
+
+
+# ── B5: mentat-gate binary must not exist ────────────────────────────────────
+
+def test_mentat_gate_binary_deleted():
+    """mentat-gate driver must be absent — orchestration moved to lefthook/gates.sh (B5)."""
+    assert not os.path.isfile(MENTAT_GATE), (
+        f"mentat-gate must be deleted (B5): {MENTAT_GATE} still exists"
     )

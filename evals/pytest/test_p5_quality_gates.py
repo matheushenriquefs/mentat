@@ -324,21 +324,26 @@ def test_gate_workflow_fails_without_cross_ref_link():
 
 # ── S5.3: orchestrate wire-in ─────────────────────────────────────────────────
 
-def test_orchestrate_references_lefthook():
-    """mentat-orchestrate must call lefthook as pre-land step."""
-    src = _read(os.path.join(BIN, "mentat-orchestrate"))
-    assert "lefthook" in src
-
-
-def test_orchestrate_lefthook_in_land_chunk():
-    """lefthook call must appear inside land_chunk function (pre-land context)."""
+def test_orchestrate_gates_files_in_land_chunk():
+    """land_chunk must gate changed files via gates.sh (not mentat-gate binary)."""
     src = _read(os.path.join(BIN, "mentat-orchestrate"))
     start = src.find("land_chunk()")
     assert start != -1, "land_chunk() not found in mentat-orchestrate"
     next_fn = src.find("\n}", start)
     land_chunk_body = src[start:next_fn]
-    assert "lefthook" in land_chunk_body, \
-        "lefthook not found inside land_chunk() body — must be a pre-land step"
+    assert "gates.sh" in land_chunk_body or "mentat_gate" in land_chunk_body, \
+        "land_chunk() must source gates.sh / call mentat_gate() for pre-land gate"
+
+
+def test_orchestrate_land_chunk_no_mentat_gate_binary():
+    """land_chunk must not call the mentat-gate binary (deleted in B5)."""
+    src = _read(os.path.join(BIN, "mentat-orchestrate"))
+    start = src.find("land_chunk()")
+    assert start != -1
+    next_fn = src.find("\n}", start)
+    land_chunk_body = src[start:next_fn]
+    assert '"$_LIB/../mentat-gate"' not in land_chunk_body, \
+        "mentat-gate binary must not be called in land_chunk (deleted in B5)"
 
 
 # ── B5: gate_shell advisory shellcheck path ───────────────────────────────────

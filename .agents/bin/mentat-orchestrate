@@ -108,11 +108,17 @@ land_chunk() {
   }
 
   # Deterministic harness-tool gate on changed files (host-side, no devcontainer). ADR 0004
-  local changed_files
+  local changed_files _gate_fail _f
   changed_files="$(git -C "$wt" diff --name-only "$HOLDING" 2>/dev/null || true)"
   if [ -n "$changed_files" ]; then
-    if ! (cd "$wt" && lefthook run pre-commit --files $changed_files) >>"$logf" 2>&1; then
-      log "land EJECT (lefthook fail before re-gate): $slug"
+    _gate_fail=0
+    while IFS= read -r _f; do
+      [ -z "$_f" ] && continue
+      # shellcheck source=/dev/null
+      (cd "$wt" && . "$_LIB/gates.sh" && mentat_gate "$_f") >>"$logf" 2>&1 || _gate_fail=1
+    done <<< "$changed_files"
+    if [ "$_gate_fail" -ne 0 ]; then
+      log "land EJECT (gate fail before re-gate): $slug"
       _land_record "$logf" "$slug" error "$onto" gate-fail; return 1
     fi
   fi

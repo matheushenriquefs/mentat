@@ -96,7 +96,7 @@ if [ "$DRY_RUN" -eq 0 ] && [ "$YES" -eq 0 ]; then
     echo "mentat-release: files to delete from ~/.agents/:"
     echo "$DELETE_LIST"
     printf 'Proceed? [y/N] '
-    read -r reply
+    read -r reply </dev/tty || reply=""
     case "$reply" in
       [Yy]*) ;;
       *) echo "mentat-release: aborted"; exit 1 ;;
