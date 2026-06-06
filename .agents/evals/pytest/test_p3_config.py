@@ -312,9 +312,7 @@ def test_orchestrate_flag_overrides_config_harness():
         )
         assert r.returncode == 0, f"flag override dry-run failed: {r.stderr}"
         combined = r.stdout + r.stderr
-        assert "codex" in combined, f"--harness=codex must override config aider: {combined}"
-        assert "aider" not in combined or combined.index("codex") < combined.index("aider") or True, \
-            "codex must be the active harness"
+        assert "harness=codex" in combined, f"--harness=codex must override config aider; got: {combined}"
     finally:
         os.unlink(cfgpath)
 
