@@ -28,7 +28,7 @@ When editing prompt files in `.agents/`:
 
 1. Read the relevant ADRs for the area you're touching (`docs/adr/`). System ADRs always; the target repo's `docs/adr/` when working there.
 2. Run verification with `bin/mentat-container-run '<test cmd>'` if the target repo has one.
-3. Commit via `/to-commit` (routes through devcontainer if one exists).
+3. Commit via `/mentat-commit` (routes through devcontainer if one exists).
 
 ### Promotion workflow
 
@@ -177,7 +177,7 @@ Wired into `mentat-orchestrate` pre-land step (host-side; harness tools only —
 
 Unknown file classes pass silently (gate is additive, not a whitelist).
 
-See [.agents/bin/lib/gates.sh](.agents/bin/lib/gates.sh) for checker implementations and [.agents/.agents/bin/mentat-gate](.agents/.agents/bin/mentat-gate) for the driver.
+See [.agents/bin/lib/gates.sh](.agents/bin/lib/gates.sh) for checker implementations and [.agents/bin/mentat-gate](.agents/bin/mentat-gate) for the driver.
 
 **Doc-freshness gate (advisory):** Any change in `.agents/bin/`, `.agents/skills/`, `.agents/commands/`, or `docs/adr/` that alters public surface must include a corresponding update to `README.md` or `CONTEXT.md`. The gate lists affected docs; the LLM reviewer flags actual staleness.
 
