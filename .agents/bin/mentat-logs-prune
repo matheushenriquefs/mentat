@@ -41,11 +41,11 @@ _dry_or_run() {
   fi
 }
 
-# Gzip .jsonl files older than GZIP_AFTER days
+# Gzip .jsonl and .stdout files older than GZIP_AFTER days
 while IFS= read -r -d '' f; do
   log "gzip: $f"
   _dry_or_run gzip "$f"
-done < <(find "$LOG_DIR" -name "*.jsonl" -mtime "+$GZIP_AFTER" -print0 2>/dev/null)
+done < <(find "$LOG_DIR" \( -name "*.jsonl" -o -name "*.stdout" \) -mtime "+$GZIP_AFTER" -print0 2>/dev/null)
 
 # Archive session dirs older than ARCHIVE_AFTER days
 while IFS= read -r -d '' sess_dir; do
