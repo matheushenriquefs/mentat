@@ -75,7 +75,12 @@ SUBTREE=$(echo "$UPSTREAM" | jq -r '.subtree_path // ""')
 COMMIT_FLAG=$(echo "$UPSTREAM" | jq -r '.commit')
 
 # Guard against path traversal: vendor_path must resolve inside REPO_ROOT
-FULL_VENDOR="$(cd "$REPO_ROOT" && realpath -m "$VENDOR_PATH")"
+# realpath -m (GNU) not available on macOS; use Python as portable fallback
+if command -v python3 >/dev/null 2>&1; then
+  FULL_VENDOR="$(python3 -c "import os,sys; print(os.path.normpath(os.path.join('$REPO_ROOT', sys.argv[1])))" "$VENDOR_PATH")"
+else
+  FULL_VENDOR="$(cd "$REPO_ROOT" && realpath -m "$VENDOR_PATH")"
+fi
 if [[ "$FULL_VENDOR" != "$REPO_ROOT"/* ]]; then
   echo "mentat-sync-upstream: vendor_path '$VENDOR_PATH' escapes repo root — refusing" >&2
   exit 1
