@@ -1,0 +1,32 @@
+# Plan brief: mentat bin/ refactor (disjoint groups)
+
+## Goal
+
+Refactor `mentat/.agents/bin/` and `mentat/.agents/agents/` to use shared lib helpers and standardized naming. The work falls into four groups with completely separate write-sets and no dependency chain between them.
+
+## Groups
+
+### Group A — lib helpers
+Write-set: `.agents/bin/lib/strict.sh`, `.agents/bin/lib/log.sh`, `.agents/bin/lib/here.sh`
+Work: create sourced helper files (strict mode, logging, self-locator). No dependency on B, C, or D.
+
+### Group B — rename agents/
+Write-set: `.agents/agents/crew-research.md`, `.agents/agents/crew-review-plan.md`, `.agents/agents/crew-review-bugs.md`, `.agents/agents/crew-review-tests.md`
+Work: rename agent files to `mentat-*` prefix. No dependency on A, C, or D.
+
+### Group C — rename bin/
+Write-set: `.agents/bin/to-orchestrate`, `.agents/bin/devcontainer-up`, `.agents/bin/devcontainer-run`
+Work: rename bin files to `mentat-*` prefix. No dependency on A, B, or D.
+
+### Group D — update docs
+Write-set: `.agents/docs/mentat-architecture.md`, `AGENTS.md`, `CONTEXT.md`
+Work: update cross-references to new names. No dependency on A, B, or C.
+
+## Slices
+
+- S1: create `lib/strict.sh`, `lib/log.sh`, `lib/here.sh` [Group A]
+- S2: git mv agent files to `mentat-*` [Group B]
+- S3: git mv bin files to `mentat-*` [Group C]
+- S4: sed sweep docs for new names [Group D]
+
+No slice in any group blocks a slice in another group. All four can run in parallel.

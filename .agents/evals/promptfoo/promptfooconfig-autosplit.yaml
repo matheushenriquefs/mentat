@@ -1,0 +1,35 @@
+description: "mentat-plan autosplit eval — disjoint vs monolithic"
+
+providers:
+  - id: anthropic:messages:claude-sonnet-4-6
+    config:
+      max_tokens: 2048
+      system: "file://../../commands/mentat-plan.md"
+
+prompts:
+  - "{{brief}}"
+
+tests:
+  # disjoint groups → model should emit sibling plans
+  - description: "autosplit-disjoint: emit sibling-set for 4 disjoint write-sets"
+    vars:
+      brief: "file://fixtures/autosplit/disjoint.md"
+    assert:
+      - type: llm-rubric
+        value: |
+          The response proposes splitting the work into multiple sibling plan files (one per disjoint group) plus a parent index file.
+          Score 1.0 if the model clearly recommends emitting multiple plans.
+          Score 0.0 if the model recommends a single monolithic plan.
+        threshold: 0.88
+
+  # single chain → model should emit one plan
+  - description: "autosplit-monolithic: emit single plan for chained write-set"
+    vars:
+      brief: "file://fixtures/autosplit/monolithic.md"
+    assert:
+      - type: llm-rubric
+        value: |
+          The response recommends a single plan file covering all slices (not split into siblings).
+          Score 1.0 if the model correctly proposes one plan.
+          Score 0.0 if the model unnecessarily splits into sibling plans.
+        threshold: 0.88
