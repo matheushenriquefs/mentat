@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bin/lib/gates.sh — per-class deterministic file checkers for mentat-gate
+# bin/lib/precommit-gates.sh — per-class deterministic file checkers
 
 # @class: ADR  # @glob: docs/adr/*.md  # @check: All three sections present: ## Context, ## Decision, ## Consequences
 gate_adr() {

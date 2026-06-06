@@ -7,16 +7,7 @@ Agents can work unattended *because* the harness keeps them honest — isolated 
 
 A lean, agnostic **multi-harness orchestrator** for parallel coding agents.
 
-## How it works
-
-1. **Cut.** `/mentat-plan` slices a feature into vertical tracer-bullet cuts — each a `plan.md`. AFK slices gate and land unattended; HITL slices pause for review.
-2. **Fan out.** `bin/mentat-orchestrate` launches each slice as a chunk: isolated worktree, devcontainer, and branch off `main`. Up to 3 run in parallel.
-3. **Re-gate on land.** The serial land pass is a merge queue. Per chunk: rebase onto the live holding-branch tip inside the container, re-gate with the target repo's own quality gates, then `merge --ff-only`. Semantic breakage from a sibling's land is caught here. Red → eject; queue continues.
-4. **Hold, don't merge.** The holding branch (`branch/<feature>`) carries no commits of its own — every land is a fast-forward. No host-side pre-commit ever fires.
-
-Anti-cheat is structural: the impl-only-after-red contract (agents write implementation only after a failing test) plus a trajectory blacklist in the reviewer gate (forbidden reward-hacking moves → hard veto). The driver names no project tool and holds no project knowledge — agents read the target repo's own docs and run its gates.
-
-See [CONTEXT.md](CONTEXT.md) for the full glossary and ADR index.
+See [CONTEXT.md](CONTEXT.md) for the full workflow narrative, glossary, and ADR index.
 
 ## Quickstart
 
@@ -41,6 +32,18 @@ lefthook run pre-commit
 - Docker
 
 No language toolchain on the host. Mentat declares no interpreter, formatter, linter, or test runner — those run inside the target repo's devcontainer.
+
+## Development
+
+Dev-only tools (not required for consumers):
+
+| Tool | Used for |
+|------|----------|
+| [vendir](https://github.com/carvel-dev/vendir) | Declarative vendoring of upstream skills |
+| [lefthook](https://github.com/evilmartians/lefthook) | Pre-commit quality gates in dev |
+| [yq](https://github.com/mikefarah/yq) | Task md frontmatter mutation (mentat-tasks) |
+| [ruff](https://github.com/astral-sh/ruff) | Python lint + format for evals/ |
+| [pyright](https://github.com/microsoft/pyright) | Python type checking for evals/ |
 
 ## No-framework thesis
 
