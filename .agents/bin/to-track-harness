@@ -3,8 +3,11 @@
 # Sourced by to-orchestrate; also runnable standalone.
 # Usage (standalone): to-track-harness <logdir> <slug>...
 # Exported fns (sourced): to_track_start / to_track_phase / to_track_exit / to_track_stop
-
 set -uo pipefail
+
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+. "$_LIB/strict.sh"
+
 JQ="${JQ:-jq}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAP="${TO_TRACK_MAP:-$HERE/harness-map.jq}"
@@ -85,7 +88,7 @@ to_track_start() { # logdir slug...
     _pids+=("$!")
   done
 }
-to_track_stop() { local p; for p in "${_pids[@]:-}"; do kill "$p" 2>/dev/null; done; }
+to_track_stop() { local p; for p in "${_pids[@]:-}"; do kill "$p" 2>/dev/null || true; done; }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   [[ $# -lt 2 ]] && { echo "usage: to-track-harness <logdir> <slug>..." >&2; exit 2; }

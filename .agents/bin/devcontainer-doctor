@@ -3,6 +3,9 @@
 # Does NOT check language toolchains — those are the target repo's contract.
 set -euo pipefail
 
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+. "$_LIB/strict.sh"
+
 RC=0
 
 check() {

@@ -4,6 +4,9 @@
 # Exits 99 if container not running (caller must devcontainer-up first).
 set -euo pipefail
 
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+. "$_LIB/strict.sh"
+
 CMD="${*:-}"
 [ -z "$CMD" ] && { echo "usage: devcontainer-run '<command>'" >&2; exit 2; }
 [ -f "$PWD/.git" ] || { echo "devcontainer-run: must run from inside a git worktree" >&2; exit 2; }
