@@ -1,17 +1,16 @@
 {
   "harness": {
-    // cursor | claude-code | aider | codex | copilot | gemini | openhands | amp
-    "name": "cursor",
-    "model": "sonnet"        // harness-specific slug; "" = harness default
+    "name": "aider",
+    "model": "claude-sonnet-4-6"
   },
   "agents": {
-    "max_concurrent": 3      // ADR 0004 merge-conflict scaling
+    "max_concurrent": 3
   },
   "diff": {
-    "tool": "delta"          // diff renderer; "" = git default
+    "tool": "delta"
   },
   "editor": {
-    "name": "cursor"         // /to-rebase pickaxe, inspection shell-outs
+    "name": "cursor"
   },
-  "plugins": []              // PATH-discovered mentat-* extras
+  "plugins": []
 }

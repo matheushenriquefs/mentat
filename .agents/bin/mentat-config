@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# mentat-config — config schema CLI (validate, print-example, print-schema-md)
+# Usage: mentat-config --validate [FILE]
+#        mentat-config --print-example
+#        mentat-config --print-schema-md
+set -euo pipefail
+
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+. "$_LIB/strict.sh"
+. "$_LIB/config.sh"
+
+_SCHEMA="$_LIB/config-schema.jq"
+
+_harnesses() {
+  ls "$_LIB/harness/"*.sh 2>/dev/null | xargs -I{} basename {} .sh | tr '\n' ' '
+}
+
+cmd_print_example() {
+  local harnesses; harnesses="$(_harnesses)"
+  local first_harness; first_harness="$(echo "$harnesses" | awk '{print $1}')"
+  jq -n \
+    --arg harness "${first_harness:-claude-code}" \
+    '{
+      harness: { name: $harness, model: "claude-sonnet-4-6" },
+      agents:  { max_concurrent: 3 },
+      diff:    { tool: "delta" },
+      editor:  { name: "cursor" },
+      plugins: []
+    }'
+}
+
+cmd_print_schema_md() {
+  local harnesses; harnesses="$(_harnesses)"
+  printf '| Key | Type | Required | Description |\n'
+  printf '|-----|------|----------|-------------|\n'
+  jq -r 'to_entries[] | "| \(.key) | \(.value.type) | \(if .value.required then "yes" else "no" end) | \(.value.description) |"' \
+    <(jq -n -f "$_SCHEMA")
+}
+
+cmd_validate() {
+  local f="${1:-}"
+  if [ -n "$f" ]; then
+    export MENTAT_CONFIG_PATH="$f"
+  fi
+  mentat_config_validate
+}
+
+case "${1:-}" in
+  --print-example)   cmd_print_example ;;
+  --print-schema-md) cmd_print_schema_md ;;
+  --validate)        shift; cmd_validate "${1:-}" ;;
+  --help|-h)
+    echo "usage: mentat-config --validate [FILE]"
+    echo "       mentat-config --print-example"
+    echo "       mentat-config --print-schema-md"
+    ;;
+  *) echo "mentat-config: unknown subcommand '${1:-}'" >&2; exit 1 ;;
+esac
