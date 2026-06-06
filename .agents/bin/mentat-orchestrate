@@ -86,6 +86,7 @@ run_chunk() {
   local plan="$1" slug="$2" logf="$3"
   local wt="$ROOT/.mentat/worktrees/$slug"
   git worktree add -b "$slug" "$wt" main
+  export MENTAT_WORKTREE="$wt"
   ( cd "$wt" && ~/.agents/bin/mentat-container-up )
   local cmd=()
   while IFS= read -r -d '' tok; do cmd+=("$tok"); done < <(build_cmd "/to-implement $plan $slug")
@@ -166,7 +167,8 @@ final_review() {
   local prompt
   prompt="The merge queue landed every chunk onto $HOLDING. Run the full ADR-0003 \
 review gate over the cumulative diff $base..HEAD: spawn mentat-plan-reviewer, \
-mentat-test-reviewer, mentat-bug-reviewer, apply the gate (never average, veto > \
+mentat-test-reviewer, mentat-bug-reviewer, and mentat-smell-reviewer (advisory, \
+threshold 0.85, no max-sev veto), apply the gate (never average, veto > \
 threshold), and report each score + the verdict. Read CLAUDE.md/AGENTS.md for how \
 this project runs its checks. Do not modify code."
   local rcmd=()

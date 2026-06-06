@@ -28,3 +28,13 @@ pre-commit:
         out=$(rg -n '\bmentat-setup\b|\bmentat-sync-upstream\b|upstreams\.jsonc|/to-(rebase|commit|plan|implement|scaffold|eval)\b' {staged_files} 2>/dev/null || true)
         [ -z "$out" ] && exit 0
         echo "stale-ref advisory: $out" && exit 0
+    docs-sync:
+      glob: "{.agents/bin/**,.agents/commands/**}"
+      run: |
+        .agents/bin/lib/docs-sync.sh {staged_files}
+    holding-branch-guard:
+      run: |
+        b=$(git rev-parse --abbrev-ref HEAD)
+        [ "${MENTAT_RELEASE:-0}" = "1" ] && exit 0
+        [ "$b" = "main" ] && { echo "ERR: direct commit to holding branch main — ADR-0002"; exit 1; }
+        exit 0

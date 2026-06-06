@@ -5,10 +5,12 @@ Date: 2026-05-31
 Amended: 2026-06-04 — scorer mappings re-confirmed against source (not docs);
 `both`-mode reason corrected to "unfinished stub"; hallucination veto added to
 mentat-bug-reviewer; blacklist set gains runner-redirection (see ADR 0006).
+Amended: 2026-06-06 — mentat-smell-reviewer added as 4th reviewer, advisory,
+threshold 0.85, no max-sev veto.
 
 ## Context
 
-The three reviewers (`mentat-plan-reviewer`, `mentat-test-reviewer`, `mentat-bug-reviewer`)
+The four reviewers (`mentat-plan-reviewer`, `mentat-test-reviewer`, `mentat-bug-reviewer`, `mentat-smell-reviewer`)
 emitted `PASS|FAIL` — LLM judgment, not a number. An orchestrator is only as
 autonomous as its gate is trustworthy, and a binary verdict with no false-pass
 record can't be trusted to reject unattended. We ground-truthed Mastra's eval
@@ -32,6 +34,9 @@ the reviewer prompts, no code dependency** on Mastra. Scores are [0,1].
 - **mentat-bug-reviewer → trajectory blacklist veto + latent-bug veto.** Blacklist
   of forbidden moves → 0.0, overrides all. Latent-bug single finding at
   **sev ≥ high** → hard veto.
+- **mentat-smell-reviewer → advisory code-smell reviewer.** Runs refactoring.guru
+  22-smell catalog. No veto authority. Threshold ≥ 0.85 (lower than plan/test —
+  smell findings are fuzzier, rarely justify hard halt). Score-only gate.
 
 Gate (verbatim posture): **never average; veto > threshold; LLM never
 self-promotes.**
@@ -44,6 +49,7 @@ gate_pass =
   AND no_severe_hallucination            # impl asserts unplanned behavior — VETO (inverted polarity)
   AND plan_alignment    >= 0.88          # Prompt Alignment (user) — LLM threshold
   AND test_asserts_plan >= 0.88          # Faithfulness scorer (plan-as-context) — LLM threshold
+  AND smell_score       >= 0.85          # code-smell advisory — no max-sev veto
 ```
 
 mentat-bug-reviewer now carries THREE vetoes (blacklist, latent-bug, hallucination),

@@ -166,26 +166,29 @@ Run locally: `lefthook run pre-commit --files $(git diff --name-only "$base")`.
 Wired into `mentat-orchestrate` pre-land step via lefthook (host-side; harness tools only — ADR 0004).
 Checker dispatch: [.agents/bin/mentat-precommit](.agents/bin/mentat-precommit) (invoked by lefthook).
 
-| Class | Glob | Check |
-|-------|------|-------|
-| ADR | docs/adr/*.md | All three sections present: ## Context, ## Decision, ## Consequences |
-| Skill/agent | agents/*.md | YAML frontmatter present (first 10 lines contain ---) |
-| Command | commands/*.md | YAML frontmatter present (first 10 lines contain ---) |
-| Workflow doc | AGENTS.md,CONTEXT.md,README.md | Cross-ref links present ([text](*.md) syntax) |
-| Shell | bin/**/*,lib/**/*.sh | bash -n + shellcheck (advisory if absent) |
-| Config | *.jsonc | sed \| jq -e validates JSON structure |
-| Harness | bin/lib/harness/*.sh | harness_<name>_cmd and harness_<name>_output_format both defined |
-| Python lint | evals/pytest/**/*.py | `mentat-container-run "uv run ruff check"` |
-| Python format | evals/pytest/**/*.py | `mentat-container-run "uv run ruff format --check"` |
-| Python types | evals/pytest/**/*.py | `mentat-container-run "uv run pyright"` |
+| Gate | Triggers | Command | Class |
+|------|----------|---------|-------|
+| ADR | `docs/adr/*.md` | sections: ## Context, ## Decision, ## Consequences present | precommit |
+| Skill/agent | `agents/*.md` | YAML frontmatter present (first 10 lines contain ---) | precommit |
+| Command | `commands/*.md` | YAML frontmatter present | precommit |
+| Workflow doc | `AGENTS.md`, `CONTEXT.md`, `README.md` | cross-ref links present | precommit |
+| Shell | `bin/**`, `lib/**/*.sh` | `bash -n` + shellcheck (advisory if absent) | precommit |
+| Config | `*.jsonc` | `jq -e` validates JSON structure | precommit |
+| Harness | `bin/lib/harness/*.sh` | `harness_<name>_cmd` and `harness_<name>_output_format` defined | precommit |
+| Python lint | `evals/pytest/**/*.py` | `mentat-container-run "uv run ruff check"` | precommit |
+| Python format | `evals/pytest/**/*.py` | `mentat-container-run "uv run ruff format --check"` | precommit |
+| Python types | `evals/pytest/**/*.py` | `mentat-container-run "uv run pyright"` | precommit |
+| Pytest | `evals/pytest/test_*.py` modified | `mentat-container-run "uv run pytest <file>"` | test-when-modified |
+| Agent/skill eval | `agents/*.md` or `skills/*/SKILL.md` modified | `npx promptfoo eval --filter-providers <name>` | test-when-modified |
+| ADR metadata | `docs/adr/*.md` modified | must include `**Decided:** <YYYY-MM-DD>` and `**Author:** <handle>` | test-when-modified |
+| Docs in sync | `bin/**` or `commands/**` modified | `bin/lib/docs-sync.sh` — old basename in README/AGENTS/CONTEXT → 0 hits | precommit |
+| Vendor pins | `vendir.yml` modified or >24h since sync | `vendir sync --diff` | precommit |
+| Holding-branch guard | always on commit | branch ≠ `main`; blocks direct commits to holding branch (ADR-0002) | precommit |
 
 Unknown file classes pass silently (gate is additive, not a whitelist).
+`test-when-modified` rows are enforced by convention; `precommit` rows run via lefthook.
 
 See [.agents/bin/lib/precommit-gates.sh](.agents/bin/lib/precommit-gates.sh) for checker implementations and [.agents/bin/mentat-precommit](.agents/bin/mentat-precommit) for the dispatch script.
-
-**Doc-freshness gate (advisory):** Any change in `.agents/bin/`, `.agents/skills/`, `.agents/commands/`, or `docs/adr/` that alters public surface must include a corresponding update to `README.md` or `CONTEXT.md`. The gate lists affected docs; the LLM reviewer flags actual staleness.
-
-**Vendor-pins gate:** If `vendir.yml` is modified, or >24 h since last sync, run `vendir sync --diff` before commit. `vendir sync --diff` is the shipped equivalent of the former `mentat-sync-check` binary.
 
 ## Audit emission
 
@@ -211,6 +214,8 @@ Event verb registry (canonical verbs per ADR-0009):
 | mentat-update | `sync.complete` |
 
 Payload schema: see `.agents/lib/audit_schema.py`. Reviewer outputs must use `ReviewVerdictPayload`. Never write raw `printf` to a `.jsonl` file outside `audit.sh`.
+
+**Audit log retention:** Run `mentat-logs-prune` weekly to gzip logs older than 7 days and delete logs older than 30 days. No external caller wires this — run manually or via cron.
 
 ## Ship Surface
 
@@ -250,18 +255,6 @@ When you borrow a concept, schema, or protocol from another repo without vendori
 Non-zero hit = abort commit. Emit `staleref.sweep {terms, hits}` audit event.
 
 **Reviewer score floor = hard halt.** Any reviewer below threshold is a veto — read every line of output. To dismiss a finding, emit `review.dismiss` with `reason` enumerating each refuted finding and the artifact check that disproved it.
-
-## Test-when-modified
-
-Modifying certain file classes requires additional checks before commit:
-
-| Trigger | Required action |
-|---|---|
-| `agents/*.md` or `skills/*/SKILL.md` modified | Run `lefthook run pre-commit --all-files` + skill's promptfoo eval (`npx promptfoo eval --filter-providers <skill-name>`) |
-| `docs/adr/*.md` modified | File must include `**Decided:** <YYYY-MM-DD>` and `**Author:** <handle>` lines |
-| `agents/mentat-*-reviewer.md` modified | Must bump ADR-0003 weight rationale (add/update reasoning for any changed dimension weight) |
-
-Enforced by convention during review. `lefthook run pre-commit` flags structural violations; the LLM reviewer flags missing promptfoo eval evidence in the PR diff.
 
 ## See also
 
