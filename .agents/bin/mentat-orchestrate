@@ -168,7 +168,7 @@ for i in "${IMPL_OK[@]}"; do
   to_track_phase "${SLUGS[$i]}" landing
   if land_chunk "${SLUGS[$i]}" "${LOGS[$i]}"; then
     LANDED=$((LANDED + 1)); to_track_exit "${SLUGS[$i]}" landed "-> $HOLDING"
-    ( cd "$ROOT/.mentat/worktrees/${SLUGS[$i]}" && ~/.agents/bin/devcontainer-down ) || true
+    ( cd "$ROOT/.mentat/worktrees/${SLUGS[$i]}" && ~/.agents/bin/mentat-container-down ) || true
     git -C "$ROOT" worktree remove "$ROOT/.mentat/worktrees/${SLUGS[$i]}" || true
   else
     to_track_exit "${SLUGS[$i]}" forensics "${LOGS[$i]}"
