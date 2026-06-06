@@ -34,7 +34,10 @@ pre-commit:
         .agents/bin/lib/docs-sync.sh {staged_files}
     holding-branch-guard:
       run: |
-        b=$(git rev-parse --abbrev-ref HEAD)
         [ "${MENTAT_RELEASE:-0}" = "1" ] && exit 0
-        [ "$b" = "main" ] && { echo "ERR: direct commit to holding branch main — ADR-0002"; exit 1; }
+        h="$(mentat-config git.holding_branch 2>/dev/null \
+            || git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
+            || { echo "ERR: holding-branch-guard: cannot resolve holding branch name"; exit 1; })"
+        b="$(git rev-parse --abbrev-ref HEAD)"
+        [ "$b" = "$h" ] && { echo "ERR: direct commit to holding branch '$h' — ADR-0002"; exit 1; }
         exit 0
