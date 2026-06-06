@@ -1,0 +1,15 @@
+diff --git a/lib/reporter.py b/lib/reporter.py
+index abc1234..def5678 100644
+--- a/lib/reporter.py
++++ b/lib/reporter.py
+@@ -1,3 +1,15 @@
++class Reporter:
++    def format_invoice(self, order):
++        # Feature Envy: accesses order's data more than its own
++        name = order.customer.name
++        addr = order.customer.address
++        items = order.items
++        total = sum(i.price * i.qty for i in items)
++        discount = order.customer.loyalty_discount
++        tax = order.customer.tax_rate * total
++        return f"{name}\n{addr}\n{total - discount + tax}"

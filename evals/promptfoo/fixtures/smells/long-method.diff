@@ -1,0 +1,43 @@
+diff --git a/lib/processor.sh b/lib/processor.sh
+index abc1234..def5678 100644
+--- a/lib/processor.sh
++++ b/lib/processor.sh
+@@ -1,3 +1,45 @@
++process_everything() {
++  local input="$1"
++  echo "step1: $input"
++  echo "step2: $input"
++  echo "step3: $input"
++  echo "step4: $input"
++  echo "step5: $input"
++  echo "step6: $input"
++  echo "step7: $input"
++  echo "step8: $input"
++  echo "step9: $input"
++  echo "step10: $input"
++  echo "step11: $input"
++  echo "step12: $input"
++  echo "step13: $input"
++  echo "step14: $input"
++  echo "step15: $input"
++  echo "step16: $input"
++  echo "step17: $input"
++  echo "step18: $input"
++  echo "step19: $input"
++  echo "step20: $input"
++  echo "step21: $input"
++  echo "step22: $input"
++  echo "step23: $input"
++  echo "step24: $input"
++  echo "step25: $input"
++  echo "step26: $input"
++  echo "step27: $input"
++  echo "step28: $input"
++  echo "step29: $input"
++  echo "step30: $input"
++  echo "step31: $input"
++  echo "step32: $input"
++  echo "step33: $input"
++  echo "step34: $input"
++  echo "step35: $input"
++}

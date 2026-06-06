@@ -1,0 +1,10 @@
+diff --git a/lib/util.sh b/lib/util.sh
+index abc1234..def5678 100644
+--- a/lib/util.sh
++++ b/lib/util.sh
+@@ -1,0 +1,5 @@
++trim() {
++  local s="$1"
++  s="${s#"${s%%[![:space:]]*}"}"
++  echo "${s%"${s##*[![:space:]]}"}"
++}

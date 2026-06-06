@@ -66,6 +66,39 @@ tests:
       - type: contains
         value: "VETO"
 
+  # S3.5a: long-method smell detected
+  - description: "smell-long-method: long-method flagged in smell_findings"
+    vars:
+      diff: "file://fixtures/smells/long-method.diff"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/mentat-smell-reviewer.md"
+        threshold: 0.8
+      - type: contains
+        value: "smell_findings"
+      - type: contains
+        value: "long-method"
+
+  # S3.5b: feature-envy smell detected
+  - description: "smell-feature-envy: feature-envy flagged"
+    vars:
+      diff: "file://fixtures/smells/feature-envy.diff"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/mentat-smell-reviewer.md"
+        threshold: 0.8
+      - type: contains
+        value: "smell_findings"
+
+  # S3.5c: clean diff → empty findings
+  - description: "smell-clean: no findings for clean diff"
+    vars:
+      diff: "file://fixtures/smells/clean.diff"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/mentat-smell-reviewer.md"
+        threshold: 0.8
+
   # S4.3: design drift surfaces without veto
   - description: "handoff2-design-drift: design_drift non-empty, no HIGH finding"
     vars:
