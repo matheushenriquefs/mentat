@@ -1,0 +1,23 @@
+#!/bin/bash
+# ~/.agents/bin/devcontainer-doctor — run INSIDE the container.
+# Asserts mentat's minimum deps: git, jq, docker socket.
+# Does NOT check language toolchains — those are the target repo's contract.
+set -euo pipefail
+
+RC=0
+
+check() {
+  local label="$1" cmd="$2"
+  if eval "$cmd" >/dev/null 2>&1; then
+    echo "OK  $label"
+  else
+    echo "FAIL $label"
+    RC=1
+  fi
+}
+
+check "git"           "command -v git"
+check "jq"            "command -v jq"
+check "docker socket" "test -S /var/run/docker.sock"
+
+exit "$RC"
