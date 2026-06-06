@@ -100,6 +100,8 @@ _sync_one() {
   fi
 
   local tmpdir; tmpdir=$(mktemp -d)
+  # Use subshell so cleanup is scoped to this invocation; EXIT trap doesn't leak across --all iterations.
+  (
   trap 'rm -rf "$tmpdir"' EXIT
 
   echo "mentat-sync-upstream: cloning $key at $pin ..."
@@ -149,6 +151,7 @@ _sync_one() {
   fi
 
   echo "mentat-sync-upstream: done — $key @ ${actual_sha:0:12}"
+  ) # end subshell — EXIT trap is scoped, tmpdir always cleaned
 }
 
 if [ "${1:-}" = "--print-credits" ]; then
