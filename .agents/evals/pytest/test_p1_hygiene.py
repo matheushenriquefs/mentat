@@ -114,6 +114,21 @@ def test_to_orchestrate_sources_here():
     assert "here.sh" in _read_bin("to-orchestrate")
 
 
+def test_to_orchestrate_google_header_lte_6_lines():
+    """Leading # block after shebang must be ≤6 lines (Google Shell Style)."""
+    lines = _read_bin("to-orchestrate").splitlines()
+    # skip shebang
+    header = [l for l in lines[1:] if l.startswith("#")]
+    # count consecutive comment lines from the top (before first non-comment)
+    block = 0
+    for l in lines[1:]:
+        if l.startswith("#"):
+            block += 1
+        else:
+            break
+    assert block <= 6, f"Header block is {block} lines, expected ≤6"
+
+
 def test_to_orchestrate_comment_lt_30():
     src = _read_bin("to-orchestrate")
     comment_lines = [l for l in src.splitlines() if l.startswith("#")]
@@ -144,18 +159,61 @@ def test_compose_synth_has_synthesize_functions():
     assert "synthesize_devcontainer_from_dockerfile()" in src
 
 
+def _google_header_lines(name: str) -> int:
+    """Count consecutive leading # lines after the shebang."""
+    lines = _read_bin(name).splitlines()
+    count = 0
+    for l in lines[1:]:
+        if l.startswith("#"):
+            count += 1
+        else:
+            break
+    return count
+
+
+def _comment_count(name: str) -> int:
+    return sum(1 for l in _read_bin(name).splitlines() if l.startswith("#"))
+
+
 # S1.5 — devcontainer-run, devcontainer-doctor, to-track-harness source lib/
 
 def test_devcontainer_run_sources_strict():
     assert "strict.sh" in _read_bin("devcontainer-run")
 
 
+def test_devcontainer_run_google_header():
+    assert _google_header_lines("devcontainer-run") >= 1, "Missing Google header"
+    assert _google_header_lines("devcontainer-run") <= 6, "Header too long (>6 lines)"
+
+
+def test_devcontainer_run_comment_count():
+    assert _comment_count("devcontainer-run") < 15
+
+
 def test_devcontainer_doctor_sources_strict():
     assert "strict.sh" in _read_bin("devcontainer-doctor")
 
 
+def test_devcontainer_doctor_google_header():
+    assert _google_header_lines("devcontainer-doctor") >= 1
+    assert _google_header_lines("devcontainer-doctor") <= 6
+
+
+def test_devcontainer_doctor_comment_count():
+    assert _comment_count("devcontainer-doctor") < 15
+
+
 def test_to_track_harness_sources_strict():
     assert "strict.sh" in _read_bin("to-track-harness")
+
+
+def test_to_track_harness_google_header():
+    assert _google_header_lines("to-track-harness") >= 1
+    assert _google_header_lines("to-track-harness") <= 6
+
+
+def test_to_track_harness_comment_count():
+    assert _comment_count("to-track-harness") < 15
 
 
 # S1.6 — bash -n syntax check on all bin/ and bin/lib/*.sh
