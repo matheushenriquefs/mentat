@@ -31,7 +31,7 @@ bin/mentat-container-run '<test command>'
 bin/mentat-orchestrate branch/my-feature plan1.md plan2.md plan3.md
 
 # Run quality gates on changed files
-lefthook run pre-commit
+bin/mentat-gate $(git diff --name-only main)
 ```
 
 ## Requirements
