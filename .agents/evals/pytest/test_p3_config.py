@@ -146,6 +146,14 @@ def test_mentat_config_validate_fails_plugins_not_array():
         os.unlink(cfgpath)
 
 
+def test_mentat_config_validate_uses_return_not_exit():
+    """mentat_config_validate must use 'return' not 'exit' — sourced lib must not kill caller."""
+    with open(os.path.join(LIB, "config.sh")) as f:
+        body = f.read()
+    # exit 2 in a sourced file terminates the calling process before || can fire
+    assert "exit 2" not in body, "config.sh must use 'return 2' not 'exit 2' — sourced library"
+
+
 def test_mentat_config_validate_fails_editor_name_not_string():
     cfg = '{"harness":{"name":"cursor","model":""},"agents":{"max_concurrent":3},"diff":{"tool":""},"editor":{"name":99},"plugins":[]}'
     with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonc", delete=False) as f:
