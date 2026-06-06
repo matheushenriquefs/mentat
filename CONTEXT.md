@@ -1,6 +1,6 @@
 # Mentat
 
-A lean, agnostic harness for orchestrating parallel coding agents.
+A lean, agnostic **multi-harness orchestrator** for parallel coding agents.
 
 ## What this is
 
@@ -19,6 +19,15 @@ Mentat cuts planned work into vertical slices, runs each slice as an isolated ch
 **No-framework thesis.** Bash + jq + prompts. No language toolchain on the host. Any Unix, any harness (`cursor-agent` | `claude-code`), any target language. Docker required (ADR 0004).
 
 ## Language
+
+**Multi-harness orchestrator**
+: Mentat's category label. Contrast with *meta-harness* (Lee et al. arxiv 2603.28052 — a different architecture) and *meta-skill* (revfactory/harness). Mentat orchestrates parallel coding agents across multiple headless agent CLIs (`cursor-agent`, `claude-code`). _Avoid_: "meta-harness", "the harness" as a self-description of Mentat.
+
+**Vendor skill**
+: A third-party skill synced via `bin/mentat-sync-upstream` from `upstreams.jsonc`. Installed under `.agents/skills/vendor/<upstream>/`. Attributions recorded in `CREDITS.md`. _Avoid_: treating vendor skills as first-party; always check `upstreams.jsonc` before modifying.
+
+**Sync log**
+: JSONL freshness ledger at `~/.agents/mentat/logs/sync-upstream.jsonl`. Written by `bin/mentat-sync-upstream`; read by `bin/mentat-sync-check` to detect stale upstreams. _Avoid_: deleting or rotating this file manually.
 
 **Mentat (system)**
 : The harness itself — the `bin/`, `.agents/`, and orchestration contracts. Not a person, not an agent. _Avoid_: "the Mentat", "the AI", "the bot".

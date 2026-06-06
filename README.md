@@ -5,7 +5,7 @@
 
 Agents can work unattended *because* the harness keeps them honest — isolated chunks, deterministic gates, an anti-cheat blacklist.
 
-A lean, agnostic harness for orchestrating parallel coding agents.
+A lean, agnostic **multi-harness orchestrator** for parallel coding agents.
 
 ## How it works
 
@@ -25,10 +25,13 @@ See [CONTEXT.md](CONTEXT.md) for the full glossary and ADR index.
 bin/mentat-container-up
 
 # Run a command inside the container
-bin/mentat-container-run 'npm test'
+bin/mentat-container-run '<test command>'
 
 # Fan out planned slices onto a holding branch
 bin/mentat-orchestrate branch/my-feature plan1.md plan2.md plan3.md
+
+# Run quality gates on changed files
+bin/mentat-gate $(git diff --name-only main)
 ```
 
 ## Requirements
@@ -46,3 +49,7 @@ Bash + jq + prompts.
 No SDK, no orchestration framework, no platform lock. The driver (`mentat-orchestrate`) is ~260 lines of shell. The gate logic is in reviewer prompt files. The harness abstraction (`mentat-track`, `bin/lib/harness/<name>.sh`) normalizes `cursor-agent` and `claude-code` stream-json — swapping harnesses is a config change, not a rewrite.
 
 The constraint is Docker. Everything else is a text file.
+
+## Vendored skills
+
+Third-party skills are synced from `upstreams.jsonc` via `bin/mentat-sync-upstream` and installed under `.agents/skills/vendor/<upstream>/`. Attributions are auto-generated in [CREDITS.md](CREDITS.md).
