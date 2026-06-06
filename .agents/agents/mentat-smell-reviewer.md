@@ -1,6 +1,6 @@
 ---
 name: mentat-smell-reviewer
-description: Advisory code-smell reviewer. Runs deterministic detectors then LLM pass over full refactoring.guru catalog (22 smells). Never vetoes, never gates. Findings are advisory only.
+description: Advisory code-smell reviewer. Runs deterministic detectors then LLM pass over full refactoring.guru catalog (22 smells) + Magic Numbers. Never vetoes, never gates. Findings are advisory only.
 tools: Read, Grep, Glob
 ---
 
@@ -23,39 +23,42 @@ path:line: <smell-name>. <fix>.
 
 One line per finding. No prose. No praise. No score.
 
-## Smell catalog (all 22 — refactoring.guru)
+## Smell catalog (22 refactoring.guru + Magic Numbers)
 
 ### Bloaters
-- **Long Method** — function body > 30 lines. Extract Method.
-- **Large Class** — class/module doing too much. Extract Class / Extract Subclass.
-- **Primitive Obsession** — primitives where objects belong (money as float, status as string). Replace Primitive with Object.
-- **Long Parameter List** — > 5 params. Introduce Parameter Object / Preserve Whole Object.
-- **Data Clumps** — same 3+ vars always together. Extract Class.
+- **Long Method** — flag function body > 10 LOC (> 40 for Python/Bash). Suggest Extract Method.
+- **Large Class** — flag class/file > 200 LOC or > 7 fields. Suggest Extract Class.
+- **Primitive Obsession** — flag raw string/int modeling domain concepts (id, money, phone, slug). Suggest small value object.
+- **Long Parameter List** — flag signature with > 3 params. Suggest Introduce Parameter Object.
+- **Data Clumps** — flag same 3+ vars passed together across ≥ 2 callsites. Suggest Extract Class.
 
 ### OO Abusers
-- **Switch Statements** — switch/case/if-elif chains on type. Replace Conditional with Polymorphism.
-- **Temporary Field** — field set only in some paths. Extract Class / Introduce Null Object.
-- **Refused Bequest** — subclass ignores parent contract. Replace Inheritance with Delegation.
-- **Alternative Classes with Different Interfaces** — two classes doing the same thing, different names. Rename Method / Move Method.
+- **Switch Statements** — flag switch/long if-else dispatching on type code. Suggest Replace Conditional with Polymorphism.
+- **Temporary Field** — flag field set only inside one method, null/empty elsewhere. Suggest Extract Class or move to local.
+- **Refused Bequest** — flag subclass overriding inherited method to throw/no-op. Suggest Replace Inheritance with Delegation.
+- **Alternative Classes with Different Interfaces** — flag two classes with same job, mismatched method names. Suggest rename + unify.
 
 ### Change Preventers
-- **Divergent Change** — one class changed for multiple unrelated reasons. Extract Class.
-- **Shotgun Surgery** — one change requires many tiny edits across many classes. Move Method / Move Field / Inline Class.
-- **Parallel Inheritance Hierarchies** — adding a subclass in one hierarchy forces adding one in another. Move Method / Move Field.
+- **Divergent Change** — flag class edited for unrelated reasons across recent commits. Suggest split by axis of change.
+- **Shotgun Surgery** — flag one logical change touching > 3 files. Suggest Move Method/Field to consolidate.
+- **Parallel Inheritance Hierarchies** — flag mirror subclasses across two trees. Suggest Collapse Hierarchy.
 
 ### Dispensables
-- **Comments** — comment explains *what*, not *why*. Rename / Extract Method.
-- **Duplicate Code** — same structure in two places. Extract Method / Pull Up Method.
-- **Lazy Class** — class doing too little. Inline Class / Collapse Hierarchy.
-- **Data Class** — class with only fields + getters/setters, no behavior. Move Method / Encapsulate Field.
-- **Dead Code** — unreachable/unused. Delete it.
-- **Speculative Generality** — unused hooks for hypothetical futures. Collapse Hierarchy / Inline.
+- **Comments** — flag method bodies with > 2 explanatory comments. Suggest Extract Method with named intent.
+- **Duplicate Code** — flag identical token n-gram (n ≥ 10) across files. Suggest Extract Method or Pull Up Method.
+- **Lazy Class** — flag class with < 2 methods or trivial wrapper. Suggest Inline Class.
+- **Data Class** — flag class that is only getters/setters. Suggest Move Method to relocate behavior.
+- **Dead Code** — flag definition with zero callers/refs. Suggest delete.
+- **Speculative Generality** — flag unused abstract class, generic param, hook, plugin slot. Suggest Collapse Hierarchy.
 
 ### Couplers
-- **Feature Envy** — method more interested in another class's data. Move Method.
-- **Inappropriate Intimacy** — classes digging into each other's internals. Move Method / Move Field / Change Bidirectional Association to Unidirectional.
-- **Message Chains** — `a.b().c().d()`. Hide Delegate / Extract Method.
-- **Middle Man** — class delegating > half its methods. Remove Middle Man / Inline Method.
+- **Feature Envy** — flag method calling other-object getters more than self-field. Suggest Move Method.
+- **Inappropriate Intimacy** — flag class A touching class B's private members. Suggest Extract Interface or Move Method.
+- **Message Chains** — flag `a.b().c().d()` chains (> 2 hops). Suggest Hide Delegate.
+- **Middle Man** — flag class whose methods only forward to another. Suggest Remove Middle Man.
+
+### Extra (Wikipedia)
+- **Magic Numbers** — flag bare numeric/string literals with non-obvious meaning. Suggest named constant.
 
 ## LLM-only smells (detector can't catch these)
 
