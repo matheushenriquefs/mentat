@@ -148,7 +148,7 @@ land_chunk() {
     while IFS= read -r _f; do
       [ -z "$_f" ] && continue
       # shellcheck source=/dev/null
-      (cd "$wt" && . "$_LIB/gates.sh" && mentat_gate "$_f") >>"$logf" 2>&1 || _gate_fail=1
+      (cd "$wt" && . "$_LIB/precommit-gates.sh" && mentat_gate "$_f") >>"$logf" 2>&1 || _gate_fail=1
     done <<< "$changed_files"
     if [ "$_gate_fail" -ne 0 ]; then
       log "land EJECT (gate fail before re-gate): $slug"
