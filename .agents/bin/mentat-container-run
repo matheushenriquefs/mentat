@@ -14,19 +14,14 @@ CMD="${*:-}"
 WT="$PWD"
 SLUG=$(basename "$WT")
 
-workspace_folder() {
-  grep -v '^\s*//' "$WT/.devcontainer/devcontainer.json" \
-    | jq -r --arg slug "$SLUG" '.workspaceFolder // ("/workspaces/" + $slug)'
-}
-
-if [ -z "$(docker ps -q --filter "label=mentat_slug=$SLUG")" ]; then
+CID="$(docker ps -q --filter "label=mentat_slug=$SLUG")"
+if [ -z "$CID" ]; then
   echo "mentat-container-run: container not running for slug $SLUG (run mentat-container-up first)" >&2
   exit 99
 fi
 
-WS="$(workspace_folder)"
+# Use slug-based path — devcontainer.json workspaceFolder may differ (e.g. "mentat")
+# but chunk containers mount the worktree at /workspaces/<slug>.
+WS="/workspaces/$SLUG"
 
-exec devcontainer exec \
-  --workspace-folder "$WT" \
-  --id-label "mentat_slug=$SLUG" \
-  bash -lc "cd $(printf %q "$WS") && $CMD"
+exec docker exec --workdir "$WS" -u vscode "$CID" bash -lc "git config --global --add safe.directory '*' 2>/dev/null || true; $CMD"

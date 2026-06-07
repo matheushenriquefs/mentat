@@ -132,6 +132,14 @@ devcontainer up \
   --mount "type=bind,source=$ROOT/.git,target=$ROOT/.git" \
   --remote-env "GIT_DIR=$GIT_TARGET" \
   --remote-env "GIT_WORK_TREE=$WS" \
-  --id-label "mentat_slug=$SLUG"
+  --id-label "mentat_slug=$SLUG" || {
+  # devcontainer up may exit non-zero if onCreateCommand from a stale cached image
+  # fails even though the container actually started. Recover if container is running.
+  if [ -n "$(docker ps -q --filter "label=mentat_slug=$SLUG")" ]; then
+    echo "mentat-container-up: devcontainer up exited non-zero but container is running — continuing" >&2
+  else
+    exit 1
+  fi
+}
 
 ensure_safe_directory "$WS"
