@@ -4,6 +4,13 @@ description: Implement a plan using TDD inside the devcontainer. Score-gate the 
 
 $ARGUMENTS
 
+## AFK contract (ADR-0010)
+
+Signal: `MENTAT_INTERACTIVE=0` (opt-in; default/unset/other = interactive).
+HITL exit code: `42`. Audit reason: `hitl-ambiguity`.
+Adapters honoring this contract: `claude-code`, `cursor` (see `.agents/bin/lib/harness-registry.jsonc`).
+Canonical source: `.agents/docs/adr/0010-hitl-routing.md` — prose here is linked, not load-bearing.
+
 0. **Worktree preflight.** Run `pwd`. Resolution order:
    a) `$MENTAT_WORKTREE` is set → cwd must equal it. PASS.
    b) cwd matches `.*/\.mentat/worktrees/[^/]+/?$` (mentat-canonical). PASS.
