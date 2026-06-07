@@ -1,6 +1,9 @@
 [build-system]
 requires = []
 
+[tool.uv]
+package = false
+
 [project]
 name = "mentat"
 version = "0.1.0"
