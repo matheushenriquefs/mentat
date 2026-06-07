@@ -10,7 +10,6 @@ _LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
 
 JQ="${JQ:-jq}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MAP="${TO_TRACK_MAP:-$HERE/harness-map.jq}"
 THINK="${TO_TRACK_THINK:-0}"
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
@@ -46,8 +45,32 @@ _paint() { # $1=kind $2=summary
 _feed() { # $1=slug $2=logfile
   local slug="$1" log="$2" scol; scol="$(_slug_color "$slug")"
   local tag; printf -v tag '%s%-10s%s' "$scol" "[$slug]" "$c_rst"
-  tail -n +1 -F "$log" 2>/dev/null \
-  | "$JQ" -rc -f "$MAP" 2>/dev/null \
+  local _jq_filter
+  _jq_filter=$(cat <<'JQEOF'
+. as $e
+| ($e.event // "unknown") as $ev
+| ($e.payload // {}) as $p
+| if   $ev | test("tool_use|tool_call|action")          then ["tool",   ($p.name // $p.tool_name // $p.tool // $ev)]
+  elif $ev | test("tool_result|observation")            then ["result", ($p.is_error == true | if . then "error" else "ok" end)]
+  elif $ev | test("text|message|assistant|aider\\.")    then ["text",   ($p.text // $p.content // $p.line // "" | tostring | .[0:120])]
+  elif $ev | test("think|thinking|reasoning")           then ["think",  ($p.text // "" | .[0:120])]
+  elif $ev | test("stderr\\.line|usage\\.line")         then ["info",   ($p.line // "")]
+  elif $ev | test("result$|gemini\\.final|complete$")   then ["result", ($p.subtype // "done")]
+  elif $ev | test("error|fail")                         then ["error",  ($p.message // $p.line // $ev)]
+  elif $ev | test("system|init")                        then ["init",   $ev]
+  else                                                       ["raw",    $ev]
+  end
+| @tsv
+JQEOF
+)
+  local _mode="tail"
+  local _driver_log; _driver_log="$(dirname "$log")/mentat-orchestrate-$(basename "$log")"
+  [ -f "$_driver_log" ] && grep -q '"event":"land.complete"' "$_driver_log" 2>/dev/null && _mode="cat"
+  case "$_mode" in
+    cat)  cat "$log" ;;
+    tail) tail -n +1 -F "$log" 2>/dev/null ;;
+  esac \
+  | "$JQ" -rc "$_jq_filter" \
   | while IFS=$'\t' read -r kind summary; do
       [[ "$kind" == "think" && "$THINK" != "1" ]] && continue
       printf '%s %s\n' "$tag" "$(_paint "$kind" "$summary")"
@@ -72,30 +95,38 @@ to_track_phase() { # slug implementing|landing
 to_track_exit() { # slug landed|forensics|agent-error [note]
   case "$2" in
     landed)      _banner "$1" "✓" "$c_green"  "landed"      "${3:-}";;
-    forensics)   _banner "$1" "✗" "$c_red"    "left up — forensics" "${3:-}";;
+    forensics)   _banner "$1" "✗" "$c_red"    "torn down, see diagnosis" "${3:-}";;
     agent-error) _banner "$1" "✗" "$c_red"    "agent error" "${3:-}";;
     *)           _banner "$1" "·" "$c_dim"    "$2"          "${3:-}";;
   esac
+  kill "${_feed_pid[$1]:-0}" 2>/dev/null || true
+  unset '_feed_pid[$1]'
 }
 
-_pids=()
+declare -A _feed_pid
 to_track_start() { # logdir slug...
   local logdir="$1"; shift
   local slug
   for slug in "$@"; do
     to_track_phase "$slug" implementing
     _feed "$slug" "$logdir/$slug.jsonl" &
-    _pids+=("$!")
+    _feed_pid[$slug]=$!
   done
 }
-to_track_stop() { local p; for p in "${_pids[@]:-}"; do kill "$p" 2>/dev/null || true; done; }
+to_track_stop() {
+  local slug
+  for slug in "${!_feed_pid[@]:-}"; do
+    kill "${_feed_pid[$slug]}" 2>/dev/null || true
+  done
+  _feed_pid=()
+}
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   if [ "$#" -eq 0 ]; then
-    LOG_ROOT="${MENTAT_LOG_DIR:-$HOME/.agents/mentat/logs}"
+    LOG_ROOT="${MENTAT_LOG_PATH:-$HOME/.agents/mentat/logs}"
     REPO="$(basename "$PWD")"
     [ -d "$LOG_ROOT/$REPO" ] || { echo "mentat-track: no log dir for repo '$REPO' at $LOG_ROOT/$REPO" >&2; exit 1; }
-    SESS="$(find "$LOG_ROOT/$REPO" -mindepth 1 -maxdepth 1 -type d | sort -r | head -1 | xargs basename 2>/dev/null || true)"
+    SESS="$(ls -1t "$LOG_ROOT/$REPO" 2>/dev/null | grep -v '^manual-' | head -1 || true)"
     [ -n "$SESS" ] || { echo "mentat-track: no sessions under $LOG_ROOT/$REPO" >&2; exit 1; }
     shopt -s nullglob
     SLUG_LOGS=("$LOG_ROOT/$REPO/$SESS"/mentat-*.jsonl)

@@ -40,6 +40,32 @@ shift
 [ "$#" -ge 1 ] || die "need at least one plan path"
 [ "$#" -le "$PARALLEL_CAP" ] || die "max $PARALLEL_CAP parallel chunks (merge-conflict scaling — ADR 0004)"
 
+_fm() {
+  local out
+  out="$(yq --front-matter=extract -r "$1" "$2" 2>/dev/null)" || { echo ""; return 1; }
+  echo "$out"
+}
+
+_plan_check() { # $1=plan path
+  local p="$1"
+  local class id dep dep_path dep_status
+  [ -f "$p" ] || die "plan not found: $p"
+  class="$(_fm '.class // ""' "$p")"
+  id="$(_fm '.id // ""' "$p")"
+  [ "$class" = AFK ] || die "plan '$p' is class=${class:-missing}; orchestrate runs AFK only — run via mentat-implement"
+  [ -n "$id" ] || die "plan '$p' missing frontmatter id field"
+  [ "${id}.md" = "$(basename "$p")" ] || die "plan '$p' id mismatch (id=$id, file=$(basename "$p"))"
+  while IFS= read -r dep; do
+    [ -z "$dep" ] && continue
+    dep_path="$(dirname "$p")/${dep}.md"
+    [ -f "$dep_path" ] || die "plan '$p' blocked_by '$dep' but $dep_path missing"
+    dep_status="$(_fm '.status // ""' "$dep_path")" || die "plan '$p' blocked_by '$dep': could not read $dep_path frontmatter"
+    [ -n "$dep_status" ] || die "plan '$p' blocked_by '$dep': $dep_path has no status field"
+    [ "$dep_status" = done ] || die "plan '$p' blocked_by '$dep' (status=$dep_status); run that plan first"
+  done < <(_fm '.blocked_by[]? // ""' "$p")
+}
+for _p in "$@"; do _plan_check "$_p"; done
+
 if [ "$DRY_RUN" -eq 1 ]; then
   log "dry-run: harness=$HARNESS model=${MODEL:-<default>} parallel_cap=$PARALLEL_CAP holding=$HOLDING"
   for plan in "$@"; do log "dry-run: plan $plan"; done
@@ -51,7 +77,7 @@ MENTAT_REPO="$(basename "$ROOT")"
 export MENTAT_REPO
 MENTAT_SESSION="$(date +%s)-$$"
 export MENTAT_SESSION
-LOGDIR="${MENTAT_LOG_DIR:-$HOME/.agents/mentat/logs}/$MENTAT_REPO/$MENTAT_SESSION"
+LOGDIR="${MENTAT_LOG_PATH:-$HOME/.agents/mentat/logs}/$MENTAT_REPO/$MENTAT_SESSION"
 mkdir -p "$LOGDIR"
 
 command -v jq >/dev/null || die "jq not found (needed by mentat-track)"
@@ -86,7 +112,7 @@ run_chunk() {
   local plan="$1" slug="$2" logf="$3"
   local wt="$ROOT/.mentat/worktrees/$slug"
   git worktree add -b "$slug" "$wt" main
-  export MENTAT_WORKTREE="$wt"
+  export MENTAT_WORKTREE_PATH="$wt"
   ( cd "$wt" && ~/.agents/bin/mentat-container-up )
   local cmd=()
   while IFS= read -r -d '' tok; do cmd+=("$tok"); done < <(build_cmd "/mentat-implement $plan")
@@ -196,6 +222,15 @@ _run_doctor() { # $1=slug $2=reason
   log "diagnosis: $LOGDIR/diagnosis-$1.md"
 }
 
+_chunk_teardown() { # $1=slug
+  local wt="$ROOT/.mentat/worktrees/$1"
+  [ -d "$wt" ] || return 0
+  ( cd "$wt" && ~/.agents/bin/mentat-container-down ) \
+    || log "WARN: container-down failed for $1 — orphan possible"
+  git -C "$ROOT" worktree remove --force "$wt" \
+    || log "WARN: worktree remove failed for $1"
+}
+
 declare -a PIDS PLANS SLUGS LOGS
 for plan in "$@"; do
   slug="mentat-$(date +%s)-$$-$RANDOM"; logf="$LOGDIR/$slug.jsonl"; : > "$logf"
@@ -207,7 +242,12 @@ log "watch live: ~/.agents/bin/mentat-track $LOGDIR mentat-*.jsonl"
 log "or in this repo: mentat-track"
 log "or via harness slash-command: /mentat-track"
 to_track_start "$LOGDIR" "${SLUGS[@]}"
-cleanup() { to_track_stop; }
+cleanup() {
+  to_track_stop
+  for slug in ${SLUGS[@]+"${SLUGS[@]}"}; do
+    _chunk_teardown "$slug"
+  done
+}
 trap cleanup EXIT INT TERM
 
 for i in "${!SLUGS[@]}"; do
@@ -223,6 +263,7 @@ for i in "${!PIDS[@]}"; do
     _land_record "${LOGS[$i]}" "${SLUGS[$i]}" error "" implement-fail
     log "CHUNK FAILED (implement): ${PLANS[$i]} — worktree $ROOT/.mentat/worktrees/${SLUGS[$i]}"
     _run_doctor "${SLUGS[$i]}" agent-exit-nonzero
+    _chunk_teardown "${SLUGS[$i]}"
   fi
 done
 
@@ -232,12 +273,12 @@ for i in ${IMPL_OK[@]+"${IMPL_OK[@]}"}; do
   to_track_phase "${SLUGS[$i]}" landing
   if land_chunk "${SLUGS[$i]}" "${LOGS[$i]}"; then
     LANDED=$((LANDED + 1)); to_track_exit "${SLUGS[$i]}" landed "-> $HOLDING"
-    ( cd "$ROOT/.mentat/worktrees/${SLUGS[$i]}" && ~/.agents/bin/mentat-container-down ) || true
-    git -C "$ROOT" worktree remove "$ROOT/.mentat/worktrees/${SLUGS[$i]}" || true
+    _chunk_teardown "${SLUGS[$i]}"
   else
     to_track_exit "${SLUGS[$i]}" forensics "${LOGS[$i]}"
-    log "left up for forensics: ${PLANS[$i]} — log ${LOGS[$i]}"
     _run_doctor "${SLUGS[$i]}" land-fail
+    _chunk_teardown "${SLUGS[$i]}"
+    log "torn down: ${PLANS[$i]} — diagnosis at $LOGDIR/diagnosis-${SLUGS[$i]}.md"
   fi
 done
 

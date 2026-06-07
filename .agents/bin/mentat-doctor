@@ -25,26 +25,45 @@ for arg in "$@"; do
   esac
 done
 
-[ -z "$SLUG" ] && SLUG="${MENTAT_SLUG:-$$}"
+LOG_DIR="${MENTAT_LOG_PATH:-$HOME/.agents/mentat/logs}"
+REPO="${MENTAT_REPO:-$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")}"
 
-LOG_DIR="${MENTAT_LOG_DIR:-$HOME/.agents/mentat/logs}"
-
-# Resolve REPO/SESSION from slug's chunk audit file on disk (authoritative).
-CHUNK_LOG="$(find "$LOG_DIR" -type f -name "${SLUG}.jsonl" 2>/dev/null | sort -u | head -1 || true)"
-if [ -n "$CHUNK_LOG" ]; then
-  SESSION_DIR="$(dirname "$CHUNK_LOG")"   # .../<REPO>/<SESSION>
-  SESSION="$(basename "$SESSION_DIR")"
-  REPO="$(basename "$(dirname "$SESSION_DIR")")"
-else
-  # No chunk file on disk — fall back to env (orchestrate injects these) or fail.
-  REPO="${MENTAT_REPO:-$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")}"
-  SESSION="${MENTAT_SESSION:-}"
-  # audit.sh always pre-sets MENTAT_SESSION via :=, so SESSION is never empty here.
-  # Verify the resolved session dir actually exists; otherwise this is a wrong/unknown slug.
-  if [ -z "$SESSION" ] || [ ! -d "$LOG_DIR/$REPO/$SESSION" ]; then
-    echo "mentat-doctor: no chunk audit for slug '$SLUG' under $LOG_DIR; set MENTAT_SESSION or pass a slug whose ${SLUG}.jsonl exists" >&2
-    exit 2
+if [ -n "$SLUG" ]; then
+  # Explicit slug: locate its audit file on disk (authoritative).
+  CHUNK_LOG="$(find "$LOG_DIR" -type f -name "${SLUG}.jsonl" 2>/dev/null | sort -u | head -1 || true)"
+  if [ -n "$CHUNK_LOG" ]; then
+    SESSION_DIR="$(dirname "$CHUNK_LOG")"   # .../<REPO>/<SESSION>
+    SESSION="$(basename "$SESSION_DIR")"
+    REPO="$(basename "$(dirname "$SESSION_DIR")")"
+  else
+    # Slug given but no file — fall back to env-injected session (orchestrate sets these).
+    SESSION="${MENTAT_SESSION:-}"
+    if [ -z "$SESSION" ] || [ ! -d "$LOG_DIR/$REPO/$SESSION" ]; then
+      echo "mentat-doctor: no chunk audit for slug '$SLUG' under $LOG_DIR; set MENTAT_SESSION or pass a slug whose ${SLUG}.jsonl exists" >&2
+      exit 2
+    fi
   fi
+else
+  # No slug: discover latest real-work session and run doctor for every chunk in it.
+  SESSION="${MENTAT_SESSION:-}"
+  if [ -z "$SESSION" ] || [ ! -d "$LOG_DIR/$REPO/$SESSION" ] || [[ "$SESSION" == manual-* ]]; then
+    SESSION="$(ls -1t "$LOG_DIR/$REPO" 2>/dev/null | grep -v '^manual-' | head -1 || true)"
+  fi
+  [ -n "$SESSION" ] || { echo "mentat-doctor: no batch under $LOG_DIR/$REPO" >&2; exit 2; }
+  # Iterate all chunk-owning driver logs (orchestrate or solo implement) in this session.
+  shopt -s nullglob
+  _driver_logs=("$LOG_DIR/$REPO/$SESSION"/mentat-orchestrate-*.jsonl
+                "$LOG_DIR/$REPO/$SESSION"/mentat-implement-*.jsonl)
+  if [ "${#_driver_logs[@]}" -eq 0 ]; then
+    # Fallback: pick the newest chunk jsonl directly.
+    _driver_logs=("$LOG_DIR/$REPO/$SESSION"/*.jsonl)
+  fi
+  for _f in "${_driver_logs[@]}"; do
+    [ -f "$_f" ] || continue
+    _slug="$(basename "$_f" .jsonl | sed -E 's/^mentat-(orchestrate|implement)-//')"
+    "$0" "$_slug" --reason=session-rerun
+  done
+  exit 0
 fi
 
 # Resolve orchestrate driver log (most recent for this slug).
