@@ -184,12 +184,22 @@ any gate is red. Report only PASS or FAIL."
 }
 
 # End-of-queue review over final landed tip — advisory. ADR 0003 ADR 0004
+# Subprocess stdout captured into the audit row; stderr tee'd to a sidecar
+# file. Raw output never reaches `.jsonl` (G1-S4, ADR 0009).
 final_review() {
   local base="$1"
-  local logf="$LOGDIR/mentat-orchestrate-$MENTAT_SESSION.jsonl"
+  local stderr_dir="$LOGDIR/.stderr"
+  local stderr_path="$stderr_dir/mentat-orchestrate-final-review.stderr"
+  mkdir -p "$stderr_dir"
   log "end-of-queue review: spawning ADR-0003 reviewers over $base..$HOLDING"
-  ( cd "$ROOT" && ~/.agents/bin/mentat-container-up ) >>"$logf" 2>&1 || {
-    log "end-of-queue review SKIPPED (mentat-container-up failed at $ROOT)"; return 0; }
+
+  local up_out
+  if ! up_out="$( cd "$ROOT" && ~/.agents/bin/mentat-container-up 2>&1 )"; then
+    printf '%s\n' "$up_out" >> "$stderr_path"
+    log "end-of-queue review SKIPPED (mentat-container-up failed at $ROOT; see $stderr_path)"
+    return 0
+  fi
+
   local prompt
   prompt="The merge queue landed every chunk onto $HOLDING. Run the full ADR-0003 \
 review gate over the cumulative diff $base..HEAD: spawn mentat-plan-reviewer, \
@@ -199,20 +209,30 @@ threshold), and report each score + the verdict. Read CLAUDE.md/AGENTS.md for ho
 this project runs its checks. Do not modify code."
   local rcmd=()
   while IFS= read -r -d '' tok; do rcmd+=("$tok"); done < <(build_cmd "$prompt")
-  local verdict="success"
-  if ( cd "$ROOT" && "${rcmd[@]}" ) >>"$logf" 2>&1; then
-    log "end-of-queue review done (see $logf)"
-  else
+
+  # Capture stdout for the audit field; redirect stderr straight to the
+  # sidecar so it never lands in the .jsonl stream.
+  local stdout_capture verdict="success" rc=0
+  stdout_capture="$( cd "$ROOT" && "${rcmd[@]}" 2>>"$stderr_path" )" || rc=$?
+  if [ "$rc" -ne 0 ]; then
     verdict="flagged"
-    log "end-of-queue review FLAGGED a miss (see $logf). Landed ref unchanged (advisory)."
+    log "end-of-queue review FLAGGED a miss (sidecar $stderr_path). Landed ref unchanged (advisory)."
+  else
+    log "end-of-queue review done (sidecar $stderr_path)"
   fi
+
+  # Trim captured stdout so a chatty agent can't bloat the audit row.
+  local stdout_field
+  stdout_field="$(printf '%s' "$stdout_capture" | tail -c 4000)"
   local veto_bool="false"; [ "$verdict" = flagged ] && veto_bool="true"
   mentat_audit mentat-orchestrate review.final "$(jq -cn \
     --arg reviewer "adr-0003-composite" \
     --argjson score "$([ "$verdict" = success ] && echo 1.0 || echo 0.0)" \
     --argjson veto "$veto_bool" \
     --arg base "$base" --arg tip "$HOLDING" \
-    '{reviewer:$reviewer, score:$score, veto:$veto, findings:[], base:$base, tip:$tip}')"
+    --arg stdout "$stdout_field" \
+    --arg stderr_path "$stderr_path" \
+    '{reviewer:$reviewer, score:$score, veto:$veto, findings:[], base:$base, tip:$tip, stdout:$stdout, stderr_path:$stderr_path}')"
 }
 
 _run_doctor() { # $1=slug $2=reason
