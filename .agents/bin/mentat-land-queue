@@ -116,11 +116,28 @@ land_chunk() { # $1=slug — returns 0 on landed, 1 on eject (verdict on stdout)
   ( cd "$wt" && ~/.agents/bin/mentat-container-run "git rebase $(printf %q "$HOLDING")" ) >>"$logf" 2>&1 || {
     # S10: capture unmerged paths + resume recipe before any abort. Leave
     # the rebase in progress so operator can `git rebase --continue`.
-    local cf_json resume_cmd
-    cf_json="$(git -C "$wt" diff --name-only --diff-filter=U 2>/dev/null \
-      | jq -R . | jq -cs '.' )"
-    [ -n "$cf_json" ] || cf_json='[]'
+    local unmerged cf_json resume_cmd
+    unmerged="$(git -C "$wt" diff --name-only --diff-filter=U 2>/dev/null || true)"
+    if [ -n "$unmerged" ]; then
+      cf_json="$(printf '%s\n' "$unmerged" | jq -R . | jq -cs '.')"
+    else
+      cf_json='[]'
+    fi
     resume_cmd="cd $(printf %q "$wt") && git rebase --continue"
+    # S11: RESUME.md at worktree root — operator runs `cat RESUME.md && git
+    # rebase --continue` without consulting other docs. Pointer line carries
+    # chunk slug, holding branch, pre-rebase holding tip SHA.
+    {
+      printf '# Chunk: %s — rebasing onto %s @ %s\n\n' "$slug" "$HOLDING" "$onto"
+      printf 'Pre-rebase chunk tip: %s\n\n' "$chunk_tip"
+      printf '## Conflicted files\n\n'
+      if [ -n "$unmerged" ]; then
+        printf '%s\n' "$unmerged" | sed 's/^/- /'
+      else
+        printf '- (none reported)\n'
+      fi
+      printf '\n## Resume\n\n    %s\n' "$resume_cmd"
+    } > "$wt/RESUME.md"
     log "land EJECT (rebase conflict onto $onto): $slug — worktree $wt"
     _land_record "$slug" eject "$chunk_tip" rebase-conflict "$cf_json" "$resume_cmd"
     _verdict     "$slug" eject "$chunk_tip" rebase-conflict "$cf_json" "$resume_cmd"
