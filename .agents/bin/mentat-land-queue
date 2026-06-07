@@ -1,0 +1,174 @@
+#!/bin/bash
+# mentat-land-queue — serial land queue: rebase each chunk onto holding tip,
+# re-gate, ff-merge or eject. ADR-0011.
+#
+# Argv:   <holding-branch>                  (single ref — positional)
+# Stdin:  newline-delim chunk slugs.
+# Stdout: JSONL verdict per chunk on stdout. One line per chunk:
+#           {slug, outcome, tip, reason?, conflicted_files?, resume_cmd?, findings?}
+#         outcome ∈ {"success", "eject"}
+#         reason  ∈ {"rebase-conflict", "gate-fail", "not-ff", "implement-fail"}
+#         `tip` always present: post-merge tip on success, pre-rebase chunk tip
+#         on eject (recipient can still inspect the worktree at that ref).
+# Side:   per chunk — rebase onto live $HOLDING tip (in container), re-gate via
+#         cavecrew-builder against rebased tree, merge --ff-only or leave the
+#         worktree intact for operator repair. Emits one land.complete audit
+#         row per chunk.
+# Exit:   0 = tool ran AND every chunk landed; 1 = partial (>=1 eject);
+#         >=2 = tool-level failure (bad argv, missing config).
+set -euo pipefail
+
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+. "$_LIB/strict.sh"
+. "$_LIB/log.sh"
+. "$_LIB/here.sh"
+. "$_LIB/config.sh"
+. "$_LIB/audit.sh"
+_LOG_PREFIX=mentat-land-queue
+
+# Override log.sh::die to exit 2 — ADR-0011 contract: 1=partial, >=2=tool-level.
+die() { printf '[%s] ERROR %s\n' "$_LOG_PREFIX" "$*" >&2; exit 2; }
+
+HARNESS="$(mentat_config harness.name)"; HARNESS="${HARNESS:-cursor}"
+MODEL="$(mentat_config harness.model)"; MODEL="${MODEL:-}"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --harness=*) HARNESS="${1#*=}"; shift ;;
+    --model=*)   MODEL="${1#*=}";   shift ;;
+    --) shift; break ;;
+    -*) die "unknown flag $1 (usage: mentat-land-queue [--harness=<n>] [--model=<s>] <holding-branch>)" ;;
+    *)  break ;;
+  esac
+done
+
+HOLDING="${1:-}"
+[ -n "$HOLDING" ] || die "missing positional <holding-branch> (usage: mentat-land-queue <holding-branch>)"
+shift || true
+
+mentat_config_validate >&2 || die "invalid .mentat.jsonc — fix config before running"
+
+declare -a SLUGS=()
+while IFS= read -r _line; do
+  [ -z "$_line" ] && continue
+  SLUGS+=("$_line")
+done
+
+if [ "${#SLUGS[@]}" -eq 0 ]; then
+  log "empty stdin — zero chunks to land"
+  exit 0
+fi
+
+ROOT="$PWD"
+: "${MENTAT_REPO:=$(basename "$ROOT")}"
+: "${MENTAT_SESSION:=$(date +%s)-$$}"
+export MENTAT_REPO MENTAT_SESSION
+LOGDIR="${MENTAT_LOG_PATH:-$HOME/.agents/mentat/logs}/$MENTAT_REPO/$MENTAT_SESSION"
+mkdir -p "$LOGDIR"
+
+build_cmd() {
+  local prompt="$1"
+  local hfile="$_LIB/harness/${HARNESS}.sh"
+  [ -f "$hfile" ] || die "unknown harness '$HARNESS' — no $hfile"
+  . "$hfile"
+  "harness_${HARNESS//-/_}_cmd" "$prompt"
+}
+
+# Emit land.complete audit row. $1=slug $2=outcome(success|eject) $3=tip [$4=reason]
+_land_record() {
+  local slug="$1" outcome="$2" tip="$3" reason="${4:-}"
+  MENTAT_SLUG="$slug" mentat_audit mentat-land-queue land.complete "$(jq -cn \
+    --arg slug "$slug" --arg outcome "$outcome" \
+    --arg tip "$tip" --arg reason "$reason" \
+    '{slug:$slug, outcome:$outcome, tip:$tip, reason:$reason}')"
+}
+
+# Emit JSONL verdict line on stdout. $1=slug $2=outcome $3=tip [$4=reason]
+_verdict() {
+  local slug="$1" outcome="$2" tip="$3" reason="${4:-}"
+  if [ -n "$reason" ]; then
+    jq -cn --arg slug "$slug" --arg outcome "$outcome" --arg tip "$tip" --arg reason "$reason" \
+      '{slug:$slug, outcome:$outcome, tip:$tip, reason:$reason}'
+  else
+    jq -cn --arg slug "$slug" --arg outcome "$outcome" --arg tip "$tip" \
+      '{slug:$slug, outcome:$outcome, tip:$tip}'
+  fi
+}
+
+land_chunk() { # $1=slug — returns 0 on landed, 1 on eject (verdict on stdout)
+  local slug="$1"
+  local wt="$ROOT/.mentat/worktrees/$slug"
+  local logf="$LOGDIR/$slug.jsonl"
+  : > "$logf"
+  [ -d "$wt" ] || { _land_record "$slug" eject "" not-ff; _verdict "$slug" eject "" not-ff; return 1; }
+  local chunk_tip; chunk_tip="$(git -C "$wt" rev-parse --short HEAD 2>/dev/null || echo "")"
+  local onto; onto="$(git -C "$ROOT" rev-parse --short "$HOLDING" 2>/dev/null || echo "$HOLDING")"
+
+  # Rebase inside container so pre-commit fires where tools live. ADR 0002
+  ( cd "$wt" && ~/.agents/bin/mentat-container-run "git rebase $(printf %q "$HOLDING")" ) >>"$logf" 2>&1 || {
+    log "land EJECT (rebase conflict onto $onto): $slug — worktree $wt"
+    ( cd "$wt" && git rebase --abort >/dev/null 2>&1 || true )
+    _land_record "$slug" eject "$chunk_tip" rebase-conflict
+    _verdict "$slug" eject "$chunk_tip" rebase-conflict
+    return 1
+  }
+
+  # Deterministic harness-tool gate on changed files (host-side). ADR 0004
+  local changed_files _gate_fail _f
+  changed_files="$(git -C "$wt" diff --name-only "$HOLDING" 2>/dev/null || true)"
+  if [ -n "$changed_files" ]; then
+    _gate_fail=0
+    while IFS= read -r _f; do
+      [ -z "$_f" ] && continue
+      # shellcheck source=/dev/null
+      (cd "$wt" && . "$_LIB/precommit-gates.sh" && mentat_gate "$_f") >>"$logf" 2>&1 || _gate_fail=1
+    done <<< "$changed_files"
+    if [ "$_gate_fail" -ne 0 ]; then
+      log "land EJECT (gate fail before re-gate): $slug"
+      _land_record "$slug" eject "$chunk_tip" gate-fail
+      _verdict "$slug" eject "$chunk_tip" gate-fail
+      return 1
+    fi
+  fi
+
+  # Re-gate via headless cavecrew-builder agent — project-agnostic. ADR 0003
+  local gate_prompt
+  gate_prompt="Spawn cavecrew-builder in this worktree. Read CLAUDE.md/AGENTS.md, \
+run this project's quality gates (lint/types/tests/etc as the project defines them) \
+via mentat-container-run on the current rebased tree, fix nothing, and exit non-zero if \
+any gate is red. Report only PASS or FAIL."
+  local gcmd=()
+  while IFS= read -r -d '' tok; do gcmd+=("$tok"); done < <(build_cmd "$gate_prompt")
+  if ! ( cd "$wt" && "${gcmd[@]}" ) >>"$logf" 2>&1; then
+    log "land EJECT (re-gate red after rebase onto $onto): $slug — worktree $wt"
+    _land_record "$slug" eject "$chunk_tip" gate-fail
+    _verdict "$slug" eject "$chunk_tip" gate-fail
+    return 1
+  fi
+
+  # Fast-forward — ff-only, no merge commit. ADR 0002
+  if [ "$(git -C "$ROOT" branch --show-current)" != "$HOLDING" ]; then
+    log "land EJECT (holding '$HOLDING' not checked out at $ROOT): $slug"
+    _land_record "$slug" eject "$chunk_tip" not-ff
+    _verdict "$slug" eject "$chunk_tip" not-ff
+    return 1
+  fi
+  if git -C "$ROOT" merge --ff-only "$slug" >>"$logf" 2>&1; then
+    local tip; tip="$(git -C "$ROOT" rev-parse --short "$HOLDING" 2>/dev/null || echo "$HOLDING")"
+    _land_record "$slug" success "$tip"
+    _verdict "$slug" success "$tip"
+    log "landed: $slug -> $HOLDING (gated on rebase onto $onto)"
+    return 0
+  fi
+  log "land EJECT (not fast-forward): $slug — worktree $wt"
+  _land_record "$slug" eject "$chunk_tip" not-ff
+  _verdict "$slug" eject "$chunk_tip" not-ff
+  return 1
+}
+
+PARTIAL=0
+for slug in "${SLUGS[@]}"; do
+  land_chunk "$slug" || PARTIAL=1
+done
+
+exit "$PARTIAL"
