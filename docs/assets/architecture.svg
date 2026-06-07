@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 480" width="800" height="480" font-family="monospace, sans-serif" font-size="13">
+  <!-- Background -->
+  <rect width="800" height="480" fill="#0d1117" rx="8"/>
+
+  <!-- Title -->
+  <text x="400" y="38" text-anchor="middle" fill="#c9d1d9" font-size="16" font-weight="bold">Mentat — Parallel-out / Serial-in</text>
+
+  <!-- Plan box -->
+  <rect x="330" y="60" width="140" height="40" rx="6" fill="#21262d" stroke="#388bfd" stroke-width="1.5"/>
+  <text x="400" y="84" text-anchor="middle" fill="#388bfd" font-weight="bold">plan.md</text>
+
+  <!-- Down arrow from plan -->
+  <line x1="400" y1="100" x2="400" y2="128" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- mentat-orchestrate -->
+  <rect x="300" y="128" width="200" height="40" rx="6" fill="#21262d" stroke="#f0883e" stroke-width="1.5"/>
+  <text x="400" y="152" text-anchor="middle" fill="#f0883e" font-weight="bold">mentat-orchestrate</text>
+
+  <!-- Fan-out arrows (3 branches) -->
+  <!-- Left -->
+  <line x1="320" y1="168" x2="160" y2="218" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- Center -->
+  <line x1="400" y1="168" x2="400" y2="218" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- Right -->
+  <line x1="480" y1="168" x2="640" y2="218" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Fan-out label -->
+  <text x="400" y="196" text-anchor="middle" fill="#8b949e" font-size="11">fan-out (parallel)</text>
+
+  <!-- Chunk boxes -->
+  <!-- Chunk 1 -->
+  <rect x="60" y="218" width="200" height="64" rx="6" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="160" y="240" text-anchor="middle" fill="#3fb950" font-weight="bold">chunk 1</text>
+  <text x="160" y="257" text-anchor="middle" fill="#8b949e" font-size="11">worktree + container</text>
+  <text x="160" y="272" text-anchor="middle" fill="#8b949e" font-size="11">branch/feature-1</text>
+
+  <!-- Chunk 2 -->
+  <rect x="300" y="218" width="200" height="64" rx="6" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="400" y="240" text-anchor="middle" fill="#3fb950" font-weight="bold">chunk 2</text>
+  <text x="400" y="257" text-anchor="middle" fill="#8b949e" font-size="11">worktree + container</text>
+  <text x="400" y="272" text-anchor="middle" fill="#8b949e" font-size="11">branch/feature-2</text>
+
+  <!-- Chunk 3 -->
+  <rect x="540" y="218" width="200" height="64" rx="6" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="640" y="240" text-anchor="middle" fill="#3fb950" font-weight="bold">chunk 3</text>
+  <text x="640" y="257" text-anchor="middle" fill="#8b949e" font-size="11">worktree + container</text>
+  <text x="640" y="272" text-anchor="middle" fill="#8b949e" font-size="11">branch/feature-3</text>
+
+  <!-- Converge arrows to land queue -->
+  <line x1="160" y1="282" x2="320" y2="332" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="400" y1="282" x2="400" y2="332" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="640" y1="282" x2="480" y2="332" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Serial land label -->
+  <text x="400" y="322" text-anchor="middle" fill="#8b949e" font-size="11">land (serial)</text>
+
+  <!-- Land queue / gate box -->
+  <rect x="250" y="332" width="300" height="50" rx="6" fill="#21262d" stroke="#f0883e" stroke-width="1.5"/>
+  <text x="400" y="352" text-anchor="middle" fill="#f0883e" font-weight="bold">merge queue + gate</text>
+  <text x="400" y="370" text-anchor="middle" fill="#8b949e" font-size="11">rebase → review → ff-only</text>
+
+  <!-- Arrow to holding branch -->
+  <line x1="400" y1="382" x2="400" y2="418" stroke="#484f58" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Holding branch -->
+  <rect x="280" y="418" width="240" height="40" rx="6" fill="#21262d" stroke="#388bfd" stroke-width="1.5"/>
+  <text x="400" y="442" text-anchor="middle" fill="#388bfd" font-weight="bold">holding branch (ff-only)</text>
+
+  <!-- Eject label -->
+  <text x="618" y="366" fill="#f85149" font-size="11">gate fail → eject</text>
+  <line x1="550" y1="358" x2="610" y2="362" stroke="#f85149" stroke-width="1" stroke-dasharray="4,3"/>
+
+  <!-- Arrow marker -->
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#484f58"/>
+    </marker>
+  </defs>
+</svg>
