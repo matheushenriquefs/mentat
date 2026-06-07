@@ -74,26 +74,34 @@ build_cmd() {
   "harness_${HARNESS//-/_}_cmd" "$prompt"
 }
 
-# Emit land.complete audit row. $1=slug $2=outcome(success|eject) $3=tip [$4=reason]
-_land_record() {
+# Build a JSON object from slug/outcome/tip/reason + optional S10 fields.
+# $1=slug $2=outcome $3=tip $4=reason $5=conflicted_files_json (e.g. '[]') $6=resume_cmd
+_verdict_json() {
   local slug="$1" outcome="$2" tip="$3" reason="${4:-}"
-  MENTAT_SLUG="$slug" mentat_audit mentat-land-queue land.complete "$(jq -cn \
-    --arg slug "$slug" --arg outcome "$outcome" \
-    --arg tip "$tip" --arg reason "$reason" \
-    '{slug:$slug, outcome:$outcome, tip:$tip, reason:$reason}')"
+  local cf_json="${5:-}" resume_cmd="${6:-}"
+  local jq_args=(--arg slug "$slug" --arg outcome "$outcome" --arg tip "$tip")
+  local jq_expr='{slug:$slug, outcome:$outcome, tip:$tip}'
+  if [ -n "$reason" ]; then
+    jq_args+=(--arg reason "$reason"); jq_expr="$jq_expr + {reason:\$reason}"
+  fi
+  # S10: conflicted_files + resume_cmd populated only on rebase-conflict eject.
+  if [ -n "$cf_json" ]; then
+    jq_args+=(--argjson cf "$cf_json"); jq_expr="$jq_expr + {conflicted_files:\$cf}"
+  fi
+  if [ -n "$resume_cmd" ]; then
+    jq_args+=(--arg rc "$resume_cmd"); jq_expr="$jq_expr + {resume_cmd:\$rc}"
+  fi
+  jq -cn "${jq_args[@]}" "$jq_expr"
 }
 
-# Emit JSONL verdict line on stdout. $1=slug $2=outcome $3=tip [$4=reason]
-_verdict() {
-  local slug="$1" outcome="$2" tip="$3" reason="${4:-}"
-  if [ -n "$reason" ]; then
-    jq -cn --arg slug "$slug" --arg outcome "$outcome" --arg tip "$tip" --arg reason "$reason" \
-      '{slug:$slug, outcome:$outcome, tip:$tip, reason:$reason}'
-  else
-    jq -cn --arg slug "$slug" --arg outcome "$outcome" --arg tip "$tip" \
-      '{slug:$slug, outcome:$outcome, tip:$tip}'
-  fi
+# Emit land.complete audit row. $1=slug $2=outcome $3=tip [$4=reason $5=cf_json $6=resume_cmd]
+_land_record() {
+  local payload; payload="$(_verdict_json "$@")"
+  MENTAT_SLUG="$1" mentat_audit mentat-land-queue land.complete "$payload"
 }
+
+# Emit JSONL verdict line on stdout. Same argv as _land_record.
+_verdict() { _verdict_json "$@"; }
 
 land_chunk() { # $1=slug — returns 0 on landed, 1 on eject (verdict on stdout)
   local slug="$1"
@@ -106,10 +114,16 @@ land_chunk() { # $1=slug — returns 0 on landed, 1 on eject (verdict on stdout)
 
   # Rebase inside container so pre-commit fires where tools live. ADR 0002
   ( cd "$wt" && ~/.agents/bin/mentat-container-run "git rebase $(printf %q "$HOLDING")" ) >>"$logf" 2>&1 || {
+    # S10: capture unmerged paths + resume recipe before any abort. Leave
+    # the rebase in progress so operator can `git rebase --continue`.
+    local cf_json resume_cmd
+    cf_json="$(git -C "$wt" diff --name-only --diff-filter=U 2>/dev/null \
+      | jq -R . | jq -cs '.' )"
+    [ -n "$cf_json" ] || cf_json='[]'
+    resume_cmd="cd $(printf %q "$wt") && git rebase --continue"
     log "land EJECT (rebase conflict onto $onto): $slug — worktree $wt"
-    ( cd "$wt" && git rebase --abort >/dev/null 2>&1 || true )
-    _land_record "$slug" eject "$chunk_tip" rebase-conflict
-    _verdict "$slug" eject "$chunk_tip" rebase-conflict
+    _land_record "$slug" eject "$chunk_tip" rebase-conflict "$cf_json" "$resume_cmd"
+    _verdict     "$slug" eject "$chunk_tip" rebase-conflict "$cf_json" "$resume_cmd"
     return 1
   }
 
