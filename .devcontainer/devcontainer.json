@@ -1,13 +1,14 @@
 {
   "name": "mentat",
-  "image": "mcr.microsoft.com/devcontainers/base:bookworm",
+  "build": { "dockerfile": "Dockerfile" },
   "features": {
     "ghcr.io/devcontainers/features/node:1": { "version": "22" },
     "ghcr.io/devcontainers/features/python:1": { "version": "3.11" }
   },
   "onCreateCommand": "sudo apt-get update && sudo apt-get install -y jq shellcheck && curl -LsSf https://astral.sh/uv/install.sh | sh",
-  "postCreateCommand": "~/.local/bin/uv sync --group dev && npm install -g promptfoo",
-  "workspaceFolder": "/workspaces",
+  "postCreateCommand": "cd /workspaces/mentat && ~/.local/bin/uv sync --group dev && npm install -g promptfoo",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/mentat,type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/mentat",
   "runArgs": ["--init"],
   "remoteUser": "vscode"
 }
