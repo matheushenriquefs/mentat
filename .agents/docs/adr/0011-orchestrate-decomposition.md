@@ -42,11 +42,15 @@ mentat-fan-out      reads:  newline-delimited slice plan paths on stdin
 
 mentat-land-queue   reads:  newline-delimited chunk slugs on stdin
                     writes: JSONL verdicts on stdout, one per chunk:
-                            {slug, outcome, tip?, reason?, conflicted_files?,
+                            {slug, outcome, tip, reason?, conflicted_files?,
                              resume_cmd?, findings?}
                             outcome ∈ {"success", "eject"}            (audit schema)
                             reason  ∈ {"rebase-conflict", "gate-fail",
                                        "not-ff", "implement-fail"}   (eject only)
+                            `tip` always present (required by `land.complete`
+                            schema): post-merge tip on success, pre-rebase
+                            chunk tip on eject (recipient can still inspect
+                            the worktree state at that ref).
                     side:   per chunk — rebase onto live $HOLDING tip,
                             re-gate via cavecrew-builder, `merge --ff-only` or
                             eject (worktree left intact). Emits one
