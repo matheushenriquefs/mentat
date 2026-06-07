@@ -1,317 +1,69 @@
 #!/bin/bash
-# mentat-orchestrate — headless batch driver: fan out planned chunks in parallel,
-# land each onto the holding branch serially. No planning; human does that.
-# Usage: mentat-orchestrate [--harness=<name>] [--model=<slug>] [--dry-run] \
+# mentat-orchestrate — thin driver. Dispatches mentat-fan-out -> mentat-land-queue
+# -> mentat-final-review. Same external behavior (chunk count, audit envelope,
+# eject layout) as pre-S9. ADR 0004 ADR 0011.
+#
+# Usage: mentat-orchestrate [--harness=<n>] [--model=<s>] [--dry-run]
 #                       <holding-branch> <plan.md> [<plan.md> ...]
-# ADR 0004
-set -euo pipefail
+# Exit:  0 = all chunks landed; 1 = partial (>=1 eject);
+#        >=2 = tool-level error (bad argv, missing config, plan-check fail).
 
-_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_LIB="$_HERE/lib"
 . "$_LIB/strict.sh"
 . "$_LIB/log.sh"
 . "$_LIB/here.sh"
 . "$_LIB/config.sh"
 . "$_LIB/audit.sh"
+. "$_LIB/plan-validate.sh"
 _LOG_PREFIX=mentat-orchestrate
+die() { printf '[%s] ERROR %s\n' "$_LOG_PREFIX" "$*" >&2; exit 2; }
 
-# Load config defaults; CLI flags override (last-write-wins)
-HARNESS="$(mentat_config harness.name)"; HARNESS="${HARNESS:-cursor}"
-MODEL="$(mentat_config harness.model)"; MODEL="${MODEL:-}"
-PARALLEL_CAP="$(mentat_config agents.max_concurrent)"; PARALLEL_CAP="${PARALLEL_CAP:-3}"
-DRY_RUN=0
-
+DRY_RUN=0; FLAGS=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --harness=*) HARNESS="${1#*=}"; shift ;;
-    --model=*)   MODEL="${1#*=}";   shift ;;
-    --dry-run)   DRY_RUN=1; shift ;;
+    --harness=*|--model=*) FLAGS+=("$1"); shift ;;
+    --dry-run) DRY_RUN=1; shift ;;
     --) shift; break ;;
-    -*) die "unknown flag $1 (usage: mentat-orchestrate [--harness=<name>] [--model=<slug>] [--dry-run] <holding-branch> <plan.md> [...])" ;;
-    *)  break ;;
+    -*) die "unknown flag $1 (usage: mentat-orchestrate [--harness=<n>] [--model=<s>] [--dry-run] <holding-branch> <plan.md> [...])" ;;
+    *) break ;;
   esac
 done
 
 mentat_config_validate || die "invalid .mentat.jsonc — fix config before running"
-# Re-read PARALLEL_CAP after validate (guarantees numeric)
-PARALLEL_CAP="$(mentat_config agents.max_concurrent)"; PARALLEL_CAP="${PARALLEL_CAP:-3}"
-
-HOLDING="${1:?usage: mentat-orchestrate [--harness=<name>] [--model=<slug>] <holding-branch> <plan.md> [<plan.md> ...]}"
-shift
+[ "$#" -ge 1 ] || die "missing positional <holding-branch> (usage: mentat-orchestrate [flags] <holding-branch> <plan.md> [...])"
+HOLDING="$1"; shift
 [ "$#" -ge 1 ] || die "need at least one plan path"
-[ "$#" -le "$PARALLEL_CAP" ] || die "max $PARALLEL_CAP parallel chunks (merge-conflict scaling — ADR 0004)"
-
-_fm() {
-  local out
-  out="$(yq --front-matter=extract -r "$1" "$2" 2>/dev/null)" || { echo ""; return 1; }
-  echo "$out"
-}
-
-_plan_check() { # $1=plan path
-  local p="$1"
-  local class id dep dep_path dep_status
-  [ -f "$p" ] || die "plan not found: $p"
-  class="$(_fm '.class // ""' "$p")"
-  id="$(_fm '.id // ""' "$p")"
-  [ "$class" = AFK ] || die "plan '$p' is class=${class:-missing}; orchestrate runs AFK only — run via mentat-implement"
-  [ -n "$id" ] || die "plan '$p' missing frontmatter id field"
-  [ "${id}.md" = "$(basename "$p")" ] || die "plan '$p' id mismatch (id=$id, file=$(basename "$p"))"
-  while IFS= read -r dep; do
-    [ -z "$dep" ] && continue
-    dep_path="$(dirname "$p")/${dep}.md"
-    [ -f "$dep_path" ] || die "plan '$p' blocked_by '$dep' but $dep_path missing"
-    dep_status="$(_fm '.status // ""' "$dep_path")" || die "plan '$p' blocked_by '$dep': could not read $dep_path frontmatter"
-    [ -n "$dep_status" ] || die "plan '$p' blocked_by '$dep': $dep_path has no status field"
-    [ "$dep_status" = done ] || die "plan '$p' blocked_by '$dep' (status=$dep_status); run that plan first"
-  done < <(_fm '.blocked_by[]? // ""' "$p")
-}
-for _p in "$@"; do _plan_check "$_p"; done
+for _p in "$@"; do mentat_plan_check "$_p" || die "plan check failed: $_p"; done
 
 if [ "$DRY_RUN" -eq 1 ]; then
-  log "dry-run: harness=$HARNESS model=${MODEL:-<default>} parallel_cap=$PARALLEL_CAP holding=$HOLDING"
-  for plan in "$@"; do log "dry-run: plan $plan"; done
+  log "dry-run: holding=$HOLDING flags=${FLAGS[*]:-}"
+  for _p in "$@"; do log "dry-run: plan $_p"; done
   exit 0
 fi
 
 ROOT="$PWD"
-MENTAT_REPO="$(basename "$ROOT")"
-export MENTAT_REPO
-MENTAT_SESSION="$(date +%s)-$$"
-export MENTAT_SESSION
-LOGDIR="${MENTAT_LOG_PATH:-$HOME/.agents/mentat/logs}/$MENTAT_REPO/$MENTAT_SESSION"
-mkdir -p "$LOGDIR"
-
-command -v jq >/dev/null || die "jq not found (needed by mentat-track)"
-. "$HERE/mentat-track"
-
-# Emit canonical land.complete audit event. ADR 0004 ADR 0009
-_land_record() { # $1=logf(unused,kept for compat) $2=slug $3=success|error [$4=sha] [$5=reason]
-  local slug="$2" outcome="$3" sha="${4:-}" reason="${5:-}"
-  MENTAT_SLUG="$slug" mentat_audit mentat-orchestrate land.complete "$(jq -cn \
-    --arg slug "$slug" --arg outcome "$outcome" \
-    --arg tip "$sha" --arg reason "$reason" \
-    '{slug:$slug, outcome:$outcome, tip:$tip, reason:$reason}')"
-}
-
-build_cmd() {
-  local prompt="$1"
-  local hfile="$_LIB/harness/${HARNESS}.sh"
-  [ -f "$hfile" ] || die "unknown harness '$HARNESS' — no $hfile"
-  . "$hfile"
-  local fn="harness_${HARNESS//-/_}_cmd"
-  "$fn" "$prompt"
-}
-
-harness_output_format() {
-  local hfile="$_LIB/harness/${HARNESS}.sh"
-  [ -f "$hfile" ] || die "unknown harness '$HARNESS' — no $hfile"
-  . "$hfile"
-  "harness_${HARNESS//-/_}_output_format"
-}
-
-run_chunk() {
-  local plan="$1" slug="$2" logf="$3"
-  local wt="$ROOT/.mentat/worktrees/$slug"
-  git worktree add -b "$slug" "$wt" main
-  export MENTAT_WORKTREE_PATH="$wt"
-  ( cd "$wt" && ~/.agents/bin/mentat-container-up )
-  local cmd=()
-  while IFS= read -r -d '' tok; do cmd+=("$tok"); done < <(build_cmd "/mentat-implement $plan")
-  local hfile="$_LIB/harness/${HARNESS}.sh"
-  . "$hfile"
-  local norm_fn="harness_${HARNESS//-/_}_normalize"
-  local stdout_f="${logf%.jsonl}.stdout"
-  # Export normalize fn so it survives the pipe subshell, then normalize
-  export -f "$norm_fn" 2>/dev/null || true
-  ( cd "$wt" && "${cmd[@]}" </dev/null ) 2>&1 \
-    | tee "$stdout_f" \
-    | bash -c "source $(printf %q "$hfile") && $norm_fn" \
-    >> "$logf"
-}
-
-land_chunk() {
-  local slug="$1" logf="$2"
-  local wt="$ROOT/.mentat/worktrees/$slug"
-  local onto; onto="$(git -C "$ROOT" rev-parse --short "$HOLDING" 2>/dev/null || echo "$HOLDING")"
-
-  # Rebase inside container so pre-commit fires where tools live. ADR 0002
-  ( cd "$wt" && ~/.agents/bin/mentat-container-run "git rebase $(printf %q "$HOLDING")" ) >>"$logf" 2>&1 || {
-    log "land EJECT (rebase conflict onto $onto): $slug — worktree $wt"
-    ( cd "$wt" && git rebase --abort >/dev/null 2>&1 || true )
-    _land_record "$logf" "$slug" error "$onto" rebase-conflict; return 1
-  }
-
-  # Deterministic harness-tool gate on changed files (host-side, no devcontainer). ADR 0004
-  local changed_files _gate_fail _f
-  changed_files="$(git -C "$wt" diff --name-only "$HOLDING" 2>/dev/null || true)"
-  if [ -n "$changed_files" ]; then
-    _gate_fail=0
-    while IFS= read -r _f; do
-      [ -z "$_f" ] && continue
-      # shellcheck source=/dev/null
-      (cd "$wt" && . "$_LIB/precommit-gates.sh" && mentat_gate "$_f") >>"$logf" 2>&1 || _gate_fail=1
-    done <<< "$changed_files"
-    if [ "$_gate_fail" -ne 0 ]; then
-      log "land EJECT (gate fail before re-gate): $slug"
-      _land_record "$logf" "$slug" error "$onto" gate-fail; return 1
-    fi
-  fi
-
-  # Re-gate via headless agent — project-agnostic, reads CLAUDE.md/AGENTS.md. ADR 0003
-  local gate_prompt
-  gate_prompt="Spawn cavecrew-builder in this worktree. Read CLAUDE.md/AGENTS.md, \
-run this project's quality gates (lint/types/tests/etc as the project defines them) \
-via mentat-container-run on the current rebased tree, fix nothing, and exit non-zero if \
-any gate is red. Report only PASS or FAIL."
-  local gcmd=()
-  while IFS= read -r -d '' tok; do gcmd+=("$tok"); done < <(build_cmd "$gate_prompt")
-  if ! ( cd "$wt" && "${gcmd[@]}" ) >>"$logf" 2>&1; then
-    log "land EJECT (re-gate red after rebase onto $onto): $slug — worktree $wt"
-    _land_record "$logf" "$slug" error "$onto" gate-fail; return 1
-  fi
-
-  # Fast-forward — ff-only, no merge commit. ADR 0002
-  if [ "$(git -C "$ROOT" branch --show-current)" != "$HOLDING" ]; then
-    log "land EJECT (holding '$HOLDING' not checked out at $ROOT): $slug"
-    _land_record "$logf" "$slug" error "$onto" not-ff; return 1
-  fi
-  if git -C "$ROOT" merge --ff-only "$slug" >>"$logf" 2>&1; then
-    local tip; tip="$(git -C "$ROOT" rev-parse --short "$HOLDING" 2>/dev/null || echo "$HOLDING")"
-    _land_record "$logf" "$slug" success "$tip"
-    log "landed: $slug -> $HOLDING (gated on rebase onto $onto)"; return 0
-  fi
-  log "land EJECT (not fast-forward): $slug — worktree $wt"
-  _land_record "$logf" "$slug" error "$onto" not-ff; return 1
-}
-
-# End-of-queue review over final landed tip — advisory. ADR 0003 ADR 0004
-# Subprocess stdout captured into the audit row; stderr tee'd to a sidecar
-# file. Raw output never reaches `.jsonl` (G1-S4, ADR 0009).
-final_review() {
-  local base="$1"
-  local stderr_dir="$LOGDIR/.stderr"
-  local stderr_path="$stderr_dir/mentat-orchestrate-final-review.stderr"
-  mkdir -p "$stderr_dir"
-  log "end-of-queue review: spawning ADR-0003 reviewers over $base..$HOLDING"
-
-  local up_out
-  if ! up_out="$( cd "$ROOT" && ~/.agents/bin/mentat-container-up 2>&1 )"; then
-    printf '%s\n' "$up_out" >> "$stderr_path"
-    log "end-of-queue review SKIPPED (mentat-container-up failed at $ROOT; see $stderr_path)"
-    return 0
-  fi
-
-  local prompt
-  prompt="The merge queue landed every chunk onto $HOLDING. Run the full ADR-0003 \
-review gate over the cumulative diff $base..HEAD: spawn mentat-plan-reviewer, \
-mentat-test-reviewer, mentat-bug-reviewer, and mentat-smell-reviewer (advisory, \
-threshold 0.85, no max-sev veto), apply the gate (never average, veto > \
-threshold), and report each score + the verdict. Read CLAUDE.md/AGENTS.md for how \
-this project runs its checks. Do not modify code."
-  local rcmd=()
-  while IFS= read -r -d '' tok; do rcmd+=("$tok"); done < <(build_cmd "$prompt")
-
-  # Capture stdout for the audit field; redirect stderr straight to the
-  # sidecar so it never lands in the .jsonl stream.
-  local stdout_capture verdict="success" rc=0
-  stdout_capture="$( cd "$ROOT" && "${rcmd[@]}" 2>>"$stderr_path" )" || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    verdict="flagged"
-    log "end-of-queue review FLAGGED a miss (sidecar $stderr_path). Landed ref unchanged (advisory)."
-  else
-    log "end-of-queue review done (sidecar $stderr_path)"
-  fi
-
-  # Trim captured stdout so a chatty agent can't bloat the audit row.
-  local stdout_field
-  stdout_field="$(printf '%s' "$stdout_capture" | tail -c 4000)"
-  local veto_bool="false"; [ "$verdict" = flagged ] && veto_bool="true"
-  mentat_audit mentat-orchestrate review.final "$(jq -cn \
-    --arg reviewer "adr-0003-composite" \
-    --argjson score "$([ "$verdict" = success ] && echo 1.0 || echo 0.0)" \
-    --argjson veto "$veto_bool" \
-    --arg base "$base" --arg tip "$HOLDING" \
-    --arg stdout "$stdout_field" \
-    --arg stderr_path "$stderr_path" \
-    '{reviewer:$reviewer, score:$score, veto:$veto, findings:[], base:$base, tip:$tip, stdout:$stdout, stderr_path:$stderr_path}')"
-}
-
-_run_doctor() { # $1=slug $2=reason
-  MENTAT_SLUG="$1" MENTAT_SESSION="$MENTAT_SESSION" MENTAT_REPO="$MENTAT_REPO" \
-    "$HERE/mentat-doctor" "$1" --reason="$2" \
-    >"$LOGDIR/diagnosis-$1.md" 2>&1 || true
-  log "diagnosis: $LOGDIR/diagnosis-$1.md"
-}
-
-_chunk_teardown() { # $1=slug
-  local wt="$ROOT/.mentat/worktrees/$1"
-  [ -d "$wt" ] || return 0
-  ( cd "$wt" && ~/.agents/bin/mentat-container-down ) \
-    || log "WARN: container-down failed for $1 — orphan possible"
-  git -C "$ROOT" worktree remove --force "$wt" \
-    || log "WARN: worktree remove failed for $1"
-}
-
-declare -a PIDS PLANS SLUGS LOGS
-for plan in "$@"; do
-  slug="mentat-$(date +%s)-$$-$RANDOM"; logf="$LOGDIR/$slug.jsonl"; : > "$logf"
-  SLUGS+=("$slug"); LOGS+=("$logf"); PLANS+=("$plan")
-  log "chunk: $plan -> $slug | $logf"
-done
-
-log "watch live: ~/.agents/bin/mentat-track $LOGDIR mentat-*.jsonl"
-log "or in this repo: mentat-track"
-log "or via harness slash-command: /mentat-track"
-to_track_start "$LOGDIR" "${SLUGS[@]}"
-cleanup() {
-  to_track_stop
-  for slug in ${SLUGS[@]+"${SLUGS[@]}"}; do
-    _chunk_teardown "$slug"
-  done
-}
-trap cleanup EXIT INT TERM
-
-for i in "${!SLUGS[@]}"; do
-  run_chunk "${PLANS[$i]}" "${SLUGS[$i]}" "${LOGS[$i]}" & PIDS+=("$!")
-done
-
-declare -a IMPL_OK
-for i in "${!PIDS[@]}"; do
-  if wait "${PIDS[$i]}"; then
-    IMPL_OK+=("$i")
-  else
-    to_track_exit "${SLUGS[$i]}" agent-error "implement failed"
-    _land_record "${LOGS[$i]}" "${SLUGS[$i]}" error "" implement-fail
-    log "CHUNK FAILED (implement): ${PLANS[$i]} — worktree $ROOT/.mentat/worktrees/${SLUGS[$i]}"
-    _run_doctor "${SLUGS[$i]}" agent-exit-nonzero
-    _chunk_teardown "${SLUGS[$i]}"
-  fi
-done
-
+: "${MENTAT_REPO:=$(basename "$ROOT")}"
+: "${MENTAT_SESSION:=$(date +%s)-$$}"
+export MENTAT_REPO MENTAT_SESSION
 LAND_BASE="$(git -C "$ROOT" rev-parse "$HOLDING" 2>/dev/null || echo "$HOLDING")"
-LANDED=0
-for i in ${IMPL_OK[@]+"${IMPL_OK[@]}"}; do
-  to_track_phase "${SLUGS[$i]}" landing
-  if land_chunk "${SLUGS[$i]}" "${LOGS[$i]}"; then
-    LANDED=$((LANDED + 1)); to_track_exit "${SLUGS[$i]}" landed "-> $HOLDING"
-    _chunk_teardown "${SLUGS[$i]}"
-  else
-    to_track_exit "${SLUGS[$i]}" forensics "${LOGS[$i]}"
-    _run_doctor "${SLUGS[$i]}" land-fail
-    _chunk_teardown "${SLUGS[$i]}"
-    log "torn down: ${PLANS[$i]} — diagnosis at $LOGDIR/diagnosis-${SLUGS[$i]}.md"
-  fi
-done
 
-cleanup
-TOTAL="${#SLUGS[@]}"
-if [ "$LANDED" -eq "$TOTAL" ]; then
-  log "all $TOTAL chunk(s) landed -> $HOLDING."
-  final_review "$LAND_BASE"
-  log "done. Review end-of-queue findings, then push + PR manually (ADR 0002)."
-  exit 0
-else
-  log "$LANDED/$TOTAL chunk(s) landed; $((TOTAL - LANDED)) left up."
-  log "end-of-queue review skipped — repair ejected chunks first."
-  log "logs: $LOGDIR/  worktrees: $ROOT/.mentat/worktrees/"
-  exit 1
+set +e
+printf '%s\n' "$@" \
+  | "$_HERE/mentat-fan-out" ${FLAGS[@]+"${FLAGS[@]}"} \
+  | "$_HERE/mentat-land-queue" ${FLAGS[@]+"${FLAGS[@]}"} "$HOLDING"
+_RC=("${PIPESTATUS[@]}")
+set -e
+RC_FAN="${_RC[1]}"; RC_LAND="${_RC[2]}"
+
+if [ "$RC_FAN" -ge 2 ] || [ "$RC_LAND" -ge 2 ]; then
+  die "tool-level failure (fan-out=$RC_FAN land-queue=$RC_LAND)"
 fi
+if [ "$RC_FAN" -eq 0 ] && [ "$RC_LAND" -eq 0 ]; then
+  TIP="$(git -C "$ROOT" rev-parse "$HOLDING" 2>/dev/null || echo "$HOLDING")"
+  "$_HERE/mentat-final-review" ${FLAGS[@]+"${FLAGS[@]}"} "$LAND_BASE" "$TIP" || true
+  log "done. Push + PR manually (ADR 0002)."
+  exit 0
+fi
+log "partial: fan-out=$RC_FAN land-queue=$RC_LAND. Repair ejected chunks before final-review (ADR 0004)."
+exit 1
