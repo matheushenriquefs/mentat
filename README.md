@@ -11,7 +11,7 @@
 ## Demo
 
 <!-- Hero asciicast — land C3 first -->
-![demo](docs/assets/demo.cast.gif)
+![demo](docs/assets/demo.gif)
 
 <!-- Install --------------------------------------------------------------- -->
 
