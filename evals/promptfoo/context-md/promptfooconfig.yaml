@@ -1,0 +1,47 @@
+description: "CONTEXT.md eval — lexicon precision, land vs merge, avoid-list, ADR cross-ref"
+
+providers:
+  - id: anthropic:messages:claude-haiku-4-5-20251001
+    config:
+      max_tokens: 1024
+      system: "file://../../../CONTEXT.md"
+  - id: anthropic:messages:claude-sonnet-4-6
+    config:
+      max_tokens: 1024
+      system: "file://../../../CONTEXT.md"
+
+prompts:
+  - "{{prompt}}"
+
+tests:
+  - description: "lexicon-slice: slice=plan artifact, not running worktree"
+    vars:
+      prompt: "file://fixtures/lexicon-slice/input.md"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/lexicon-slice.md"
+        threshold: 0.88
+
+  - description: "lexicon-land-vs-merge: land not merge for cross-branch move"
+    vars:
+      prompt: "file://fixtures/lexicon-land-vs-merge/input.md"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/lexicon-land-vs-merge.md"
+        threshold: 0.88
+
+  - description: "avoid-list-violation: reject 'the harness' as Mentat self-description"
+    vars:
+      prompt: "file://fixtures/avoid-list-violation/input.md"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/avoid-list-violation.md"
+        threshold: 0.88
+
+  - description: "adr-cross-ref: holding branch invariant cites ADR 0002"
+    vars:
+      prompt: "file://fixtures/adr-cross-ref/input.md"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/adr-cross-ref.md"
+        threshold: 0.88

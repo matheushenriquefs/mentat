@@ -20,6 +20,9 @@ gate_auto() {
     */docs/adr/*.md)             gate_adr      "$f" ;;
     */skills/*/SKILL.md)         gate_skill    "$f" ;;
     */commands/*.md)             gate_command  "$f" ;;
+    */.agents/AGENTS.md|\
+    .agents/AGENTS.md)           gate_doc_eval "$f" ;;
+    CONTEXT.md|*/CONTEXT.md)     gate_doc_eval "$f" ;;
     */.github/workflows/*.yml|\
     */.github/workflows/*.yaml)  gate_workflow "$f" ;;
     # harness before *.sh — harness files match both; more-specific wins

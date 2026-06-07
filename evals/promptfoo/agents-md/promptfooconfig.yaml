@@ -1,0 +1,47 @@
+description: "AGENTS.md eval — delegation routing, container-only rule, lexicon, ADR citation"
+
+providers:
+  - id: anthropic:messages:claude-haiku-4-5-20251001
+    config:
+      max_tokens: 1024
+      system: "file://../../../../.agents/AGENTS.md"
+  - id: anthropic:messages:claude-sonnet-4-6
+    config:
+      max_tokens: 1024
+      system: "file://../../../../.agents/AGENTS.md"
+
+prompts:
+  - "{{prompt}}"
+
+tests:
+  - description: "delegation-routing: cavecrew-investigator for code location"
+    vars:
+      prompt: "file://fixtures/delegation-routing/input.md"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/delegation-routing.md"
+        threshold: 0.88
+
+  - description: "container-only: use mentat-container-run not host"
+    vars:
+      prompt: "file://fixtures/container-only/input.md"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/container-only.md"
+        threshold: 0.88
+
+  - description: "slice-vs-chunk: slice=plan artifact, chunk=running execution"
+    vars:
+      prompt: "file://fixtures/slice-vs-chunk/input.md"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/slice-vs-chunk.md"
+        threshold: 0.88
+
+  - description: "adr-citation: container-only rule cites ADR 0002 or 0004"
+    vars:
+      prompt: "file://fixtures/adr-citation/input.md"
+    assert:
+      - type: llm-rubric
+        value: "file://rubrics/adr-citation.md"
+        threshold: 0.88
