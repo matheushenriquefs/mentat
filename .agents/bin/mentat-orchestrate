@@ -96,7 +96,7 @@ run_chunk() {
   local stdout_f="${logf%.jsonl}.stdout"
   # Export normalize fn so it survives the pipe subshell, then normalize
   export -f "$norm_fn" 2>/dev/null || true
-  ( cd "$wt" && "${cmd[@]}" ) 2>&1 \
+  ( cd "$wt" && "${cmd[@]}" </dev/null ) 2>&1 \
     | tee "$stdout_f" \
     | bash -c "source $(printf %q "$hfile") && $norm_fn" \
     >> "$logf"
@@ -243,19 +243,14 @@ done
 
 cleanup
 TOTAL="${#SLUGS[@]}"
-EJECTED=$((TOTAL - LANDED))
 if [ "$LANDED" -eq "$TOTAL" ]; then
   log "all $TOTAL chunk(s) landed -> $HOLDING."
   final_review "$LAND_BASE"
-  # Emit cumulative diff on clean drain
-  log "--- mentat-diff ---"
-  ( cd "$ROOT" && "$HERE/mentat-diff" "$HOLDING" ) \
-    | tee -a "$LOGDIR/mentat-orchestrate-$MENTAT_SESSION.jsonl" >&2 || true
   log "done. Review end-of-queue findings, then push + PR manually (ADR 0002)."
   exit 0
 else
-  log "$LANDED/$TOTAL chunk(s) landed; $EJECTED ejected — repair first."
-  log "skipped cumulative diff — $EJECTED eject(s). Run: mentat-diff $HOLDING"
+  log "$LANDED/$TOTAL chunk(s) landed; $((TOTAL - LANDED)) left up."
+  log "end-of-queue review skipped — repair ejected chunks first."
   log "logs: $LOGDIR/  worktrees: $ROOT/.mentat/worktrees/"
   exit 1
 fi
