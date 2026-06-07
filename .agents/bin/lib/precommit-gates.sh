@@ -53,13 +53,44 @@ gate_harness() {
     || { echo "$1: missing harness_${name}_normalize"; return 1; }
 }
 
+# @class: Doc eval  # @glob: .agents/AGENTS.md,CONTEXT.md  # @check: promptfoo eval pass rate >= 0.88
+gate_doc_eval() {
+  local f="$1"
+  local harness
+  case "$f" in
+    */.agents/AGENTS.md|.agents/AGENTS.md) harness="evals/promptfoo/agents-md" ;;
+    CONTEXT.md|*/CONTEXT.md)               harness="evals/promptfoo/context-md" ;;
+    *) return 0 ;;
+  esac
+
+  if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+    echo "$f: doc-eval skipped (ANTHROPIC_API_KEY not set)" >&2
+    return 0
+  fi
+
+  local repo_root; repo_root="$(git rev-parse --show-toplevel)"
+  local run_sh="${repo_root}/${harness}/run.sh"
+  if [[ ! -f "$run_sh" ]]; then
+    echo "$f: doc-eval skipped (no run.sh at ${harness}/run.sh)" >&2
+    return 0
+  fi
+
+  echo "$f: running promptfoo eval …" >&2
+  bash "$run_sh" /tmp/doc-eval-$$.json >/dev/null || {
+    echo "$f: promptfoo eval failed — check /tmp/doc-eval-$$.json" >&2
+    return 1
+  }
+}
+
 mentat_gate() {
   local f="$1"
   case "$f" in
     */docs/adr/*.md)    gate_adr      "$f" ;;
     */agents/*.md)      gate_skill    "$f" ;;
     */commands/*.md)    gate_command  "$f" ;;
-    AGENTS.md|CONTEXT.md|STYLE.md|README.md)
+    */.agents/AGENTS.md|.agents/AGENTS.md|CONTEXT.md)
+                        gate_doc_eval "$f" ;;
+    AGENTS.md|STYLE.md|README.md)
                         gate_workflow "$f" ;;
     */bin/lib/harness/*.sh)
                         gate_harness  "$f" ;;

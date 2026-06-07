@@ -22,6 +22,9 @@ pre-commit:
     harness:
       glob: ".agents/bin/lib/harness/*.sh"
       run: .agents/bin/mentat-precommit harness {staged_files}
+    doc-eval:
+      glob: "{.agents/AGENTS.md,CONTEXT.md}"
+      run: .agents/bin/mentat-precommit auto {staged_files}
     stale-ref:
       glob: "**/*"
       run: |
