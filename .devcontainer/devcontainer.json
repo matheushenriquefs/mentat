@@ -7,8 +7,7 @@
   },
   "onCreateCommand": "apt-get update && apt-get install -y jq shellcheck && curl -LsSf https://astral.sh/uv/install.sh | sh",
   "postCreateCommand": "~/.local/bin/uv sync --group dev && npm install -g promptfoo",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/mentat,type=bind,consistency=cached",
-  "workspaceFolder": "/workspaces/mentat",
+  "workspaceFolder": "/workspaces",
   "runArgs": ["--init"],
   "remoteUser": "vscode"
 }
