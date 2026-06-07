@@ -12,6 +12,7 @@ pre-commit:
       run: .agents/bin/mentat-precommit command {staged_files}
     shell:
       glob: "{.agents/bin/**/*,.agents/bin/lib/**/*.sh}"
+      exclude: '\.(jsonc|jq|json|md)$'
       run: bash -n {staged_files}
     jsonc:
       glob: "*.jsonc"
