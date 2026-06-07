@@ -182,15 +182,17 @@ def test_adr_and_stub_field_lists_agree():
     )
 
 
-# -- Stale-ref discipline (no S2 contamination) -------------------------------
+# -- Slice-boundary marker (S1 -> S2 transition) -----------------------------
 
 
-def test_stub_does_not_pre_seed_harness_rows():
-    """S1 stub seeds schema only — S2 fills rows. Defends against scope creep
-    that would invalidate S2's TDD red phase."""
+def test_stub_harnesses_map_well_formed():
+    """S1 stub declared an empty `harnesses` map awaiting S2. S2 has landed
+    and populated 8 rows. This test now asserts the post-S2 floor: the
+    `harnesses` value is a dict (whether empty during S1 or populated post-S2)
+    — never a list, string, or null. Schema contract from S1 holds."""
     parsed = json.loads(_strip_jsonc_comments(STUB.read_text()))
-    assert parsed["harnesses"] == {}, (
-        f"S1 must leave `harnesses` empty for S2 to fill; got {parsed['harnesses']!r}"
+    assert isinstance(parsed["harnesses"], dict), (
+        f"`harnesses` must be a JSON object (dict); got {type(parsed['harnesses']).__name__}"
     )
 
 
