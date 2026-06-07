@@ -51,6 +51,7 @@
     "release.complete":     {"actor": "mentat-release",     "required": []},
 
     // --- mentat-orchestrate --------------------------------------------------
+    "orchestrate.start":    {"actor": "mentat-orchestrate", "required": ["args"]},
     // chunk.spawn: new in G1-S6 — one row per fanned-out chunk.
     "chunk.spawn":          {"actor": "mentat-orchestrate", "required": ["slug","plan"]},
     // land.complete: outcome enum = success | eject (reason qualifies eject).
