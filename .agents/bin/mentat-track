@@ -99,26 +99,30 @@ to_track_exit() { # slug landed|forensics|agent-error [note]
     agent-error) _banner "$1" "✗" "$c_red"    "agent error" "${3:-}";;
     *)           _banner "$1" "·" "$c_dim"    "$2"          "${3:-}";;
   esac
-  kill "${_feed_pid[$1]:-0}" 2>/dev/null || true
-  unset '_feed_pid[$1]'
+  local _v; _v="$(_fp_var "$1")"
+  kill "${!_v:-0}" 2>/dev/null || true
+  eval "unset $_v"
 }
 
-declare -A _feed_pid
+# bash 3.2-compatible pid map — associative arrays need bash 4+
+_fp_var() { printf '_fp__%s' "$(printf '%s' "$1" | tr -c 'a-zA-Z0-9' '_')"; }
 to_track_start() { # logdir slug...
   local logdir="$1"; shift
-  local slug
+  local slug _v
   for slug in "$@"; do
     to_track_phase "$slug" implementing
     _feed "$slug" "$logdir/$slug.jsonl" &
-    _feed_pid[$slug]=$!
+    _v="$(_fp_var "$slug")"
+    eval "$_v=$!"
   done
 }
 to_track_stop() {
-  local slug
-  for slug in "${!_feed_pid[@]:-}"; do
-    kill "${_feed_pid[$slug]}" 2>/dev/null || true
-  done
-  _feed_pid=()
+  local _v _pid
+  while IFS= read -r _v; do
+    eval "_pid=\$$_v"
+    kill "$_pid" 2>/dev/null || true
+    eval "unset $_v"
+  done < <(compgen -v _fp__ 2>/dev/null || true)
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
