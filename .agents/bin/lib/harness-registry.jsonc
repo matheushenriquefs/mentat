@@ -5,9 +5,13 @@
 //   bash:    sed 's|//.*$||' harness-registry.jsonc | jq -c '.'
 //   python:  re.sub(r'//.*$', '', text, flags=re.M); json.loads(...)
 //
-// G3-S1 seeds this stub with schema + fail-closed policy. The `harnesses` map
-// is intentionally empty — G3-S2 writes the 8 rows (aider, amp, claude-code,
-// codex, copilot, cursor, gemini, openhands).
+// G3-S1 seeded schema + fail-closed policy.
+// G3-S2 wrote the 8 rows below (aider, amp, claude-code, codex, copilot,
+// cursor, gemini, openhands).
+// supports_afk=true only for claude-code + cursor (the adapters G3-S4/S5/S6
+// wire to honor MENTAT_INTERACTIVE=0 and emit the HITL exit code).
+// system_prompt_template text for AFK adapters is an initial draft —
+// G3-S3 refines the exact clause once the HITL exit code is chosen.
 //
 // Row contract (each value under harnesses.<name>):
 //   {
@@ -32,6 +36,76 @@
 
   "on_unknown": "refuse",
 
-  // G3-S2 fills this map with 8 rows. Empty in S1 by design — tests verify.
-  "harnesses": {}
+  "harnesses": {
+    "aider": {
+      "name": "aider",
+      "bin": "aider",
+      "base_args": ["--message"],
+      "supports_afk": false,
+      "disallowed_tools_arg": "",
+      "system_prompt_template": ""
+    },
+    "amp": {
+      "name": "amp",
+      "bin": "amp",
+      "base_args": ["-x", "--stream-json"],
+      "supports_afk": false,
+      "disallowed_tools_arg": "",
+      "system_prompt_template": ""
+    },
+    "claude-code": {
+      "name": "claude-code",
+      "bin": "claude",
+      "base_args": [
+        "-p",
+        "--output-format", "stream-json",
+        "--verbose",
+        "--permission-mode", "acceptEdits",
+        "--allowedTools", "Bash,Read,Edit,Write,Agent"
+      ],
+      "supports_afk": true,
+      "disallowed_tools_arg": "--disallowedTools AskUserQuestion",
+      "system_prompt_template": "AFK mode: do not ask the user questions. On ambiguity, exit nonzero with a HITL audit reason instead of guessing."
+    },
+    "codex": {
+      "name": "codex",
+      "bin": "codex",
+      "base_args": ["exec", "--json"],
+      "supports_afk": false,
+      "disallowed_tools_arg": "",
+      "system_prompt_template": ""
+    },
+    "copilot": {
+      "name": "copilot",
+      "bin": "copilot",
+      "base_args": ["-p"],
+      "supports_afk": false,
+      "disallowed_tools_arg": "",
+      "system_prompt_template": ""
+    },
+    "cursor": {
+      "name": "cursor",
+      "bin": "cursor-agent",
+      "base_args": ["-p", "--output-format", "stream-json", "--force"],
+      "supports_afk": true,
+      "disallowed_tools_arg": "",
+      "system_prompt_template": "AFK mode: do not ask the user questions. On ambiguity, exit nonzero with a HITL audit reason instead of guessing."
+    },
+    "gemini": {
+      "name": "gemini",
+      "bin": "gemini",
+      "base_args": ["-p", "--output-format", "json"],
+      "supports_afk": false,
+      "disallowed_tools_arg": "",
+      "system_prompt_template": ""
+    },
+    "openhands": {
+      "name": "openhands",
+      "bin": "openhands",
+      "base_args": ["-t"],
+      "supports_afk": false,
+      "disallowed_tools_arg": "",
+      "system_prompt_template": ""
+    }
+  }
 }
