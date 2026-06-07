@@ -1,0 +1,37 @@
+// harness-registry.jsonc — single source-of-truth for per-harness capability claims.
+// See docs/adr/0012-harness-registry.md for schema rationale and consumer contract.
+//
+// Loader convention (mirrors audit-schema.jsonc / G1-S1):
+//   bash:    sed 's|//.*$||' harness-registry.jsonc | jq -c '.'
+//   python:  re.sub(r'//.*$', '', text, flags=re.M); json.loads(...)
+//
+// G3-S1 seeds this stub with schema + fail-closed policy. The `harnesses` map
+// is intentionally empty — G3-S2 writes the 8 rows (aider, amp, claude-code,
+// codex, copilot, cursor, gemini, openhands).
+//
+// Row contract (each value under harnesses.<name>):
+//   {
+//     "name":                   string,    // equals the key + lib/harness/<name>.sh basename
+//     "bin":                    string,    // executable on $PATH
+//     "base_args":              string[],  // argv prepended before prompt
+//     "supports_afk":           bool,      // honors MENTAT_INTERACTIVE=0 + emits HITL exit code
+//     "disallowed_tools_arg":   string,    // template fragment appended under AFK; "" => no knob
+//     "system_prompt_template": string     // text prepended to user prompt in AFK mode
+//   }
+//
+// Unknown harness policy: refuse to spawn, exit nonzero. No implicit defaults.
+{
+  "required_fields": [
+    "name",
+    "bin",
+    "base_args",
+    "supports_afk",
+    "disallowed_tools_arg",
+    "system_prompt_template"
+  ],
+
+  "on_unknown": "refuse",
+
+  // G3-S2 fills this map with 8 rows. Empty in S1 by design — tests verify.
+  "harnesses": {}
+}
