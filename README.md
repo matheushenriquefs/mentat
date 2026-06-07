@@ -67,15 +67,28 @@ Full glossary and ADR index: [CONTEXT.md](CONTEXT.md)
 
 ## How it compares
 
-| | Mentat | dmux | swarm | claude-flow |
+| | Mentat | dmux [^1] | swarm [^2] | claude-flow [^3] |
 |---|---|---|---|---|
-| Parallel fan-out | ✓ | ✓ | ✓ | ✓ |
+| Parallel fan-out | ✓ | ✓ [^4] | ✓ [^5] | ✓ [^6] |
 | Serial land queue | ✓ | — | — | — |
-| Deterministic gate | ✓ | — | — | partial |
+| Deterministic gate | ✓ | — | — | partial [^7] |
 | Anti-cheat blacklist | ✓ | — | — | — |
-| Host toolchain required | none | none | varies | node |
-| Harness agnostic | ✓ | — | — | — |
+| Host toolchain required | none | none [^8] | python [^9] | node [^10] |
+| Harness agnostic | ✓ | — [^11] | — | — [^12] |
 | Docker required | ✓ | — | — | — |
+
+[^1]: dmux — tmux-based Claude Code pane manager. Runs multiple Claude Code sessions in parallel tmux panes. No merge queue or quality gate. <https://github.com/matheushenriquefs/mentat/tree/main/.dmux>
+[^2]: OpenAI Swarm — "lightweight, highly controllable, and easily testable" multi-agent coordination via `Agent`s and handoffs. Deprecated in favour of [OpenAI Agents SDK](https://github.com/openai/openai-agents-python). <https://github.com/openai/swarm>
+[^3]: claude-flow (now Ruflo) — "Multi-agent AI harness for Claude Code and Codex." Orchestrates swarms via `npx ruflo init`. <https://github.com/ruvnet/claude-flow>
+[^4]: dmux spawns one Claude Code pane per task; panes run concurrently inside tmux.
+[^5]: Swarm routes between agents via handoffs; concurrent calls possible via Python async. README: "powerful enough to express rich dynamics between tools and networks of agents."
+[^6]: Ruflo: "Orchestrate 100+ specialized AI agents across machines, teams, and trust boundaries." Swarm plugin coordinates agents as a team.
+[^7]: Ruflo includes a routing layer and autopilot loop but no deterministic scored gate or veto system equivalent to ADR 0003.
+[^8]: dmux is a shell script + tmux; no language runtime required on the host beyond tmux and a terminal.
+[^9]: Swarm README: "Requires Python 3.10+". Install via `pip install git+https://github.com/openai/swarm.git`.
+[^10]: Ruflo README: "One `npx ruflo init` gives Claude Code a nervous system." Requires Node.js/npm for `npx`.
+[^11]: dmux is tightly coupled to Claude Code; it reads `.dmux.config.json` and launches `claude` sessions directly.
+[^12]: Ruflo targets Claude Code and Codex explicitly; README badge: "Claude Code — Plugin".
 
 <!-- Docs ------------------------------------------------------------------ -->
 
