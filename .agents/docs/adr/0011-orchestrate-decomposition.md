@@ -41,9 +41,12 @@ mentat-fan-out      reads:  newline-delimited slice plan paths on stdin
                             emits one `chunk.spawn` audit row per spawn
 
 mentat-land-queue   reads:  newline-delimited chunk slugs on stdin
-                    writes: JSONL verdicts on stdout, one per chunk
+                    writes: JSONL verdicts on stdout, one per chunk:
                             {slug, outcome, tip?, reason?, conflicted_files?,
-                             resume_cmd?}
+                             resume_cmd?, findings?}
+                            outcome ∈ {"success", "eject"}            (audit schema)
+                            reason  ∈ {"rebase-conflict", "gate-fail",
+                                       "not-ff", "implement-fail"}   (eject only)
                     side:   per chunk — rebase onto live $HOLDING tip,
                             re-gate via cavecrew-builder, `merge --ff-only` or
                             eject (worktree left intact). Emits one
@@ -51,15 +54,26 @@ mentat-land-queue   reads:  newline-delimited chunk slugs on stdin
 
 mentat-final-review <base-sha> <tip-sha>
                     reads:  nothing on stdin
-                    writes: JSONL verdict on stdout (single line)
-                            {reviewer, score, veto, base, tip, stdout?,
-                             stderr_path?}
+                    writes: JSONL verdict on stdout (single line):
+                            {reviewer, score, veto, findings, base, tip,
+                             stdout?, stderr_path?}
+                            (`findings` required by audit schema;
+                             stdout-verdict shape duplicates the audit row.)
                     side:   spawns the ADR-0003 reviewer set against
                             (base..tip), captures stdout into the audit field
                             (tail -c 4000) and stderr into the sidecar at
                             `$LOGDIR/.stderr/mentat-final-review.stderr`.
                             Emits one `review.final` audit row.
 ```
+
+Empty stdin → zero chunks → tools exit 0 with zero verdict lines. Zero-slice
+batches are a legitimate no-op (e.g., a plan whose preflight finds every
+slice already DONE), not an argv error.
+
+Outcome / reason enums above are the canonical land-verdict vocabulary that
+`audit-schema.jsonc::land.complete` already locks. S7 implementers wire
+plan-stated failure classes (27 implement-fail / 23 rebase-conflict / 2 gate-fail /
+2 not-ff) onto the `reason` field; no new enum values are introduced here.
 
 `mentat-orchestrate` becomes a ≤60-LOC dispatcher: parse a batch spec, pipe
 the slice paths into fan-out, pipe the chunk slugs into land-queue, pluck the
@@ -139,8 +153,8 @@ and only if each behavior survives the split.
 | Each chunk holds its OWN branch                   | `mentat-fan-out` creates per-chunk worktrees with their own branches; nothing in this ADR couples chunks to a shared ref except `$HOLDING`.    |
 | Re-gate after the land rebase (merge queue)       | `mentat-land-queue` re-gates inside its per-chunk loop before `merge --ff-only`. Same agent-spawn pattern as today; no driver names a project tool. |
 | Eject on any red, never loop-retry one chunk      | Verdict schema has a closed set of `outcome` values; once emitted, the chunk is done. `mentat-land-queue` moves on to the next slug.            |
-| Reviewers run once at end-of-queue, only all-green | `mentat-final-review` runs after `mentat-land-queue` exits 0 (all-green). On exit 1 (partial), the dispatcher skips final-review per ADR-0004.  |
-| Language- and harness-agnostic; Docker required   | None of the three tools name a project tool. `mentat-container-run` and `cavecrew-builder` already abstract that.                              |
+| Reviewers run once at end-of-queue, only all-green | `mentat-final-review` runs after `mentat-land-queue` exits 0 (all-green). On exit 1 (partial), the dispatcher skips final-review per ADR-0004. The review is advisory (warns, never rolls back the landed ref) — `mentat-final-review`'s `veto` bit on stdout flags miss-detection but the dispatcher does not act on it. |
+| Language- and harness-agnostic; Docker required   | None of the three tools name a project tool. `mentat-container-run` and `cavecrew-builder` already abstract that. Docker remains a hard dep (ADR-0004): `mentat-fan-out` calls `mentat-container-up` per chunk; absence of a container runtime is a tool-level failure (exit ≥2), not an eject. |
 | Project tools run in-container, never host        | Inherited — these tools shell out to `mentat-container-run` exactly where the current driver does.                                              |
 | Cap 3 parallel chunks                             | Cap lives in `mentat-fan-out` (a single number that gates its spawn loop). Same place it lives today, just relocated.                          |
 
