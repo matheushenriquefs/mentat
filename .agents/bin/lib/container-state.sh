@@ -19,6 +19,27 @@ container_slug_for_cwd() {
   basename "$PWD"
 }
 
+# Resolve the workspaceFolder for the current worktree.
+# Reads $PWD/.devcontainer/devcontainer.json's .workspaceFolder field
+# (stripping JSONC `//` line comments) and falls back to /workspaces/<slug>
+# when the file or field is absent. Sole canonical reader of devcontainer.json
+# across the four mentat-container-* scripts (closes C4's "four scripts
+# re-derive workspaceFolder" tail and the S4 carry-forward where
+# `mentat-container-run` slug-hardcoded WS diverged from a hand-written
+# devcontainer.json's explicit workspaceFolder, causing OCI chdir failures).
+# Stdout: absolute path. Exit 0 always.
+resolve_workspace_folder() {
+  local slug
+  slug="$(container_slug_for_cwd)"
+  local dcj="$PWD/.devcontainer/devcontainer.json"
+  if [ ! -f "$dcj" ]; then
+    printf '/workspaces/%s\n' "$slug"
+    return 0
+  fi
+  grep -v '^[[:space:]]*//' "$dcj" \
+    | jq -r --arg slug "$slug" '.workspaceFolder // ("/workspaces/" + $slug)'
+}
+
 # Resolve a running container's ID by mentat_slug label.
 # Stdout: 12-char (or longer) docker container ID.
 # Exit 0 on hit, 1 on miss (stderr stays empty — caller decides fatality),
