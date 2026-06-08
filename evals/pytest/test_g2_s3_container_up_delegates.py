@@ -30,14 +30,15 @@ Testing strategy:
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
+import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / ".agents" / "bin" / "mentat-container-up"
 LIB = ROOT / ".agents" / "bin" / "lib" / "container-state.sh"
-DESIGN_DOC = ROOT / ".agents" / "docs" / "container-state-design.md"
 
 # Helpers the design doc locks; S3 must invoke at least these four.
 LIB_HELPERS_USED_BY_UP = (
@@ -46,6 +47,12 @@ LIB_HELPERS_USED_BY_UP = (
     "ensure_workspace_folder",  # asserts workspaceFolder dir exists
     "assert_safe_directory",    # asserts safe.directory configured
 )
+
+
+def _strip_comments(text: str) -> str:
+    """Drop full-line comments so source-grep tests cannot be gamed by
+    inserting the helper name in a comment without actually calling it."""
+    return re.sub(r"^\s*#.*$", "", text, flags=re.MULTILINE)
 
 
 # -- Static prerequisites ----------------------------------------------------
@@ -121,8 +128,9 @@ def test_script_sources_lib_before_first_helper_call():
 
 
 def test_script_invokes_container_slug_for_cwd():
-    """Slug derivation must come from the lib (was: `SLUG=$(basename "$WT")`)."""
-    text = SCRIPT.read_text()
+    """Slug derivation must come from the lib (was: `SLUG=$(basename "$WT")`).
+    Comments stripped so a doc-only mention cannot satisfy the assertion."""
+    text = _strip_comments(SCRIPT.read_text())
     assert re.search(r"\bcontainer_slug_for_cwd\b", text), (
         "mentat-container-up must derive slug via container_slug_for_cwd "
         "(replaces inline basename of $WT / $PWD)"
@@ -131,8 +139,8 @@ def test_script_invokes_container_slug_for_cwd():
 
 def test_script_invokes_container_id_for():
     """Container-ID lookup must come from the lib (was: `docker ps -q
-    --filter "label=mentat_slug=$SLUG"`)."""
-    text = SCRIPT.read_text()
+    --filter "label=mentat_slug=$SLUG"`). Comments stripped."""
+    text = _strip_comments(SCRIPT.read_text())
     assert re.search(r"\bcontainer_id_for\b", text), (
         "mentat-container-up must look up the container via container_id_for"
     )
@@ -140,8 +148,8 @@ def test_script_invokes_container_id_for():
 
 def test_script_invokes_ensure_workspace_folder():
     """Pre-flight assertion: workspaceFolder exists inside the container.
-    Per design doc — verify line of the slice plan."""
-    text = SCRIPT.read_text()
+    Per design doc — verify line of the slice plan. Comments stripped."""
+    text = _strip_comments(SCRIPT.read_text())
     assert re.search(r"\bensure_workspace_folder\b", text), (
         "mentat-container-up must call ensure_workspace_folder as a "
         "pre-flight check (plan S3 verify line)"
@@ -150,8 +158,9 @@ def test_script_invokes_ensure_workspace_folder():
 
 def test_script_invokes_assert_safe_directory():
     """Pre-flight assertion: safe.directory is configured. Plan S3 spec:
-    'Pre-flight: assert_safe_directory after up, before returning success.'"""
-    text = SCRIPT.read_text()
+    'Pre-flight: assert_safe_directory after up, before returning success.'
+    Comments stripped."""
+    text = _strip_comments(SCRIPT.read_text())
     assert re.search(r"\bassert_safe_directory\b", text), (
         "mentat-container-up must call assert_safe_directory before "
         "returning success (plan S3 spec)"
@@ -235,39 +244,64 @@ def test_assert_safe_directory_present_before_each_success_exit():
         )
 
 
-def test_ensure_workspace_folder_called_after_up_or_start():
+def test_workspace_folder_check_fires_after_state_probe():
     """Plan S3 verify: 'workspaceFolder exists per ensure_workspace_folder'.
-    The check must run on every path that produces a running container
-    (already-up, start-stopped, cold up). Lower bar than full control-flow
-    proof: ensure_workspace_folder is invoked at least once and appears
-    AFTER the first container-state-changing operation (docker start,
-    devcontainer up, or container_id_for non-empty hit)."""
+    The check must run on every path that produces a running container —
+    so the first call site (NOT the function-body definition) must follow
+    the first container-state probe (docker start, devcontainer up, or
+    container_id_for). Testing workspace presence before any probe would
+    be a no-op.
+
+    The impl extracts the three pre-flight asserts into a `postup_assertions`
+    wrapper. The wrapper is the effective call site; lib helpers inside the
+    wrapper body are definitions, not calls."""
     text = SCRIPT.read_text()
     lines = text.splitlines()
     first_state_change = None
-    first_ensure_ws = None
+    first_ws_callsite = None
+    # Track open/close of `postup_assertions() { ... }` so we can skip the
+    # function body when looking for *call* sites of ensure_workspace_folder.
+    in_postup_body = False
+    postup_brace_depth = 0
     for i, line in enumerate(lines):
         stripped = line.strip()
         if stripped.startswith("#"):
             continue
+        # Detect function opener.
+        if re.search(r"^\s*postup_assertions\s*\(\s*\)\s*\{", line):
+            in_postup_body = True
+            postup_brace_depth = 1
+            continue
+        if in_postup_body:
+            postup_brace_depth += line.count("{") - line.count("}")
+            if postup_brace_depth <= 0:
+                in_postup_body = False
+            continue  # skip lines inside the function body
         if first_state_change is None and re.search(
             r"\b(devcontainer\s+up|docker\s+start|container_id_for)\b", line
         ):
             first_state_change = i
-        if first_ensure_ws is None and "ensure_workspace_folder" in line:
-            first_ensure_ws = i
-    assert first_ensure_ws is not None, (
-        "ensure_workspace_folder must be invoked somewhere in the script"
-    )
+        # A call to postup_assertions (the wrapper that runs the workspace
+        # check) OR a direct call to ensure_workspace_folder outside the
+        # wrapper definition.
+        if first_ws_callsite is None and (
+            re.search(r"\bpostup_assertions\s+", line)
+            or re.search(r"\bensure_workspace_folder\s+", line)
+        ):
+            first_ws_callsite = i
     assert first_state_change is not None, (
-        "script must perform some container-state-changing op "
+        "script must perform some container-state probe "
         "(devcontainer up / docker start / container_id_for)"
     )
-    # If both present, ensure-ws should not precede the very first
-    # state-change call (testing the workspace before there's a container
-    # to test against would be a no-op).
-    # NB: container_id_for is also a "first state-change" probe, so ws
-    # check can come immediately after.
+    assert first_ws_callsite is not None, (
+        "postup_assertions (or ensure_workspace_folder) must be invoked "
+        "outside its function definition"
+    )
+    assert first_ws_callsite > first_state_change, (
+        f"first workspace-check call at line {first_ws_callsite+1} must "
+        f"follow first state-probe at line {first_state_change+1} "
+        "(checking workspace before a container exists is a no-op)"
+    )
 
 
 # -- No silent fallback regressions ------------------------------------------
@@ -331,6 +365,191 @@ def test_script_aborts_outside_worktree(tmp_path):
     # Diagnostic message must still mention worktree.
     assert "worktree" in r.stderr.lower() or "git" in r.stderr.lower(), (
         f"abort message must name the cause; got stderr={r.stderr!r}"
+    )
+
+
+# -- Behavioural end-to-end: already-running path exercises lib helpers ------
+
+
+def _make_fake_bin(bin_dir: Path, name: str, body: str) -> Path:
+    """Drop a real executable shim into bin_dir and return its path."""
+    p = bin_dir / name
+    p.write_text(body)
+    p.chmod(0o755)
+    return p
+
+
+def test_already_running_path_invokes_lib_helpers_end_to_end(tmp_path):
+    """Plan S3 verify line: 'mentat-container-up from a worktree → container
+    starts, workspaceFolder exists per ensure_workspace_folder, safe.directory
+    configured.' Static delegation tests above prove the helper *names* land
+    in the script; this test proves the helpers actually *run* and reach the
+    fake docker binary in the expected shapes — closing the gap test-reviewer
+    flagged ('verify lines are not behaviorally exercised').
+
+    Strategy: build a fake worktree, point PATH at fake docker/devcontainer/
+    jq/df binaries that log every invocation, run the script, then read the
+    log and assert that:
+      - container_id_for invoked `docker ps -q --filter "label=mentat_slug=..."`
+      - ensure_workspace_folder invoked `docker exec ... test -d <ws>`
+      - assert_safe_directory invoked `docker exec ... git config --global
+        --get-all safe.directory`
+    All on the already-running early-exit path (line 45).
+    """
+    slug = "myslug"
+    wt = tmp_path / slug
+    wt.mkdir()
+    # Bare `.git` file (mimic a worktree pointer, not a real one).
+    (wt / ".git").write_text("gitdir: /fake/.git/worktrees/myslug\n")
+    # devcontainer.json so `workspace_folder()` (jq) has something to read.
+    (wt / ".devcontainer").mkdir()
+    (wt / ".devcontainer" / "devcontainer.json").write_text(
+        '{"workspaceFolder": "/workspaces/myslug"}\n'
+    )
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "calls.log"
+
+    # Fake docker: log every call; respond to ps + exec subcommands.
+    _make_fake_bin(bin_dir, "docker", textwrap.dedent(f"""\
+        #!/bin/bash
+        echo "docker $*" >> {log}
+        case "$1" in
+          ps)
+            # `ps -q --filter label=mentat_slug={slug}` → emit fake CID.
+            if [[ "$*" == *"mentat_slug={slug}"* ]]; then
+              echo fakecid123
+            fi
+            ;;
+          exec)
+            # Two shapes the lib emits inside the postup_assertions chain:
+            #   docker exec <cid> test -d <ws>           → exit 0
+            #   docker exec <cid> git config ... safe.directory → print ws
+            if [[ "$*" == *"test -d"* ]]; then
+              exit 0
+            elif [[ "$*" == *"safe.directory"* && "$*" == *"--get-all"* ]]; then
+              echo "/workspaces/{slug}"
+            fi
+            ;;
+        esac
+        """))
+
+    # Fake devcontainer: ensure_safe_directory uses `devcontainer exec ...`
+    # → no-op success, log the call.
+    _make_fake_bin(bin_dir, "devcontainer", textwrap.dedent(f"""\
+        #!/bin/bash
+        echo "devcontainer $*" >> {log}
+        exit 0
+        """))
+
+    # Fake jq: workspace_folder() pipes devcontainer.json through jq with
+    # `--arg slug "$SLUG" '.workspaceFolder // ("/workspaces/" + $slug)'`.
+    # Real jq is available in the container; keep it real by NOT shimming it.
+    # But provide a `df` shim that returns safe disk usage so the 95% guard
+    # never trips regardless of host state.
+    _make_fake_bin(bin_dir, "df", textwrap.dedent("""\
+        #!/bin/bash
+        echo "Filesystem  1K-blocks  Used  Available  Use%  Mounted"
+        echo "/dev/fake   1000000    100000 900000    10%   /"
+        """))
+
+    env = {
+        # Fake bins first; system PATH after so jq/awk/grep/sed/basename
+        # still resolve to real binaries.
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+        "HOME": str(tmp_path),
+    }
+
+    r = subprocess.run(
+        [str(SCRIPT)],
+        cwd=str(wt),
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0, (
+        f"already-running early-exit path must succeed; got rc={r.returncode}\n"
+        f"stdout={r.stdout!r}\nstderr={r.stderr!r}\n"
+        f"calls={log.read_text() if log.exists() else '(no log)'}"
+    )
+
+    calls = log.read_text() if log.exists() else ""
+    # container_id_for shape:
+    assert "ps -q" in calls and f"mentat_slug={slug}" in calls, (
+        "container_id_for must have invoked "
+        "`docker ps -q --filter label=mentat_slug=<slug>`; "
+        f"got calls:\n{calls}"
+    )
+    # ensure_workspace_folder shape:
+    assert "exec" in calls and "test -d" in calls, (
+        "ensure_workspace_folder must have invoked "
+        "`docker exec <cid> test -d <ws>`; "
+        f"got calls:\n{calls}"
+    )
+    # assert_safe_directory shape:
+    assert "safe.directory" in calls and "--get-all" in calls, (
+        "assert_safe_directory must have invoked "
+        "`docker exec <cid> git config --global --get-all safe.directory`; "
+        f"got calls:\n{calls}"
+    )
+
+
+def test_already_running_path_fails_loud_when_safe_directory_missing(tmp_path):
+    """Companion to the success-path test: if the container is running but
+    safe.directory is NOT configured (lib `assert_safe_directory` returns
+    nonzero), the script must propagate the failure (set -euo pipefail) —
+    no silent success. Locks the fail-loud contract behaviorally.
+    """
+    slug = "myslug2"
+    wt = tmp_path / slug
+    wt.mkdir()
+    (wt / ".git").write_text("gitdir: /fake/.git/worktrees/myslug2\n")
+    (wt / ".devcontainer").mkdir()
+    (wt / ".devcontainer" / "devcontainer.json").write_text(
+        '{"workspaceFolder": "/workspaces/myslug2"}\n'
+    )
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "calls.log"
+
+    # Fake docker: container present + `test -d` succeeds, but
+    # `git config --get-all safe.directory` returns EMPTY (no entry) —
+    # so `grep -Fxq` in the lib's assert_safe_directory exits nonzero.
+    _make_fake_bin(bin_dir, "docker", textwrap.dedent(f"""\
+        #!/bin/bash
+        echo "docker $*" >> {log}
+        case "$1" in
+          ps)
+            if [[ "$*" == *"mentat_slug={slug}"* ]]; then echo fakecid; fi
+            ;;
+          exec)
+            if [[ "$*" == *"test -d"* ]]; then exit 0
+            elif [[ "$*" == *"safe.directory"* ]]; then exit 0  # empty stdout
+            fi
+            ;;
+        esac
+        """))
+
+    _make_fake_bin(bin_dir, "devcontainer", "#!/bin/bash\nexit 0\n")
+    _make_fake_bin(bin_dir, "df", textwrap.dedent("""\
+        #!/bin/bash
+        echo "Filesystem  1K-blocks  Used  Available  Use%  Mounted"
+        echo "/dev/fake   1000000    100000 900000    10%   /"
+        """))
+
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path)}
+    r = subprocess.run(
+        [str(SCRIPT)],
+        cwd=str(wt),
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode != 0, (
+        f"missing safe.directory must produce nonzero exit (fail-loud); "
+        f"got rc={r.returncode}\nstdout={r.stdout!r}\nstderr={r.stderr!r}"
+    )
+    # Lib emits an explicit diagnostic naming the missing path.
+    assert "safe.directory" in r.stderr or "assert_safe_directory" in r.stderr, (
+        f"lib must surface the failure on stderr; got stderr={r.stderr!r}"
     )
 
 
