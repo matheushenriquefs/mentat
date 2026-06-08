@@ -150,3 +150,46 @@ cannot fail, and S2 tests must lock that.
 - ADR write-up — this design lives as a free-standing doc, not an ADR
   (G2-S1 HITL choice). If a future slice promotes any decision here to
   ADR status, the ADR cross-references back to this file.
+
+## G2-S7 driver-collapse decision (2026-06-07) — **A chosen**
+
+HITL choice after empirical evidence from S3–S6 (commits `0bccd07`, `33c655a`,
+`96f8dc0`, `6698174`, `4cddc8c`):
+
+- **Option A** — keep four scripts (`mentat-container-{up,run,down,doctor}`),
+  each sourcing `lib/container-state.sh`. **Chosen.**
+- **Option B** — collapse to `mentat-container {up|run|down|doctor}` driver,
+  symlink shims for one release. **Rejected.**
+
+### Why A
+
+1. **The chdir bug closed at S4, not at the driver layer.**
+   `mentat-container-run` now passes `--workdir "$WS"` (lib-derived) to
+   `docker exec`. The OCI `chdir to /workspaces/<slug>` failure mode is
+   resolved regardless of how many entry points front the lib. Driver shape
+   was never the cure.
+2. **Shared state via `lib/container-state.sh` works.** All four scripts
+   read `container_slug_for_cwd`, `container_id_for`,
+   `ensure_workspace_folder`, `assert_safe_directory` from one file. C4's
+   "four scripts re-derive invariants with subtle divergence" failure mode
+   is dead — the lib is the single source of truth.
+3. **Ergonomic cost of B is real, payoff is zero.**
+   `mentat-container-run '<cmd>'` is the documented entry point in
+   `AGENTS.md` (ADR-0002) and is invoked from `/mentat-implement`,
+   `/mentat-orchestrate`, the doctor walk, every test harness path, and
+   muscle memory in chat. Collapsing renames every doc + skill + CI ref
+   for a script-count reduction the lib already neutralised behaviourally.
+4. **No recurring bug motivates B.** Outstanding bug-reviewer
+   carry-forwards (doctor's `[ -f .git ]` repo-root skip; `assert_safe_directory`
+   `grep -Fxq` vs git's `safe.directory=*` wildcard) are lib-side or
+   doctor-side fixes — driver shape changes nothing.
+
+### Consequence
+
+- **G2 closes at S7.** S8 (`compose-synth.sh` pure callable) already DONE.
+- Driver-collapse stays parked. Revisit only if a new shared-state failure
+  emerges that genuinely requires single-entrypoint dispatch.
+- AGENTS.md keeps `mentat-container-run '<cmd>'` as the canonical form. No
+  doc churn.
+
+Plan receipt: see `~/.agents/plans/mentat-architecture-revamp-g2-container-quartet.md` §S7.
