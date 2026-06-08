@@ -60,10 +60,11 @@ if [ ! -d "$WT/.devcontainer" ]; then
   if [ ! -f "$WT/docker-compose.yml" ] && [ -f "$WT/docker-compose.yaml" ]; then
     ln -s docker-compose.yaml "$WT/docker-compose.yml"
   fi
+  mkdir -p "$WT/.devcontainer"
   if [ -f "$WT/docker-compose.yml" ]; then
-    synthesize_devcontainer
+    synthesize_devcontainer > "$WT/.devcontainer/devcontainer.json"
   elif ls "$WT"/Dockerfile* >/dev/null 2>&1; then
-    synthesize_devcontainer_from_dockerfile
+    synthesize_devcontainer_from_dockerfile > "$WT/.devcontainer/devcontainer.json"
   else
     echo "mentat-container-up: no .devcontainer/, no docker-compose.yml, no Dockerfile in worktree" >&2
     exit 1
