@@ -106,9 +106,10 @@ synthesize_compose_if_absent() {
   SLUG="$(container_slug_for_cwd)"
   # shellcheck source=/dev/null
   . "$lib_dir/compose-synth.sh"
+  mkdir -p "$wt/.devcontainer"
   if [ "$has_compose" = 1 ]; then
-    synthesize_devcontainer
+    synthesize_devcontainer > "$wt/.devcontainer/devcontainer.json"
   else
-    synthesize_devcontainer_from_dockerfile
+    synthesize_devcontainer_from_dockerfile > "$wt/.devcontainer/devcontainer.json"
   fi
 }

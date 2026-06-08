@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# bin/lib/compose-synth.sh — synthesize .devcontainer/devcontainer.json from
-# docker-compose.yml or a bare Dockerfile when no .devcontainer/ exists.
-# Source from mentat-container-up; requires WT and SLUG to be set by the caller.
+# bin/lib/compose-synth.sh — pure callable. Emits the devcontainer.json body
+# on stdout for either a docker-compose workspace or a bare Dockerfile.
+# Caller (mentat-container-up / container-state.sh::synthesize_compose_if_absent)
+# owns mkdir + redirect. Requires WT and SLUG to be set by the caller.
 
-# Infer workspace service from docker-compose.yml and write devcontainer.json.
-# Exits 3 if zero or multiple buildable/cwd-mounted services are found.
+# Infer workspace service from docker-compose.yml and emit devcontainer.json
+# body on stdout. Exits 3 if zero or multiple buildable/cwd-mounted services
+# are found (sourced -> propagates to caller, as before).
 synthesize_devcontainer() {
   local compose="$WT/docker-compose.yml"
 
@@ -44,17 +46,16 @@ synthesize_devcontainer() {
   ' "$compose" | grep -oE ':[/][^[:space:]:\x27"]*' | tail -1 | sed 's/^://')
   [ -n "$mt" ] && ws="$mt"
 
-  mkdir -p "$WT/.devcontainer"
   jq -n --arg name "$SLUG" --arg svc "$service" --arg ws "$ws" '{
     name: $name,
     dockerComposeFile: ["../docker-compose.yml"],
     service: $svc,
     workspaceFolder: $ws
-  }' > "$WT/.devcontainer/devcontainer.json"
+  }'
 }
 
-# Write devcontainer.json for a bare Dockerfile (no compose, no .devcontainer/).
-# Exits 3 if no Dockerfile is found.
+# Emit devcontainer.json body on stdout for a bare Dockerfile (no compose,
+# no .devcontainer/). Exits 3 if no Dockerfile is found.
 synthesize_devcontainer_from_dockerfile() {
   local dockerfile=""
   for cand in Dockerfile dockerfile; do
@@ -72,11 +73,10 @@ synthesize_devcontainer_from_dockerfile() {
   last_workdir=$(grep -iE '^\s*WORKDIR\s+/\S+' "$WT/$dockerfile" | tail -1 | awk '{print $NF}')
   [ -n "$last_workdir" ] && ws="$last_workdir"
 
-  mkdir -p "$WT/.devcontainer"
   jq -n --arg name "$SLUG" --arg df "../$dockerfile" --arg ws "$ws" '{
     name: $name,
     build: {dockerfile: $df, context: ".."},
     workspaceFolder: $ws,
     workspaceMount: ("source=${localWorkspaceFolder},target=" + $ws + ",type=bind")
-  }' > "$WT/.devcontainer/devcontainer.json"
+  }'
 }
