@@ -27,7 +27,10 @@ container_slug_for_cwd() {
 # re-derive workspaceFolder" tail and the S4 carry-forward where
 # `mentat-container-run` slug-hardcoded WS diverged from a hand-written
 # devcontainer.json's explicit workspaceFolder, causing OCI chdir failures).
-# Stdout: absolute path. Exit 0 always.
+# Stdout: absolute path. Exit 0 on success; nonzero if devcontainer.json
+# parses fail (jq propagates) — matches the lib's "no silent fallback"
+# discipline. Trailing-inline `// comment` JSONC (vs full-line `//`) is
+# not stripped; carry as known limitation if it surfaces.
 resolve_workspace_folder() {
   local slug
   slug="$(container_slug_for_cwd)"
