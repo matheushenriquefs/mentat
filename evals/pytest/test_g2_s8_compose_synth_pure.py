@@ -155,3 +155,36 @@ def test_synthesize_compose_if_absent_writes_devcontainer_json(tmp_path):
     )
     body = json.loads(dcj.read_text())
     assert body["service"] == "app"
+
+
+def test_synthesize_compose_if_absent_does_not_poison_on_exit3(tmp_path):
+    """Regression: bash truncates a `> final` redirect BEFORE invoking the
+    sourced fn. synthesize_devcontainer `exit 3`s on zero/multiple buildable
+    services, so a naked `synthesize_x > final` would leave an empty
+    devcontainer.json that the file-exists guard re-greenlights on next run
+    (data poisoning, masks the real error). The atomic tmp+mv contract must
+    leave the real target ABSENT on failure."""
+    (tmp_path / "docker-compose.yml").write_text(
+        # Two buildable services -> synthesize_devcontainer cannot pick one,
+        # hits `exit 3`.
+        "services:\n"
+        "  app:\n"
+        "    build: .\n"
+        "  worker:\n"
+        "    build: .\n"
+    )
+    res = subprocess.run(
+        ["bash", "-c", f". {CONTAINER_STATE} && synthesize_compose_if_absent"],
+        cwd=str(tmp_path),
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode != 0, (
+        f"helper must fail when compose has multiple buildable services; "
+        f"stderr={res.stderr!r}"
+    )
+    dcj = tmp_path / ".devcontainer" / "devcontainer.json"
+    assert not dcj.exists(), (
+        f"poisoned target survived exit-3 — atomic tmp+mv contract broken; "
+        f"size={dcj.stat().st_size if dcj.exists() else 'absent'}"
+    )

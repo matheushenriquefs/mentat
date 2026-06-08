@@ -61,11 +61,17 @@ if [ ! -d "$WT/.devcontainer" ]; then
     ln -s docker-compose.yaml "$WT/docker-compose.yml"
   fi
   mkdir -p "$WT/.devcontainer"
+  # Atomic write — see container-state.sh::synthesize_compose_if_absent for
+  # why the synthesize_* `exit 3` failure mode requires tmp+mv (truncation
+  # would poison the cold-start guard at the top of this if-block).
+  DCJ="$WT/.devcontainer/devcontainer.json"
+  DCJ_TMP="$(mktemp "${DCJ}.XXXXXX")"
   if [ -f "$WT/docker-compose.yml" ]; then
-    synthesize_devcontainer > "$WT/.devcontainer/devcontainer.json"
+    synthesize_devcontainer > "$DCJ_TMP" && mv "$DCJ_TMP" "$DCJ"
   elif ls "$WT"/Dockerfile* >/dev/null 2>&1; then
-    synthesize_devcontainer_from_dockerfile > "$WT/.devcontainer/devcontainer.json"
+    synthesize_devcontainer_from_dockerfile > "$DCJ_TMP" && mv "$DCJ_TMP" "$DCJ"
   else
+    rm -f "$DCJ_TMP"
     echo "mentat-container-up: no .devcontainer/, no docker-compose.yml, no Dockerfile in worktree" >&2
     exit 1
   fi
