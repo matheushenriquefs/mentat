@@ -1,12 +1,27 @@
 #!/bin/bash
 # mentat-container-down — stop the devcontainer for a worktree. ADR 0004.
+#
+# Slug + ownership probe flow through lib/container-state.sh — see
+# .agents/docs/container-state-design.md.
 set -euo pipefail
 
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/strict.sh"
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/container-state.sh"
 
 [ -f "$PWD/.git" ] || { echo "mentat-container-down: must run from inside a git worktree" >&2; exit 2; }
 
-SLUG=$(basename "$PWD")
+SLUG="$(container_slug_for_cwd)"
+
+# Ownership probe: container_id_for is canonical "is there a running container
+# for this slug?". Nonzero = idempotent already-down path -> exit 0.
+if ! container_id_for "$SLUG" >/dev/null 2>&1; then
+  exit 0
+fi
+
+# Tear-down: rm all containers (running + stopped) carrying our slug label.
+# The label filter is the ownership assertion — we never rm anything we
+# didn't `up`.
 ids=$(docker ps -aq --filter "label=mentat_slug=$SLUG")
 [ -n "$ids" ] && docker rm -f $ids
