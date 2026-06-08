@@ -7,6 +7,9 @@ Amended: 2026-06-04 — scorer mappings re-confirmed against source (not docs);
 mentat-bug-reviewer; blacklist set gains runner-redirection (see ADR 0006).
 Amended: 2026-06-06 — mentat-smell-reviewer added as 4th reviewer, advisory,
 threshold 0.85, no max-sev veto.
+Amended: 2026-06-07 (G3-S10) — HITL axis added as a fourth eject reason
+alongside score-veto / not-ff / rebase-conflict. Distinct from blacklist
+veto and from scored-review threshold; canonical contract in ADR-0010.
 
 ## Context
 
@@ -164,6 +167,41 @@ numeric gate stays the first true walk-away target.
   posture, LLM never self-promotes.
 - **impl-claims-vs-plan for Faithfulness.** That judges the implementation —
   mentat-plan-reviewer's and mentat-bug-reviewer' job, not the tests-reviewer's.
+
+## HITL axis (ADR-0010 cross-reference) — added 2026-06-07 by G3-S10
+
+The gate above governs *scored review*. A HITL exit (harness adapter refused to
+guess at ambiguity in an AFK chunk — ADR-0010) is a **fourth, orthogonal axis**.
+It must NOT be collapsed into the scored-review veto, into the reward-hacking
+blacklist, or into `implement-fail`.
+
+**Three orthogonal mechanisms — never substitutable:**
+
+| Axis | Signal | Owned by |
+|---|---|---|
+| Scored-review veto | reviewer score below threshold (plan/test ≥ 0.88) | this ADR (ADR-0003) |
+| Reward-hacking blacklist | LLM-judge score `0.0` on forbidden move/sequence | ADR-0006 + this ADR §blacklist |
+| HITL | process exit code `42` + audit reason `hitl-ambiguity` | ADR-0010 |
+
+A `0.92` plan-alignment cannot buy back a `hitl-ambiguity` exit. A blacklist
+veto and a HITL exit do not substitute for each other — the blacklist is a
+reviewer judgment over the diff, HITL is a runtime signal from the adapter that
+no diff was produced because the agent refused to fabricate one. Future reviewers
+MUST keep them separate; the gate expression above does not include HITL because
+HITL terminates *before* the gate runs.
+
+**Four eject reasons in `mentat-land-queue` verdict inventory (ADR-0011):**
+
+1. `rebase-conflict` — chunk could not rebase onto holding tip.
+2. `gate-fail` — re-gate red after rebase (covers scored-review veto + blacklist).
+3. `not-ff` — chunk would not fast-forward into holding branch.
+4. `hitl-ambiguity` — adapter exited `42` per ADR-0010 (HITL axis). Distinct
+   from `gate-fail`; distinct from `implement-fail` (which is an orchestrate-
+   upstream verdict, not a land-queue eject reason).
+
+The `hitl-ambiguity` reason is NOT a blacklist hit, NOT a scored-review veto,
+and NOT collapsible into `implement-fail`. See ADR-0010 §"Axis discipline" for
+the canonical three-way table.
 
 ## Consequences
 
