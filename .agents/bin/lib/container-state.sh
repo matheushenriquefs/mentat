@@ -111,9 +111,11 @@ synthesize_compose_if_absent() {
   # services or missing Dockerfile. Bash opens+truncates the redirect target
   # BEFORE the fn runs, so a naked `synthesize_x > final` would leave an
   # empty .devcontainer/devcontainer.json that the guard above re-greenlights
-  # on next run (data-poisoning). Write to a sibling tmp then mv on success;
-  # on exit-3 the caller dies and the tmp stays orphaned in /tmp (cleaned
-  # later by tmpreaper) while the real target is never touched.
+  # on next run (data-poisoning). Write to a sibling tmp (same dir as the
+  # final target → mv is an atomic rename(2), not a cross-fs copy) then mv
+  # on success; on exit-3 the caller dies before mv runs and the real
+  # target stays untouched. An orphan `<dcj>.XXXXXX` may persist in
+  # .devcontainer/ on repeated failures — cosmetic; cleanup is a follow-up.
   local dcj="$wt/.devcontainer/devcontainer.json"
   local tmp
   tmp="$(mktemp "${dcj}.XXXXXX")"
