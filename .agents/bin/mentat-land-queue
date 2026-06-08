@@ -7,7 +7,9 @@
 # Stdout: JSONL verdict per chunk on stdout. One line per chunk:
 #           {slug, outcome, tip, reason?, conflicted_files?, resume_cmd?, findings?}
 #         outcome ∈ {"success", "eject"}
-#         reason  ∈ {"rebase-conflict", "gate-fail", "not-ff", "implement-fail"}
+#         reason  ∈ {"rebase-conflict", "gate-fail", "not-ff", "implement-fail", "hitl-ambiguity"}
+#         (`hitl-ambiguity` per ADR-0010 §3 — adapter exit 42 in AFK chunk;
+#          distinct from generic gate-fail and from implement-fail.)
 #         `tip` always present: post-merge tip on success, pre-rebase chunk tip
 #         on eject (recipient can still inspect the worktree at that ref).
 # Side:   per chunk — rebase onto live $HOLDING tip (in container), re-gate via
@@ -24,6 +26,7 @@ _LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
 . "$_LIB/here.sh"
 . "$_LIB/config.sh"
 . "$_LIB/audit.sh"
+. "$_LIB/land-queue.sh"
 _LOG_PREFIX=mentat-land-queue
 
 # Override log.sh::die to exit 2 — ADR-0011 contract: 1=partial, >=2=tool-level.
@@ -170,10 +173,17 @@ via mentat-container-run on the current rebased tree, fix nothing, and exit non-
 any gate is red. Report only PASS or FAIL."
   local gcmd=()
   while IFS= read -r -d '' tok; do gcmd+=("$tok"); done < <(build_cmd "$gate_prompt")
-  if ! ( cd "$wt" && "${gcmd[@]}" ) >>"$logf" 2>&1; then
-    log "land EJECT (re-gate red after rebase onto $onto): $slug — worktree $wt"
-    _land_record "$slug" eject "$chunk_tip" gate-fail
-    _verdict "$slug" eject "$chunk_tip" gate-fail
+  local _gate_rc=0
+  ( cd "$wt" && "${gcmd[@]}" ) >>"$logf" 2>&1 || _gate_rc=$?
+  if [ "$_gate_rc" -ne 0 ]; then
+    local _reason; _reason="$(_classify_gate_rc "$_gate_rc")"
+    if [ "$_reason" = "hitl-ambiguity" ]; then
+      log "land EJECT (HITL ambiguity in AFK chunk, exit $_gate_rc): $slug — worktree $wt"
+    else
+      log "land EJECT (re-gate red after rebase onto $onto, exit $_gate_rc): $slug — worktree $wt"
+    fi
+    _land_record "$slug" eject "$chunk_tip" "$_reason"
+    _verdict "$slug" eject "$chunk_tip" "$_reason"
     return 1
   fi
 
