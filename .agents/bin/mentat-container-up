@@ -2,18 +2,24 @@
 # mentat-container-up — bring up the devcontainer for a worktree.
 # Auto-detects image/Dockerfile/docker-compose shape; synthesizes devcontainer.json
 # if absent. Deps: git, jq, docker. ADR 0004.
+#
+# State invariants (slug, workspaceFolder, safe.directory) flow through
+# lib/container-state.sh — see .agents/docs/container-state-design.md.
 set -euo pipefail
 
 [ -f "$PWD/.git" ] || { echo "mentat-container-up: must run from inside a git worktree" >&2; exit 2; }
 df -k . | awk 'NR==2 && $5+0 >= 95 {print "mentat-container-up: ERR disk " $5 "% full — free space before building container"; exit 1}'
 
 WT="$PWD"
-SLUG=$(basename "$WT")
 
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/strict.sh"
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/compose-synth.sh"
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/container-state.sh"
+
+SLUG="$(container_slug_for_cwd)"
 
 workspace_folder() {
   grep -v '^\s*//' "$WT/.devcontainer/devcontainer.json" \
@@ -28,9 +34,16 @@ ensure_safe_directory() {
     >/dev/null 2>&1 || true
 }
 
+postup_assertions() {
+  local ws="$1"
+  ensure_safe_directory "$ws"
+  assert_safe_directory "$ws"
+  ensure_workspace_folder "$ws"
+}
+
 # Already running — safe.directory must fire every path (handoff Issue 4).
-if [ -n "$(docker ps -q --filter "label=mentat_slug=$SLUG")" ]; then
-  ensure_safe_directory "$(workspace_folder)"
+if container_id_for "$SLUG" >/dev/null 2>&1; then
+  postup_assertions "$(workspace_folder)"
   exit 0
 fi
 
@@ -38,7 +51,7 @@ fi
 STOPPED=$(docker ps -aq --filter "label=mentat_slug=$SLUG" --filter "status=exited")
 if [ -n "$STOPPED" ]; then
   docker start "$STOPPED" >/dev/null
-  ensure_safe_directory "$(workspace_folder)"
+  postup_assertions "$(workspace_folder)"
   exit 0
 fi
 
@@ -135,11 +148,11 @@ devcontainer up \
   --id-label "mentat_slug=$SLUG" || {
   # devcontainer up may exit non-zero if onCreateCommand from a stale cached image
   # fails even though the container actually started. Recover if container is running.
-  if [ -n "$(docker ps -q --filter "label=mentat_slug=$SLUG")" ]; then
+  if container_id_for "$SLUG" >/dev/null 2>&1; then
     echo "mentat-container-up: devcontainer up exited non-zero but container is running — continuing" >&2
   else
     exit 1
   fi
 }
 
-ensure_safe_directory "$WS"
+postup_assertions "$WS"
