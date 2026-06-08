@@ -107,9 +107,19 @@ synthesize_compose_if_absent() {
   # shellcheck source=/dev/null
   . "$lib_dir/compose-synth.sh"
   mkdir -p "$wt/.devcontainer"
+  # Atomic write: synthesize_* `exit 3`s mid-jq on zero/multiple compose
+  # services or missing Dockerfile. Bash opens+truncates the redirect target
+  # BEFORE the fn runs, so a naked `synthesize_x > final` would leave an
+  # empty .devcontainer/devcontainer.json that the guard above re-greenlights
+  # on next run (data-poisoning). Write to a sibling tmp then mv on success;
+  # on exit-3 the caller dies and the tmp stays orphaned in /tmp (cleaned
+  # later by tmpreaper) while the real target is never touched.
+  local dcj="$wt/.devcontainer/devcontainer.json"
+  local tmp
+  tmp="$(mktemp "${dcj}.XXXXXX")"
   if [ "$has_compose" = 1 ]; then
-    synthesize_devcontainer > "$wt/.devcontainer/devcontainer.json"
+    synthesize_devcontainer > "$tmp" && mv "$tmp" "$dcj"
   else
-    synthesize_devcontainer_from_dockerfile > "$wt/.devcontainer/devcontainer.json"
+    synthesize_devcontainer_from_dockerfile > "$tmp" && mv "$tmp" "$dcj"
   fi
 }
