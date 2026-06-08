@@ -2,6 +2,9 @@
 
 Status: Accepted (locked)
 Date: 2026-06-04
+Amended: 2026-06-07 (G3-S10) — HITL axis cross-reference: a HITL exit
+(`42` + `hitl-ambiguity`) is NOT a blacklist hit. ADR-0010 owns the
+canonical contract.
 
 ## Context
 
@@ -82,6 +85,39 @@ See ADR 0003's amended blacklist set for the full list.
 - **Treating the soft rule as sufficient (dropping blacklist test-write entries).**
   A rule is not enforcement. The blacklist is the gate; the rule only lowers the
   temptation. Considered (the "Hybrid" drop) and rejected once the mount fell.
+
+## HITL axis (ADR-0010 cross-reference) — added 2026-06-07 by G3-S10
+
+The blacklist defined above is a **reward-hacking** detector: a reviewer-side
+score `0.0` veto over the agent's diff/trajectory. A HITL exit — adapter exit
+code `42` with audit reason `hitl-ambiguity` per ADR-0010 — is a **separate
+axis** and explicitly NOT a blacklist hit.
+
+The distinction matters because the two failure modes have opposite shapes:
+
+- **Blacklist hit** — the agent *did something forbidden* (edited tests,
+  weakened an assertion, redirected the runner). The diff exists; the reviewer
+  scored it `0.0`. The chunk is rejected on the strength of the trajectory.
+- **HITL `hitl-ambiguity` (ADR-0010)** — the AFK harness adapter *refused to
+  guess* at ambiguity in the plan. Exit code `42`. No diff was produced; the
+  reviewer never runs. The chunk is ejected by `mentat-land-queue` for operator
+  review, not because the agent cheated.
+
+Conflating the two would either (a) waste a blacklist slot on something the
+blacklist cannot catch (the agent never edited anything), or (b) let a
+genuinely ambiguous plan be filed away as "agent gamed the tests" — the wrong
+post-mortem. Reviewers and future ADRs MUST keep them separate.
+
+**Three orthogonal mechanisms — same map as ADR-0003 §"HITL axis":**
+
+| Axis | Signal | Owned by |
+|---|---|---|
+| HITL | exit `42` + `hitl-ambiguity` reason | ADR-0010 |
+| Reward-hacking blacklist | score `0.0` on forbidden move/sequence | this ADR + ADR-0003 |
+| Scored-review veto | threshold (plan/test ≥ 0.88) | ADR-0003 |
+
+A HITL exit is **not a blacklist hit**, not a scored-review veto, and not
+`implement-fail`. See ADR-0010 §"Axis discipline" for the canonical table.
 
 ## Consequences
 
