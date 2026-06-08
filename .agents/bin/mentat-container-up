@@ -21,11 +21,6 @@ WT="$PWD"
 
 SLUG="$(container_slug_for_cwd)"
 
-workspace_folder() {
-  grep -v '^\s*//' "$WT/.devcontainer/devcontainer.json" \
-    | jq -r --arg slug "$SLUG" '.workspaceFolder // ("/workspaces/" + $slug)'
-}
-
 ensure_safe_directory() {
   devcontainer exec \
     --workspace-folder "$WT" \
@@ -43,7 +38,7 @@ postup_assertions() {
 
 # Already running — safe.directory must fire every path (handoff Issue 4).
 if container_id_for "$SLUG" >/dev/null 2>&1; then
-  postup_assertions "$(workspace_folder)"
+  postup_assertions "$(resolve_workspace_folder)"
   exit 0
 fi
 
@@ -51,7 +46,7 @@ fi
 STOPPED=$(docker ps -aq --filter "label=mentat_slug=$SLUG" --filter "status=exited")
 if [ -n "$STOPPED" ]; then
   docker start "$STOPPED" >/dev/null
-  postup_assertions "$(workspace_folder)"
+  postup_assertions "$(resolve_workspace_folder)"
   exit 0
 fi
 
@@ -77,7 +72,7 @@ if [ ! -d "$WT/.devcontainer" ]; then
   fi
 fi
 
-WS="$(workspace_folder)"
+WS="$(resolve_workspace_folder)"
 GIT_TARGET=$(awk '{print $2}' "$WT/.git")
 ROOT="${GIT_TARGET%/.git/worktrees/*}"
 

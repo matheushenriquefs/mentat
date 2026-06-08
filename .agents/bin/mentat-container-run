@@ -23,9 +23,10 @@ if ! CID="$(container_id_for "$SLUG")"; then
   exit 99
 fi
 
-# Use slug-based path — devcontainer.json workspaceFolder may differ (e.g. "mentat")
-# but chunk containers mount the worktree at /workspaces/<slug>.
-WS="/workspaces/$SLUG"
+# Read workspaceFolder from devcontainer.json (or fall back to /workspaces/<slug>).
+# Hand-written devcontainer.json (e.g. mentat repo's "/workspaces/mentat") would
+# otherwise diverge from the slug and break `docker exec --workdir` with OCI chdir.
+WS="$(resolve_workspace_folder)"
 
 # Pre-flight: assert the workspaceFolder exists inside the container before
 # `exec` replaces this process. Lib emits explicit stderr on miss; set -euo
