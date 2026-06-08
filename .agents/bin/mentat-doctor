@@ -116,6 +116,30 @@ _emit_repro() {
   echo ""
 }
 
+# G3-S9 (ADR-0010 §3): if any chunk audit row carries reason:hitl-ambiguity,
+# emit a distinct verdict section naming the suspect. Operators reading the
+# diagnosis must see "design call needed" instead of the generic placeholder —
+# HITL is NOT implement-fail and must not be collapsed into it.
+_emit_verdict() {
+  local chunk_log="$LOG_DIR/$REPO/$SESSION/$SLUG.jsonl"
+  [ -f "$chunk_log" ] || return 0
+  local hitl_rows
+  hitl_rows="$(jq -c 'select(.payload.reason == "hitl-ambiguity")' "$chunk_log" 2>/dev/null | head -1 || true)"
+  if [ -n "$hitl_rows" ]; then
+    echo "## Verdict — HITL ambiguity (hitl-ambiguity)"
+    echo "- Suspect: ambiguous plan, AFK chunk needed a design call."
+    echo "- This is NOT implement-fail — distinct from generic gate-fail (ADR-0010 §3)."
+    echo "- Source: ADR-0010 (HITL routing) — adapter refused to guess on ambiguity."
+    echo "- Cross-ref: G3-S9 (this section), G3-S8 (land.complete reason mapping)."
+    echo "- Action: review the worktree, escalate to a design call; do not retry blindly."
+    echo "- Audit row (first hitl-ambiguity match):"
+    echo '```json'
+    echo "$hitl_rows"
+    echo '```'
+    echo ""
+  fi
+}
+
 _emit_logs() {
   echo "## Logs"
   if [ -n "$SESSION_LOG" ] && [ -f "$SESSION_LOG" ]; then
@@ -177,6 +201,7 @@ _emit_footer() {
   _emit_versions
   _emit_system
   _emit_repro
+  _emit_verdict
   _emit_logs
   _emit_footer
 } > "$OUT.tmp"
