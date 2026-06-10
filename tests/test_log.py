@@ -7,7 +7,6 @@ import os
 import stat
 from pathlib import Path
 
-import pytest
 
 
 LOG_SCRIPT = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-log/scripts/log.py"
@@ -34,7 +33,7 @@ def test_emit_appends_jsonl(tmp_path):
     assert result.returncode == 0, result.stderr
     files = list(tmp_path.rglob("*.jsonl"))
     assert files, "no jsonl written"
-    rows = [json.loads(l) for l in files[0].read_text().splitlines() if l.strip()]
+    rows = [json.loads(ln) for ln in files[0].read_text().splitlines() if ln.strip()]
     assert rows[0]["event"] == "plan.started"
     assert rows[0]["payload"]["path"] == "/tmp/x.md"
 
@@ -85,9 +84,9 @@ def test_query_filters_by_event(tmp_path):
     run_log(["emit", "mentat-plan", "plan.succeeded", '{"path":"/a.md"}'], env=env)
     result = run_log(["query", "s1", "--event", "plan.started"], env=env)
     assert result.returncode == 0, result.stderr
-    lines = [l for l in result.stdout.splitlines() if l.strip()]
-    assert all("plan.started" in l for l in lines)
-    assert not any("plan.succeeded" in l for l in lines)
+    lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    assert all("plan.started" in ln for ln in lines)
+    assert not any("plan.succeeded" in ln for ln in lines)
 
 
 def test_query_filters_by_agent(tmp_path):
@@ -96,7 +95,7 @@ def test_query_filters_by_agent(tmp_path):
     run_log(["emit", "mentat-implement", "plan.started", '{"path":"/a.md"}'], env=env)
     result = run_log(["query", "s1", "--agent", "mentat-plan"], env=env)
     assert result.returncode == 0, result.stderr
-    lines = [l for l in result.stdout.splitlines() if l.strip()]
+    lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
     for line in lines:
         row = json.loads(line)
         assert row["agent"] == "mentat-plan"

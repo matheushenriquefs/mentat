@@ -7,7 +7,6 @@ import argparse
 import os
 import subprocess
 import sys
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parent
