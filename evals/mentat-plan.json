@@ -1,5 +1,28 @@
 {
   "skill_name": "mentat-plan",
-  "evals": [],
-  "eval_queries": []
+  "description": "Write and resolve mentat plan files",
+  "evals": [
+    {
+      "id": "resolve-bare-slug",
+      "description": "resolve-slug with bare slug returns canonical path",
+      "type": "functional",
+      "command": "python3 .agents/skills/mentat-plan/scripts/plan.py resolve-slug my-plan",
+      "expected_output_contains": ".agents/plans/my-plan.md"
+    },
+    {
+      "id": "resolve-path-with-slash",
+      "description": "resolve-slug with slash treats as path",
+      "type": "functional"
+    },
+    {
+      "id": "write-creates-file",
+      "description": "write creates ~/.agents/plans/<slug>.md",
+      "type": "functional"
+    }
+  ],
+  "eval_queries": [
+    "resolve plan slug my-feature-plan",
+    "write a plan from /tmp/body.md with slug my-feature-plan",
+    "resolve path ~/custom/plan.md"
+  ]
 }

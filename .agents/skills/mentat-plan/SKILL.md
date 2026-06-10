@@ -1,19 +1,37 @@
 ---
 name: mentat-plan
 description: >
-  Write and manage mentat plan files.
-  Use when the user wants to create a new plan, resolve a plan slug to a path,
-  or write a plan body from a script.
+  Write and resolve mentat plan files.
+  Use when you need to create a new plan file or canonicalize a plan slug-or-path reference.
 metadata:
   version: "0.1.0"
 ---
 
-Interactive plan-writing skill. Handles file IO, path canonicalization, and slug resolution. All bins that accept a plan reference use `mentat-plan resolve-slug` as the canonical resolver.
+Write structured plan files to `~/.agents/plans/` and resolve plan slug-or-path references to canonical absolute paths.
 
 ## How to invoke
 
 ```
-python3 ~/.agents/skills/mentat-plan/scripts/plan.py [write <slug> <body-path>] [resolve-slug <ref>]
+python3 ~/.agents/skills/mentat-plan/scripts/plan.py <subcommand> <args>
 ```
 
-Default (no subcommand): interactive plan-writing mode.
+Subcommands: `write`, `resolve-slug`.
+
+## Subcommands
+
+| Subcommand | Args | Description |
+|---|---|---|
+| `write` | `<slug> <body-path>` | Write `~/.agents/plans/<slug>.md` from body file. Emits `plan.started` + `plan.succeeded`. |
+| `resolve-slug` | `<slug-or-path>` | Print canonical absolute path. Pure — no stat. |
+
+## Plan-ref resolution
+
+Bare slug (no `/`, no `.md` suffix) → `~/.agents/plans/<slug>.md`.
+Slash or `.md` suffix → treated as a path (expanduser + resolve).
+
+## Flow (interactive plan writing)
+
+1. Grill with docs → split into slices.
+2. Write plan body to a temp file.
+3. `python3 ~/.agents/skills/mentat-plan/scripts/plan.py write <slug> <body-path>`
+4. Emits `plan.started` then `plan.succeeded` (or `plan.failed` on write error).
