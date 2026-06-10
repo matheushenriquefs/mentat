@@ -4,14 +4,9 @@
 from __future__ import annotations
 
 import argparse
-import os
-import subprocess
+import importlib.util as _ilu
 import sys
 from pathlib import Path
-
-_SCRIPTS = Path(__file__).resolve().parent
-
-import importlib.util as _ilu
 
 
 def _load_sibling(name: str):
@@ -26,50 +21,15 @@ def _load_sibling(name: str):
     return mod
 
 
-utils = _load_sibling("utils")
+_commit = _load_sibling("commit")
+_rebase = _load_sibling("rebase")
+_diff = _load_sibling("diff")
 
-
-def cmd_commit(git_args: list[str]) -> int:
-    """Stage and commit. Route through container if present."""
-    cid = utils.container_id_for_cwd()
-    if cid:
-        docker = os.environ.get("MENTAT_DOCKER", "docker")
-        wt_result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True,
-        )
-        ws = f"/workspaces/{Path(wt_result.stdout.strip()).name}" if wt_result.returncode == 0 else "/workspaces/mentat"
-        cmd = [docker, "exec", "--workdir", ws, cid, "git", "commit"] + git_args
-        result = subprocess.run(cmd)
-    else:
-        result = subprocess.run(["git", "commit"] + git_args)
-    return result.returncode
-
-
-def cmd_rebase(holding: str) -> int:
-    """Fast-forward-only rebase onto holding branch."""
-    result = subprocess.run(
-        ["git", "rebase", holding],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        print(
-            f"mentat-git: rebase onto {holding!r} failed (not fast-forward):\n{result.stderr}",
-            file=sys.stderr,
-        )
-        raise SystemExit(result.returncode)
-    return 0
-
-
-def cmd_diff(base: str) -> int:
-    """Show cumulative diff of current branch vs base. Respects config diff_tool."""
-    config = utils.read_config()
-    diff_tool = config.get("diff_tool")
-
-    if diff_tool:
-        result = subprocess.run([diff_tool, base, "HEAD"])
-    else:
-        result = subprocess.run(["git", "diff", base, "HEAD"])
-    return result.returncode
+# Re-exports
+utils = _commit.utils
+cmd_commit = _commit.cmd_commit
+cmd_rebase = _rebase.cmd_rebase
+cmd_diff = _diff.cmd_diff
 
 
 def build_parser() -> argparse.ArgumentParser:
