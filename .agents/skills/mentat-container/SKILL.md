@@ -55,12 +55,14 @@ python3 ~/.agents/skills/mentat-container/scripts/container.py doctor
 
 - `up` synthesizes `.devcontainer/devcontainer.json` atomically if absent (compose or Dockerfile auto-detected).
 - `up` is idempotent: calling it twice is safe, returns exit 0 if already running.
+- `down` stops the container only — never touches branch state. Container respawns on the next `up`.
 - `run` requires container already up; fails fast with exit 2 if not running.
 - `compose_render` auto-detects `docker-compose.yml` or `Dockerfile` in worktree root.
 - Atomic write for `.devcontainer/devcontainer.json`: writes to `.tmp` then renames.
 - Slug = `basename(git rev-parse --show-toplevel)`.
 - `workspaceFolder` read from `devcontainer.json`, not slug-derived.
 - `doctor` walks rules and prints human-readable status for each.
+- ADR-0004: project tools execute inside the container; host execution is forbidden by callers (e.g. `mentat-git`).
 
 ## Arch handling
 
