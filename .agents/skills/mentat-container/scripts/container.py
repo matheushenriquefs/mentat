@@ -154,7 +154,7 @@ def cmd_run(wt: Path, command: str) -> int:
             f"mentat-container: container not running for slug {slug} (run 'mentat-container up' first)",
             file=sys.stderr,
         )
-        return 99
+        return 69
     ws = utils.resolve_workspace_folder(wt)
     result = subprocess.run(
         [
