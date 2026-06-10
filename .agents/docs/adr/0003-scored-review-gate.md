@@ -39,7 +39,7 @@ Severity per gate: `code/precommit.py` = blocking; `code/smells.py` = advisory;
 Must-not-exist veto (folded from ADR-0007): `code/precommit.py` emits `block` on
 forbidden file/path patterns (e.g. test-file writes during impl phase).
 
-Smell review (folded from ADR-0008): `llm/smell.md` runs refactoring.guru 22-smell
+Smell review (folded from ADR-0008): `mentat-smell-reviewer` runs refactoring.guru 22-smell
 catalog. Advisory; severity escalation at callsite. Threshold 0.85.
 
 HITL exit `42` (`hitl-ambiguity`) is NOT a blacklist hit — it's a separate axis

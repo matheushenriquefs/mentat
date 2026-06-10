@@ -9,6 +9,13 @@ _SKILL_NAMES = [
     "mentat-orchestrate", "mentat-skill", "mentat-git", "mentat-session", "mentat-install",
 ]
 
+_REVIEWER_NAMES = [
+    "mentat-bug-reviewer",
+    "mentat-plan-reviewer",
+    "mentat-smell-reviewer",
+    "mentat-test-reviewer",
+]
+
 _STALE_PATHS = [
     ".agents/mentat",
     ".agents/bin/mentat-config",
@@ -17,7 +24,7 @@ _STALE_PATHS = [
     ".agents/bin/lib/audit.sh",
     ".agents/bin/lib/audit-schema.jsonc",
     ".agents/bin/lib/harness-registry.jsonc",
-    ".agents/agents",
+    ".agents/lib/gates/llm",
 ]
 
 
@@ -81,11 +88,14 @@ def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
                 add.append(Action("copy", None, target))
 
     # 3. Harness detection
+    agents_agents = home / ".agents" / "agents"
     for harness_dir, harness_name in [(".claude", "claude-code"), (".cursor", "cursor")]:
         h_path = home / harness_dir
         if not h_path.exists():
             for skill in _SKILL_NAMES:
                 skipped.append(Action("symlink", None, h_path / "skills" / skill))
+            for reviewer in _REVIEWER_NAMES:
+                skipped.append(Action("symlink", None, h_path / "agents" / reviewer))
             continue
         for skill in _SKILL_NAMES:
             link = h_path / "skills" / skill
@@ -93,6 +103,17 @@ def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
                 source = clone_root / ".agents" / "skills" / skill
             else:
                 source = agents_skills / skill
+            if link.exists():
+                if link.is_symlink() and link.resolve() != source.resolve():
+                    update.append(Action("symlink", source, link))
+            else:
+                add.append(Action("symlink", source, link))
+        for reviewer in _REVIEWER_NAMES:
+            link = h_path / "agents" / reviewer
+            if clone_root is not None:
+                source = clone_root / ".agents" / "agents" / reviewer
+            else:
+                source = agents_agents / reviewer
             if link.exists():
                 if link.is_symlink() and link.resolve() != source.resolve():
                     update.append(Action("symlink", source, link))
