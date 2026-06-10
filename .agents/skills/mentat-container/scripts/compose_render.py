@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
+from string import Template
 
 
 def _parse_compose_service(compose_text: str) -> str:
@@ -58,9 +60,53 @@ def _infer_workspace_folder_from_compose(compose_text: str, service: str, slug: 
     return f"/workspaces/{slug}"
 
 
+def render_template(tmpl_path: Path, workspace_folder: str, arch: str, image_tag: str) -> str:
+    """Render a compose.yml.tmpl via stdlib string.Template. Pure — no filesystem writes.
+
+    Substituted variables: $workspace_folder, $arch, $image_tag.
+    Use $$ to emit a literal $ in the output.
+    """
+    return Template(tmpl_path.read_text()).substitute(
+        workspace_folder=workspace_folder,
+        arch=arch,
+        image_tag=image_tag,
+    )
+
+
+def _ro_mounts_from_env(workspace_folder: str, worktree_host: str) -> list[str]:
+    """Return devcontainer.json mount strings from MENTAT_RO_MOUNTS env var."""
+    raw = os.environ.get("MENTAT_RO_MOUNTS")
+    if not raw:
+        return []
+    paths: list[str] = json.loads(raw)
+    return [f"source={worktree_host}/{p},target={workspace_folder}/{p},type=bind,readonly" for p in paths]
+
+
 def synth(worktree_path: Path) -> str:
     """Return devcontainer.json JSON string for worktree_path. Pure — no filesystem writes."""
+    import subprocess as _sp
+
     slug = worktree_path.name
+
+    # Template path takes priority over auto-detection
+    tmpl = worktree_path / ".devcontainer" / "compose.yml.tmpl"
+    if tmpl.exists():
+        arch = _sp.run(["uname", "-m"], capture_output=True, text=True).stdout.strip() or "amd64"
+        image_tag = os.environ.get("MENTAT_IMAGE_TAG", "latest")
+        ws = f"/workspaces/{slug}"
+        # Render but don't write; caller writes to .devcontainer/docker-compose.yml
+        _ = render_template(tmpl, workspace_folder=ws, arch=arch, image_tag=image_tag)
+        mounts = _ro_mounts_from_env(ws, str(worktree_path))
+        dcj: dict = {
+            "name": slug,
+            "dockerComposeFile": ["docker-compose.yml"],
+            "service": "app",
+            "workspaceFolder": ws,
+        }
+        if mounts:
+            dcj["mounts"] = mounts
+        return json.dumps(dcj, indent=2)
+
     compose_yml = worktree_path / "docker-compose.yml"
     if not compose_yml.exists():
         compose_yaml = worktree_path / "docker-compose.yaml"
@@ -71,15 +117,16 @@ def synth(worktree_path: Path) -> str:
         text = compose_yml.read_text()
         service = _parse_compose_service(text)
         ws = _infer_workspace_folder_from_compose(text, service, slug)
-        return json.dumps(
-            {
-                "name": slug,
-                "dockerComposeFile": ["../docker-compose.yml"],
-                "service": service,
-                "workspaceFolder": ws,
-            },
-            indent=2,
-        )
+        mounts = _ro_mounts_from_env(ws, str(worktree_path))
+        dcj = {
+            "name": slug,
+            "dockerComposeFile": ["../docker-compose.yml"],
+            "service": service,
+            "workspaceFolder": ws,
+        }
+        if mounts:
+            dcj["mounts"] = mounts
+        return json.dumps(dcj, indent=2)
 
     # Dockerfile path
     dockerfile: str | None = None
@@ -105,12 +152,13 @@ def synth(worktree_path: Path) -> str:
             ws = m.group(1)
             break
 
-    return json.dumps(
-        {
-            "name": slug,
-            "build": {"dockerfile": f"../{dockerfile}", "context": ".."},
-            "workspaceFolder": ws,
-            "workspaceMount": f"source=${{localWorkspaceFolder}},target={ws},type=bind",
-        },
-        indent=2,
-    )
+    mounts = _ro_mounts_from_env(ws, str(worktree_path))
+    dcj = {
+        "name": slug,
+        "build": {"dockerfile": f"../{dockerfile}", "context": ".."},
+        "workspaceFolder": ws,
+        "workspaceMount": f"source=${{localWorkspaceFolder}},target={ws},type=bind",
+    }
+    if mounts:
+        dcj["mounts"] = mounts
+    return json.dumps(dcj, indent=2)

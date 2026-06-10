@@ -293,7 +293,9 @@ def test_syntax_lib_here():
 
 def test_syntax_lib_compose_render():
     scripts = os.path.join(os.path.dirname(__file__), "..", "..", ".agents", "skills", "mentat-container", "scripts")
-    result = subprocess.run(["python3", "-m", "py_compile", os.path.join(scripts, "compose_render.py")], capture_output=True)
+    result = subprocess.run(
+        ["python3", "-m", "py_compile", os.path.join(scripts, "compose_render.py")], capture_output=True
+    )
     assert result.returncode == 0
 
 

@@ -17,7 +17,7 @@ python3 ~/.agents/skills/mentat-implement/scripts/implement.py <plan-ref> [--har
 
 Multi-slug → exit 1 with "use mentat-orchestrate for multi-plan".
 
-## Atomic contract
+## Execution flow
 
 ```
 mentat-implement <single-plan-slug>
@@ -28,7 +28,7 @@ mentat-implement <single-plan-slug>
      + system clause forbidding self-answer.
 3. If class == HITL:
      harness adapter invoked normally (AskUserQuestion allowed).
-4. TDD loop over plan slices:
+4. TDD loop over plan slices via /tdd:
      red test → impl → gate → commit per slice.
 5. On AFK ambiguity (self-answered-question detected in session JSONL):
      emit chunk.ejected{reason: hitl-required} + exit 42.

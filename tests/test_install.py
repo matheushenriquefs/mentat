@@ -65,7 +65,8 @@ def test_install_yes_flag_skips_prompt(tmp_path, monkeypatch):
 def test_install_help_flag_exits_0():
     result = subprocess.run(
         ["python3", str(SCRIPTS / "install.py"), "--help"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 0
     assert "usage" in result.stdout.lower() or "Usage" in result.stdout
@@ -120,7 +121,8 @@ def test_shell_wrapper_execs_python_when_present():
     assert wrapper.exists(), "mentat-install wrapper not found"
     result = subprocess.run(
         [str(wrapper), "--help"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 0
     assert "usage" in result.stdout.lower() or "mentat-install" in result.stdout.lower()

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
+import os
 import re
 import subprocess
 import sys
@@ -33,6 +35,44 @@ _utils = _load_sibling("utils")
 
 
 # ── public helpers (patchable in tests) ─────────────────────────────────────
+
+
+def _plans_dir() -> Path:
+    return Path.home() / ".agents" / "plans"
+
+
+def read_tests_manifest(slug: str) -> tuple[list[str], list[str]]:
+    """Return (closed, open) from ~/.agents/plans/<slug>.tests.json. Returns ([], []) if absent."""
+    manifest = _plans_dir() / f"{slug}.tests.json"
+    if not manifest.exists():
+        return [], []
+    data = json.loads(manifest.read_text())
+    return data.get("closed", []), data.get("open", [])
+
+
+def compute_ro_mounts(closed: list[str], open_: list[str]) -> list[str]:
+    """Paths that must be mounted read-only = closed minus open."""
+    open_set = set(open_)
+    return [p for p in closed if p not in open_set]
+
+
+def mark_test_writable(slug: str, path: str) -> None:
+    """Move path from closed to open in the tests manifest. Emits test.writable.requested."""
+    manifest = _plans_dir() / f"{slug}.tests.json"
+    if not manifest.exists():
+        print(f"mentat-implement: no manifest for {slug}", file=sys.stderr)
+        return
+    data = json.loads(manifest.read_text())
+    closed: list[str] = data.get("closed", [])
+    open_: list[str] = data.get("open", [])
+    if path not in closed:
+        print(f"mentat-implement: {path} not in closed list for {slug}", file=sys.stderr)
+        return
+    if path not in open_:
+        open_.append(path)
+    data["open"] = open_
+    manifest.write_text(json.dumps(data, indent=2))
+    _emit_event("test.writable.requested", {"slug": slug, "path": path})
 
 
 def resolve_plan_path(ref: str) -> Path:
@@ -110,6 +150,13 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     plan_class = fm.get("class", "HITL")
     afk = plan_class == "AFK"
 
+    # Inject read-only test mounts before container-up (ADR-0010)
+    slug = plan_path.stem
+    closed, open_ = read_tests_manifest(slug)
+    ro = compute_ro_mounts(closed, open_)
+    if ro:
+        os.environ["MENTAT_RO_MOUNTS"] = json.dumps(ro)
+
     plan_body = plan_path.read_text()
     result = _invoke_harness(harness, plan_body, afk=afk, model=model)
 
@@ -153,17 +200,21 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     return 0
 
 
-def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="mentat-implement", description="Atomic plan executor")
-    p.add_argument("plan_refs", nargs="+", metavar="plan-ref")
-    p.add_argument("--harness", default=None)
-    p.add_argument("--model", default=None)
-    return p
-
-
 def main() -> None:
-    parser = build_parser()
-    args = parser.parse_args()
+    # Support both: `mentat-implement <plan>` and `mentat-implement run <plan>`
+    argv = sys.argv[1:]
+    if argv and argv[0] == "mark-test-writable":
+        if len(argv) < 3:
+            print("usage: mentat-implement mark-test-writable <slug> <path>", file=sys.stderr)
+            sys.exit(64)
+        mark_test_writable(slug=argv[1], path=argv[2])
+        sys.exit(0)
+
+    parser = argparse.ArgumentParser(prog="mentat-implement", description="Atomic plan executor")
+    parser.add_argument("plan_refs", nargs="+", metavar="plan-ref")
+    parser.add_argument("--harness", default=None)
+    parser.add_argument("--model", default=None)
+    args = parser.parse_args(argv)
 
     if len(args.plan_refs) > 1:
         print(

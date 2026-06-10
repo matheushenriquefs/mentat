@@ -27,9 +27,9 @@ Subcommands: `write`, `resolve-slug`.
 Bare slug (no `/`, no `.md` suffix) → `~/.agents/plans/<slug>.md`.
 Slash or `.md` suffix → treated as a path (expanduser + resolve).
 
-## Flow (interactive plan writing)
+## Flow
 
-1. Grill with docs → split into slices.
+1. Run `/grill-with-docs` to grill requirements and split into slices.
 2. Write plan body to a temp file.
 3. `python3 ~/.agents/skills/mentat-plan/scripts/plan.py write <slug> <body-path>`
 4. Emits `plan.started` then `plan.succeeded` (or `plan.failed` on write error).
