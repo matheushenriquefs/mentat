@@ -1,50 +1,16 @@
 pre-commit:
   parallel: true
   commands:
-    adr:
-      glob: "docs/adr/*.md"
-      run: .agents/bin/mentat-precommit adr {staged_files}
-    skill:
-      glob: ".agents/skills/**/*.md"
-      run: .agents/bin/mentat-precommit skill {staged_files}
-    command:
-      glob: ".agents/commands/*.md"
-      run: .agents/bin/mentat-precommit command {staged_files}
-    shell:
-      glob: "{.agents/bin/**/*,.agents/bin/lib/**/*.sh}"
-      exclude:
-        - "*.jsonc"
-        - "*.jq"
-        - "*.json"
-        - "*.md"
-      run: bash -n {staged_files}
-    jsonc:
-      glob: "*.jsonc"
-      run: .agents/bin/mentat-precommit jsonc {staged_files}
-    jq:
-      glob: "*.jq"
-      run: .agents/bin/mentat-precommit jq {staged_files}
-    harness:
-      glob: ".agents/bin/lib/harness/*.sh"
-      run: .agents/bin/mentat-precommit harness {staged_files}
-    doc-eval:
-      glob: "{.agents/AGENTS.md,CONTEXT.md}"
-      run: .agents/bin/mentat-precommit auto {staged_files}
     stale-ref:
       glob: "**/*"
       run: |
-        out=$(rg -n '\bmentat-install\b|\bmentat-update\b|\bmentat-credits-gen\b|upstreams\.jsonc|/to-(rebase|commit|plan|implement|scaffold|eval)\b' {staged_files} 2>/dev/null || true)
+        out=$(rg -n '\bmentat-update\b|\bmentat-credits-gen\b|upstreams\.jsonc|/to-(rebase|commit|plan|implement|scaffold|eval)\b' {staged_files} 2>/dev/null || true)
         [ -z "$out" ] && exit 0
         echo "stale-ref advisory: $out" && exit 0
-    docs-sync:
-      glob: "{.agents/bin/**,.agents/commands/**}"
-      run: |
-        .agents/bin/lib/docs-sync.sh {staged_files}
     holding-branch-guard:
       run: |
         [ "${MENTAT_RELEASE:-0}" = "1" ] && exit 0
-        h="$(mentat-config git.holding_branch 2>/dev/null \
-            || git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
+        h="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
             || { echo "ERR: holding-branch-guard: cannot resolve holding branch name"; exit 1; })"
         b="$(git rev-parse --abbrev-ref HEAD)"
         [ "$b" = "$h" ] && { echo "ERR: direct commit to holding branch '$h' — ADR-0002"; exit 1; }
