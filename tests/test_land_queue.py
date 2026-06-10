@@ -6,7 +6,6 @@ import importlib.util
 from pathlib import Path
 from unittest.mock import patch
 
-
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
 

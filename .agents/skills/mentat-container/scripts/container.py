@@ -14,8 +14,9 @@ from pathlib import Path
 _SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS))
 
-import utils
 import compose_render
+
+import utils
 
 
 def _docker() -> str:
@@ -42,7 +43,7 @@ def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
         content = compose_render.synth(wt)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
     dcj.parent.mkdir(parents=True, exist_ok=True)
     tmp = dcj.parent / (dcj.name + ".tmp")
     tmp.write_text(content)
@@ -52,8 +53,15 @@ def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
 def _ensure_safe_directory(wt: Path, ws: str, slug: str, cid: str) -> None:
     subprocess.run(
         [
-            _docker(), "exec", cid,
-            "git", "config", "--global", "--add", "safe.directory", ws,
+            _docker(),
+            "exec",
+            cid,
+            "git",
+            "config",
+            "--global",
+            "--add",
+            "safe.directory",
+            ws,
         ],
         capture_output=True,
     )
@@ -71,7 +79,8 @@ def cmd_up(wt: Path) -> int:
     # Stopped container
     stopped = subprocess.run(
         [_docker(), "ps", "-aq", "--filter", f"label=mentat_slug={slug}", "--filter", "status=exited"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if stopped.returncode == 0 and stopped.stdout.strip():
         subprocess.run([_docker(), "start", stopped.stdout.strip()], check=True, capture_output=True)
@@ -107,14 +116,19 @@ def cmd_up(wt: Path) -> int:
 
     git_dir_result = subprocess.run(
         ["git", "rev-parse", "--git-dir"],
-        capture_output=True, text=True, cwd=str(wt),
+        capture_output=True,
+        text=True,
+        cwd=str(wt),
     )
     git_dir = git_dir_result.stdout.strip() if git_dir_result.returncode == 0 else ""
 
     cmd = [
-        "devcontainer", "up",
-        "--workspace-folder", str(wt),
-        "--id-label", f"mentat_slug={slug}",
+        "devcontainer",
+        "up",
+        "--workspace-folder",
+        str(wt),
+        "--id-label",
+        f"mentat_slug={slug}",
     ]
     if git_dir:
         cmd += ["--remote-env", f"GIT_DIR={git_dir}"]
@@ -143,8 +157,18 @@ def cmd_run(wt: Path, command: str) -> int:
         return 99
     ws = utils.resolve_workspace_folder(wt)
     result = subprocess.run(
-        [_docker(), "exec", "--workdir", ws, "-u", "vscode", cid,
-         "bash", "-lc", f"git config --global --add safe.directory '*' 2>/dev/null || true; {command}"],
+        [
+            _docker(),
+            "exec",
+            "--workdir",
+            ws,
+            "-u",
+            "vscode",
+            cid,
+            "bash",
+            "-lc",
+            f"git config --global --add safe.directory '*' 2>/dev/null || true; {command}",
+        ],
     )
     return result.returncode
 
@@ -168,7 +192,9 @@ def cmd_doctor(wt: Path) -> int:
     # Check git tree
     git_check = subprocess.run(
         ["git", "rev-parse", "--git-dir"],
-        capture_output=True, text=True, cwd=str(wt),
+        capture_output=True,
+        text=True,
+        cwd=str(wt),
     )
     if git_check.returncode != 0:
         issues.append(f"  [FAIL] {wt} is not inside a git worktree")

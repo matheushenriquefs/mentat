@@ -10,7 +10,8 @@ def cmd_rebase(holding: str) -> int:
     """Fast-forward-only rebase onto holding branch."""
     result = subprocess.run(
         ["git", "rebase", holding],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         print(

@@ -199,7 +199,7 @@ def test_adr_0010_clause_matches_registry_rows():
     clause_claude = parsed["harnesses"]["claude-code"]["system_prompt_template"]
     clause_cursor = parsed["harnesses"]["cursor"]["system_prompt_template"]
     # Both rows must carry the same clause
-    assert clause_claude == clause_cursor, f"S2 rows drifted: claude-code != cursor clause"
+    assert clause_claude == clause_cursor, "S2 rows drifted: claude-code != cursor clause"
     # And that clause must appear verbatim in the ADR
     adr_src = ADR.read_text()
     assert clause_claude in adr_src, (
@@ -214,7 +214,7 @@ def test_adr_0010_clause_matches_registry_rows():
 def test_hitl_reason_is_kebab_lowercase():
     """audit-schema.jsonc (G1-S1) reason field is kebab-lowercase. The HITL
     reason must conform so mentat-land-queue can emit it directly."""
-    assert HITL_REASON == HITL_REASON.lower(), "reason must be lowercase"
+    assert HITL_REASON.lower() == HITL_REASON, "reason must be lowercase"
     assert re.match(r"^[a-z]+(-[a-z]+)*$", HITL_REASON), (
         f"reason {HITL_REASON!r} must be kebab-lowercase (audit-schema convention)"
     )

@@ -120,7 +120,7 @@ def test_grep_dash_a_3_afk_shows_signal_and_exit():
         text=True,
     )
     assert result.returncode == 0, (
-        f"grep -A 3 'AFK' returned no match — doc has no AFK paragraph at all; S7 requires AFK be referenced by name."
+        "grep -A 3 'AFK' returned no match — doc has no AFK paragraph at all; S7 requires AFK be referenced by name."
     )
     out = result.stdout
     assert SIGNAL_ENV in out, f"grep -A 3 'AFK' output must include {SIGNAL_ENV}; got:\n{out}"

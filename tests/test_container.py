@@ -9,7 +9,6 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
-
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-container/scripts"
 
 
@@ -42,6 +41,7 @@ def test_slug_for_cwd_from_worktree(tmp_path, monkeypatch):
         class R:
             stdout = str(tmp_path) + "\n"
             returncode = 0
+
         return R()
 
     with patch("subprocess.run", fake_run):
@@ -53,9 +53,7 @@ def test_resolve_workspace_folder_reads_devcontainer(tmp_path):
     utils = load_module("utils")
     dcj_dir = tmp_path / ".devcontainer"
     dcj_dir.mkdir()
-    (dcj_dir / "devcontainer.json").write_text(
-        json.dumps({"name": "test", "workspaceFolder": "/workspaces/custom"})
-    )
+    (dcj_dir / "devcontainer.json").write_text(json.dumps({"name": "test", "workspaceFolder": "/workspaces/custom"}))
     result = utils.resolve_workspace_folder(tmp_path)
     assert result == "/workspaces/custom"
 
@@ -72,9 +70,7 @@ def test_resolve_workspace_folder_falls_back_when_missing(tmp_path):
 def test_compose_render_pure_returns_string(tmp_path):
     cs = load_module("compose_render")
     compose_yml = tmp_path / "docker-compose.yml"
-    compose_yml.write_text(
-        "services:\n  app:\n    build: .\n    volumes:\n      - ..:/workspaces/app\n"
-    )
+    compose_yml.write_text("services:\n  app:\n    build: .\n    volumes:\n      - ..:/workspaces/app\n")
     result = cs.synth(tmp_path)
     assert isinstance(result, str)
     data = json.loads(result)
@@ -85,9 +81,7 @@ def test_compose_render_pure_returns_string(tmp_path):
 def test_compose_render_no_side_effects(tmp_path):
     cs = load_module("compose_render")
     compose_yml = tmp_path / "docker-compose.yml"
-    compose_yml.write_text(
-        "services:\n  app:\n    build: .\n    volumes:\n      - ..:/workspaces/app\n"
-    )
+    compose_yml.write_text("services:\n  app:\n    build: .\n    volumes:\n      - ..:/workspaces/app\n")
     before = set(tmp_path.rglob("*"))
     cs.synth(tmp_path)
     after = set(tmp_path.rglob("*"))
@@ -117,6 +111,7 @@ def test_doctor_names_missing_path(tmp_path, monkeypatch, capsys):
     with patch.object(container_mod.utils, "container_id_for", return_value=None):
         import io
         from contextlib import redirect_stdout
+
         buf = io.StringIO()
         with redirect_stdout(buf):
             try:

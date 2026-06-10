@@ -5,7 +5,6 @@ import pytest
 pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
 
 import os
-import inspect
 
 MENTAT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 TO_ORCHESTRATE = os.path.expanduser("~/.agents/bin/mentat-orchestrate")

@@ -8,7 +8,6 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts"
 
 
@@ -24,9 +23,7 @@ def _write_plan(tmp_path: Path, slug: str, class_: str = "AFK", extra: str = "")
     plan_dir = tmp_path / "plans"
     plan_dir.mkdir(exist_ok=True)
     plan_file = plan_dir / f"{slug}.md"
-    plan_file.write_text(
-        f"---\nid: {slug}\nclass: {class_}\n---\n# Plan\n{extra}\n"
-    )
+    plan_file.write_text(f"---\nid: {slug}\nclass: {class_}\n---\n# Plan\n{extra}\n")
     return plan_file
 
 
@@ -53,7 +50,8 @@ def test_parse_frontmatter_extracts_id(tmp_path):
 def test_implement_refuses_multi_slug(tmp_path):
     result = subprocess.run(
         ["python3", str(SCRIPTS / "implement.py"), "plan-a", "plan-b"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 1
     assert "mentat-orchestrate" in result.stderr
@@ -102,9 +100,7 @@ def test_implement_single_afk_plan_succeeds(tmp_path):
 
     assert rc == 0
     call_kwargs = mock_invoke.call_args
-    assert call_kwargs.kwargs.get("afk") is True or (
-        call_kwargs.args[1] if len(call_kwargs.args) > 1 else False
-    )
+    assert call_kwargs.kwargs.get("afk") is True or (call_kwargs.args[1] if len(call_kwargs.args) > 1 else False)
 
 
 def test_implement_single_hitl_plan_allows_questions(tmp_path):

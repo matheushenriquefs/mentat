@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util as _ilu
 import subprocess
 import sys
 from pathlib import Path
 from typing import NamedTuple
-
-import importlib.util as _ilu
 
 
 def _load_sibling(name: str):
@@ -34,12 +33,17 @@ def _rebase_chunk(chunk: Chunk, holding: str) -> tuple[str | None, str | None]:
     """Rebase chunk onto holding. Returns (tip_sha, error_message)."""
     result = subprocess.run(
         ["git", "rebase", holding],
-        capture_output=True, text=True, cwd=str(chunk.worktree),
+        capture_output=True,
+        text=True,
+        cwd=str(chunk.worktree),
     )
     if result.returncode != 0:
         return None, result.stderr.strip()
     sha_result = subprocess.run(
-        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=str(chunk.worktree),
+        ["git", "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=str(chunk.worktree),
     )
     return sha_result.stdout.strip(), None
 
@@ -52,7 +56,9 @@ def _ff_merge(chunk: Chunk, holding: str) -> bool:
     """FF-merge chunk HEAD onto holding branch via update-ref."""
     sha_r = subprocess.run(
         ["git", "rev-parse", "HEAD"],
-        capture_output=True, text=True, cwd=str(chunk.worktree),
+        capture_output=True,
+        text=True,
+        cwd=str(chunk.worktree),
     )
     if sha_r.returncode != 0:
         return False
@@ -61,14 +67,16 @@ def _ff_merge(chunk: Chunk, holding: str) -> bool:
     # Verify holding is an ancestor of sha (fast-forward is possible)
     anc = subprocess.run(
         ["git", "merge-base", "--is-ancestor", holding, sha],
-        capture_output=True, cwd=str(chunk.worktree),
+        capture_output=True,
+        cwd=str(chunk.worktree),
     )
     if anc.returncode != 0:
         return False
 
     result = subprocess.run(
         ["git", "update-ref", f"refs/heads/{holding}", sha],
-        capture_output=True, cwd=str(chunk.worktree),
+        capture_output=True,
+        cwd=str(chunk.worktree),
     )
     return result.returncode == 0
 
@@ -81,11 +89,14 @@ def land(chunk: Chunk, *, holding: str) -> dict:
     """Land one chunk. Returns verdict dict."""
     tip, err = _rebase_chunk(chunk, holding)
     if err:
-        _emit_event("chunk.ejected", {
-            "slug": chunk.slug,
-            "reason": "rebase-conflicted",
-            "where": str(chunk.worktree),
-        })
+        _emit_event(
+            "chunk.ejected",
+            {
+                "slug": chunk.slug,
+                "reason": "rebase-conflicted",
+                "where": str(chunk.worktree),
+            },
+        )
         return {
             "slug": chunk.slug,
             "status": "eject",
@@ -96,11 +107,14 @@ def land(chunk: Chunk, *, holding: str) -> dict:
 
     verdict, message = _run_gates(chunk)
     if verdict == "block":
-        _emit_event("chunk.ejected", {
-            "slug": chunk.slug,
-            "reason": "gate-failed",
-            "where": str(chunk.worktree),
-        })
+        _emit_event(
+            "chunk.ejected",
+            {
+                "slug": chunk.slug,
+                "reason": "gate-failed",
+                "where": str(chunk.worktree),
+            },
+        )
         return {
             "slug": chunk.slug,
             "status": "eject",
@@ -111,11 +125,14 @@ def land(chunk: Chunk, *, holding: str) -> dict:
 
     merged = _ff_merge(chunk, holding)
     if not merged:
-        _emit_event("chunk.ejected", {
-            "slug": chunk.slug,
-            "reason": "not-ff",
-            "where": str(chunk.worktree),
-        })
+        _emit_event(
+            "chunk.ejected",
+            {
+                "slug": chunk.slug,
+                "reason": "not-ff",
+                "where": str(chunk.worktree),
+            },
+        )
         return {
             "slug": chunk.slug,
             "status": "eject",
@@ -123,11 +140,14 @@ def land(chunk: Chunk, *, holding: str) -> dict:
             "tip": tip,
         }
 
-    _emit_event("chunk.landed", {
-        "slug": chunk.slug,
-        "sha": tip or "",
-        "holding": holding,
-    })
+    _emit_event(
+        "chunk.landed",
+        {
+            "slug": chunk.slug,
+            "sha": tip or "",
+            "holding": holding,
+        },
+    )
     return {
         "slug": chunk.slug,
         "status": "success",

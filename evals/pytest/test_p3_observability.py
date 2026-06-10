@@ -4,10 +4,10 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
 
-import os
-import subprocess
 import json
+import os
 import stat
+import subprocess
 import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -45,7 +45,7 @@ def test_audit_sh_defines_mentat_audit():
 def test_audit_sh_emits_valid_jsonl():
     with tempfile.TemporaryDirectory() as tmpdir:
         r = _sh(
-            f"bash -s",
+            "bash -s",
             env={
                 "MENTAT_LOG_DIR": tmpdir,
                 "MENTAT_REPO": "testrepo",

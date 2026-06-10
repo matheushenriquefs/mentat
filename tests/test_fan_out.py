@@ -8,7 +8,6 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
 
@@ -76,8 +75,7 @@ def test_fan_out_stdout_emits_chunk_slugs_newline_delim(tmp_path):
     fan_out = load_module("fan_out")
     routing = load_module("routing")
     plans = [
-        routing.Plan(slug=f"plan-{i}", class_="AFK", blocked_by=[], path=tmp_path / f"plan-{i}.md")
-        for i in range(3)
+        routing.Plan(slug=f"plan-{i}", class_="AFK", blocked_by=[], path=tmp_path / f"plan-{i}.md") for i in range(3)
     ]
 
     with patch.object(fan_out, "_spawn_worktree_subprocess", return_value="sess-x"):

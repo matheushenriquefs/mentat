@@ -49,12 +49,15 @@ def _emit_event(event: str, payload: dict) -> None:
 def spawn(plan, *, harness: str | None = None, model: str | None = None) -> str:
     """Spawn plan headless. Print track command immediately. Return session ID."""
     session_id = _spawn_worktree_subprocess(plan.path, harness=harness, model=model)
-    _emit_event("chunk.spawned", {
-        "slug": plan.slug,
-        "plan": str(plan.path),
-        "harness": harness or "default",
-        "worktree": str(plan.path.parent),
-    })
+    _emit_event(
+        "chunk.spawned",
+        {
+            "slug": plan.slug,
+            "plan": str(plan.path),
+            "harness": harness or "default",
+            "worktree": str(plan.path.parent),
+        },
+    )
     print(f"python3 ~/.agents/skills/mentat-session/scripts/session.py track {session_id}")
     print(session_id)
     return session_id

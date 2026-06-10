@@ -157,7 +157,7 @@ def test_adapter_clause_matches_registry():
 def test_adapter_clause_matches_adr_0010():
     """ADR-0010 is the canonical source. Test constant must agree."""
     src = ADR_0010.read_text()
-    assert CLAUSE in src, f"ADR-0010 must contain the clause verbatim; test constant may have drifted"
+    assert CLAUSE in src, "ADR-0010 must contain the clause verbatim; test constant may have drifted"
 
 
 def test_afk_prompt_clause_matches_registry_byte_for_byte():

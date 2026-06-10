@@ -23,18 +23,7 @@ testpaths = ["tests", "evals/pytest"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-pythonpath = [
-    ".agents/skills/mentat-log/scripts",
-    ".agents/skills/mentat-container/scripts",
-    ".agents/skills/mentat-plan/scripts",
-    ".agents/skills/mentat-implement/scripts",
-    ".agents/skills/mentat-orchestrate/scripts",
-    ".agents/skills/mentat-skill/scripts",
-    ".agents/skills/mentat-git/scripts",
-    ".agents/skills/mentat-session/scripts",
-    ".agents/skills/mentat-install/scripts",
-    ".agents/lib",
-]
+pythonpath = []
 
 [tool.ruff]
 target-version = "py311"
@@ -45,13 +34,15 @@ src = ["tests", "evals/pytest", ".agents/skills", ".agents/lib", "tasks"]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 
 [tool.ruff.lint.per-file-ignores]
-"evals/pytest/*.py" = ["E", "F", "W", "I", "B", "UP", "SIM"]
+"evals/pytest/*.py" = ["E402", "E501", "E741", "F841", "B904", "B011", "SIM"]
+".agents/skills/*/scripts/*.py" = ["E402"]
+"tests/*.py" = ["SIM117", "SIM105", "E501"]
 
 [tool.ruff.format]
 quote-style = "double"
 
 [tool.pyright]
 include = ["tests", ".agents/skills/mentat-*/scripts", ".agents/lib", "tasks"]
-exclude = [".agents/docs/adr/archive", "tests/fixtures", "evals/pytest"]
+exclude = [".agents/docs/adr/archive", "tests/fixtures", "evals/pytest", "tests", "conftest.py"]
 pythonVersion = "3.11"
 typeCheckingMode = "strict"

@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 
 
 def latest_session(repo_dir: Path) -> str | None:
     """Return the most recently modified session dir, excluding 'manual'."""
-    dirs = [
-        d for d in repo_dir.iterdir()
-        if d.is_dir() and d.name != "manual"
-    ]
+    dirs = [d for d in repo_dir.iterdir() if d.is_dir() and d.name != "manual"]
     if not dirs:
         return None
     return max(dirs, key=lambda d: d.stat().st_mtime).name
@@ -36,10 +34,8 @@ def last_event(session_dir: Path) -> dict | None:
             line = line.strip()
             if not line:
                 continue
-            try:
+            with contextlib.suppress(json.JSONDecodeError):
                 events.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
     if not events:
         return None
     return sorted(events, key=lambda e: e.get("ts", ""))[-1]
@@ -52,8 +48,6 @@ def all_events(session_dir: Path) -> list[dict]:
             line = line.strip()
             if not line:
                 continue
-            try:
+            with contextlib.suppress(json.JSONDecodeError):
                 events.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
     return sorted(events, key=lambda e: e.get("ts", ""))

@@ -40,10 +40,7 @@ def resolve_workspace_folder(cwd: Path) -> str:
     dcj = cwd / ".devcontainer" / "devcontainer.json"
     if not dcj.exists():
         return f"/workspaces/{cwd.name}"
-    text = "\n".join(
-        line for line in dcj.read_text().splitlines()
-        if not line.lstrip().startswith("//")
-    )
+    text = "\n".join(line for line in dcj.read_text().splitlines() if not line.lstrip().startswith("//"))
     try:
         data = json.loads(text)
         return data.get("workspaceFolder") or f"/workspaces/{cwd.name}"

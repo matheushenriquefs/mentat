@@ -4,8 +4,8 @@ import pytest
 
 pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
 
-import os
 import json
+import os
 
 MENTAT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 EVALS_ROOT = os.path.join(MENTAT_ROOT, ".agents", "evals")

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util as _ilu
 import json
 import sys
 import time
 from pathlib import Path
-
-import importlib.util as _ilu
 
 
 def _load_sibling(name: str):
@@ -25,15 +24,15 @@ def _load_sibling(name: str):
 _sessions = _load_sibling("sessions")
 
 _COLORS = {
-    "started": "\033[34m",    # blue
+    "started": "\033[34m",  # blue
     "succeeded": "\033[32m",  # green
-    "landed": "\033[32m",     # green
-    "failed": "\033[31m",     # red
-    "ejected": "\033[31m",    # red
+    "landed": "\033[32m",  # green
+    "failed": "\033[31m",  # red
+    "ejected": "\033[31m",  # red
     "evaluated": "\033[36m",  # cyan
-    "reviewed": "\033[36m",   # cyan
+    "reviewed": "\033[36m",  # cyan
     "submitted": "\033[36m",  # cyan
-    "spawned": "\033[33m",    # yellow
+    "spawned": "\033[33m",  # yellow
 }
 _RESET = "\033[0m"
 
@@ -71,7 +70,8 @@ def stream(session_dir: Path, *, follow: bool = True, use_color: bool | None = N
                     event = row.get("event", "")
                     c = _color_for_event(event) if color else ""
                     reset = _RESET if color else ""
-                    print(f"{c}{row.get('ts', '')} [{row.get('agent', '')}] {event} {json.dumps(row.get('payload', {}))}{reset}")
+                    payload = json.dumps(row.get("payload", {}))
+                    print(f"{c}{row.get('ts', '')} [{row.get('agent', '')}] {event} {payload}{reset}")
                 seen_files[log_file] = f.tell()
 
         if not follow or time.time() > end_time:

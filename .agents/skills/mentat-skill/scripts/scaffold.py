@@ -38,7 +38,7 @@ def cmd_scaffold(skill_name: str, *, skills_root: Path | None = None, evals_dir:
     if not skill_md.exists():
         skill_md.write_text(
             f"---\nname: {skill_name}\ndescription: >\n  {skill_name} skill.\n"
-            f"metadata:\n  version: \"0.1.0\"\n---\n\n# {skill_name}\n\n"
+            f'metadata:\n  version: "0.1.0"\n---\n\n# {skill_name}\n\n'
             f"## How to invoke\n\n```\npython3 ~/.agents/skills/{skill_name}/scripts/{skill_name}.py\n```\n"
         )
 
@@ -70,12 +70,18 @@ def cmd_scaffold(skill_name: str, *, skills_root: Path | None = None, evals_dir:
 
     evals_file = evals_dir / f"{skill_name}.json"
     if not evals_file.exists():
-        evals_file.write_text(json.dumps({
-            "skill_name": skill_name,
-            "description": f"{skill_name} skill",
-            "evals": [],
-            "eval_queries": [],
-        }, indent=2) + "\n")
+        evals_file.write_text(
+            json.dumps(
+                {
+                    "skill_name": skill_name,
+                    "description": f"{skill_name} skill",
+                    "evals": [],
+                    "eval_queries": [],
+                },
+                indent=2,
+            )
+            + "\n"
+        )
 
     print(f"mentat-skill: scaffolded {skill_dir}")
     return 0

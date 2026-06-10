@@ -71,12 +71,15 @@ def synth(worktree_path: Path) -> str:
         text = compose_yml.read_text()
         service = _parse_compose_service(text)
         ws = _infer_workspace_folder_from_compose(text, service, slug)
-        return json.dumps({
-            "name": slug,
-            "dockerComposeFile": ["../docker-compose.yml"],
-            "service": service,
-            "workspaceFolder": ws,
-        }, indent=2)
+        return json.dumps(
+            {
+                "name": slug,
+                "dockerComposeFile": ["../docker-compose.yml"],
+                "service": service,
+                "workspaceFolder": ws,
+            },
+            indent=2,
+        )
 
     # Dockerfile path
     dockerfile: str | None = None
@@ -102,9 +105,12 @@ def synth(worktree_path: Path) -> str:
             ws = m.group(1)
             break
 
-    return json.dumps({
-        "name": slug,
-        "build": {"dockerfile": f"../{dockerfile}", "context": ".."},
-        "workspaceFolder": ws,
-        "workspaceMount": f"source=${{localWorkspaceFolder}},target={ws},type=bind",
-    }, indent=2)
+    return json.dumps(
+        {
+            "name": slug,
+            "build": {"dockerfile": f"../{dockerfile}", "context": ".."},
+            "workspaceFolder": ws,
+            "workspaceMount": f"source=${{localWorkspaceFolder}},target={ws},type=bind",
+        },
+        indent=2,
+    )

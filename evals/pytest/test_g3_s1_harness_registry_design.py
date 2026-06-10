@@ -21,7 +21,6 @@ pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrit
 
 import json
 import re
-import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]

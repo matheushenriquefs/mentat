@@ -47,13 +47,17 @@ def _load_plans(paths: list[Path]) -> list[_routing.Plan]:
         if blocked_by_raw and blocked_by_raw not in ("[]", ""):
             # parse "[a, b]" or "a, b"
             import re
-            blocked_by = [s.strip().strip("[]\"'") for s in re.split(r"[,\s]+", blocked_by_raw) if s.strip().strip("[]\"'")]
-        plans.append(_routing.Plan(
-            slug=fm.get("id", path.stem),
-            class_=fm.get("class", "HITL"),
-            blocked_by=blocked_by,
-            path=path,
-        ))
+
+            parts = re.split(r"[,\s]+", blocked_by_raw)
+            blocked_by = [s.strip().strip("[]\"'") for s in parts if s.strip().strip("[]\"'")]
+        plans.append(
+            _routing.Plan(
+                slug=fm.get("id", path.stem),
+                class_=fm.get("class", "HITL"),
+                blocked_by=blocked_by,
+                path=path,
+            )
+        )
     return plans
 
 
@@ -154,13 +158,15 @@ def main() -> None:
 
     if args.cmd == "run":
         paths = _resolve_plan_refs(args.plan_refs)
-        sys.exit(run_orchestrate(
-            args.holding,
-            paths,
-            harness=args.harness,
-            model=args.model,
-            dry_run=args.dry_run,
-        ))
+        sys.exit(
+            run_orchestrate(
+                args.holding,
+                paths,
+                harness=args.harness,
+                model=args.model,
+                dry_run=args.dry_run,
+            )
+        )
 
     elif args.cmd == "fan-out":
         paths = _resolve_plan_refs(args.plan_refs)
@@ -171,6 +177,7 @@ def main() -> None:
     elif args.cmd == "land-queue":
         slugs = [line.strip() for line in sys.stdin if line.strip()]
         import json
+
         results = _land_all(slugs, holding=args.holding)
         for r in results:
             print(json.dumps(r))

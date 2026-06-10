@@ -5,8 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 _SKILL_NAMES = [
-    "mentat-log", "mentat-container", "mentat-plan", "mentat-implement",
-    "mentat-orchestrate", "mentat-skill", "mentat-git", "mentat-session", "mentat-install",
+    "mentat-log",
+    "mentat-container",
+    "mentat-plan",
+    "mentat-implement",
+    "mentat-orchestrate",
+    "mentat-skill",
+    "mentat-git",
+    "mentat-session",
+    "mentat-install",
 ]
 
 _REVIEWER_NAMES = [
@@ -89,7 +96,7 @@ def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
 
     # 3. Harness detection
     agents_agents = home / ".agents" / "agents"
-    for harness_dir, harness_name in [(".claude", "claude-code"), (".cursor", "cursor")]:
+    for harness_dir in [".claude", ".cursor"]:
         h_path = home / harness_dir
         if not h_path.exists():
             for skill in _SKILL_NAMES:
@@ -99,10 +106,7 @@ def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
             continue
         for skill in _SKILL_NAMES:
             link = h_path / "skills" / skill
-            if clone_root is not None:
-                source = clone_root / ".agents" / "skills" / skill
-            else:
-                source = agents_skills / skill
+            source = clone_root / ".agents" / "skills" / skill if clone_root is not None else agents_skills / skill
             if link.exists():
                 if link.is_symlink() and link.resolve() != source.resolve():
                     update.append(Action("symlink", source, link))

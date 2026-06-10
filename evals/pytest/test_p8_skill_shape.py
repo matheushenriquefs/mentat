@@ -8,7 +8,6 @@ import pytest
 pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
 
 import os
-import re
 import stat
 import subprocess
 import tempfile

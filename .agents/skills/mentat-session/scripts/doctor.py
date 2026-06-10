@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.util as _ilu
 import sys
 from pathlib import Path
-
-import importlib.util as _ilu
 
 
 def _load_sibling(name: str):
@@ -34,7 +33,11 @@ _SUSPECT_MAP = {
 def build_verdict(session_dir: Path) -> str:
     events = _sessions.all_events(session_dir)
     if not events:
-        return "## Verdict\n- Reason: unknown\n- Phase: unknown\n\n## Expected vs actual\n- Expected: unknown\n- Actual: unknown\n\n## Regression\n- Last known good commit: unknown\n- Is regression: unknown\n"
+        return (
+            "## Verdict\n- Reason: unknown\n- Phase: unknown\n\n"
+            "## Expected vs actual\n- Expected: unknown\n- Actual: unknown\n\n"
+            "## Regression\n- Last known good commit: unknown\n- Is regression: unknown\n"
+        )
 
     # Find last chunk.ejected or chunk.landed
     terminal: dict | None = None
@@ -63,22 +66,19 @@ def build_verdict(session_dir: Path) -> str:
         suspect = "No terminal event found."
 
     phase = last_ev.get("event", "unknown")
-    first_failed_line = (
-        f"{first_failed['event']} @ {first_failed['ts']}" if first_failed
-        else "none"
-    )
+    first_failed_line = f"{first_failed['event']} @ {first_failed['ts']}" if first_failed else "none"
 
     # Expected vs actual
     spawned = next((e for e in events if e.get("event") == "chunk.spawned"), None)
     started = next((e for e in events if e.get("event") == "plan.started"), None)
     expected = (
-        spawned["payload"].get("plan", "unknown") if spawned
-        else started["payload"].get("path", "unknown") if started
+        spawned["payload"].get("plan", "unknown")
+        if spawned
+        else started["payload"].get("path", "unknown")
+        if started
         else "unknown"
     )
-    actual = (
-        f"{reason}" + (f" — {suspect}" if reason != "chunk.landed" else "")
-    )
+    actual = f"{reason}" + (f" — {suspect}" if reason != "chunk.landed" else "")
 
     # Regression
     prior_landed = next((e for e in events if e.get("event") == "chunk.landed"), None)

@@ -8,16 +8,21 @@ import sys
 from pathlib import Path
 
 BANNED_RE = re.compile(
-    r'\b(just|simply|really|basically|actually|obviously|certainly|moreover)\b'
-    r'|sure[,!.]|of course|happy to|might want to|feel free to',
+    r"\b(just|simply|really|basically|actually|obviously|certainly|moreover)\b"
+    r"|sure[,!.]|of course|happy to|might want to|feel free to",
     re.IGNORECASE,
 )
-ARTICLE_RE = re.compile(r'(?<!\w)(a|an|the)\s', re.IGNORECASE)
+ARTICLE_RE = re.compile(r"(?<!\w)(a|an|the)\s", re.IGNORECASE)
 
 _THIN = {"mentat-git", "mentat-skill", "mentat-install", "mentat-plan"}
 _FULL = {
-    "mentat-prd", "mentat-tasks", "mentat-implement", "mentat-orchestrate",
-    "mentat-container", "mentat-log", "mentat-session",
+    "mentat-prd",
+    "mentat-tasks",
+    "mentat-implement",
+    "mentat-orchestrate",
+    "mentat-container",
+    "mentat-log",
+    "mentat-session",
 }
 
 
@@ -63,7 +68,7 @@ def lint_file(path: Path) -> list[str]:
     fm, fm_end = _parse_frontmatter(text)
     errs: list[str] = []
 
-    required = {"name", "description"} | ({"tools"} if cls == "crew" else set())
+    required: set[str] = {"name", "description"} | ({"tools"} if cls == "crew" else set())
     for k in sorted(required - set(fm)):
         errs.append(f"{path}: missing frontmatter key '{k}'")
 
