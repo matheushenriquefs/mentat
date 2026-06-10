@@ -3,6 +3,7 @@
 Status: Accepted (locked)
 Date: 2026-06-06
 Amended: 2026-06-09 (v2 — past-tense verbs; `~/.mentat/logs`; `EVENT_CATALOG` in Python)
+Amended: 2026-06-10 (v3 — Stripe-style naming policy; reasons live in payload, not name)
 
 ## Context
 
@@ -47,6 +48,19 @@ Envelope schema (JSONL, one row per event):
 `chunk.ejected.reason ∈ {implement-failed, gate-failed, rebase-conflicted, not-ff, hitl-required}`
 
 Log dir: `mode=0o700` on first write.
+
+## Naming policy
+
+Events follow Stripe webhook convention (https://docs.stripe.com/api/events/types):
+
+- **Past-tense verbs.** `plan.started`, `chunk.landed`, `gate.evaluated`.
+- **`resource.action` shape.** Subresources extend to `resource.subresource.action` (e.g., `chunk.dispute.created` if ever needed).
+- **Reasons live in payload, not name.** `chunk.ejected{reason: "preflight"}` — never `chunk.ejected.preflight_failed`. Stripe emits `charge.failed` with `failure_code`; they do not emit `charge.failed.insufficient_funds`.
+- **New event name only when handler diverges.** If consumers must wire a different `case`/`if` branch, justify a new name. Otherwise extend payload.
+
+Industry corroboration: Sentry fingerprinting consolidates sub-reasons rather than splitting names; Datadog facets/tags carry sub-reasons over stable log sources; New Relic custom attributes attach to existing events.
+
+Catalog stays at 9 events. Consumer skills extend via payload fields (e.g. `chunk.ejected.payload.logs_path` for doctor bundle), never via new event names.
 
 ## Consequences
 
