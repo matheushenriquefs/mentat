@@ -9,7 +9,7 @@ description: Stage and commit. Route through devcontainer if one exists.
    ```
    printf '%s\n' "<message>" > .commit-msg
    # With .devcontainer/ (container-side pre-commit):
-   ~/.agents/bin/mentat-container-run "git commit -F .commit-msg && rm .commit-msg"
+   python3 ~/.agents/skills/mentat-container/scripts/container.py run "git commit -F .commit-msg && rm .commit-msg"
    # Otherwise:
    git commit -F .commit-msg && rm .commit-msg
    ```

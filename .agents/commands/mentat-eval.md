@@ -6,7 +6,7 @@ $ARGUMENTS
 
 From `skills/$ARGUMENTS/`:
 
-1. Emit start: `source ~/.agents/bin/lib/audit.sh && mentat_audit mentat-eval eval.start "{\"skill\":\"$ARGUMENTS\"}"`.
+1. Emit start: `python3 ~/.agents/skills/mentat-log/scripts/log.py emit mentat-eval eval.start "{\"skill\":\"$ARGUMENTS\"}"`.
 2. Functional: `bash eval/run.sh`.
 2. Cognitive (current): `npx promptfoo eval --output /tmp/$ARGUMENTS-current.json --no-progress-bar`.
 3. Cognitive (main): extract main's SKILL.md, override the prompt path:
@@ -26,4 +26,4 @@ Report:
 
 Include top 3 failing cases with the judge's reason, and the per-provider breakdown (does Haiku now clear 0.88?). Don't edit the skill.
 
-Emit complete: `mentat_audit mentat-eval eval.complete "{\"skill\":\"$ARGUMENTS\"}"`.`
+Emit complete: `python3 ~/.agents/skills/mentat-log/scripts/log.py emit mentat-eval eval.complete "{\"skill\":\"$ARGUMENTS\"}"`.`

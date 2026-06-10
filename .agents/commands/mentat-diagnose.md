@@ -5,6 +5,6 @@ description: Run the /diagnose loop inside the devcontainer, then hand the regre
 $ARGUMENTS
 
 1. `/caveman ultra`.
-2. `~/.agents/bin/mentat-container-up`.
-3. `/diagnose`. Run every loop/probe/test via `~/.agents/bin/mentat-container-run '<cmd>'` — the deterministic signal lives container-side. Discover the test command from CLAUDE.md or AGENTS.md.
-4. Diagnosis lands a regression test at a correct seam (or documents that no seam exists). Hand that off: it's the first red slice for `/mentat-plan` → `/mentat-implement`. If stopping here instead, `~/.agents/bin/mentat-container-down`.
+2. `python3 ~/.agents/skills/mentat-container/scripts/container.py up`.
+3. `/diagnose`. Run every loop/probe/test via `python3 ~/.agents/skills/mentat-container/scripts/container.py run '<cmd>'` — the deterministic signal lives container-side. Discover the test command from CLAUDE.md or AGENTS.md.
+4. Diagnosis lands a regression test at a correct seam (or documents that no seam exists). Hand that off: it's the first red slice for `/mentat-plan` → `/mentat-implement`. If stopping here instead, `python3 ~/.agents/skills/mentat-container/scripts/container.py down`.
