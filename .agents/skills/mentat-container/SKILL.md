@@ -7,7 +7,7 @@ metadata:
   version: "0.1.0"
 ---
 
-Start, stop, exec inside, and diagnose devcontainers for mentat worktrees. Wraps `devcontainer` CLI + Docker with worktree-aware slug derivation and atomic compose-synth.
+Start, stop, exec inside, and diagnose devcontainers for mentat worktrees. Wraps `devcontainer` CLI + Docker with worktree-aware slug derivation and atomic `compose_render`.
 
 ## How to invoke
 
@@ -47,5 +47,31 @@ python3 ~/.agents/skills/mentat-container/scripts/container.py doctor
 - `up` synthesizes `.devcontainer/devcontainer.json` atomically if absent (compose or Dockerfile auto-detected).
 - `run` exits 99 if container not running.
 - Slug = `basename(git rev-parse --show-toplevel)`.
-- `workspaceFolder` read from `devcontainer.json` (not slug-derived) — G2-S9 invariant.
+- `workspaceFolder` read from `devcontainer.json` (not slug-derived).
 - `MENTAT_DOCKER` env override for testing without real Docker.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 1 | Command inside container exited non-zero |
+| 2 | Container not running (for `run`) |
+| 64 | CLI arg parse error / unknown subcommand |
+| 69 | Docker daemon unreachable (`EX_UNAVAILABLE`) |
+| 70 | Unhandled Python exception |
+
+## Rules
+
+- `up` is idempotent: calling it twice is safe, returns exit 0 if already running.
+- `run` requires container already up; fails fast with exit 2 if not running.
+- `compose_render` auto-detects `docker-compose.yml` or `Dockerfile` in worktree root.
+- Atomic write for `.devcontainer/devcontainer.json`: writes to `.tmp` then renames.
+- `doctor` walks invariants and prints human-readable status for each.
+
+## Constraints
+
+- Container must be running before `run`. No auto-start inside `run`.
+- `MENTAT_DOCKER` env var overrides the `docker` binary path (test isolation only).
+- `devcontainer.json` written only when absent; never overwritten if present.
+- Slug is always `basename(git rev-parse --show-toplevel)`, not a config value.

@@ -18,7 +18,7 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py land-queue <h
 python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py batch-review <session>
 ```
 
-## Routing algorithm (B6 design)
+## Routing algorithm
 
 ```
 1. Read frontmatter of each plan: id, class, blocked_by.

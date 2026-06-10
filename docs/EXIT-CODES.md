@@ -48,4 +48,4 @@ specifics above. Any exit code not in this table is a bug.
 ## Adoption status
 
 All exit codes emitted by `.agents/lib/` and `bin/` map to an entry in this table.
-`EX_UNAVAILABLE (69)` implementation: G3-S27. Constants module: `.agents/lib/exits.py`.
+`EX_UNAVAILABLE (69)` propagated across all scripts. Constants module: `.agents/lib/exits.py`.

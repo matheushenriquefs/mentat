@@ -138,7 +138,7 @@ def test_smoke_install_help_exits_0():
     assert result.returncode == 0
 
 
-# ── Smoke: shell era closed ───────────────────────────────────────────────────
+# ── Smoke: no legacy shell files ─────────────────────────────────────────────
 
 
 def test_smoke_shell_era_closed():

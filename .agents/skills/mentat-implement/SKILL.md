@@ -19,7 +19,7 @@ python3 ~/.agents/skills/mentat-implement/scripts/implement.py <plan-ref> [--har
 
 Multi-slug → exit 1 with "use mentat-orchestrate for multi-plan".
 
-## Atomic contract (B4 design)
+## Atomic contract
 
 ```
 mentat-implement <single-plan-slug>

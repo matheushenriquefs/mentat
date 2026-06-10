@@ -17,7 +17,7 @@ python3 ~/.agents/skills/mentat-session/scripts/session.py doctor [<session>]
 python3 ~/.agents/skills/mentat-session/scripts/session.py diagnose
 ```
 
-## Doctor markdown structure (B10 design)
+## Doctor markdown structure
 
 ```markdown
 ## Verdict
@@ -54,3 +54,26 @@ python3 ~/.agents/skills/mentat-session/scripts/session.py diagnose
 | `*.failed` / `*.ejected` | red |
 | `*.evaluated` / `*.reviewed` / `*.submitted` | cyan |
 | `*.spawned` | yellow |
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 64 | CLI arg parse error / unknown subcommand |
+| 66 | Session ID not found in log path |
+| 70 | Unhandled Python exception |
+
+## Rules
+
+- `track` uses `tail -F` semantics: follows new events as they arrive.
+- `doctor` writes to `~/.mentat/logs/<repo>/<session>/diagnosis.md`; overwrites on re-run.
+- `diagnose` calls `doctor` first, then enters the `/diagnose` loop with the diagnosis as context.
+- Session ID defaults to latest session for the current repo when not supplied.
+- All event reading goes through `mentat-log query`; never reads raw JSONL directly.
+
+## Constraints
+
+- Read-only: `track` and `doctor` never write events or modify plan state.
+- `diagnose` is interactive; requires `AskUserQuestion` — do not invoke in AFK class plans.
+- Session lookup uses `$MENTAT_SESSION` when set; otherwise latest session in log dir.
