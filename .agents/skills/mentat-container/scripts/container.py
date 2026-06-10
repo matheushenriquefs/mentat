@@ -15,7 +15,7 @@ _SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS))
 
 import utils
-import compose_synth
+import compose_render
 
 
 def _docker() -> str:
@@ -39,7 +39,7 @@ def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
     if dcj.exists():
         return
     try:
-        content = compose_synth.synth(wt)
+        content = compose_render.synth(wt)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         raise SystemExit(1)

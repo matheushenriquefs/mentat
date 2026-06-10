@@ -1,4 +1,4 @@
-"""Pure compose/devcontainer.json synthesizer. No side effects."""
+"""Pure compose/devcontainer.json renderer. No side effects."""
 
 from __future__ import annotations
 

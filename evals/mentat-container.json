@@ -14,7 +14,7 @@
     },
     {
       "id": "synth-compose",
-      "description": "compose_synth generates valid devcontainer.json from docker-compose.yml",
+      "description": "compose_render generates valid devcontainer.json from docker-compose.yml",
       "type": "functional"
     },
     {
