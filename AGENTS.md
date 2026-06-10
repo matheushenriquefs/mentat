@@ -10,6 +10,7 @@ See [CONTEXT.md](CONTEXT.md) for the full glossary and ADR index. See [README.md
 - **Never fabricate.** If a verification step fails or an ADR doesn't cover a case, say so. Don't invent citations or outcomes.
 - **No secrets.** No API keys, tokens, or credentials in any file — not in comments, not in examples.
 - **Mentat names no target-repo toolchain.** The driver and all Mentat files are agnostic — they do not reference specific languages, test frameworks, or build tools. Those live in the target repo's own docs (ADR 0004).
+- **Agent prompts must be self-contained.** References at most 1 level deep. No grill/slice/round numbers, no parent-doc refs, no version history of how the prompt got here. Reader is a stranger with no project history. Use `mentat-context-reviewer` to audit.
 
 ## Naming Conventions
 

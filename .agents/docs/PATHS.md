@@ -62,7 +62,7 @@ Detected harnesses: `claude-code` (`~/.claude/`), `cursor` (`~/.cursor/`).
 
 ## Stale paths (mentat-install reports for cleanup)
 
-These paths are from the shell era and should not exist on a post-rewrite install:
+These paths are stale and should not exist on current installs:
 
 | Path | Reason stale |
 |---|---|
