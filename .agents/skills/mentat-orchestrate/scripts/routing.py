@@ -40,13 +40,19 @@ def _topo_sort(plans: list[Plan]) -> list[Plan]:
     return order
 
 
-def _has_downstream_hitl(slug: str, plans_by_slug: dict[str, Plan]) -> bool:
+def _has_downstream_hitl(slug: str, plans_by_slug: dict[str, Plan], _visited: set[str] | None = None) -> bool:
     """Return True if any plan (directly or transitively) blocks on `slug` and is HITL."""
+    if _visited is None:
+        _visited = set()
+    if slug in _visited:
+        return False
+    _visited.add(slug)
     for plan in plans_by_slug.values():
-        if slug in plan.blocked_by and plan.class_ == "HITL":
-            return True
-        if slug in plan.blocked_by and _has_downstream_hitl(plan.slug, plans_by_slug):
-            return True
+        if slug in plan.blocked_by:
+            if plan.class_ == "HITL":
+                return True
+            if _has_downstream_hitl(plan.slug, plans_by_slug, _visited):
+                return True
     return False
 
 

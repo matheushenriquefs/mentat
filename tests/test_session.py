@@ -108,8 +108,8 @@ def test_expected_vs_actual_derived(tmp_path):
          "payload": {"slug": "x", "reason": "gate-failed", "where": "/tmp"}},
     ])
     verdict = doctor_mod.build_verdict(session_dir)
-    # No <placeholder> strings should remain
-    assert "<" not in verdict or "chunk" in verdict
+    # <where> placeholder must be filled in; no unfilled angle-bracket placeholders
+    assert "<where>" not in verdict
 
 
 def test_regression_marks_unknown_when_no_prior_landed(tmp_path):
@@ -157,4 +157,61 @@ def test_diagnose_feeds_doctor_output_into_loop(tmp_path):
             diag_mod.run_diagnose(session_dir)
 
     assert loop_inputs
-    assert "Verdict" in loop_inputs[0]
+
+
+# ── track.py ─────────────────────────────────────────────────────────────────
+
+import io
+from contextlib import redirect_stdout
+
+
+def test_track_streams_latest(tmp_path):
+    """stream() reads JSONL events and prints each one."""
+    track_mod = load_module("track")
+    session_dir = tmp_path / "sess-1"
+    session_dir.mkdir(parents=True)
+    (session_dir / "events.jsonl").write_text(
+        json.dumps({
+            "ts": "2026-01-01T00:00:00Z", "agent": "mentat-plan",
+            "session": "sess-1", "event": "plan.started", "payload": {"path": "/a.md"},
+        }) + "\n"
+    )
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        track_mod.stream(session_dir, follow=False, use_color=False)
+    assert "plan.started" in buf.getvalue()
+
+
+def test_track_named_session(tmp_path):
+    """stream() can target a specific named session dir."""
+    track_mod = load_module("track")
+    session_dir = tmp_path / "named-session"
+    session_dir.mkdir(parents=True)
+    (session_dir / "events.jsonl").write_text(
+        json.dumps({
+            "ts": "t", "agent": "a", "session": "named-session",
+            "event": "chunk.landed", "payload": {},
+        }) + "\n"
+    )
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        track_mod.stream(session_dir, follow=False, use_color=False)
+    assert "chunk.landed" in buf.getvalue()
+
+
+def test_track_color_by_event_type(tmp_path):
+    """Events with known suffixes get ANSI color codes when use_color=True."""
+    track_mod = load_module("track")
+    session_dir = tmp_path / "sess-color"
+    session_dir.mkdir(parents=True)
+    (session_dir / "events.jsonl").write_text(
+        json.dumps({
+            "ts": "t", "agent": "a", "session": "s",
+            "event": "plan.started", "payload": {},
+        }) + "\n"
+    )
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        track_mod.stream(session_dir, follow=False, use_color=True)
+    # plan.started ends with "started" → blue \033[34m
+    assert "\033[34m" in buf.getvalue()

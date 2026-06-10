@@ -87,7 +87,10 @@ def cmd_up(wt: Path) -> int:
 
     # Symlink shared dirs from main repo
     if (wt / ".git").is_file():
-        git_target = (wt / ".git").read_text().split()[-1]
+        _git_parts = (wt / ".git").read_text().split()
+        if not _git_parts:
+            return
+        git_target = _git_parts[-1]
         root = Path(git_target).parent
         while root.name != ".git" and root != root.parent:
             root = root.parent

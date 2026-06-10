@@ -49,9 +49,25 @@ def _run_gates(chunk: Chunk) -> tuple[str, str]:
 
 
 def _ff_merge(chunk: Chunk, holding: str) -> bool:
-    """FF-merge chunk onto holding. Returns True on success."""
+    """FF-merge chunk HEAD onto holding branch via update-ref."""
+    sha_r = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        capture_output=True, text=True, cwd=str(chunk.worktree),
+    )
+    if sha_r.returncode != 0:
+        return False
+    sha = sha_r.stdout.strip()
+
+    # Verify holding is an ancestor of sha (fast-forward is possible)
+    anc = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", holding, sha],
+        capture_output=True, cwd=str(chunk.worktree),
+    )
+    if anc.returncode != 0:
+        return False
+
     result = subprocess.run(
-        ["git", "merge", "--ff-only", "HEAD"],
+        ["git", "update-ref", f"refs/heads/{holding}", sha],
         capture_output=True, cwd=str(chunk.worktree),
     )
     return result.returncode == 0
