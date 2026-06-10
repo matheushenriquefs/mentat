@@ -3,6 +3,7 @@
 Status: Accepted (locked)
 Date: 2026-06-04
 Amended: 2026-06-09 (v2 — pytest semantics; trajectory blacklist enforced via `llm/test.md`)
+Amended: 2026-06-10 (v3 — `llm/test.md` → `mentat-test-reviewer` subagent)
 
 ## Context
 
@@ -20,7 +21,7 @@ Enforcement in two layers, both agnostic:
 the failing test is written, the agent works impl-only: it does not modify existing
 test files until the slice is green. Rule, not kernel guarantee.
 
-**Hard detective layer — trajectory blacklist (`gates/llm/test.md`).** LLM gate
+**Hard detective layer — trajectory blacklist (`mentat-test-reviewer`).** Reviewer subagent
 reads agent's edit trajectory. Test-file write during impl phase, weakened assertion,
 redirected runner → blacklisted move. Deterministic veto: score `0.0`.
 
@@ -39,6 +40,6 @@ Blacklist entries kept (nothing retired by soft prevention):
 
 ## Consequences
 
-`mentat-implement` gains impl-only-after-red contract clause. `gates/llm/test.md`
+`mentat-implement` gains impl-only-after-red contract clause. `mentat-test-reviewer`
 carries the trajectory blacklist. Driver and container scripts untouched — no test
 path knowledge in the driver. ADR is index-only in AGENTS.md.

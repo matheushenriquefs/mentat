@@ -3,6 +3,7 @@
 Status: Accepted (locked)
 Date: 2026-05-31
 Amended: 2026-06-09 (v2 — folds 0007 + 0008; Python gate runner; gate filesystem layout)
+Amended: 2026-06-10 (v3 — reviewers promoted to `.agents/agents/` subagents; `score.py` added; install-time symlinks; old LLM rubric dir retired)
 
 ## Context
 
@@ -25,14 +26,15 @@ gate_pass =
   AND smell_score       >= 0.85          # code-smell advisory — no max-sev veto
 ```
 
-Gate filesystem layout (`.agents/lib/gates/`):
-- `code/*.py` — Python callables `run(chunk_path: Path) -> tuple[str, str]`
+Gate filesystem layout:
+- `.agents/lib/gates/code/*.py` — Python callables `run(chunk_path: Path) -> tuple[str, str]`
   returning `(verdict, message)` where `verdict ∈ {"pass", "block", "advise"}`.
-- `llm/*.md` — system-prompt markdown for LLM reviewer agents.
-- No central registry; orchestrator globs both dirs.
+- `.agents/agents/mentat-*-reviewer.md` — reviewer subagent source (harness-agnostic).
+  Installed via symlink: `~/.claude/agents/`, `~/.cursor/agents/` etc. per detected harness.
+- `.agents/lib/gates/score.py` — parses subagent JSON verdicts, applies thresholds, aggregates.
 
 Severity per gate: `code/precommit.py` = blocking; `code/smells.py` = advisory;
-`llm/bug.md` = blocking with threshold; `llm/smell.md` = advisory.
+`mentat-bug-reviewer` = blocking with threshold; `mentat-smell-reviewer` = advisory.
 
 Must-not-exist veto (folded from ADR-0007): `code/precommit.py` emits `block` on
 forbidden file/path patterns (e.g. test-file writes during impl phase).
@@ -46,6 +48,8 @@ owned by ADR-0004 (HITL routing contract folded there).
 ## Consequences
 
 Three overlapping ADRs → one. Old 0007 and 0008 archived. Gate runner iterates
-`gates/code/*.py` then `gates/llm/*.md` per chunk. New gates: add a file, no
-registry edit needed. Reviewer subagent types: `mentat-plan-reviewer`,
-`mentat-test-reviewer`, `mentat-bug-reviewer`, `mentat-smell-reviewer`.
+`gates/code/*.py` (deterministic), then spawns reviewer subagents (`mentat-plan-reviewer`,
+`mentat-test-reviewer`, `mentat-bug-reviewer`, `mentat-smell-reviewer`) via Agent tool;
+`score.py` aggregates verdicts per ADR-0003 formula. New subagent reviewer: add file to
+`.agents/agents/`, run `mentat-install` for harness symlinks. Old LLM rubric content
+moved into subagent bodies; retired directory cleaned up by `mentat-install` (ADR-0003 v3).

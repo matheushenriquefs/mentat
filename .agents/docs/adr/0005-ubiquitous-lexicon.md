@@ -26,10 +26,10 @@ used interchangeably; no noun for the whole set of chunks in one run. Gate machi
 **Review machinery (expanded for ADR-0003 v2):**
 - **gate** — anything that evaluates a chunk and emits a verdict (umbrella).
 - **code gate** — deterministic Python gate. Lives in `.agents/lib/gates/code/`.
-- **llm gate** — LLM reviewer agent prompt. Lives in `.agents/lib/gates/llm/`.
+- **reviewer subagent** — LLM reviewer spawned via Agent tool. Source: `.agents/agents/mentat-*-reviewer.md`; installed via harness symlinks. Replaces `llm/*.md` gate files.
 - **smell** — Fowler code smell. Advisory by default.
 - **severity** — per-gate: `info` / `low` / `med` / `high` / `critical`.
-- **threshold** — (llm gates only) numeric score above which advisory flips blocking.
+- **threshold** — (reviewer subagents) numeric score above which advisory flips blocking.
 - **verdict** — typed gate output: `pass` / `block` / `advise`.
 
 slice : chunk :: plan : process. If about the cut → slice; about the execution → chunk;
