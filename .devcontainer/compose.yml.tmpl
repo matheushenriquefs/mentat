@@ -1,0 +1,13 @@
+# compose.yml.tmpl — rendered by compose_render.render_template()
+# Substituted by Python stdlib string.Template before container up.
+# Variables: $workspace_folder (full path), $arch (e.g. amd64), $image_tag
+# Use $$ to emit a literal $ in the output.
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: ../Dockerfile
+    platform: linux/${arch}
+    volumes:
+      - ..:${workspace_folder}
+    image: ${image_tag}

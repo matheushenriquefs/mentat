@@ -223,3 +223,76 @@ def test_implement_tdd_red_then_green(tmp_path):
                     rc = impl.run_plan(plan, harness="fake")
 
     assert rc == 0
+
+
+# ── S26: tests manifest + read-only mounts ───────────────────────────────────
+
+
+def test_read_tests_manifest_absent(tmp_path, monkeypatch):
+    """Returns ([], []) when no manifest file exists."""
+    impl = load_module("implement")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".agents" / "plans").mkdir(parents=True)
+    closed, open_ = impl.read_tests_manifest("no-such-slug")
+    assert closed == []
+    assert open_ == []
+
+
+def test_read_tests_manifest_reads_file(tmp_path, monkeypatch):
+    impl = load_module("implement")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    plans_dir = tmp_path / ".agents" / "plans"
+    plans_dir.mkdir(parents=True)
+    (plans_dir / "my-plan.tests.json").write_text(
+        json.dumps({"closed": ["tests/test_foo.py"], "open": ["tests/test_new.py"]})
+    )
+    closed, open_ = impl.read_tests_manifest("my-plan")
+    assert "tests/test_foo.py" in closed
+    assert "tests/test_new.py" in open_
+
+
+def test_compute_ro_mounts_closed_minus_open():
+    impl = load_module("implement")
+    ro = impl.compute_ro_mounts(
+        closed=["tests/test_a.py", "tests/test_b.py"],
+        open_=["tests/test_b.py"],
+    )
+    assert ro == ["tests/test_a.py"]
+
+
+def test_compute_ro_mounts_all_open_returns_empty():
+    impl = load_module("implement")
+    ro = impl.compute_ro_mounts(
+        closed=["tests/test_a.py"],
+        open_=["tests/test_a.py"],
+    )
+    assert ro == []
+
+
+def test_mark_test_writable_moves_to_open(tmp_path, monkeypatch):
+    impl = load_module("implement")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    plans_dir = tmp_path / ".agents" / "plans"
+    plans_dir.mkdir(parents=True)
+    manifest = plans_dir / "my-plan.tests.json"
+    manifest.write_text(json.dumps({"closed": ["tests/test_foo.py"], "open": []}))
+
+    with patch.object(impl, "_emit_event"):
+        impl.mark_test_writable("my-plan", "tests/test_foo.py")
+
+    data = json.loads(manifest.read_text())
+    assert "tests/test_foo.py" in data["open"]
+
+
+def test_mark_test_writable_missing_path_warns(tmp_path, monkeypatch, capsys):
+    impl = load_module("implement")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    plans_dir = tmp_path / ".agents" / "plans"
+    plans_dir.mkdir(parents=True)
+    (plans_dir / "my-plan.tests.json").write_text(json.dumps({"closed": [], "open": []}))
+
+    with patch.object(impl, "_emit_event"):
+        impl.mark_test_writable("my-plan", "tests/not_there.py")
+
+    captured = capsys.readouterr()
+    assert "not in closed" in captured.err

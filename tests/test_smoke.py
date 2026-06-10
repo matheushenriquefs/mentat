@@ -48,9 +48,7 @@ def fixture_batch(tmp_path: Path):
 
 
 def test_smoke_routing_partitions_afk_and_hitl(fixture_batch):
-    routing = load_module_from(
-        REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts/routing.py", "routing"
-    )
+    routing = load_module_from(REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts/routing.py", "routing")
     plans = [
         routing.Plan(slug="afk-slice", class_="AFK", blocked_by=[], path=fixture_batch["afk_plan"]),
         routing.Plan(slug="hitl-slice", class_="HITL", blocked_by=[], path=fixture_batch["hitl_plan"]),
@@ -64,9 +62,7 @@ def test_smoke_routing_partitions_afk_and_hitl(fixture_batch):
 
 
 def test_smoke_land_queue_emits_all_event_types(fixture_batch):
-    lq = load_module_from(
-        REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts/land_queue.py", "land_queue"
-    )
+    lq = load_module_from(REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts/land_queue.py", "land_queue")
 
     emitted_events: list[str] = []
 
@@ -88,19 +84,22 @@ def test_smoke_land_queue_emits_all_event_types(fixture_batch):
 
 
 def test_smoke_doctor_produces_clean_verdict(fixture_batch, tmp_path):
-    doctor = load_module_from(
-        REPO_ROOT / ".agents/skills/mentat-session/scripts/doctor.py", "doctor"
-    )
+    doctor = load_module_from(REPO_ROOT / ".agents/skills/mentat-session/scripts/doctor.py", "doctor")
 
     session_dir = fixture_batch["log_dir"]
     log_file = session_dir / "mentat-orchestrate-chunk.jsonl"
-    log_file.write_text(json.dumps({
-        "ts": "2026-01-01T00:00:00+00:00",
-        "agent": "mentat-orchestrate",
-        "session": "smoke-session",
-        "event": "chunk.landed",
-        "payload": {"slug": "afk-slice", "sha": "abc123", "holding": "main"},
-    }) + "\n")
+    log_file.write_text(
+        json.dumps(
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "agent": "mentat-orchestrate",
+                "session": "smoke-session",
+                "event": "chunk.landed",
+                "payload": {"slug": "afk-slice", "sha": "abc123", "holding": "main"},
+            }
+        )
+        + "\n"
+    )
 
     verdict = doctor.build_verdict(session_dir)
     assert "chunk.landed" in verdict or "landed" in verdict.lower()
@@ -112,14 +111,18 @@ def test_smoke_doctor_produces_clean_verdict(fixture_batch, tmp_path):
 
 
 def test_smoke_all_9_event_types_in_catalog():
-    log_mod = load_module_from(
-        REPO_ROOT / ".agents/skills/mentat-log/scripts/log.py", "log"
-    )
+    log_mod = load_module_from(REPO_ROOT / ".agents/skills/mentat-log/scripts/log.py", "log")
     catalog = log_mod.EVENT_CATALOG
     expected = {
-        "plan.started", "plan.succeeded", "plan.failed",
-        "chunk.spawned", "chunk.landed", "chunk.ejected",
-        "gate.evaluated", "review.submitted", "batch.reviewed",
+        "plan.started",
+        "plan.succeeded",
+        "plan.failed",
+        "chunk.spawned",
+        "chunk.landed",
+        "chunk.ejected",
+        "gate.evaluated",
+        "review.submitted",
+        "batch.reviewed",
     }
     assert set(catalog.keys()) == expected
 
@@ -129,11 +132,11 @@ def test_smoke_all_9_event_types_in_catalog():
 
 def test_smoke_install_help_exits_0():
     import subprocess
+
     result = subprocess.run(
-        ["python3",
-         str(REPO_ROOT / ".agents/skills/mentat-install/scripts/install.py"),
-         "--help"],
-        capture_output=True, text=True,
+        ["python3", str(REPO_ROOT / ".agents/skills/mentat-install/scripts/install.py"), "--help"],
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 0
 
@@ -160,8 +163,5 @@ def test_smoke_only_install_wrapper_remains():
 
 def test_smoke_python_skill_count():
     skills_dir = REPO_ROOT / ".agents/skills"
-    py_scripts = [
-        f for f in skills_dir.rglob("*.py")
-        if f.name != "__init__.py"
-    ]
+    py_scripts = [f for f in skills_dir.rglob("*.py") if f.name != "__init__.py"]
     assert len(py_scripts) >= 25, f"expected ≥25 Python scripts, found {len(py_scripts)}"

@@ -40,14 +40,6 @@ python3 ~/.agents/skills/mentat-container/scripts/container.py down
 python3 ~/.agents/skills/mentat-container/scripts/container.py doctor
 ```
 
-## Invariants
-
-- `up` synthesizes `.devcontainer/devcontainer.json` atomically if absent (compose or Dockerfile auto-detected).
-- `run` exits 99 if container not running.
-- Slug = `basename(git rev-parse --show-toplevel)`.
-- `workspaceFolder` read from `devcontainer.json` (not slug-derived).
-- `MENTAT_DOCKER` env override for testing without real Docker.
-
 ## Exit codes
 
 | Code | Meaning |
@@ -61,15 +53,24 @@ python3 ~/.agents/skills/mentat-container/scripts/container.py doctor
 
 ## Rules
 
+- `up` synthesizes `.devcontainer/devcontainer.json` atomically if absent (compose or Dockerfile auto-detected).
 - `up` is idempotent: calling it twice is safe, returns exit 0 if already running.
 - `run` requires container already up; fails fast with exit 2 if not running.
 - `compose_render` auto-detects `docker-compose.yml` or `Dockerfile` in worktree root.
 - Atomic write for `.devcontainer/devcontainer.json`: writes to `.tmp` then renames.
-- `doctor` walks invariants and prints human-readable status for each.
+- Slug = `basename(git rev-parse --show-toplevel)`.
+- `workspaceFolder` read from `devcontainer.json`, not slug-derived.
+- `doctor` walks rules and prints human-readable status for each.
+
+## Arch handling
+
+Host arch (`uname -m`) and image platform are checked at `up` time. When host is
+`arm64` and image is `linux/amd64` (or vice versa), `up` emits a visible warning about
+emulation overhead before proceeding. No blocking — emulation is slow but functional.
 
 ## Constraints
 
 - Container must be running before `run`. No auto-start inside `run`.
 - `MENTAT_DOCKER` env var overrides the `docker` binary path (test isolation only).
 - `devcontainer.json` written only when absent; never overwritten if present.
-- Slug is always `basename(git rev-parse --show-toplevel)`, not a config value.
+- Arch mismatch emits a warning via `doctor`; it does not exit non-zero.
