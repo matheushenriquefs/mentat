@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""mentat-orchestrate — run / fan-out / land-queue / final-review."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import subprocess
+import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+
+_SCRIPTS = Path(__file__).resolve().parent
+_SKILL_ROOT = _SCRIPTS.parents[2]
+sys.path.insert(0, str(_SCRIPTS))
+
+import utils as _utils
+import routing as _routing
+import fan_out as _fan_out
+import land_queue as _land_queue
+import final_review as _final_review
+
+
+def _resolve_plan_refs(refs: list[str]) -> list[Path]:
+    return [_utils.resolve_plan_ref(r) for r in refs]
+
+
+def _load_plans(paths: list[Path]) -> list[_routing.Plan]:
+    plans: list[_routing.Plan] = []
+    for path in paths:
+        fm = _utils.parse_frontmatter(path)
+        blocked_by_raw = fm.get("blocked_by", "")
+        blocked_by: list[str] = []
+        if blocked_by_raw and blocked_by_raw not in ("[]", ""):
+            # parse "[a, b]" or "a, b"
+            import re
+            blocked_by = [s.strip().strip("[]\"'") for s in re.split(r"[,\s]+", blocked_by_raw) if s.strip().strip("[]\"'")]
+        plans.append(_routing.Plan(
+            slug=fm.get("id", path.stem),
+            class_=fm.get("class", "HITL"),
+            blocked_by=blocked_by,
+            path=path,
+        ))
+    return plans
+
+
+def _run_anchored_plans(plans: list[_routing.Plan], *, harness: str | None, model: str | None) -> list[str]:
+    """Run anchored (HITL or forced-anchor AFK) plans in current session."""
+    implement_script = _SKILL_ROOT / ".agents/skills/mentat-implement/scripts/implement.py"
+    chunks: list[str] = []
+    for plan in plans:
+        cmd = ["python3", str(implement_script), str(plan.path)]
+        if harness:
+            cmd += ["--harness", harness]
+        if model:
+            cmd += ["--model", model]
+        subprocess.run(cmd)
+        chunks.append(plan.slug)
+    return chunks
+
+
+def _fan_out_plans(plans: list[_routing.Plan], *, harness: str | None, model: str | None) -> list[str]:
+    """Spawn AFK plans headless. Returns list of session/chunk IDs."""
+    chunks: list[str] = []
+    for plan in plans:
+        session_id = _fan_out.spawn(plan, harness=harness, model=model)
+        chunks.append(session_id)
+    return chunks
+
+
+def _land_all(chunk_slugs: list[str], *, holding: str) -> list[dict]:
+    """Land all chunks onto holding branch serially."""
+    chunks = [_land_queue.Chunk(slug=s, worktree=Path.cwd()) for s in chunk_slugs]
+    return _land_queue.drain(chunks, holding=holding)
+
+
+def _final_review(session_id: str) -> None:
+    _final_review_mod = _final_review
+    _final_review_mod.review(session_id)
+
+
+def run_orchestrate(
+    holding: str,
+    plan_paths: list[Path],
+    *,
+    harness: str | None,
+    model: str | None,
+    dry_run: bool,
+) -> int:
+    plans = _load_plans(plan_paths)
+    anchored, auto = _routing.partition(plans)
+
+    if dry_run:
+        print(f"[dry-run] would anchor: {[p.slug for p in anchored]}")
+        print(f"[dry-run] would spawn: {[p.slug for p in auto]}")
+        _land_all([], holding=holding)
+        _final_review(session_id=os.environ.get("MENTAT_SESSION", "dry-run"))
+        return 0
+
+    # Spawn AFK plans headless
+    auto_chunks: list[str] = []
+    if auto:
+        auto_chunks = _fan_out_plans(auto, harness=harness, model=model)
+
+    # Run anchored plans in current session
+    anchored_chunks: list[str] = []
+    if anchored:
+        anchored_chunks = _run_anchored_plans(anchored, harness=harness, model=model)
+
+    all_chunks = anchored_chunks + auto_chunks
+    results = _land_all(all_chunks, holding=holding)
+
+    session_id = os.environ.get("MENTAT_SESSION", f"session-{os.getpid()}")
+    _final_review(session_id)
+
+    any_ejected = any(r.get("outcome") == "eject" for r in results)
+    return 1 if any_ejected else 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="mentat-orchestrate")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    run_p = sub.add_parser("run", help="Full orchestrate run")
+    run_p.add_argument("holding", help="Holding branch")
+    run_p.add_argument("plan_refs", nargs="+", metavar="plan-ref")
+    run_p.add_argument("--harness", default=None)
+    run_p.add_argument("--model", default=None)
+    run_p.add_argument("--dry-run", action="store_true")
+
+    fo_p = sub.add_parser("fan-out", help="Debug: spawn plans headless")
+    fo_p.add_argument("plan_refs", nargs="+", metavar="plan-ref")
+
+    lq_p = sub.add_parser("land-queue", help="Debug: land chunks from stdin")
+    lq_p.add_argument("holding", help="Holding branch")
+
+    fr_p = sub.add_parser("final-review", help="Debug: re-run final review")
+    fr_p.add_argument("session", help="Session ID")
+
+    return p
+
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if args.cmd == "run":
+        paths = _resolve_plan_refs(args.plan_refs)
+        sys.exit(run_orchestrate(
+            args.holding,
+            paths,
+            harness=args.harness,
+            model=args.model,
+            dry_run=args.dry_run,
+        ))
+
+    elif args.cmd == "fan-out":
+        paths = _resolve_plan_refs(args.plan_refs)
+        plans = _load_plans(paths)
+        for plan in plans:
+            _fan_out.spawn(plan)
+
+    elif args.cmd == "land-queue":
+        slugs = [line.strip() for line in sys.stdin if line.strip()]
+        import json
+        results = _land_all(slugs, holding=args.holding)
+        for r in results:
+            print(json.dumps(r))
+
+    elif args.cmd == "final-review":
+        _final_review(args.session)
+
+
+if __name__ == "__main__":
+    main()

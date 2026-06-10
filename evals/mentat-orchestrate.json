@@ -1,5 +1,38 @@
 {
   "skill_name": "mentat-orchestrate",
-  "evals": [],
-  "eval_queries": []
+  "description": "Fan out plans in parallel, land serially onto holding branch",
+  "evals": [
+    {
+      "id": "routing-afk-spawned",
+      "description": "AFK plan auto-spawned headless",
+      "type": "functional"
+    },
+    {
+      "id": "routing-hitl-anchored",
+      "description": "HITL plan runs anchored in current session",
+      "type": "functional"
+    },
+    {
+      "id": "routing-cycle-raises",
+      "description": "circular blocked_by raises ValueError",
+      "type": "functional"
+    },
+    {
+      "id": "land-queue-serial",
+      "description": "chunks land one-by-one in order",
+      "type": "functional"
+    },
+    {
+      "id": "dry-run-skips-spawn",
+      "description": "--dry-run prints plan but skips spawn and land",
+      "type": "functional"
+    }
+  ],
+  "eval_queries": [
+    "orchestrate run main my-plan",
+    "orchestrate run main plan-a plan-b --dry-run",
+    "orchestrate fan-out my-plan",
+    "orchestrate land-queue main",
+    "orchestrate final-review session-123"
+  ]
 }
