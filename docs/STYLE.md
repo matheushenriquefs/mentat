@@ -16,7 +16,7 @@ Three classes; every file maps to exactly one.
 
 ### Thin Skill
 
-Used for: `mentat-git`, `mentat-skill`, `mentat-install`, `mentat-plan`.
+Used for: `mentat-skill`, `mentat-install`, `mentat-plan`.
 
 - Frontmatter: `name` + `description` only. No `metadata:`, no `version:`.
 - Description: third-person, "Use when..." trigger clause.
@@ -27,7 +27,7 @@ Used for: `mentat-git`, `mentat-skill`, `mentat-install`, `mentat-plan`.
 ### Full Pocock Skill
 
 Used for: `mentat-prd`, `mentat-tasks`, `mentat-implement`, `mentat-orchestrate`,
-`mentat-container`, `mentat-log`, `mentat-session`.
+`mentat-container`, `mentat-log`, `mentat-session`, `mentat-git`.
 
 - Frontmatter: `name` + `description` only.
 - Description: third-person, "Use when..." trigger clause.
@@ -55,8 +55,8 @@ Used for: `mentat-researcher`, reviewers, all files in `.agents/agents/`.
 
 | Path pattern | Voice class | LOC budget |
 |---|---|---|
-| `.agents/skills/mentat-{git,skill,install,plan}/SKILL.md` | Thin skill | ≤40 |
-| `.agents/skills/mentat-{prd,tasks,implement,orchestrate,container,log,session}/SKILL.md` | Full Pocock | 75–120 |
+| `.agents/skills/mentat-{skill,install,plan}/SKILL.md` | Thin skill | ≤40 |
+| `.agents/skills/mentat-{prd,tasks,implement,orchestrate,container,log,session,git}/SKILL.md` | Full Pocock | 75–120 |
 | `.agents/agents/mentat-*-reviewer.md` | Crew | 60–100 |
 | `.agents/agents/mentat-researcher.md` | Crew | 60–100 |
 | `docs/*.md` | Diátaxis (free) | n/a |

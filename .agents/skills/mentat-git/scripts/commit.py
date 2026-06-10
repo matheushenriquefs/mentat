@@ -25,18 +25,28 @@ utils = _load_sibling("utils")
 
 
 def cmd_commit(git_args: list[str]) -> int:
-    """Stage and commit. Route through container if present."""
+    """Stage and commit through the devcontainer. Auto-up if down (ADR-0004)."""
     cid = utils.container_id_for_cwd()
-    if cid:
-        docker = os.environ.get("MENTAT_DOCKER", "docker")
-        wt_result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
+    if not cid:
+        container_script = (
+            Path(__file__).resolve().parents[2]
+            / "mentat-container/scripts/container.py"
         )
-        ws = f"/workspaces/{Path(wt_result.stdout.strip()).name}" if wt_result.returncode == 0 else "/workspaces/mentat"
-        cmd = [docker, "exec", "--workdir", ws, cid, "git", "commit"] + git_args
-        result = subprocess.run(cmd)
-    else:
-        result = subprocess.run(["git", "commit"] + git_args)
+        subprocess.run(["python3", str(container_script), "up"], check=False)
+        cid = utils.container_id_for_cwd()
+        if not cid:
+            print(
+                "mentat-git: failed to bring up devcontainer for cwd (ADR-0004)",
+                file=sys.stderr,
+            )
+            return 69
+    docker = os.environ.get("MENTAT_DOCKER", "docker")
+    wt_result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    )
+    ws = f"/workspaces/{Path(wt_result.stdout.strip()).name}" if wt_result.returncode == 0 else "/workspaces/mentat"
+    cmd = [docker, "exec", "--workdir", ws, cid, "git", "commit"] + git_args
+    result = subprocess.run(cmd)
     return result.returncode
