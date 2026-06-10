@@ -71,6 +71,27 @@ def test_land_queue_serializes_landings():
     assert len(results) == 3
 
 
+def test_land_queue_rebases_each_chunk():
+    """land() calls _rebase_chunk with the correct holding branch."""
+    lq = load_module("land_queue")
+    chunk = make_chunk("r-chunk")
+
+    rebase_calls = []
+
+    def fake_rebase(c, holding):
+        rebase_calls.append((c.slug, holding))
+        return ("sha123", None)
+
+    with patch.object(lq, "_rebase_chunk", side_effect=fake_rebase):
+        with patch.object(lq, "_run_gates", return_value=("pass", "")):
+            with patch.object(lq, "_ff_merge", return_value=True):
+                with patch.object(lq, "_emit_event"):
+                    lq.land(chunk, holding="my-holding")
+
+    assert any(slug == "r-chunk" for slug, _ in rebase_calls)
+    assert any(h == "my-holding" for _, h in rebase_calls)
+
+
 def test_land_queue_emits_canonical_verdict_jsonl_shape():
     lq = load_module("land_queue")
     chunk = make_chunk("shape-chunk")
@@ -83,4 +104,6 @@ def test_land_queue_emits_canonical_verdict_jsonl_shape():
 
     assert "slug" in result
     assert "outcome" in result
+    assert "tip" in result
     assert result["outcome"] in ("success", "eject")
+    assert result["tip"] == "sha1"

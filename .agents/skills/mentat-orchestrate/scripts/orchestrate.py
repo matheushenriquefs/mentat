@@ -87,10 +87,6 @@ def _land_all(chunk_slugs: list[str], *, holding: str) -> list[dict]:
     return _land_queue.drain(chunks, holding=holding)
 
 
-def _final_review(session_id: str) -> None:
-    _final_review.review(session_id)
-
-
 def run_orchestrate(
     holding: str,
     plan_paths: list[Path],
@@ -106,7 +102,7 @@ def run_orchestrate(
         print(f"[dry-run] would anchor: {[p.slug for p in anchored]}")
         print(f"[dry-run] would spawn: {[p.slug for p in auto]}")
         _land_all([], holding=holding)
-        _final_review(session_id=os.environ.get("MENTAT_SESSION", "dry-run"))
+        _final_review.review(session_id=os.environ.get("MENTAT_SESSION", "dry-run"))
         return 0
 
     # Spawn AFK plans headless
@@ -123,7 +119,7 @@ def run_orchestrate(
     results = _land_all(all_chunks, holding=holding)
 
     session_id = os.environ.get("MENTAT_SESSION", f"session-{os.getpid()}")
-    _final_review(session_id)
+    _final_review.review(session_id)
 
     any_ejected = any(r.get("outcome") == "eject" for r in results)
     return 1 if any_ejected else 0
@@ -180,7 +176,7 @@ def main() -> None:
             print(json.dumps(r))
 
     elif args.cmd == "final-review":
-        _final_review(args.session)
+        _final_review.review(args.session)
 
 
 if __name__ == "__main__":

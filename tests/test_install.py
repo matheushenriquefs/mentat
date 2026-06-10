@@ -136,7 +136,7 @@ def test_install_creates_mentat_dotdir(tmp_path, monkeypatch):
     with patch.object(install_mod, "_execute_actions"):
         with patch.object(install_mod, "_emit_installed"):
             install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
-    assert (home / ".mentat").exists() or True  # may be created by execute_actions
+    assert (home / ".mentat").exists()
 
 
 def test_install_dry_run_writes_nothing(tmp_path, monkeypatch):
@@ -172,3 +172,79 @@ def test_install_help_flag_exits_0():
     )
     assert result.returncode == 0
     assert "usage" in result.stdout.lower() or "Usage" in result.stdout
+
+
+def test_install_writes_default_config(tmp_path, monkeypatch):
+    install_mod = load_module("install")
+    home = _fake_home(tmp_path, monkeypatch)
+    with patch.object(install_mod, "_execute_actions"):
+        with patch.object(install_mod, "_emit_installed"):
+            install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
+    config = home / ".mentat" / "config.jsonc"
+    assert config.exists()
+
+
+def test_install_no_symlink_farm_at_agents_bin(tmp_path, monkeypatch):
+    """install must not create ~/.agents/bin/ symlink entries."""
+    install_mod = load_module("install")
+    home = _fake_home(tmp_path, monkeypatch)
+    with patch.object(install_mod, "_execute_actions"):
+        with patch.object(install_mod, "_emit_installed"):
+            install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
+    agents_bin = home / ".agents" / "bin"
+    if agents_bin.exists():
+        items = [p for p in agents_bin.iterdir() if p.name != "mentat-install"]
+        assert not items
+
+
+def test_install_idempotent_second_run_noop(tmp_path, monkeypatch):
+    install_mod = load_module("install")
+    home = _fake_home(tmp_path, monkeypatch)
+    with patch.object(install_mod, "_execute_actions"):
+        with patch.object(install_mod, "_emit_installed"):
+            install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
+            snapshot1 = set(str(p) for p in tmp_path.rglob("*"))
+            install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
+            snapshot2 = set(str(p) for p in tmp_path.rglob("*"))
+    assert snapshot1 == snapshot2
+
+
+def test_install_emits_install_completed_event(tmp_path, monkeypatch):
+    install_mod = load_module("install")
+    home = _fake_home(tmp_path, monkeypatch)
+    emit_calls: list = []
+    with patch.object(install_mod, "_execute_actions"):
+        with patch.object(install_mod, "_emit_installed", side_effect=lambda: emit_calls.append(True)):
+            install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
+    assert emit_calls, "_emit_installed was not called"
+
+
+def test_render_uses_color_when_tty(tmp_path, monkeypatch):
+    render_mod = load_module("render")
+    plan_mod = load_module("plan")
+    home = _fake_home(tmp_path, monkeypatch)
+    # Create a stale path so render has content to colorize
+    (home / ".agents" / "mentat").mkdir(parents=True)
+    ip = plan_mod.compute_plan(home=home, clone_root=None)
+    output = render_mod.render(ip, color=True)
+    assert "\033[" in output  # some ANSI code present
+
+
+def test_shell_wrapper_execs_python_when_present():
+    wrapper = Path(__file__).resolve().parents[1] / ".agents/bin/mentat-install"
+    assert wrapper.exists(), "mentat-install wrapper not found"
+    result = subprocess.run(
+        [str(wrapper), "--help"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0
+    assert "usage" in result.stdout.lower() or "mentat-install" in result.stdout.lower()
+
+
+def test_shell_wrapper_errors_when_python_missing():
+    """Wrapper source must contain python3 guard with error and exit 1."""
+    wrapper = Path(__file__).resolve().parents[1] / ".agents/bin/mentat-install"
+    content = wrapper.read_text()
+    assert "python3" in content
+    assert "exit 1" in content
+    assert "not found" in content

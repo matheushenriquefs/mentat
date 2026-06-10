@@ -20,6 +20,26 @@ def load_module(name: str):
     return mod
 
 
+def test_fan_out_spawns_worktree_and_subprocess(tmp_path):
+    """spawn() calls _spawn_worktree_subprocess and returns the session id."""
+    fan_out = load_module("fan_out")
+    routing = load_module("routing")
+    plan = routing.Plan(slug="my-plan", class_="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
+
+    spawn_calls = []
+
+    def fake_spawn(p, harness=None, model=None):
+        spawn_calls.append(p)
+        return "sess-abc"
+
+    with patch.object(fan_out, "_spawn_worktree_subprocess", side_effect=fake_spawn):
+        with patch.object(fan_out, "_emit_event"):
+            session_id = fan_out.spawn(plan)
+
+    assert spawn_calls, "worktree subprocess was not called"
+    assert session_id == "sess-abc"
+
+
 def test_fan_out_prints_track_command_immediately(tmp_path):
     fan_out = load_module("fan_out")
     routing = load_module("routing")
