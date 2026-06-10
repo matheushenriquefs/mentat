@@ -135,3 +135,22 @@ def test_shell_wrapper_errors_when_python_missing():
     assert "python3" in content
     assert "exit 1" in content
     assert "not found" in content
+
+
+# ── utils.py ──────────────────────────────────────────────────────────────────
+
+
+def test_safe_symlink_recovers_from_broken_parent_symlink(tmp_path):
+    """Parent path being a broken symlink must not crash mkdir."""
+    utils = load_module("utils")
+    source = tmp_path / "src"
+    source.mkdir()
+    missing = tmp_path / "missing_target"
+    parent = tmp_path / "claude_agents"
+    parent.symlink_to(missing)  # broken: points at non-existent dir
+    target = parent / "leaf"
+
+    utils.safe_symlink(source, target)
+
+    assert target.is_symlink()
+    assert target.resolve() == source.resolve()
