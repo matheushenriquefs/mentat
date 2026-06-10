@@ -296,3 +296,83 @@ def test_mark_test_writable_missing_path_warns(tmp_path, monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert "not in closed" in captured.err
+
+
+# ── D11: doctor auto-trigger + logs_path on chunk.ejected ────────────────────
+
+
+def test_implement_auto_doctors_on_nonzero_exit(tmp_path):
+    """rc in {1, 42, 64, 65, 66, 69, 70, 78} → doctor fires."""
+    impl = load_module("implement")
+    plan = _write_plan(tmp_path, "fail-plan", class_="AFK")
+
+    with patch.object(impl, "run_plan", return_value=1):
+        with patch.object(impl, "_auto_doctor") as mock_doc:
+            rc = impl._run_and_doctor(plan, harness="fake")
+
+    assert rc == 1
+    mock_doc.assert_called_once()
+
+
+def test_implement_no_doctor_on_zero_exit(tmp_path):
+    """rc == 0 → doctor does NOT fire."""
+    impl = load_module("implement")
+    plan = _write_plan(tmp_path, "ok-plan", class_="AFK")
+
+    with patch.object(impl, "run_plan", return_value=0):
+        with patch.object(impl, "_auto_doctor") as mock_doc:
+            rc = impl._run_and_doctor(plan, harness="fake")
+
+    assert rc == 0
+    mock_doc.assert_not_called()
+
+
+def test_implement_no_doctor_on_signal_exit(tmp_path):
+    """SIGINT (130) / SIGTERM (143) skip doctor — signal exits aren't TDD failures."""
+    impl = load_module("implement")
+    plan = _write_plan(tmp_path, "sig-plan", class_="AFK")
+
+    for sig_rc in (130, 143):
+        with patch.object(impl, "run_plan", return_value=sig_rc):
+            with patch.object(impl, "_auto_doctor") as mock_doc:
+                rc = impl._run_and_doctor(plan, harness="fake")
+        assert rc == sig_rc
+        mock_doc.assert_not_called()
+
+
+def test_implement_chunk_ejected_includes_logs_path(tmp_path, monkeypatch):
+    """Every chunk.ejected emit carries a logs_path field per ADR-0007 payload-extension rule."""
+    impl = load_module("implement")
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "myrepo")
+    monkeypatch.setenv("MENTAT_SESSION", "sess-001")
+    plan = _write_plan(tmp_path, "ej-plan", class_="AFK")
+
+    fake_result = MagicMock(returncode=1)
+    with patch.object(impl, "_invoke_harness", return_value=fake_result):
+        with patch.object(impl, "_emit_event") as mock_emit:
+            impl.run_plan(plan, harness="fake")
+
+    payloads = [c.args[1] for c in mock_emit.call_args_list if "ejected" in c.args[0]]
+    assert payloads
+    assert "logs_path" in payloads[0]
+    assert "sess-001" in payloads[0]["logs_path"]
+    assert "myrepo" in payloads[0]["logs_path"]
+
+
+def test_implement_logs_path_dir_holds_jsonl_and_diagnosis(tmp_path, monkeypatch):
+    """logs_path points to the dir containing the session JSONL + diagnosis.md bundle."""
+    impl = load_module("implement")
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "myrepo")
+    monkeypatch.setenv("MENTAT_SESSION", "sess-002")
+
+    session_dir = tmp_path / "logs" / "myrepo" / "sess-002"
+    session_dir.mkdir(parents=True)
+    (session_dir / "mentat-implement-impl.jsonl").write_text('{"event": "plan.started"}\n')
+    (session_dir / "diagnosis.md").write_text("## Verdict\n- Reason: test\n")
+
+    logs_dir = Path(impl._logs_path())
+    assert logs_dir == session_dir
+    assert any(logs_dir.glob("*.jsonl"))
+    assert (logs_dir / "diagnosis.md").exists()

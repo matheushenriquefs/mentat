@@ -16,7 +16,12 @@ from typing import Any
 _SCRIPTS = Path(__file__).resolve().parent
 _SKILL_ROOT = _SCRIPTS.parents[2]
 _LOG_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-log/scripts/log.py"
+_SESSION_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-session/scripts/session.py"
 _GATES_CODE = _SKILL_ROOT / ".agents/lib/gates/code"
+
+# Exit codes that trigger auto-doctor: TDD/gate fail, HITL ambiguity, CLI/plan errors,
+# container down, unhandled exceptions, missing config. Signal exits (130/143) skipped.
+_DOCTOR_EXIT_CODES = frozenset({1, 42, 64, 65, 66, 69, 70, 78})
 
 
 def _load_sibling(name: str):
@@ -106,6 +111,39 @@ def _emit_event(event: str, payload: dict) -> None:
     )
 
 
+def _logs_path() -> str:
+    """Dir holding session JSONL + diagnosis.md for the current session."""
+    base = Path(os.environ.get("MENTAT_LOG_PATH", str(Path.home() / ".mentat" / "logs")))
+    repo = os.environ.get("MENTAT_REPO", Path.cwd().name)
+    session = os.environ.get("MENTAT_SESSION", "manual")
+    return str(base / repo / session)
+
+
+def _auto_doctor() -> None:
+    """Spawn mentat-session doctor. Honor $EDITOR for the diagnosis if set."""
+    session_id = os.environ.get("MENTAT_SESSION")
+    if not _SESSION_SCRIPT.exists() or not session_id:
+        return
+    subprocess.run(
+        ["python3", str(_SESSION_SCRIPT), "doctor", session_id],
+        capture_output=True,
+        check=False,
+    )
+    editor = os.environ.get("EDITOR")
+    if editor:
+        diag = Path(_logs_path()) / "diagnosis.md"
+        if diag.exists():
+            subprocess.run([editor, str(diag)], check=False)
+
+
+def _run_and_doctor(plan_path: Path, *, harness: str | None = None, model: str | None = None) -> int:
+    """Run plan and auto-doctor on diagnosable exit codes (skip 0 and signal exits)."""
+    rc = run_plan(plan_path, harness=harness, model=model)
+    if rc in _DOCTOR_EXIT_CODES:
+        _auto_doctor()
+    return rc
+
+
 def _invoke_harness(harness: str, prompt: str, *, afk: bool, model: str | None = None) -> Any:
     harness_dir = _SCRIPTS / "harness"
     adapter_name = harness.replace("-", "_")
@@ -168,6 +206,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
                 "slug": slug,
                 "reason": "implement-failed",
                 "where": str(plan_path.parent),
+                "logs_path": _logs_path(),
             },
         )
         return 1
@@ -180,6 +219,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
                 "slug": slug,
                 "reason": "hitl-required",
                 "where": str(plan_path.parent),
+                "logs_path": _logs_path(),
             },
         )
         return 42
@@ -193,6 +233,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
                 "slug": slug,
                 "reason": "gate-failed",
                 "where": str(plan_path.parent),
+                "logs_path": _logs_path(),
             },
         )
         return 1
@@ -228,7 +269,7 @@ def main() -> None:
         print(f"mentat-implement: plan not found: {plan_path}", file=sys.stderr)
         sys.exit(1)
 
-    sys.exit(run_plan(plan_path, harness=args.harness, model=args.model))
+    sys.exit(_run_and_doctor(plan_path, harness=args.harness, model=args.model))
 
 
 if __name__ == "__main__":
