@@ -2,6 +2,6 @@
 description: Stop the worktree's devcontainer (frees resources, no merge).
 ---
 
-Run `~/.agents/bin/mentat-container-down`. Container respawns on the
-next `~/.agents/bin/mentat-container-run` or `/mentat-container-up`. Use to
+Run `python3 ~/.agents/skills/mentat-container/scripts/container.py down`. Container respawns on the
+next `python3 ~/.agents/skills/mentat-container/scripts/container.py run` or `/mentat-container-up`. Use to
 free Docker resources without merging the branch.

@@ -4,40 +4,26 @@ description: Implement a plan using TDD inside the devcontainer. Score-gate the 
 
 $ARGUMENTS
 
-## AFK contract (ADR-0010)
+AFK contract + harness adapters: see ADR-0004 (folded) and `.agents/lib/harness/registry.py`.
 
-Signal: `MENTAT_INTERACTIVE=0` (opt-in; default/unset/other = interactive).
-HITL exit code: `42`. Audit reason: `hitl-ambiguity`.
-Adapters honoring this contract: `claude-code`, `cursor` (see `.agents/bin/lib/harness-registry.jsonc`).
-Canonical source: `.agents/docs/adr/0010-hitl-routing.md` — prose here is linked, not load-bearing.
-
-0. **Worktree preflight.** Run `pwd`. Resolution order:
-   a) `$MENTAT_WORKTREE` is set → cwd must equal it. PASS.
-   b) cwd matches `.*/\.mentat/worktrees/[^/]+/?$` (mentat-canonical). PASS.
-   c) cwd matches `.*/worktrees/[^/]+/?$` (agnostic fallback — any parent harness). PASS.
-   Else: halt immediately, emit `mentat_audit mentat-implement implement.preflight.fail "{\"cwd\":\"$(pwd)\",\"expected\":\"worktree\"}"`, and do not proceed.
-   Note: (a) covers orchestrate-spawned chunks; (b) covers manual mentat-canonical runs; (c) covers parent-harness worktrees (dmux, conductor, custom) — Mentat trusts the parent harness and refuses to enumerate harness names.
-1. Emit start: `source ~/.agents/bin/lib/audit.sh && mentat_audit mentat-implement implement.start "{\"plan\":\"$ARGUMENTS\"}"`.
-2. **Pre-flight artifact check (mandatory).** Parse the plan's slice list. For each slice derive its artifact predicate (file exists / file absent / grep returns N hits). Run predicates as bash one-liners. Emit `implement.preflight` audit event with `{slices:[{id,status,predicate}]}` table. Refuse to implement slices already marked DONE. Refuse to skip slices unless table marks DONE.
-3. `/caveman ultra`.
-4. `~/.agents/bin/mentat-container-up`.
-5. Use `/tdd`. Run each test via `~/.agents/bin/mentat-container-run '<test command>'`. Discover the test command from CLAUDE.md or AGENTS.md.
-6. **Rename/delete discipline.** When plan says "rename X → Y" or "drop X": run `git mv`/`git rm` first in its own commit. Post-commit: `git ls-files | grep <old>` must return 0. Emit `rename.complete {old, new}` audit event.
-7. **Stale-ref sweep pre-commit.** After any rename/delete slice, run the plan's verification `rg` lines. Non-zero hit = abort commit. Emit `staleref.sweep {terms, hits}`.
-8. After each green slice, `/mentat-commit` scoped to that slice's files.
-9. When the plan is fully implemented, spawn `mentat-plan-reviewer`, `mentat-test-reviewer`, `mentat-bug-reviewer`, and `mentat-smell-reviewer` in parallel, each given the plan path + the cumulative diff (and mentat-bug-reviewer the slice trajectory if available). Gate (ADR 0003 — never average, veto > threshold):
-
+0. **Worktree preflight.** `pwd` must match `$MENTAT_WORKTREE`, `.*/\.mentat/worktrees/[^/]+/?$`, or `.*/worktrees/[^/]+/?$` (parent-harness fallback). Else halt + emit `log.py emit mentat-implement implement.preflight.fail "{\"cwd\":\"$(pwd)\"}"`.
+1. Emit start: `python3 ~/.agents/skills/mentat-log/scripts/log.py emit mentat-implement implement.start "{\"plan\":\"$ARGUMENTS\"}"`.
+2. **Pre-flight artifact check.** Parse slice list; derive each artifact predicate (exists/absent/grep N) as bash one-liner. Emit `implement.preflight {slices:[{id,status,predicate}]}`. Refuse DONE slices; refuse skips not marked DONE.
+3. `/caveman ultra` then `python3 ~/.agents/skills/mentat-container/scripts/container.py up`.
+4. `/tdd`. Run each test via `python3 ~/.agents/skills/mentat-container/scripts/container.py run '<test cmd>'`. Discover test cmd from CLAUDE.md/AGENTS.md.
+5. **Rename/delete discipline.** "rename X → Y" / "drop X": `git mv`/`git rm` first in own commit. Post-commit `git ls-files | grep <old>` must return 0. Emit `rename.complete {old,new}`.
+6. **Stale-ref sweep pre-commit.** After rename/delete, run plan's `rg` lines. Non-zero = abort. Emit `staleref.sweep {terms,hits}`.
+7. After each green slice, `/mentat-commit` scoped to that slice.
+8. When fully implemented, spawn `mentat-plan-reviewer`, `mentat-test-reviewer`, `mentat-bug-reviewer`, `mentat-smell-reviewer` in parallel with plan path + cumulative diff (bug-reviewer also gets slice trajectory). Gate (ADR-0003 — never average, veto > threshold):
    ```
    gate_pass =
-         deterministic_checks_all_green     # tests green / coverage delta >= 0 / no weakened-or-deleted assertion — VETO
-     AND trajectory_blacklist_clean         # mentat-bug-reviewer blacklist — VETO (0.0 kills the chunk)
+         deterministic_checks_all_green     # tests / coverage delta >= 0 / no weakened-or-deleted assertion — VETO
+     AND trajectory_blacklist_clean         # mentat-bug-reviewer blacklist — VETO
      AND max_latent_bug_sev < high          # mentat-bug-reviewer latent-bug lens — VETO
      AND plan_alignment    >= 0.88          # mentat-plan-reviewer — LLM threshold
      AND test_asserts_plan >= 0.88          # mentat-test-reviewer — LLM threshold
-     AND smell_score       >= 0.85          # mentat-smell-reviewer — advisory, no max-sev veto
+     AND smell_findings.hard_tier == []     # mentat-smell-reviewer — hard-tier deterministic veto
+     AND smell_findings.soft_tier[sev=high] == []  # mentat-smell-reviewer — soft-tier LLM sev=high veto
    ```
-
-   `gate_pass` → continue. Any veto tripped or threshold below limit → fix the cited miss, re-commit, re-spawn the four. Don't rebase on a FAIL. Never average a threshold against a veto — a clean code read can't buy back a deleted test. To dismiss a reviewer finding, emit `review.dismiss {reviewer, score, reason}` with reason enumerating each refuted finding and the artifact check that disproved it — prose-only dismissal is forbidden.
-10. Emit complete: `mentat_audit mentat-implement implement.complete "{\"plan\":\"$ARGUMENTS\",\"outcome\":\"success\"}"`.
-11. `/mentat-rebase <holding-branch>`. Ask the user for the holding-branch name if not specified in $ARGUMENTS.
-12. `~/.agents/bin/mentat-container-down`.
+   Any veto/threshold fail → fix, re-commit, re-spawn. Don't rebase on FAIL. Dismiss only via `review.dismiss {reviewer, score, reason}` enumerating refuted findings + disproof — prose-only forbidden.
+9. Emit complete (`implement.complete`), `/mentat-rebase <holding-branch>` (ask user if not in $ARGUMENTS), then `python3 ~/.agents/skills/mentat-container/scripts/container.py down`.
