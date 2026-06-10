@@ -16,9 +16,9 @@
 
 ---
 
-> "It is by will alone I set my mind in motion. It is by the juice of sapho that thoughts acquire speed, the lips acquire stains, the stains become a warning. It is by will alone I set my mind in motion."
+> "Once men turned their thinking over to machines in the hope that this would set them free. But that only permitted other men with machines to enslave them."
 >
-> — *The Mentat Mantra*, Frank Herbert, **Dune**
+> — *Dune*, Frank Herbert
 
 ---
 
