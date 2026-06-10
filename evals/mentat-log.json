@@ -1,5 +1,41 @@
 {
   "skill_name": "mentat-log",
-  "evals": [],
-  "eval_queries": []
+  "description": "Emit, validate, query, and prune mentat audit JSONL entries",
+  "evals": [
+    {
+      "id": "emit-plan-started",
+      "description": "Emit a plan.started event and verify JSONL row written",
+      "type": "functional",
+      "command": "python3 .agents/skills/mentat-log/scripts/log.py emit mentat-plan plan.started '{\"path\":\"/tmp/test.md\"}'",
+      "expected_exit": 0
+    },
+    {
+      "id": "emit-unknown-event-rejected",
+      "description": "Unknown event name exits non-zero",
+      "type": "functional",
+      "command": "python3 .agents/skills/mentat-log/scripts/log.py emit mentat-plan plan.nonexistent '{}'",
+      "expected_exit": 1
+    },
+    {
+      "id": "validate-clean-file",
+      "description": "validate exits 0 on well-formed JSONL",
+      "type": "functional"
+    },
+    {
+      "id": "query-filter-event",
+      "description": "query --event filters to matching rows only",
+      "type": "functional"
+    },
+    {
+      "id": "prune-old-sessions",
+      "description": "prune removes dirs older than cutoff",
+      "type": "functional"
+    }
+  ],
+  "eval_queries": [
+    "emit a plan.started event for path /tmp/test.md",
+    "validate the log file at /tmp/test.jsonl",
+    "query session s1 for gate.evaluated events",
+    "prune sessions older than 2026-01-01"
+  ]
 }
