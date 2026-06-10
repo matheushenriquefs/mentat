@@ -32,10 +32,10 @@ running execution; batch = all chunks in the run — ADR 0005.) Why: ADR 0004.
 
 ## ADRs
 
-System decisions live in `~/.agents/docs/adr/`. Project decisions live in that
-repo's `<repo>/docs/adr/`. "Check ADRs in the
-area you're touching" means both — system ADRs always, repo ADRs when working
-in a repo. Index (titles only; read on demand):
+System decisions live in mentat's `docs/adr/`. Project decisions live in that
+repo's own `docs/adr/`. "Check ADRs in the area you're touching" means both
+— system ADRs always, repo ADRs when working in a repo. Index (titles only;
+read on demand):
 
 - **0001** sub-agent delegation — cavecrew vs vanilla, procedure not persona.
 - **0002** holding branch over Merge — own-branch + `/to-rebase`, commits in-container.
