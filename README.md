@@ -48,19 +48,18 @@ task test    # pytest tests/
 
 ## Quick Start
 
-```bash
+```
 # 1. create a plan (interactive grilling session)
-python3 ~/.agents/skills/mentat-plan/scripts/plan.py write my-feature /tmp/body.md
+/mentat-plan write my-feature /tmp/body.md
 
 # 2. orchestrate — fan slices out as parallel chunks, land serial
-python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py run \
-    branch/my-feature my-feature
+/mentat-orchestrate run branch/my-feature my-feature
 
 # 3. watch the batch land
-python3 ~/.agents/skills/mentat-session/scripts/session.py track
+/mentat-session track
 
 # 4. inspect ejected chunks (if any)
-python3 ~/.agents/skills/mentat-session/scripts/session.py doctor
+/mentat-session doctor
 
 # 5. merge holding into main when green
 git checkout main && git merge --ff-only branch/my-feature
@@ -78,30 +77,6 @@ git checkout main && git merge --ff-only branch/my-feature
 - **Harness-agnostic** — pluggable headless-agent CLIs (`claude-code`, `cursor` today). Drop a module to add another.
 - **Plugin API** — extend rubrics and gates without forking core.
 - **Stdlib-only bin layer** — installs without pip. Dev layer uses `uv`/`ruff`/`pyright`/`pytest`.
-
-## How it compares
-
-| | Mentat | dmux [^1] | swarm [^2] | claude-flow [^3] |
-|---|---|---|---|---|
-| Parallel fan-out | ✓ | ✓ [^4] | ✓ [^5] | ✓ [^6] |
-| Serial land queue | ✓ | — | — | — |
-| Deterministic gate | ✓ | — | — | partial [^7] |
-| Anti-cheat blacklist | ✓ | — | — | — |
-| Host toolchain required | python3 | none [^8] | python | node [^10] |
-| Harness agnostic | ✓ | — [^11] | — | — [^12] |
-| Docker required | ✓ | — | — | — |
-
-[^1]: dmux — tmux-based Claude Code pane manager. Runs multiple Claude Code sessions in parallel tmux panes. No merge queue or quality gate. <https://github.com/formkit/dmux>
-[^2]: OpenAI Swarm — "lightweight, highly controllable, and easily testable" multi-agent coordination via `Agent`s and handoffs. Deprecated in favour of [OpenAI Agents SDK](https://github.com/openai/openai-agents-python). <https://github.com/openai/swarm>
-[^3]: claude-flow (now Ruflo) — "Multi-agent AI harness for Claude Code and Codex." Orchestrates swarms via `npx ruflo init`. <https://github.com/ruvnet/claude-flow>
-[^4]: dmux spawns one Claude Code pane per task; panes run concurrently inside tmux.
-[^5]: Swarm routes between agents via handoffs; concurrent calls possible via Python async.
-[^6]: Ruflo: "Orchestrate 100+ specialized AI agents across machines, teams, and trust boundaries."
-[^7]: Ruflo includes a routing layer and autopilot loop but no deterministic scored gate or veto system equivalent to ADR-0003.
-[^8]: dmux is a shell script + tmux; no language runtime required on the host beyond tmux and a terminal.
-[^10]: Ruflo README: "One `npx ruflo init` gives Claude Code a nervous system." Requires Node.js/npm for `npx`.
-[^11]: dmux is tightly coupled to Claude Code; it reads `.dmux.config.json` and launches `claude` sessions directly.
-[^12]: Ruflo targets Claude Code and Codex explicitly; README badge: "Claude Code — Plugin".
 
 ## Documentation
 
