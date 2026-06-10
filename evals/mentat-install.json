@@ -1,5 +1,16 @@
 {
   "skill_name": "mentat-install",
-  "evals": [],
-  "eval_queries": []
+  "description": "Idempotent install of mentat skills and user state directories",
+  "evals": [
+    {"id": "dry-run-no-writes", "description": "--dry-run writes nothing to filesystem", "type": "functional"},
+    {"id": "clone-mode-symlinks", "description": "clone mode creates symlinks not copies", "type": "functional"},
+    {"id": "stale-paths-listed", "description": "stale shell-era paths reported", "type": "functional"},
+    {"id": "harness-detection", "description": "detects ~/.claude and ~/.cursor when present", "type": "functional"},
+    {"id": "idempotent", "description": "second run is no-op", "type": "functional"}
+  ],
+  "eval_queries": [
+    "install mentat on this machine",
+    "preview what mentat-install would do with --dry-run",
+    "install without prompting with --yes"
+  ]
 }
