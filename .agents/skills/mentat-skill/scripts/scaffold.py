@@ -38,7 +38,8 @@ def cmd_scaffold(skill_name: str, *, skills_root: Path | None = None, evals_dir:
     if not skill_md.exists():
         skill_md.write_text(
             f"---\nname: {skill_name}\ndescription: >\n  {skill_name} skill.\n"
-            f'metadata:\n  version: "0.1.0"\n---\n\n# {skill_name}\n\n'
+            f"---\n\n"
+            f"<!-- Voice, LOC budget, and frontmatter spec: docs/STYLE.md -->\n\n"
             f"## How to invoke\n\n```\npython3 ~/.agents/skills/{skill_name}/scripts/{skill_name}.py\n```\n"
         )
 
