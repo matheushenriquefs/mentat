@@ -12,8 +12,22 @@ _LOG_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-log/scripts/log.py"
 _IMPLEMENT_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-implement/scripts/implement.py"
 _CONTAINER_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-container/scripts/container.py"
 
-sys.path.insert(0, str(Path(__file__).parent))
-import utils as _utils
+import importlib.util as _ilu
+
+
+def _load_sibling(name: str):
+    here = Path(__file__).parent
+    key = f"{here.parent.name}.{name}"
+    if key in sys.modules:
+        return sys.modules[key]
+    spec = _ilu.spec_from_file_location(key, here / f"{name}.py")
+    mod = _ilu.module_from_spec(spec)
+    sys.modules[key] = mod
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+_utils = _load_sibling("utils")
 
 
 def _spawn_worktree_subprocess(plan_path: Path, *, harness: str | None = None, model: str | None = None) -> str:

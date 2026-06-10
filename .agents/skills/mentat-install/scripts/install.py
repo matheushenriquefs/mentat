@@ -12,10 +12,24 @@ _SCRIPTS = Path(__file__).resolve().parent
 _SKILL_ROOT = _SCRIPTS.parents[2]
 _LOG_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-log/scripts/log.py"
 
-sys.path.insert(0, str(_SCRIPTS))
-import plan as _plan
-import render as _render
-import utils as _utils
+import importlib.util as _ilu
+
+
+def _load_sibling(name: str):
+    here = Path(__file__).parent
+    key = f"{here.parent.name}.{name}"
+    if key in sys.modules:
+        return sys.modules[key]
+    spec = _ilu.spec_from_file_location(key, here / f"{name}.py")
+    mod = _ilu.module_from_spec(spec)
+    sys.modules[key] = mod
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+_plan = _load_sibling("plan")
+_render = _load_sibling("render")
+_utils = _load_sibling("utils")
 
 
 def _emit_installed() -> None:

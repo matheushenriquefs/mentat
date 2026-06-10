@@ -16,8 +16,20 @@ _SKILL_ROOT = _SCRIPTS.parents[2]
 _LOG_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-log/scripts/log.py"
 _GATES_CODE = _SKILL_ROOT / ".agents/lib/gates/code"
 
-sys.path.insert(0, str(_SCRIPTS))
-import utils as _utils
+
+def _load_sibling(name: str):
+    here = Path(__file__).parent
+    key = f"{here.parent.name}.{name}"
+    if key in sys.modules:
+        return sys.modules[key]
+    spec = importlib.util.spec_from_file_location(key, here / f"{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[key] = mod
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+_utils = _load_sibling("utils")
 
 
 # ── public helpers (patchable in tests) ─────────────────────────────────────
