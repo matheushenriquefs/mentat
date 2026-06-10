@@ -7,7 +7,7 @@ metadata:
   version: "0.1.0"
 ---
 
-Hybrid orchestrator: one bin, three stage modules (`fan_out`, `land_queue`, `final_review`), four subcommands. Reads plan frontmatter to partition plans into anchored (HITL) and auto-spawned (AFK) groups. Spawns AFK plans in parallel via `ProcessPoolExecutor`; runs HITL plans in the current session. Lands all chunks serially onto the holding branch with gate checks.
+Hybrid orchestrator: one bin, three stage modules (`fan_out`, `land_queue`, `batch_review`), four subcommands. Reads plan frontmatter to partition plans into anchored (HITL) and auto-spawned (AFK) groups. Spawns AFK plans in parallel via `ProcessPoolExecutor`; runs HITL plans in the current session. Lands all chunks serially onto the holding branch with gate checks.
 
 ## How to invoke
 
@@ -15,7 +15,7 @@ Hybrid orchestrator: one bin, three stage modules (`fan_out`, `land_queue`, `fin
 python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py run [--harness <n>] [--model <s>] [--dry-run] <holding-branch> <plan-ref>+
 python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py fan-out <plan-ref>+
 python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py land-queue <holding-branch>
-python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py final-review <session>
+python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py batch-review <session>
 ```
 
 ## Routing algorithm (B6 design)
@@ -32,7 +32,7 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py final-review 
 5. Run anchored_here serially in current session.
 6. Poll/wait for auto_spawn completions.
 7. Land all completed chunks (anchored + auto_spawn) serially onto holding.
-8. final-review at end of queue (advisory).
+8. batch-review at end of queue (advisory).
 9. Exit 0 all-landed; 1 if any ejected.
 ```
 
@@ -64,7 +64,7 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py final-review 
 - AFK plan with a downstream HITL dep anchors in the calling session.
 - Land queue is serial: each chunk rebases onto the tip the previous one left.
 - Gate required on each chunk before land; ejected chunk leaves worktree intact.
-- `final-review` is advisory; never blocks the batch.
+- `batch-review` is advisory; never blocks the batch.
 - All emit calls route through `mentat-log emit` per ADR-0007.
 
 ## Constraints

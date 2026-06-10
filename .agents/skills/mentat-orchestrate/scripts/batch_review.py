@@ -1,4 +1,4 @@
-"""End-of-queue advisory final review."""
+"""End-of-queue advisory batch review."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def _emit_event(event: str, payload: dict) -> None:
 
 
 def review(session_id: str) -> dict:
-    """Run advisory final review. Emits batch.reviewed. Returns summary."""
+    """Run advisory batch review. Emits batch.reviewed. Returns summary."""
     summary = f"batch review for session {session_id} — advisory"
     _emit_event("batch.reviewed", {
         "session": session_id,

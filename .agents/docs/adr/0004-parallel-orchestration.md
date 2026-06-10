@@ -19,9 +19,9 @@ folded here.
 - `mentat-orchestrate run [--harness=<n>] [--model=<s>] [--dry-run] <holding> <plan-ref>+`
 - `mentat-orchestrate fan-out <plan-ref>+` — debug: spawn N plans headless; stdout = chunk slugs
 - `mentat-orchestrate land-queue <holding-branch>` — debug: stdin = slugs; stdout = verdict JSONL
-- `mentat-orchestrate final-review <session>` — debug: re-run final review
+- `mentat-orchestrate batch-review <session>` — debug: re-run batch review
 
-Stage modules under `scripts/`: `fan_out.py`, `land_queue.py`, `final_review.py`.
+Stage modules under `scripts/`: `fan_out.py`, `land_queue.py`, `batch_review.py`.
 
 **Routing partition (HITL contract folded from ADR-0010):**
 
@@ -51,7 +51,7 @@ Exit codes: 0 all-landed; 1 partial; ≥2 tool error.
 
 ## Consequences
 
-Shell bins `mentat-fan-out`, `mentat-land-queue`, `mentat-final-review` replaced by
+Shell bins `mentat-fan-out`, `mentat-land-queue`, `mentat-batch-review` replaced by
 debug subcommands. Old ADRs 0010, 0011, 0012 archived. Docker required per worktree.
 Track prompt prints immediately after spawn (not at end) so user can monitor while
 anchored plans run. `mentat-session track` remains the live view.

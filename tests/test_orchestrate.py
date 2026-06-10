@@ -31,7 +31,7 @@ def test_orchestrate_full_pipeline_exits_0_on_all_success(tmp_path):
 
     with patch.object(orch, "_fan_out_plans", return_value=["chunk-a"]):
         with patch.object(orch, "_land_all", return_value=[{"status": "success", "slug": "chunk-a", "tip": "abc"}]):
-            with patch.object(orch, "_final_review"):
+            with patch.object(orch, "_batch_review"):
                 rc = orch.run_orchestrate(
                     holding="main",
                     plan_paths=[plan],
@@ -46,7 +46,7 @@ def test_orchestrate_exits_1_on_any_ejection(tmp_path):
 
     with patch.object(orch, "_fan_out_plans", return_value=["chunk-b"]):
         with patch.object(orch, "_land_all", return_value=[{"status": "eject", "slug": "chunk-b", "reason": "gate-fail"}]):
-            with patch.object(orch, "_final_review"):
+            with patch.object(orch, "_batch_review"):
                 rc = orch.run_orchestrate(
                     holding="main",
                     plan_paths=[plan],
@@ -82,7 +82,7 @@ def test_orchestrate_dry_run_flag_skips_spawn(tmp_path):
 
     with patch.object(orch, "_fan_out_plans") as mock_fan:
         with patch.object(orch, "_land_all", return_value=[]):
-            with patch.object(orch, "_final_review"):
+            with patch.object(orch, "_batch_review"):
                 orch.run_orchestrate(
                     holding="main",
                     plan_paths=[plan],
@@ -104,7 +104,7 @@ def test_orchestrate_anchored_runs_in_current_session(tmp_path):
 
     with patch.object(orch, "_run_anchored_plans", side_effect=fake_run_anchored):
         with patch.object(orch, "_land_all", return_value=[{"status": "success", "slug": "chunk-hitl", "tip": "abc"}]):
-            with patch.object(orch, "_final_review"):
+            with patch.object(orch, "_batch_review"):
                 orch.run_orchestrate(
                     holding="main",
                     plan_paths=[hitl],
@@ -121,7 +121,7 @@ def test_orchestrate_auto_spawn_runs_headless(tmp_path):
     with patch.object(orch, "_fan_out_plans") as mock_fan:
         mock_fan.return_value = ["chunk-afk"]
         with patch.object(orch, "_land_all", return_value=[{"status": "success", "slug": "chunk-afk", "tip": "abc"}]):
-            with patch.object(orch, "_final_review"):
+            with patch.object(orch, "_batch_review"):
                 orch.run_orchestrate(
                     holding="main",
                     plan_paths=[afk],
@@ -143,7 +143,7 @@ def test_orchestrate_harness_flag_overrides_config(tmp_path):
 
     with patch.object(orch, "_run_anchored_plans", side_effect=fake_run_anchored):
         with patch.object(orch, "_land_all", return_value=[]):
-            with patch.object(orch, "_final_review"):
+            with patch.object(orch, "_batch_review"):
                 orch.run_orchestrate(
                     holding="main",
                     plan_paths=[plan],
