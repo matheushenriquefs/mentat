@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 _GREEN = "\033[32m"
 _CYAN = "\033[36m"

@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import os
 import subprocess
-import textwrap
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
-import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts"
 

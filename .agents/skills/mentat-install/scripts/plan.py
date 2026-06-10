@@ -55,8 +55,6 @@ def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
     skipped: list[Action] = []
 
     agents_skills = home / ".agents" / "skills"
-    use_symlinks = clone_root is not None
-
     # 1. ~/.mentat/{} dirs and config
     mentat_dir = home / ".mentat"
     if not mentat_dir.exists():

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import subprocess
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 

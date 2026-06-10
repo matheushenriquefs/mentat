@@ -5,9 +5,8 @@ from __future__ import annotations
 import importlib.util
 import subprocess
 from pathlib import Path
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch
 
-import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 

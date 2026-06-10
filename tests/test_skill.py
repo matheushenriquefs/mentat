@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import os
-import subprocess
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -47,7 +45,6 @@ def test_eval_gates_promptfoo_absence(tmp_path):
     evals_file.parent.mkdir(parents=True)
     evals_file.write_text('{"skill_name":"my-skill","evals":[]}')
 
-    import shutil
     with patch("shutil.which", return_value=None):
         with pytest.raises(SystemExit) as exc_info:
             skill_mod.cmd_eval("my-skill", evals_dir=evals_file.parent)
@@ -87,11 +84,9 @@ def test_shrink_proposes_and_gates(tmp_path):
     skills_dir = tmp_path / "skills"
     skill_mod.cmd_scaffold("target-skill", skills_root=skills_dir, evals_dir=tmp_path / "evals")
 
-    skill_md = skills_dir / "target-skill" / "SKILL.md"
-
     with patch.object(skill_mod, "_invoke_shrink_harness", return_value="# Shorter content") as mock_shrink:
         with patch.object(skill_mod, "_run_eval_gate", return_value=True) as mock_gate:
-            result = skill_mod.cmd_shrink("target-skill", skills_root=skills_dir, evals_dir=tmp_path / "evals")
+            skill_mod.cmd_shrink("target-skill", skills_root=skills_dir, evals_dir=tmp_path / "evals")
 
     mock_shrink.assert_called_once()
     mock_gate.assert_called_once()

@@ -7,7 +7,6 @@ import argparse
 import datetime
 import json
 import os
-import stat
 import sys
 from pathlib import Path
 
