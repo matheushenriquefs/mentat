@@ -80,7 +80,7 @@ def test_smoke_land_queue_emits_all_event_types(fixture_batch):
                     chunk = lq.Chunk(slug="afk-slice", worktree=fixture_batch["afk_plan"].parent)
                     result = lq.land(chunk, holding="main")
 
-    assert result["outcome"] == "success"
+    assert result["status"] == "success"
     assert "chunk.landed" in emitted_events
 
 

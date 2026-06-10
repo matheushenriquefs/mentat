@@ -121,7 +121,7 @@ def run_orchestrate(
     session_id = os.environ.get("MENTAT_SESSION", f"session-{os.getpid()}")
     _final_review.review(session_id)
 
-    any_ejected = any(r.get("outcome") == "eject" for r in results)
+    any_ejected = any(r.get("status") == "eject" for r in results)
     return 1 if any_ejected else 0
 
 

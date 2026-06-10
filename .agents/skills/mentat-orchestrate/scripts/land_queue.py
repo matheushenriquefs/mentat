@@ -88,7 +88,7 @@ def land(chunk: Chunk, *, holding: str) -> dict:
         })
         return {
             "slug": chunk.slug,
-            "outcome": "eject",
+            "status": "eject",
             "reason": "rebase-conflicted",
             "tip": None,
             "conflicted_files": [],
@@ -103,7 +103,7 @@ def land(chunk: Chunk, *, holding: str) -> dict:
         })
         return {
             "slug": chunk.slug,
-            "outcome": "eject",
+            "status": "eject",
             "reason": "gate-failed",
             "tip": tip,
             "findings": [message],
@@ -118,7 +118,7 @@ def land(chunk: Chunk, *, holding: str) -> dict:
         })
         return {
             "slug": chunk.slug,
-            "outcome": "eject",
+            "status": "eject",
             "reason": "not-ff",
             "tip": tip,
         }
@@ -130,7 +130,7 @@ def land(chunk: Chunk, *, holding: str) -> dict:
     })
     return {
         "slug": chunk.slug,
-        "outcome": "success",
+        "status": "success",
         "tip": tip,
     }
 

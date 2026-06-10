@@ -39,11 +39,11 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py final-review 
 ## Verdict JSONL shape
 
 ```json
-{"slug": "...", "outcome": "success|eject", "tip": "...",
+{"slug": "...", "status": "success|eject", "tip": "...",
  "reason": "...", "conflicted_files": [...], "resume_cmd": "...", "findings": [...]}
 ```
 
-`outcome ∈ {success, eject}` · `reason ∈ {rebase-conflict, gate-fail, not-ff, implement-fail, hitl-ambiguity}`
+`status ∈ {success, eject}` · `reason ∈ {rebase-conflict, gate-fail, not-ff, implement-fail, hitl-ambiguity}`
 
 ## Exit codes
 
@@ -51,4 +51,26 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py final-review 
 |---|---|
 | 0 | All chunks landed |
 | 1 | ≥1 chunk ejected |
-| ≥2 | Tool error |
+| 64 | CLI arg parse error / missing plan ref |
+| 65 | Malformed plan frontmatter or cycle in blocked_by graph |
+| 66 | Plan slug not found |
+| 69 | Container down when spawning a chunk |
+| 70 | Unhandled Python exception in stage module |
+
+## Rules
+
+- Plans without `blocked_by` run in parallel with any other independent plan.
+- HITL plans always anchor in the calling session; AFK plans can auto-spawn.
+- AFK plan with a downstream HITL dep anchors in the calling session.
+- Land queue is serial: each chunk rebases onto the tip the previous one left.
+- Gate required on each chunk before land; ejected chunk leaves worktree intact.
+- `final-review` is advisory; never blocks the batch.
+- All emit calls route through `mentat-log emit` per ADR-0007.
+
+## Constraints
+
+- Holding branch must have no own commits; only fast-forward allowed (ADR-0002).
+- Container required per chunk (ADR-0004). Exit 69 if container unavailable.
+- Plan class read from frontmatter only; no env var override.
+- `--dry-run` prints what would run; does not spawn or land.
+- Session id from `$MENTAT_SESSION` for audit events.

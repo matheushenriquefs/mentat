@@ -30,7 +30,7 @@ def test_orchestrate_full_pipeline_exits_0_on_all_success(tmp_path):
     plan = _make_plan_file(tmp_path, "plan-a", "AFK")
 
     with patch.object(orch, "_fan_out_plans", return_value=["chunk-a"]):
-        with patch.object(orch, "_land_all", return_value=[{"outcome": "success", "slug": "chunk-a", "tip": "abc"}]):
+        with patch.object(orch, "_land_all", return_value=[{"status": "success", "slug": "chunk-a", "tip": "abc"}]):
             with patch.object(orch, "_final_review"):
                 rc = orch.run_orchestrate(
                     holding="main",
@@ -45,7 +45,7 @@ def test_orchestrate_exits_1_on_any_ejection(tmp_path):
     plan = _make_plan_file(tmp_path, "plan-b", "AFK")
 
     with patch.object(orch, "_fan_out_plans", return_value=["chunk-b"]):
-        with patch.object(orch, "_land_all", return_value=[{"outcome": "eject", "slug": "chunk-b", "reason": "gate-fail"}]):
+        with patch.object(orch, "_land_all", return_value=[{"status": "eject", "slug": "chunk-b", "reason": "gate-fail"}]):
             with patch.object(orch, "_final_review"):
                 rc = orch.run_orchestrate(
                     holding="main",
@@ -103,7 +103,7 @@ def test_orchestrate_anchored_runs_in_current_session(tmp_path):
         return ["chunk-hitl"]
 
     with patch.object(orch, "_run_anchored_plans", side_effect=fake_run_anchored):
-        with patch.object(orch, "_land_all", return_value=[{"outcome": "success", "slug": "chunk-hitl", "tip": "abc"}]):
+        with patch.object(orch, "_land_all", return_value=[{"status": "success", "slug": "chunk-hitl", "tip": "abc"}]):
             with patch.object(orch, "_final_review"):
                 orch.run_orchestrate(
                     holding="main",
@@ -120,7 +120,7 @@ def test_orchestrate_auto_spawn_runs_headless(tmp_path):
 
     with patch.object(orch, "_fan_out_plans") as mock_fan:
         mock_fan.return_value = ["chunk-afk"]
-        with patch.object(orch, "_land_all", return_value=[{"outcome": "success", "slug": "chunk-afk", "tip": "abc"}]):
+        with patch.object(orch, "_land_all", return_value=[{"status": "success", "slug": "chunk-afk", "tip": "abc"}]):
             with patch.object(orch, "_final_review"):
                 orch.run_orchestrate(
                     holding="main",
