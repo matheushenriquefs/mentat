@@ -6,7 +6,7 @@ See [CONTEXT.md](CONTEXT.md) for the full glossary. See [docs/adr/README.md](doc
 
 ## Critical Constraints
 
-- **Devcontainer-only execution for target-repo work.** All target-repo commands run via `bin/mentat-container-run '<cmd>'`. Never call project tools (linters, test runners, formatters, interpreters) on the host. (ADR-0004)
+- **Devcontainer-only execution for target-repo work.** All target-repo commands run via `python3 ~/.agents/skills/mentat-container/scripts/container.py run '<cmd>'`. Never call project tools (linters, test runners, formatters, interpreters) on the host. (ADR-0004)
 - **Never fabricate.** If a verification step fails or an ADR doesn't cover a case, say so. Don't invent citations or outcomes.
 - **No secrets.** No API keys, tokens, or credentials in any file — not in comments, not in examples.
 - **Mentat names no target-repo toolchain.** The driver and all Mentat files are agnostic — they do not reference specific languages, test frameworks, or build tools. Those live in the target repo's own docs (ADR-0004).
@@ -17,8 +17,8 @@ See [CONTEXT.md](CONTEXT.md) for the full glossary. See [docs/adr/README.md](doc
 When editing prompt files in `.agents/`:
 
 1. Read the relevant ADRs for the area you're touching (`docs/adr/`). System ADRs always; the target repo's `docs/adr/` when working there.
-2. Run verification with `bin/mentat-container-run '<test cmd>'` if the target repo has one.
-3. Commit via `/mentat-commit` (routes through devcontainer if one exists).
+2. Run verification with `python3 ~/.agents/skills/mentat-container/scripts/container.py run '<test cmd>'` if the target repo has one.
+3. Commit via the `mentat-git` skill (routes through devcontainer if one exists).
 
 Until Mentat has release tags, promote harness changes to the user's global install:
 
