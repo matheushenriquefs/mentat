@@ -3,8 +3,6 @@ name: mentat-plan
 description: >
   Write and resolve mentat plan files.
   Use when you need to create a new plan file or canonicalize a plan slug-or-path reference.
-metadata:
-  version: "0.1.0"
 ---
 
 Write structured plan files to `~/.agents/plans/` and resolve plan slug-or-path references to canonical absolute paths.

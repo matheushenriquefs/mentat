@@ -3,8 +3,6 @@ name: mentat-skill
 description: >
   Evaluate, shrink, or scaffold mentat skills.
   Use when you want to run promptfoo evals, propose a leaner SKILL.md, or create a new skill skeleton.
-metadata:
-  version: "0.1.0"
 ---
 
 SKILL.md lifecycle workflows: eval against promptfoo, propose a leaner SKILL.md with gate-check, scaffold a new skill directory from template.
