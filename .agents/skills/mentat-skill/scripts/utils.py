@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parent
-_SKILL_ROOT = _SCRIPTS.parents[2]
+_SKILL_ROOT = _SCRIPTS.parents[3]
 
 
 def default_skills_root() -> Path:
