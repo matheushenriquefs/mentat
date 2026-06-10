@@ -1,5 +1,15 @@
 {
   "skill_name": "mentat-skill",
-  "evals": [],
-  "eval_queries": []
+  "description": "Evaluate, shrink, and scaffold mentat skills",
+  "evals": [
+    {"id": "eval-invokes-promptfoo", "description": "eval subcommand calls promptfoo", "type": "functional"},
+    {"id": "eval-gates-absence", "description": "eval exits non-zero when promptfoo missing", "type": "functional"},
+    {"id": "scaffold-creates-skeleton", "description": "scaffold creates SKILL.md + scripts/__init__.py + scripts/<name>.py + evals/<name>.json", "type": "functional"},
+    {"id": "scaffold-idempotent", "description": "scaffold does not overwrite existing files", "type": "functional"}
+  ],
+  "eval_queries": [
+    "run evals for mentat-log skill",
+    "scaffold a new skill named my-skill",
+    "propose a leaner SKILL.md for mentat-log"
+  ]
 }
