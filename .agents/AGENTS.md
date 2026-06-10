@@ -38,9 +38,13 @@ repo's own `docs/adr/`. "Check ADRs in the area you're touching" means both
 read on demand):
 
 - **0001** sub-agent delegation — cavecrew vs vanilla, procedure not persona.
-- **0002** holding branch over Merge — own-branch + `/to-rebase`, commits in-container.
+- **0002** holding branch over merge — own-branch + ff-only rebase, commits in-container.
 - **0003** scored review gate — Mastra-mapped reviewers, veto > threshold.
 - **0004** parallel-slicing orchestration — fan-out parallel, land serial, Docker-required.
 - **0005** ubiquitous lexicon — slice/chunk/batch, one Laravel borrow (batch, noun only).
 - **0006** soft read-only tests — impl-only-after-red contract + blacklist, driver agnostic.
+- **0007** audit envelope — 9-event NDJSON catalog, per-session log dir.
+- **0008** python runtime — stdlib-only bin layer; uv/ruff/pyright/pytest dev layer.
+- **0009** plugin API — Vite-derived 2-slot extension (rubric, gate).
+- **0010** read-only test mount — OCP manifest + container bind-mount.
 
