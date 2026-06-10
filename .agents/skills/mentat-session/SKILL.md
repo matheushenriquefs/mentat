@@ -67,7 +67,7 @@ python3 ~/.agents/skills/mentat-session/scripts/session.py diagnose
 - `track` uses `tail -F` semantics: follows new events as they arrive.
 - `doctor` writes to `~/.mentat/logs/<repo>/<session>/diagnosis.md`; overwrites on re-run.
 - `diagnose` calls `doctor` first, then enters the `/diagnose` loop with the diagnosis as context.
-- `diagnose` loop should land a regression test as the first red slice; hand off to `mentat-plan` → `mentat-implement` rather than fixing inline.
+- `diagnose` loop should land a regression test as the first red slice; hand off to `mentat-implement` rather than fixing inline.
 - Session ID defaults to latest session for the current repo when not supplied.
 - All event reading goes through `mentat-log query`; never reads raw JSONL directly.
 
