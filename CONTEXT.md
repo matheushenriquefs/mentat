@@ -1,34 +1,14 @@
 # Mentat — Context
 
-## What this is
-
-Mentat cuts planned work into vertical slices, runs each slice as an isolated chunk (worktree + devcontainer + its own branch), lands them serially onto a holding branch via a merge queue, and gates each land deterministically.
-
-**Parallel-out / serial-in.** Chunks implement concurrently. Landing is serial — one ref can't move concurrently, and serial landing lets sibling divergence resolve by rebasing onto the tip the previous chunk left (ADR 0004). Hard cap: 3 parallel chunks.
-
-**Holding-branch invariant.** The holding branch (`branch/<feature>`) carries no commits of its own. Each land is a `merge --ff-only` — no `git commit` fires, so no host-side pre-commit fires (ADR 0002).
-
-**Merge queue / re-gate.** Per chunk: rebase onto current holding tip in-container, re-gate using the target repo's own quality gates, then ff-only. A red gate ejects the chunk; the queue continues. This catches semantic breakage a sibling's land introduced (ADR 0004).
-
-**Deterministic gating + anti-cheat.** Two enforcement layers, both agnostic (ADR 0006): (1) impl-only-after-red contract — agent writes implementation code only after a failing test; (2) trajectory blacklist in `mentat-bug-reviewer` — forbidden reward-hacking moves → hard 0.0 veto (ADR 0003). The driver names no project tool.
-
-**AFK operator.** AFK-tagged slices gate and land without human input. HITL-tagged slices stall for review. The scored gate (ADR 0003) — never average, veto > threshold — is what makes AFK trustworthy.
-
-**No-framework thesis.** Bash + jq + prompts. No language toolchain on the host. Any Unix, any harness (`cursor-agent` | `claude-code`), any target language. Docker required (ADR 0004).
+Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). For decisions, see [docs/adr/](docs/adr/README.md).
 
 ## Language
 
 **Multi-harness orchestrator**
 : Mentat's category label. Contrast with *meta-harness* (Lee et al. arxiv 2603.28052 — a different architecture) and *meta-skill* (revfactory/harness). Mentat orchestrates parallel coding agents across multiple headless agent CLIs (`cursor-agent`, `claude-code`). _Avoid_: "meta-harness", "the harness" as a self-description of Mentat.
 
-**Vendor skill**
-: A third-party skill vendored via `bin/mentat-update` (wraps `vendir sync`) from `vendir.yml`. Installed under `.agents/skills/vendor/<user>/<repo>/`. Attributions recorded in `CREDITS.md`. _Avoid_: treating vendor skills as first-party; always check `vendir.yml` before modifying.
-
-**Vendor pins**
-: `vendir.lock.yml` — SHA-pinned lockfile written by `vendir sync`. Track in git. Check staleness with `vendir sync --diff`. _Avoid_: editing the lockfile manually.
-
 **Mentat (system)**
-: The harness itself — the `bin/`, `.agents/`, and orchestration contracts. Not a person, not an agent. _Avoid_: "the Mentat", "the AI", "the bot".
+: The harness itself — the `.agents/` tree, Python skills, and orchestration contracts. Not a person, not an agent. _Avoid_: "the Mentat", "the AI", "the bot".
 
 **Slice**
 : A *planned* vertical tracer-bullet cut. An input artifact: a `plan.md`. Taxonomy owned by `/mentat-plan` and `/mentat-issues`; AFK/HITL tags are theirs. _Avoid_: using "slice" for the running execution.
@@ -106,10 +86,14 @@ Mentat cuts planned work into vertical slices, runs each slice as an isolated ch
 
 | # | Title | Summary |
 |---|---|---|
-| 0001 | Sub-agent delegation | Cavecrew by default; vanilla only for prose/rationale. `/mentat-researcher` is procedure, not persona. No hardcoded model. |
-| 0002 | Holding branch + `/mentat-rebase` | Use plain `git worktree` + ff-only merge; no merge commits. Holding branch carries no commits; all lands are ff-only in-container. |
-| 0003 | Scored review gate | Three reviewers map to Mastra scorers. Never average; veto > threshold. LLM never self-promotes. |
-| 0004 | Parallel-slicing orchestration | Fan-out parallel, land serial. Cap 3 chunks. Re-gate after land rebase. Docker required. Driver names no project tool. |
-| 0005 | Ubiquitous lexicon | Slice/chunk/batch vocabulary. One Laravel borrow (batch, noun only). |
-| 0006 | Soft read-only tests | No kernel mount. Impl-only-after-red contract + runner-redirection blacklist entry. Both agnostic. |
+| [0001](docs/adr/0001-sub-agent-delegation.md) | Sub-agent delegation | Cavecrew by default; vanilla only for prose/rationale. `mentat-researcher` is procedure, not persona. No hardcoded model. |
+| [0002](docs/adr/0002-holding-branch-over-merge.md) | Holding branch over merge | Plain `git worktree` + ff-only merge; no merge commits. Holding branch carries no commits; all lands are ff-only in-container. |
+| [0003](docs/adr/0003-scored-review-gate.md) | Scored review gate | Reviewer subagents map to Mastra scorers. Never average; veto > threshold. LLM never self-promotes. |
+| [0004](docs/adr/0004-parallel-orchestration.md) | Parallel-slicing orchestration | Fan-out parallel, land serial. Cap 3 chunks. Re-gate after land rebase. Docker required. Driver names no project tool. |
+| [0005](docs/adr/0005-ubiquitous-lexicon.md) | Ubiquitous lexicon | Slice/chunk/batch vocabulary. One Laravel borrow (batch, noun only). |
+| [0006](docs/adr/0006-soft-readonly-test-enforcement.md) | Soft read-only tests | No kernel mount. Impl-only-after-red contract + runner-redirection blacklist entry. Both agnostic. |
+| [0007](docs/adr/0007-audit-envelope.md) | Audit envelope | 9-event canonical catalog, NDJSON envelope, `~/.mentat/logs/<repo>/<session>/` layout. |
+| [0008](docs/adr/0008-python-runtime.md) | Python runtime | Stdlib-only at the bin layer; uv/ruff/pyright/pytest at the dev layer. Container-required Python 3.11+. |
+| [0009](docs/adr/0009-plugin-api.md) | Plugin API | Vite-derived 2-slot extension surface (rubric, gate). Mentat core stays minimal. |
+| [0010](docs/adr/0010-readonly-test-mount.md) | Read-only test mount | OCP `<plan>.tests.json` manifest + container bind-mount with `readonly` flag. |
 

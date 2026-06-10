@@ -46,7 +46,7 @@ Every command emits start + complete events via `mentat-log emit`. Event catalog
 
 ## Ship Surface
 
-`mentat-install` rsyncs `.agents/` to `~/.agents/`. Excluded: `skills/vendor/`, `evals/`, `plans/`, `.dmux/`, `.mentat/`. Consumer regenerates vendored skills via `mentat-update`.
+`mentat-install` rsyncs `.agents/` to `~/.agents/`. Excluded: `evals/`, `plans/`, `.dmux/`, `.mentat/`.
 
 ## Platform Support
 
@@ -62,5 +62,5 @@ When borrowing a concept from another repo, add an entry to `CREDITS.md` under `
 - [docs/STYLE.md](docs/STYLE.md) — full writing rules
 - [docs/adr/README.md](docs/adr/README.md) — ADR index
 - [README.md](README.md) — public overview, quickstart
-- [CREDITS.md](CREDITS.md) — vendored skill attributions
+- [CREDITS.md](CREDITS.md) — credits + runtime tool dependencies
 - [.agents/AGENTS.md](.agents/AGENTS.md) — system harness rules
