@@ -1,5 +1,32 @@
 {
   "skill_name": "mentat-container",
-  "evals": [],
-  "eval_queries": []
+  "description": "Manage devcontainer lifecycle for a mentat worktree",
+  "evals": [
+    {
+      "id": "up-idempotent",
+      "description": "container up is idempotent (safe to call twice)",
+      "type": "functional"
+    },
+    {
+      "id": "run-exits-99-when-not-up",
+      "description": "run exits 99 when container not running",
+      "type": "functional"
+    },
+    {
+      "id": "synth-compose",
+      "description": "compose_synth generates valid devcontainer.json from docker-compose.yml",
+      "type": "functional"
+    },
+    {
+      "id": "doctor-reports-issues",
+      "description": "doctor names every failing invariant",
+      "type": "functional"
+    }
+  ],
+  "eval_queries": [
+    "start the devcontainer for this worktree",
+    "run 'uv run pytest' inside the container",
+    "stop the container",
+    "diagnose container issues for this worktree"
+  ]
 }
