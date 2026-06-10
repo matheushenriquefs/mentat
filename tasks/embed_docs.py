@@ -1,4 +1,4 @@
-"""Docs sync: check renamed/deleted files have no stale references in docs."""
+"""embed-docs: check renamed/deleted files have no stale references in docs."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def check(staged: list[str]) -> int:
 
             hits = len(re.findall(rf"\b{re.escape(base)}\b", text))
             if hits > 0:
-                print(f"docs-sync: {base!r} removed but still in {doc} ({hits} hit(s))", file=sys.stderr)
+                print(f"embed-docs: {base!r} removed but still in {doc} ({hits} hit(s))", file=sys.stderr)
                 fail = 1
     return fail
 
