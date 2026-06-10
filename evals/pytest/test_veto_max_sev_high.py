@@ -1,13 +1,12 @@
 """Verify HIGH sev veto logic present and correctly scoped in mentat-bug-reviewer."""
+
 from utils import read_agent
 
 
 def test_high_sev_veto_present():
     """Prompt must veto on sev >= high."""
     prompt = read_agent("mentat-bug-reviewer")
-    assert "sev" in prompt.lower() and "high" in prompt.lower(), (
-        "mentat-bug-reviewer must reference sev=high veto"
-    )
+    assert "sev" in prompt.lower() and "high" in prompt.lower(), "mentat-bug-reviewer must reference sev=high veto"
     assert "veto" in prompt.lower(), "mentat-bug-reviewer must have veto mechanism"
 
 

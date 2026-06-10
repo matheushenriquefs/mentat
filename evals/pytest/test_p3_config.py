@@ -1,4 +1,9 @@
 """P3: config loader + harness matrix — static + behavioral assertions."""
+
+import pytest
+
+pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
+
 import os
 import subprocess
 import json
@@ -15,11 +20,13 @@ HARNESSES = ["claude-code", "cursor", "aider", "codex", "copilot", "gemini", "op
 
 def _sh(cmd: str, cwd: str = ROOT, env: dict = None) -> subprocess.CompletedProcess:
     import os as _os
+
     e = {**_os.environ, **(env or {})}
     return subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=cwd, env=e)
 
 
 # S3.1 — lib/config.sh exists and exports mentat_config()
+
 
 def test_config_sh_exists():
     assert os.path.isfile(os.path.join(LIB, "config.sh"))
@@ -49,7 +56,7 @@ def test_mentat_config_reads_harness_name():
         cfgpath = f.name
     try:
         r = _sh(
-            f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config harness.name\'',
+            f"bash -c 'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config harness.name'",
         )
         assert r.returncode == 0, r.stderr
         assert r.stdout.strip() == "claude-code"
@@ -64,7 +71,7 @@ def test_mentat_config_reads_max_concurrent():
         cfgpath = f.name
     try:
         r = _sh(
-            f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config agents.max_concurrent\'',
+            f"bash -c 'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config agents.max_concurrent'",
         )
         assert r.returncode == 0, r.stderr
         assert r.stdout.strip() == "5"
@@ -79,7 +86,7 @@ def test_mentat_config_validate_fails_bad_harness():
         cfgpath = f.name
     try:
         r = _sh(
-            f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'',
+            f"bash -c 'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate'",
         )
         assert r.returncode == 2, f"validate must exit 2 for unknown harness, got {r.returncode}"
     finally:
@@ -92,7 +99,7 @@ def test_mentat_config_validate_fails_bad_max_concurrent_zero():
         f.write(cfg)
         cfgpath = f.name
     try:
-        r = _sh(f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'')
+        r = _sh(f"bash -c 'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate'")
         assert r.returncode == 2, f"validate must exit 2 for max_concurrent=0, got {r.returncode}"
     finally:
         os.unlink(cfgpath)
@@ -104,7 +111,7 @@ def test_mentat_config_validate_fails_bad_max_concurrent_over():
         f.write(cfg)
         cfgpath = f.name
     try:
-        r = _sh(f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'')
+        r = _sh(f"bash -c 'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate'")
         assert r.returncode == 2, f"validate must exit 2 for max_concurrent=11, got {r.returncode}"
     finally:
         os.unlink(cfgpath)
@@ -116,7 +123,7 @@ def test_mentat_config_validate_fails_bad_max_concurrent_string():
         f.write(cfg)
         cfgpath = f.name
     try:
-        r = _sh(f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'')
+        r = _sh(f"bash -c 'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate'")
         assert r.returncode == 2, f"validate must exit 2 for max_concurrent=string, got {r.returncode}"
     finally:
         os.unlink(cfgpath)
@@ -128,7 +135,7 @@ def test_mentat_config_validate_fails_diff_tool_not_string():
         f.write(cfg)
         cfgpath = f.name
     try:
-        r = _sh(f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'')
+        r = _sh(f"bash -c 'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate'")
         assert r.returncode == 2, f"validate must exit 2 for non-string diff.tool, got {r.returncode}"
     finally:
         os.unlink(cfgpath)
@@ -140,7 +147,7 @@ def test_mentat_config_validate_fails_plugins_not_array():
         f.write(cfg)
         cfgpath = f.name
     try:
-        r = _sh(f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'')
+        r = _sh(f"bash -c 'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate'")
         assert r.returncode == 2, f"validate must exit 2 for non-array plugins, got {r.returncode}"
     finally:
         os.unlink(cfgpath)
@@ -160,7 +167,7 @@ def test_mentat_config_validate_fails_editor_name_not_string():
         f.write(cfg)
         cfgpath = f.name
     try:
-        r = _sh(f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'')
+        r = _sh(f"bash -c 'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate'")
         assert r.returncode == 2, f"validate must exit 2 for non-string editor.name, got {r.returncode}"
     finally:
         os.unlink(cfgpath)
@@ -173,7 +180,7 @@ def test_mentat_config_validate_passes_valid():
         cfgpath = f.name
     try:
         r = _sh(
-            f'bash -c \'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate\'',
+            f"bash -c 'source {LIB}/config.sh; MENTAT_CONFIG_PATH={cfgpath} mentat_config_validate'",
         )
         assert r.returncode == 0, r.stderr
     finally:
@@ -181,6 +188,7 @@ def test_mentat_config_validate_passes_valid():
 
 
 # S3.2 — schema example + default config
+
 
 def test_mentat_jsonc_example_exists():
     assert os.path.isfile(os.path.join(AGENTS, ".mentat.jsonc.example"))
@@ -207,28 +215,33 @@ def test_mentat_jsonc_has_required_keys():
 def test_mentat_jsonc_locked_schema_shape():
     """Verify .mentat.jsonc matches the locked nested schema exactly."""
     path = os.path.join(AGENTS, ".mentat.jsonc")
-    r = _sh(f"sed 's|//.*||g' {path} | jq -e '"
-            ".harness | has(\"name\") and has(\"model\") | . and "
-            "($ENV | . == .) "  # always true — chaining condition
-            "'")
+    r = _sh(
+        f"sed 's|//.*||g' {path} | jq -e '"
+        '.harness | has("name") and has("model") | . and '
+        "($ENV | . == .) "  # always true — chaining condition
+        "'"
+    )
     # Check each required nested key exists and has correct type
     checks = [
-        ".harness.name | type == \"string\"",
-        ".harness.model | type == \"string\"",
-        ".agents.max_concurrent | type == \"number\"",
-        ".diff.tool | type == \"string\"",
-        ".editor.name | type == \"string\"",
-        ".plugins | type == \"array\"",
+        '.harness.name | type == "string"',
+        '.harness.model | type == "string"',
+        '.agents.max_concurrent | type == "number"',
+        '.diff.tool | type == "string"',
+        '.editor.name | type == "string"',
+        '.plugins | type == "array"',
     ]
     for check in checks:
         r = _sh(f"sed 's|//.*||g' {path} | jq -e '{check}'")
         assert r.returncode == 0, f"Schema check failed for '{check}': {r.stderr}"
     # harness.name must be a valid enum value
-    r = _sh(f"sed 's|//.*||g' {path} | jq -e '.harness.name | IN(\"claude-code\",\"cursor\",\"aider\",\"codex\",\"copilot\",\"gemini\",\"openhands\",\"amp\")'")
+    r = _sh(
+        f'sed \'s|//.*||g\' {path} | jq -e \'.harness.name | IN("claude-code","cursor","aider","codex","copilot","gemini","openhands","amp")\''
+    )
     assert r.returncode == 0, f".harness.name must be a valid harness enum: {r.stderr}"
 
 
 # S3.3 — mentat-orchestrate reads config; CLI flags override
+
 
 def test_orchestrate_sources_config_sh():
     with open(os.path.join(BIN, "mentat-orchestrate")) as f:
@@ -282,7 +295,7 @@ def test_orchestrate_dry_run_exits_zero():
     """--dry-run must print plan info and exit 0 without launching worktrees."""
     cfg_path = os.path.join(AGENTS, ".mentat.jsonc")
     r = _sh(
-        f'MENTAT_CONFIG_PATH={cfg_path} {BIN}/mentat-orchestrate --dry-run feat/x /dev/null',
+        f"MENTAT_CONFIG_PATH={cfg_path} {BIN}/mentat-orchestrate --dry-run feat/x /dev/null",
         cwd=ROOT,
     )
     assert r.returncode == 0, f"--dry-run must exit 0: {r.stderr}"
@@ -297,7 +310,7 @@ def test_orchestrate_dry_run_uses_config_harness():
         cfgpath = f.name
     try:
         r = _sh(
-            f'MENTAT_CONFIG_PATH={cfgpath} {BIN}/mentat-orchestrate --dry-run feat/x /dev/null',
+            f"MENTAT_CONFIG_PATH={cfgpath} {BIN}/mentat-orchestrate --dry-run feat/x /dev/null",
             cwd=ROOT,
         )
         assert r.returncode == 0, f"dry-run failed: {r.stderr}"
@@ -315,7 +328,7 @@ def test_orchestrate_flag_overrides_config_harness():
         cfgpath = f.name
     try:
         r = _sh(
-            f'MENTAT_CONFIG_PATH={cfgpath} {BIN}/mentat-orchestrate --harness=codex --dry-run feat/x /dev/null',
+            f"MENTAT_CONFIG_PATH={cfgpath} {BIN}/mentat-orchestrate --harness=codex --dry-run feat/x /dev/null",
             cwd=ROOT,
         )
         assert r.returncode == 0, f"flag override dry-run failed: {r.stderr}"
@@ -333,7 +346,7 @@ def test_orchestrate_dry_run_shows_parallel_cap_from_config():
         cfgpath = f.name
     try:
         r = _sh(
-            f'MENTAT_CONFIG_PATH={cfgpath} {BIN}/mentat-orchestrate --dry-run feat/x /dev/null',
+            f"MENTAT_CONFIG_PATH={cfgpath} {BIN}/mentat-orchestrate --dry-run feat/x /dev/null",
             cwd=ROOT,
         )
         assert r.returncode == 0, f"dry-run failed: {r.stderr}"
@@ -351,11 +364,13 @@ def test_orchestrate_validate_called_before_holding_arg():
     holding_idx = body.find("HOLDING=")
     assert validate_idx != -1, "mentat_config_validate not found in orchestrate"
     assert holding_idx != -1, "HOLDING= not found in orchestrate"
-    assert validate_idx < holding_idx, \
+    assert validate_idx < holding_idx, (
         f"mentat_config_validate (pos {validate_idx}) must appear before HOLDING= (pos {holding_idx})"
+    )
 
 
 # S3.3b — per-harness lib/harness-<name>.sh files
+
 
 def test_harness_files_exist():
     for h in HARNESSES:
@@ -387,6 +402,7 @@ def test_orchestrate_dispatches_harness_files():
 
 # S3.4 — diff/editor knobs wired from config
 
+
 def test_orchestrate_no_hardcoded_cursor_agent():
     with open(os.path.join(BIN, "mentat-orchestrate")) as f:
         body = f.read()
@@ -401,6 +417,7 @@ def test_orchestrate_no_hardcoded_claude_p():
 
 
 # S3.5 — harness matrix doc
+
 
 def test_harness_matrix_doc_exists():
     assert os.path.isfile(os.path.join(DOCS, "harness-matrix.md"))

@@ -9,6 +9,7 @@ Spec (plan ~/.agents/plans/mentat-architecture-revamp-g1-audit-substrate.md):
   - Schema gap closure: `orchestrate.start` event exists (was emitted but unschemaed).
   - `mentat-plan.md` plan.start emit carries the `path` field (strict-per-S2-decision).
 """
+
 from __future__ import annotations
 
 import json
@@ -68,6 +69,7 @@ def shlex_quote(s: str) -> str:
 
 # ── Schema gap closure ───────────────────────────────────────────────────────
 
+
 def test_schema_strip_comments_jq_parses():
     out = subprocess.run(
         ["bash", "-c", f"sed 's|//.*$||' {SCHEMA} | jq -c '.events | keys | length'"],
@@ -89,12 +91,12 @@ def test_schema_includes_orchestrate_start():
 
 # ── Validator behavior ───────────────────────────────────────────────────────
 
+
 def test_unknown_event_rejected():
     rc, _stderr, jsonl, sidecar = _emit("bad-event", "{}")
     assert rc != 0, "unknown event should exit nonzero"
     assert jsonl == [], "unknown event must not be appended to .jsonl"
-    assert any("bad-event" in line for line in sidecar), \
-        f"sidecar must mention rejected event; got {sidecar!r}"
+    assert any("bad-event" in line for line in sidecar), f"sidecar must mention rejected event; got {sidecar!r}"
 
 
 def test_non_json_payload_rejected():
@@ -108,8 +110,9 @@ def test_missing_required_field_rejected():
     rc, _stderr, jsonl, sidecar = _emit("plan.complete", "{}")
     assert rc != 0, "plan.complete requires `path`; empty {} should reject"
     assert jsonl == [], "missing-required must not produce .jsonl row"
-    assert any(("path" in line) or ("required" in line) for line in sidecar), \
+    assert any(("path" in line) or ("required" in line) for line in sidecar), (
         f"sidecar must cite missing field; got {sidecar!r}"
+    )
 
 
 def test_known_event_with_required_succeeds():
@@ -161,6 +164,7 @@ def test_sidecar_path_layout():
 
 # ── Emit-site alignment (companion changes shipped with S2) ──────────────────
 
+
 def test_plan_command_emit_carries_path_on_start():
     """Per S2 strict decision: plan.start emit must include `path` field."""
     content = PLAN_CMD_MD.read_text()
@@ -171,5 +175,4 @@ def test_plan_command_emit_carries_path_on_start():
     assert matches, "no plan.start emit found in mentat-plan.md"
     for payload_token in matches:
         # Accept any quoted JSON or "$var" carrying a path key
-        assert "path" in payload_token, \
-            f"plan.start payload must mention `path`; got {payload_token!r}"
+        assert "path" in payload_token, f"plan.start payload must mention `path`; got {payload_token!r}"

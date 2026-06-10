@@ -1,4 +1,5 @@
 """ADR 0006 trajectory blacklist veto — reward-hacking moves caught."""
+
 from utils import read_agent
 
 
@@ -19,9 +20,7 @@ def test_blacklist_covers_runner_redirection():
 def test_blacklist_covers_test_deletion():
     """Deleting test files must be blacklisted."""
     prompt = read_agent("mentat-bug-reviewer")
-    assert "delete" in prompt.lower() or "empty" in prompt.lower(), (
-        "Blacklist must cover test file deletion/emptying"
-    )
+    assert "delete" in prompt.lower() or "empty" in prompt.lower(), "Blacklist must cover test file deletion/emptying"
 
 
 def test_blacklist_output_format():

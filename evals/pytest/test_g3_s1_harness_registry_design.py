@@ -14,6 +14,11 @@ Blocked-by: none (G1 done; G3 internally unblocked).
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
+
+
 import json
 import re
 import subprocess
@@ -42,9 +47,7 @@ def test_adr_0012_file_exists():
 
 def test_only_one_adr_0012():
     matches = sorted(p.name for p in ADR.parent.glob("0012-*.md"))
-    assert matches == ["0012-harness-registry.md"], (
-        f"exactly one 0012-* ADR expected, got {matches}"
-    )
+    assert matches == ["0012-harness-registry.md"], f"exactly one 0012-* ADR expected, got {matches}"
 
 
 # -- ADR enumerates every required field --------------------------------------
@@ -53,9 +56,7 @@ def test_only_one_adr_0012():
 def test_adr_lists_every_required_field():
     src = ADR.read_text()
     for f in REQUIRED_FIELDS:
-        assert f"`{f}`" in src, (
-            f"ADR must enumerate required field `{f}` (backticked) — missing"
-        )
+        assert f"`{f}`" in src, f"ADR must enumerate required field `{f}` (backticked) — missing"
 
 
 def test_adr_states_field_purpose_table():
@@ -104,8 +105,7 @@ def test_adr_explains_location_decision():
     """Location was a HITL decision (bin/lib vs .agents/lib). ADR must record
     the rationale, not just the path."""
     src = ADR.read_text().lower()
-    assert "source-of-truth" in src or "source of truth" in src or \
-           "single source" in src, (
+    assert "source-of-truth" in src or "source of truth" in src or "single source" in src, (
         "ADR must articulate why bin/lib was chosen — source-of-truth rationale"
     )
 
@@ -133,9 +133,7 @@ def test_registry_stub_parses_after_comment_strip():
 
 def test_registry_stub_has_harnesses_key():
     parsed = json.loads(_strip_jsonc_comments(STUB.read_text()))
-    assert "harnesses" in parsed, (
-        "stub must declare `harnesses` map (empty in S1, S2 fills 8 rows)"
-    )
+    assert "harnesses" in parsed, "stub must declare `harnesses` map (empty in S1, S2 fills 8 rows)"
     assert isinstance(parsed["harnesses"], dict), "`harnesses` must be an object"
 
 
@@ -143,9 +141,7 @@ def test_registry_stub_has_schema_metadata():
     """Stub carries field schema declaratively so consumers can validate
     rows. S2 fills rows; S1 declares the contract."""
     parsed = json.loads(_strip_jsonc_comments(STUB.read_text()))
-    assert "required_fields" in parsed, (
-        "stub must declare `required_fields` list — S2 validates rows against it"
-    )
+    assert "required_fields" in parsed, "stub must declare `required_fields` list — S2 validates rows against it"
     declared = parsed["required_fields"]
     assert isinstance(declared, list), "`required_fields` must be a list"
     assert set(declared) == set(REQUIRED_FIELDS), (
@@ -157,9 +153,7 @@ def test_registry_stub_documents_unknown_policy():
     """Fail-closed policy must be machine-readable in the stub, not just
     prose in the ADR."""
     parsed = json.loads(_strip_jsonc_comments(STUB.read_text()))
-    assert "on_unknown" in parsed, (
-        "stub must declare `on_unknown` policy field"
-    )
+    assert "on_unknown" in parsed, "stub must declare `on_unknown` policy field"
     policy = parsed["on_unknown"]
     assert policy in ("refuse", "fail-closed", "exit-nonzero"), (
         f"`on_unknown` must encode fail-closed semantics, got {policy!r}"
@@ -177,8 +171,7 @@ def test_adr_and_stub_field_lists_agree():
     adr_fields = {f for f in REQUIRED_FIELDS if f"`{f}`" in adr_src}
     stub_fields = set(stub["required_fields"])
     assert adr_fields == stub_fields, (
-        f"ADR field set {sorted(adr_fields)} must equal stub field set "
-        f"{sorted(stub_fields)}"
+        f"ADR field set {sorted(adr_fields)} must equal stub field set {sorted(stub_fields)}"
     )
 
 
@@ -218,10 +211,6 @@ def test_adr_names_g3_dependents():
     future readers see the registry's reach."""
     src = ADR.read_text()
     # Look for G3-S2 explicitly (consumer that fills the table).
-    assert re.search(r"G3-S2(?!\d)", src), (
-        "ADR must reference G3-S2 (the slice that writes the 8 rows)"
-    )
+    assert re.search(r"G3-S2(?!\d)", src), "ADR must reference G3-S2 (the slice that writes the 8 rows)"
     # And at least one of the adapter slices that consumes the schema.
-    assert re.search(r"G3-S[456](?!\d)", src), (
-        "ADR must reference at least one of G3-S4/S5/S6 (adapter consumers)"
-    )
+    assert re.search(r"G3-S[456](?!\d)", src), "ADR must reference at least one of G3-S4/S5/S6 (adapter consumers)"

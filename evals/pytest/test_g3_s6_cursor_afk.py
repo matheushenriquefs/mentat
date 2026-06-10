@@ -26,8 +26,7 @@ REGISTRY = ROOT / ".agents" / "bin" / "lib" / "harness-registry.jsonc"
 ADR_0010 = ROOT / ".agents" / "docs" / "adr" / "0010-hitl-routing.md"
 
 CLAUSE = (
-    "AFK mode: do not ask the user questions. "
-    "On ambiguity, exit nonzero with a HITL audit reason instead of guessing."
+    "AFK mode: do not ask the user questions. On ambiguity, exit nonzero with a HITL audit reason instead of guessing."
 )
 
 HITL_EXIT = 42
@@ -47,7 +46,9 @@ def _invoke_cmd(env_overrides: dict, prompt: str = "do thing"):
     script = f'set -e; source "{HARNESS}"; harness_cursor_cmd "$1"'
     result = subprocess.run(
         ["bash", "-c", script, "_", prompt],
-        env=env, capture_output=True, check=True,
+        env=env,
+        capture_output=True,
+        check=True,
     )
     tokens = result.stdout.split(b"\x00")
     if tokens and tokens[-1] == b"":
@@ -66,7 +67,8 @@ def _detect(jsonl_path: Path, env_overrides: dict | None = None) -> int:
     script = f'source "{HARNESS}"; harness_cursor_detect_hitl "$1"'
     result = subprocess.run(
         ["bash", "-c", script, "_", str(jsonl_path)],
-        env=env, capture_output=True,
+        env=env,
+        capture_output=True,
     )
     return result.returncode
 
@@ -105,12 +107,8 @@ def _assistant_tool_use(name: str = "Read") -> dict:
 
 def test_interactive_default_prompt_unchanged():
     argv, _ = _invoke_cmd({"MENTAT_INTERACTIVE": None}, prompt="do thing")
-    assert argv[-1] == "do thing", (
-        f"interactive default: prompt must be verbatim user input; got {argv[-1]!r}"
-    )
-    assert CLAUSE not in " ".join(argv), (
-        "interactive default must NOT prepend the AFK clause"
-    )
+    assert argv[-1] == "do thing", f"interactive default: prompt must be verbatim user input; got {argv[-1]!r}"
+    assert CLAUSE not in " ".join(argv), "interactive default must NOT prepend the AFK clause"
 
 
 def test_interactive_default_no_stderr_warning():
@@ -143,9 +141,7 @@ def test_empty_value_treated_as_interactive():
 def test_afk_prepends_clause_to_prompt():
     argv, _ = _invoke_cmd({"MENTAT_INTERACTIVE": "0"}, prompt="do ambiguous thing")
     prompt_arg = argv[-1]
-    assert CLAUSE in prompt_arg, (
-        f"AFK mode must prepend clause to prompt; got prompt={prompt_arg!r}"
-    )
+    assert CLAUSE in prompt_arg, f"AFK mode must prepend clause to prompt; got prompt={prompt_arg!r}"
     assert "do ambiguous thing" in prompt_arg
     assert prompt_arg.index(CLAUSE) < prompt_arg.index("do ambiguous thing"), (
         "clause must be prepended (before user prompt), not appended"
@@ -169,25 +165,19 @@ def test_afk_keeps_base_args():
     """Base args (-p, --output-format stream-json, --force) must survive AFK."""
     argv, _ = _invoke_cmd({"MENTAT_INTERACTIVE": "0"})
     for expected in ("-p", "--output-format", "stream-json", "--force"):
-        assert expected in argv, (
-            f"AFK mode dropped base arg {expected!r}; argv={argv}"
-        )
+        assert expected in argv, f"AFK mode dropped base arg {expected!r}; argv={argv}"
 
 
 def test_afk_keeps_cursor_bin_first():
     argv, _ = _invoke_cmd({"MENTAT_INTERACTIVE": "0"})
-    assert argv[0] == "cursor-agent", (
-        f"AFK mode must keep `cursor-agent` as argv[0]; got {argv[0]!r}"
-    )
+    assert argv[0] == "cursor-agent", f"AFK mode must keep `cursor-agent` as argv[0]; got {argv[0]!r}"
 
 
 def test_afk_does_not_append_cli_disallowed_flag():
     """Cursor has no --disallowedTools — adapter must NOT fabricate one."""
     argv, _ = _invoke_cmd({"MENTAT_INTERACTIVE": "0"})
     joined = " ".join(argv)
-    assert "--disallowedTools" not in joined, (
-        f"cursor lacks --disallowedTools; adapter must not append it; argv={argv}"
-    )
+    assert "--disallowedTools" not in joined, f"cursor lacks --disallowedTools; adapter must not append it; argv={argv}"
     assert "AskUserQuestion" not in joined, (
         f"cursor has no tool-restriction flag; AskUserQuestion must not appear; argv={argv}"
     )
@@ -199,9 +189,7 @@ def test_afk_does_not_append_cli_disallowed_flag():
 def test_detect_function_declared():
     script = f'source "{HARNESS}"; declare -F harness_cursor_detect_hitl'
     result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
-    assert result.returncode == 0, (
-        f"harness_cursor_detect_hitl must be declared; stderr={result.stderr!r}"
-    )
+    assert result.returncode == 0, f"harness_cursor_detect_hitl must be declared; stderr={result.stderr!r}"
     assert "harness_cursor_detect_hitl" in result.stdout
 
 
@@ -221,8 +209,7 @@ def test_unrecognized_value_skips_detection(tmp_path):
 
 
 def test_missing_file_returns_zero():
-    assert _detect(Path("/nonexistent/path/session.jsonl"),
-                   {"MENTAT_INTERACTIVE": "0"}) == 0
+    assert _detect(Path("/nonexistent/path/session.jsonl"), {"MENTAT_INTERACTIVE": "0"}) == 0
 
 
 def test_empty_file_returns_zero(tmp_path):
@@ -232,64 +219,88 @@ def test_empty_file_returns_zero(tmp_path):
 
 
 def test_no_assistant_events_returns_zero(tmp_path):
-    jsonl = _write_jsonl(tmp_path / "sys.jsonl", [
-        {"type": "system", "subtype": "init"},
-        {"type": "result", "subtype": "success", "is_error": False},
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "sys.jsonl",
+        [
+            {"type": "system", "subtype": "init"},
+            {"type": "result", "subtype": "success", "is_error": False},
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == 0
 
 
 def test_wedge_text_ending_with_question_mark_exits_42(tmp_path):
-    jsonl = _write_jsonl(tmp_path / "wedge.jsonl", [
-        _assistant_text("Should I use option A or B?"),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "wedge.jsonl",
+        [
+            _assistant_text("Should I use option A or B?"),
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == HITL_EXIT
 
 
 def test_exit_code_is_exactly_42(tmp_path):
     """Contract: identical exit code to claude-code (ADR-0010 §HITL)."""
-    jsonl = _write_jsonl(tmp_path / "wedge.jsonl", [
-        _assistant_text("What should I do?"),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "wedge.jsonl",
+        [
+            _assistant_text("What should I do?"),
+        ],
+    )
     code = _detect(jsonl, {"MENTAT_INTERACTIVE": "0"})
     assert code == 42, f"HITL exit must be 42 (ADR-0010); got {code}"
 
 
 def test_trailing_whitespace_stripped(tmp_path):
-    jsonl = _write_jsonl(tmp_path / "wedge.jsonl", [
-        _assistant_text("Should I continue?   \n\n  "),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "wedge.jsonl",
+        [
+            _assistant_text("Should I continue?   \n\n  "),
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == HITL_EXIT
 
 
 def test_text_ending_with_period_returns_zero(tmp_path):
-    jsonl = _write_jsonl(tmp_path / "ok.jsonl", [
-        _assistant_text("Done. Implemented the feature."),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "ok.jsonl",
+        [
+            _assistant_text("Done. Implemented the feature."),
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == 0
 
 
 def test_tool_use_in_last_turn_returns_zero(tmp_path):
-    jsonl = _write_jsonl(tmp_path / "tool.jsonl", [
-        _assistant_text("Reading file."),
-        _assistant_tool_use("Read"),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "tool.jsonl",
+        [
+            _assistant_text("Reading file."),
+            _assistant_tool_use("Read"),
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == 0
 
 
 def test_earlier_tool_use_does_not_save_wedge(tmp_path):
     """Earlier tool_use; last turn is text-only ending `?` → wedge."""
-    jsonl = _write_jsonl(tmp_path / "trailing_wedge.jsonl", [
-        _assistant_tool_use("Read"),
-        _assistant_text("Did that help? Should I try something else?"),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "trailing_wedge.jsonl",
+        [
+            _assistant_tool_use("Read"),
+            _assistant_text("Did that help? Should I try something else?"),
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == HITL_EXIT
 
 
 def test_question_in_middle_only_returns_zero(tmp_path):
-    jsonl = _write_jsonl(tmp_path / "mid.jsonl", [
-        _assistant_text("I considered: should we A? No, B is better. Done."),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "mid.jsonl",
+        [
+            _assistant_text("I considered: should we A? No, B is better. Done."),
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == 0
 
 
@@ -345,9 +356,7 @@ def test_detector_references_mentat_interactive():
 def test_detector_uses_exit_code_42():
     """HITL exit code 42 must appear in cursor adapter — ADR-0010 contract."""
     src = HARNESS.read_text()
-    assert re.search(r"\b42\b", src), (
-        "cursor.sh must encode HITL exit code 42 (ADR-0010)"
-    )
+    assert re.search(r"\b42\b", src), "cursor.sh must encode HITL exit code 42 (ADR-0010)"
 
 
 def test_cursor_clause_matches_registry():
@@ -355,13 +364,9 @@ def test_cursor_clause_matches_registry():
     raw = REGISTRY.read_text()
     parsed = json.loads(re.sub(r"//.*$", "", raw, flags=re.MULTILINE))
     registry_clause = parsed["harnesses"]["cursor"]["system_prompt_template"]
-    assert registry_clause == CLAUSE, (
-        f"registry clause drifted; got {registry_clause!r}"
-    )
+    assert registry_clause == CLAUSE, f"registry clause drifted; got {registry_clause!r}"
     argv, _ = _invoke_cmd({"MENTAT_INTERACTIVE": "0"}, prompt="X")
-    assert registry_clause in argv[-1], (
-        f"AFK prompt must carry registry clause verbatim; prompt={argv[-1]!r}"
-    )
+    assert registry_clause in argv[-1], f"AFK prompt must carry registry clause verbatim; prompt={argv[-1]!r}"
 
 
 def test_registry_disallowed_tools_arg_is_empty():

@@ -64,18 +64,14 @@ def test_design_doc_titled_for_g2_s1():
     text = DOC.read_text()
     first_line = text.splitlines()[0] if text else ""
     assert first_line.startswith("# "), f"doc must start with H1; got {first_line!r}"
-    assert "container-state" in first_line.lower(), (
-        f"H1 must name container-state; got {first_line!r}"
-    )
+    assert "container-state" in first_line.lower(), f"H1 must name container-state; got {first_line!r}"
 
 
 def test_design_doc_cites_slice():
     """Doc must reference G2-S1 — drift guard so a future slice editor sees
     where this doc came from."""
     text = DOC.read_text()
-    assert "G2-S1" in text or "g2-s1" in text.lower(), (
-        "design doc must cite slice G2-S1"
-    )
+    assert "G2-S1" in text or "g2-s1" in text.lower(), "design doc must cite slice G2-S1"
 
 
 def test_design_doc_cites_parent_plan():
@@ -94,9 +90,7 @@ def test_design_doc_lists_all_five_helpers():
     one means the contract for that helper is undefined."""
     text = DOC.read_text()
     missing = [h for h in HELPERS if h not in text]
-    assert not missing, (
-        f"design doc must document all 5 helpers; missing: {missing}"
-    )
+    assert not missing, f"design doc must document all 5 helpers; missing: {missing}"
 
 
 def test_each_helper_has_a_section():
@@ -106,9 +100,7 @@ def test_each_helper_has_a_section():
     for helper in HELPERS:
         # Header line containing the helper name (any depth ##+ acceptable).
         pattern = rf"^#{{2,}}[^\n]*{re.escape(helper)}"
-        assert re.search(pattern, text, re.MULTILINE), (
-            f"helper {helper!r} must have its own section header (##/###)"
-        )
+        assert re.search(pattern, text, re.MULTILINE), f"helper {helper!r} must have its own section header (##/###)"
 
 
 # -- Signature convention (stdout + exit code) -------------------------------
@@ -122,8 +114,7 @@ def test_design_doc_states_signature_convention():
     has_stdout = "stdout" in text
     has_exit = "exit" in text and ("nonzero" in text or "non-zero" in text or "exit code" in text or "exit 0" in text)
     assert has_stdout and has_exit, (
-        "doc must state the signature convention: values on stdout, success "
-        "via exit 0 / failure via nonzero exit"
+        "doc must state the signature convention: values on stdout, success via exit 0 / failure via nonzero exit"
     )
 
 
@@ -143,8 +134,7 @@ def test_each_helper_documents_a_failure_mode():
         body = m.group("body").lower()
         signals = ("fail", "error", "exit", "abort", "die", "nonzero", "non-zero")
         assert any(s in body for s in signals), (
-            f"{helper!r} section must document its failure mode "
-            f"(expected one of {signals})"
+            f"{helper!r} section must document its failure mode (expected one of {signals})"
         )
 
 
@@ -165,17 +155,14 @@ def test_design_doc_inventories_workspace_folder_invariant():
     Doc must name it explicitly — that's invariant #1 the lib will absorb."""
     text = DOC.read_text()
     assert "workspaceFolder" in text, (
-        "doc must inventory `workspaceFolder` invariant (re-derived in "
-        "container-up + container-run)"
+        "doc must inventory `workspaceFolder` invariant (re-derived in container-up + container-run)"
     )
 
 
 def test_design_doc_inventories_safe_directory_invariant():
     """`safe.directory` is re-derived in container-up + others. Invariant #2."""
     text = DOC.read_text()
-    assert "safe.directory" in text, (
-        "doc must inventory `safe.directory` invariant"
-    )
+    assert "safe.directory" in text, "doc must inventory `safe.directory` invariant"
 
 
 def test_design_doc_inventories_slug_invariant():
@@ -211,10 +198,7 @@ def test_design_doc_invariant_count_matches_scripts():
         label = label_map.get(term, term)
         if label not in doc_text:
             missing.append(term)
-    assert not missing, (
-        f"doc misses script-side invariants: {missing} "
-        f"(sites per script: {sites_per_script})"
-    )
+    assert not missing, f"doc misses script-side invariants: {missing} (sites per script: {sites_per_script})"
 
 
 # -- Helper-specific contract sanity -----------------------------------------
@@ -225,14 +209,13 @@ def test_container_id_for_signature_documented():
     text = DOC.read_text()
     m = re.search(
         r"#{2,}[^\n]*container_id_for(?P<body>(?:(?!^#{1,2} ).)*)",
-        text, re.MULTILINE | re.DOTALL,
+        text,
+        re.MULTILINE | re.DOTALL,
     )
     assert m, "container_id_for section missing"
     body = m.group("body").lower()
     assert "slug" in body, "container_id_for must name `slug` input"
-    assert "docker" in body or "container" in body, (
-        "container_id_for must describe what it returns / looks up"
-    )
+    assert "docker" in body or "container" in body, "container_id_for must describe what it returns / looks up"
 
 
 def test_ensure_workspace_folder_signature_documented():
@@ -240,7 +223,8 @@ def test_ensure_workspace_folder_signature_documented():
     text = DOC.read_text()
     m = re.search(
         r"#{2,}[^\n]*ensure_workspace_folder(?P<body>(?:(?!^#{1,2} ).)*)",
-        text, re.MULTILINE | re.DOTALL,
+        text,
+        re.MULTILINE | re.DOTALL,
     )
     assert m, "ensure_workspace_folder section missing"
     body = m.group("body").lower()
@@ -254,13 +238,12 @@ def test_assert_safe_directory_signature_documented():
     text = DOC.read_text()
     m = re.search(
         r"#{2,}[^\n]*assert_safe_directory(?P<body>(?:(?!^#{1,2} ).)*)",
-        text, re.MULTILINE | re.DOTALL,
+        text,
+        re.MULTILINE | re.DOTALL,
     )
     assert m, "assert_safe_directory section missing"
     body = m.group("body")
-    assert "safe.directory" in body, (
-        "assert_safe_directory must reference safe.directory in its body"
-    )
+    assert "safe.directory" in body, "assert_safe_directory must reference safe.directory in its body"
 
 
 # -- Cross-reference: doc cites S2 as consumer -------------------------------
@@ -271,8 +254,6 @@ def test_design_doc_references_s2_consumer():
     `lib/container-state.sh`) — operators reading the design must know
     where the impl lives."""
     text = DOC.read_text()
-    assert (
-        "S2" in text
-        or "container-state.sh" in text
-        or "lib/container-state" in text
-    ), "design doc must cite S2 / container-state.sh as the implementation site"
+    assert "S2" in text or "container-state.sh" in text or "lib/container-state" in text, (
+        "design doc must cite S2 / container-state.sh as the implementation site"
+    )

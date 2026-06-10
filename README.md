@@ -17,13 +17,39 @@
 
 ## Install
 
-```bash
-# one-liner
-curl -fsSL https://raw.githubusercontent.com/matheushenriquefs/mentat/main/bin/mentat-install | sh
+Mentat is a Python tool (runtime: Python 3.11+, devcontainer feature).
 
-# or clone and run directly
+```bash
+# dev install (clone)
 git clone https://github.com/matheushenriquefs/mentat
-bin/mentat-install
+task install   # uv sync
+
+# user install (without clone)
+python3 .agents/skills/mentat-install/scripts/install.py
+```
+
+Dev commands:
+```bash
+task check   # lint + format + typecheck
+task test    # pytest
+```
+
+Skills invoke bins as full path (no symlink farm):
+```bash
+python3 ~/.agents/skills/mentat-<bin>/scripts/<bin>.py <subcommand>
+```
+
+Stdlib only for user-runtime; dev tooling (ruff, pyright, pytest, pydantic) pinned in `pyproject.toml`.
+
+### Pre-commit gate wiring (lefthook)
+
+Add to your project's `lefthook.yml` to run deterministic gates on staged files:
+
+```yaml
+pre-commit:
+  commands:
+    mentat-gates:
+      run: python3 ~/.agents/lib/gates/code/precommit.py {staged_files}
 ```
 
 <!-- Quickstart ------------------------------------------------------------ -->
@@ -32,16 +58,17 @@ bin/mentat-install
 
 ```bash
 # 1. create a plan
-/mentat-plan "add OAuth endpoint"
+python3 ~/.agents/skills/mentat-plan/scripts/plan.py
 
 # 2. fan out: each slice gets its own worktree + container + branch
-bin/mentat-orchestrate branch/oauth plan-oauth.md
+python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py run \
+    branch/oauth oauth-plan
 
 # 3. watch the batch land
-/mentat-track
+python3 ~/.agents/skills/mentat-session/scripts/session.py track
 
 # 4. review any ejected chunks
-bin/mentat-worktree-list
+python3 ~/.agents/skills/mentat-session/scripts/session.py doctor
 
 # 5. merge when green
 git checkout main && git merge --ff-only branch/oauth
@@ -106,4 +133,4 @@ Full documentation lives in the [wiki](../../wiki).
 
 ## License & credits
 
-MIT. Third-party skills vendored via [`vendir.yml`](vendir.yml) — attributions in [CREDITS.md](CREDITS.md).
+MIT. See [CREDITS.md](CREDITS.md).

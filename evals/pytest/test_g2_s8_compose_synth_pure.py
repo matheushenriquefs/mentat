@@ -12,6 +12,7 @@ Verify (per plan §S8):
   - "mentat-container-up still synthesizes the compose file on first up" ->
     caller-side write path still works (covered via synthesize_compose_if_absent).
 """
+
 from __future__ import annotations
 
 import json
@@ -41,21 +42,11 @@ def _run(call: str, cwd: Path, env: dict[str, str] | None = None) -> subprocess.
 
 def _seed_compose(wt: Path, service: str = "app") -> None:
     """Minimal docker-compose.yml with one build/cwd-mounted service."""
-    (wt / "docker-compose.yml").write_text(
-        "services:\n"
-        f"  {service}:\n"
-        "    build: .\n"
-        "    volumes:\n"
-        "      - .:/srv/app\n"
-    )
+    (wt / "docker-compose.yml").write_text(f"services:\n  {service}:\n    build: .\n    volumes:\n      - .:/srv/app\n")
 
 
 def _seed_dockerfile(wt: Path, workdir: str = "/srv/app") -> None:
-    (wt / "Dockerfile").write_text(
-        "FROM alpine:3.20\n"
-        f"WORKDIR {workdir}\n"
-        "CMD [\"sh\"]\n"
-    )
+    (wt / "Dockerfile").write_text(f'FROM alpine:3.20\nWORKDIR {workdir}\nCMD ["sh"]\n')
 
 
 # -- synthesize_devcontainer (compose path) ---------------------------------
@@ -149,10 +140,7 @@ def test_synthesize_compose_if_absent_writes_devcontainer_json(tmp_path):
     )
     assert res.returncode == 0, f"rc={res.returncode} stderr={res.stderr!r}"
     dcj = tmp_path / ".devcontainer" / "devcontainer.json"
-    assert dcj.is_file(), (
-        f"synthesize_compose_if_absent must write devcontainer.json; "
-        f"stderr={res.stderr!r}"
-    )
+    assert dcj.is_file(), f"synthesize_compose_if_absent must write devcontainer.json; stderr={res.stderr!r}"
     body = json.loads(dcj.read_text())
     assert body["service"] == "app"
 
@@ -167,11 +155,7 @@ def test_synthesize_compose_if_absent_does_not_poison_on_exit3(tmp_path):
     (tmp_path / "docker-compose.yml").write_text(
         # Two buildable services -> synthesize_devcontainer cannot pick one,
         # hits `exit 3`.
-        "services:\n"
-        "  app:\n"
-        "    build: .\n"
-        "  worker:\n"
-        "    build: .\n"
+        "services:\n  app:\n    build: .\n  worker:\n    build: .\n"
     )
     res = subprocess.run(
         ["bash", "-c", f". {CONTAINER_STATE} && synthesize_compose_if_absent"],
@@ -179,10 +163,7 @@ def test_synthesize_compose_if_absent_does_not_poison_on_exit3(tmp_path):
         capture_output=True,
         text=True,
     )
-    assert res.returncode != 0, (
-        f"helper must fail when compose has multiple buildable services; "
-        f"stderr={res.stderr!r}"
-    )
+    assert res.returncode != 0, f"helper must fail when compose has multiple buildable services; stderr={res.stderr!r}"
     dcj = tmp_path / ".devcontainer" / "devcontainer.json"
     assert not dcj.exists(), (
         f"poisoned target survived exit-3 — atomic tmp+mv contract broken; "

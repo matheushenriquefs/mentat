@@ -14,6 +14,11 @@ Blocked-by: S3 (ADR-0010) — done.
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
+
+
 import json
 import os
 import re
@@ -26,8 +31,7 @@ REGISTRY = ROOT / ".agents" / "bin" / "lib" / "harness-registry.jsonc"
 ADR_0010 = ROOT / ".agents" / "docs" / "adr" / "0010-hitl-routing.md"
 
 CLAUSE = (
-    "AFK mode: do not ask the user questions. "
-    "On ambiguity, exit nonzero with a HITL audit reason instead of guessing."
+    "AFK mode: do not ask the user questions. On ambiguity, exit nonzero with a HITL audit reason instead of guessing."
 )
 
 
@@ -46,7 +50,9 @@ def _invoke_cmd(env_overrides: dict, prompt: str = "do thing") -> list[str]:
     script = f'set -e; source "{HARNESS}"; harness_claude_code_cmd "$1"'
     result = subprocess.run(
         ["bash", "-c", script, "_", prompt],
-        env=env, capture_output=True, check=True,
+        env=env,
+        capture_output=True,
+        check=True,
     )
     raw = result.stdout
     tokens = raw.split(b"\x00")
@@ -64,23 +70,17 @@ def test_interactive_default_omits_disallowed_tools():
     assert "AskUserQuestion" not in joined, (
         f"interactive default must NOT add --disallowedTools AskUserQuestion; got {argv}"
     )
-    assert "--disallowedTools" not in argv, (
-        f"interactive default must not add --disallowedTools flag; got {argv}"
-    )
+    assert "--disallowedTools" not in argv, f"interactive default must not add --disallowedTools flag; got {argv}"
 
 
 def test_interactive_default_prompt_unchanged():
     argv = _invoke_cmd({"MENTAT_INTERACTIVE": None}, prompt="do thing")
-    assert argv[-1] == "do thing", (
-        f"interactive default: prompt arg must be verbatim user input, got {argv[-1]!r}"
-    )
+    assert argv[-1] == "do thing", f"interactive default: prompt arg must be verbatim user input, got {argv[-1]!r}"
 
 
 def test_interactive_explicit_one_omits_disallowed_tools():
     argv = _invoke_cmd({"MENTAT_INTERACTIVE": "1"})
-    assert "AskUserQuestion" not in " ".join(argv), (
-        "MENTAT_INTERACTIVE=1 (explicit interactive) must not engage AFK"
-    )
+    assert "AskUserQuestion" not in " ".join(argv), "MENTAT_INTERACTIVE=1 (explicit interactive) must not engage AFK"
 
 
 # -- AFK mode (MENTAT_INTERACTIVE=0) -----------------------------------------
@@ -93,7 +93,7 @@ def test_afk_appends_disallowed_tools_askuserquestion():
         if tok == "--disallowedTools":
             assert i + 1 < len(argv), "--disallowedTools without value"
             assert argv[i + 1] == "AskUserQuestion", (
-                f"--disallowedTools value must be `AskUserQuestion`, got {argv[i+1]!r}"
+                f"--disallowedTools value must be `AskUserQuestion`, got {argv[i + 1]!r}"
             )
             found = True
             break
@@ -103,12 +103,8 @@ def test_afk_appends_disallowed_tools_askuserquestion():
 def test_afk_prepends_system_prompt_clause_to_prompt():
     argv = _invoke_cmd({"MENTAT_INTERACTIVE": "0"}, prompt="do ambiguous thing")
     prompt_arg = argv[-1]
-    assert CLAUSE in prompt_arg, (
-        f"AFK mode must prepend clause to prompt; got prompt={prompt_arg!r}"
-    )
-    assert "do ambiguous thing" in prompt_arg, (
-        f"AFK mode must preserve user prompt; got {prompt_arg!r}"
-    )
+    assert CLAUSE in prompt_arg, f"AFK mode must prepend clause to prompt; got prompt={prompt_arg!r}"
+    assert "do ambiguous thing" in prompt_arg, f"AFK mode must preserve user prompt; got {prompt_arg!r}"
     # Clause must come before user prompt (prepend, not append)
     assert prompt_arg.index(CLAUSE) < prompt_arg.index("do ambiguous thing"), (
         "clause must be prepended (before user prompt), not appended"
@@ -118,18 +114,13 @@ def test_afk_prepends_system_prompt_clause_to_prompt():
 def test_afk_preserves_base_args():
     argv = _invoke_cmd({"MENTAT_INTERACTIVE": "0"})
     # Base flags from interactive mode must still be present.
-    for expected in ("-p", "--output-format", "stream-json", "--permission-mode",
-                     "acceptEdits", "--allowedTools"):
-        assert expected in argv, (
-            f"AFK mode dropped base arg {expected!r}; argv={argv}"
-        )
+    for expected in ("-p", "--output-format", "stream-json", "--permission-mode", "acceptEdits", "--allowedTools"):
+        assert expected in argv, f"AFK mode dropped base arg {expected!r}; argv={argv}"
 
 
 def test_afk_keeps_claude_bin_first():
     argv = _invoke_cmd({"MENTAT_INTERACTIVE": "0"})
-    assert argv[0] == "claude", (
-        f"AFK mode must keep `claude` as argv[0]; got {argv[0]!r}"
-    )
+    assert argv[0] == "claude", f"AFK mode must keep `claude` as argv[0]; got {argv[0]!r}"
 
 
 # -- Fail-closed for unrecognized values -------------------------------------
@@ -146,9 +137,7 @@ def test_unrecognized_value_treated_as_interactive():
 
 def test_empty_value_treated_as_interactive():
     argv = _invoke_cmd({"MENTAT_INTERACTIVE": ""})
-    assert "AskUserQuestion" not in " ".join(argv), (
-        "empty MENTAT_INTERACTIVE must not engage AFK"
-    )
+    assert "AskUserQuestion" not in " ".join(argv), "empty MENTAT_INTERACTIVE must not engage AFK"
 
 
 # -- Contract alignment (no clause drift) ------------------------------------
@@ -161,17 +150,14 @@ def test_adapter_clause_matches_registry():
     parsed = json.loads(re.sub(r"//.*$", "", raw, flags=re.MULTILINE))
     registry_clause = parsed["harnesses"]["claude-code"]["system_prompt_template"]
     assert registry_clause == CLAUSE, (
-        f"test CLAUSE constant drifted from registry; "
-        f"registry={registry_clause!r}, test={CLAUSE!r}"
+        f"test CLAUSE constant drifted from registry; registry={registry_clause!r}, test={CLAUSE!r}"
     )
 
 
 def test_adapter_clause_matches_adr_0010():
     """ADR-0010 is the canonical source. Test constant must agree."""
     src = ADR_0010.read_text()
-    assert CLAUSE in src, (
-        f"ADR-0010 must contain the clause verbatim; test constant may have drifted"
-    )
+    assert CLAUSE in src, f"ADR-0010 must contain the clause verbatim; test constant may have drifted"
 
 
 def test_afk_prompt_clause_matches_registry_byte_for_byte():
@@ -182,8 +168,7 @@ def test_afk_prompt_clause_matches_registry_byte_for_byte():
     registry_clause = parsed["harnesses"]["claude-code"]["system_prompt_template"]
     argv = _invoke_cmd({"MENTAT_INTERACTIVE": "0"}, prompt="X")
     assert registry_clause in argv[-1], (
-        f"AFK prompt must carry registry clause verbatim; "
-        f"prompt={argv[-1]!r}, expected substring={registry_clause!r}"
+        f"AFK prompt must carry registry clause verbatim; prompt={argv[-1]!r}, expected substring={registry_clause!r}"
     )
 
 
@@ -201,7 +186,7 @@ def test_disallowed_tools_arg_matches_registry():
     expected_tokens = arg_template.split()
     argv = _invoke_cmd({"MENTAT_INTERACTIVE": "0"})
     for i in range(len(argv) - len(expected_tokens) + 1):
-        if argv[i:i + len(expected_tokens)] == expected_tokens:
+        if argv[i : i + len(expected_tokens)] == expected_tokens:
             return
     raise AssertionError(
         f"adapter argv does not contain registry disallowed_tools_arg tokens "

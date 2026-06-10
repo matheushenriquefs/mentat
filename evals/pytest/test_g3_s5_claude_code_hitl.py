@@ -41,7 +41,8 @@ def _detect(jsonl_path: Path, env_overrides: dict | None = None) -> int:
     script = f'source "{HARNESS}"; harness_claude_code_detect_hitl "$1"'
     result = subprocess.run(
         ["bash", "-c", script, "_", str(jsonl_path)],
-        env=env, capture_output=True,
+        env=env,
+        capture_output=True,
     )
     return result.returncode
 
@@ -82,11 +83,12 @@ def test_detect_function_declared():
     """The detector must be defined as a callable function in the adapter."""
     script = f'source "{HARNESS}"; declare -F harness_claude_code_detect_hitl'
     result = subprocess.run(
-        ["bash", "-c", script], capture_output=True, text=True,
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 0, (
-        "harness_claude_code_detect_hitl must be declared (S5 contract); "
-        f"declare -F failed: stderr={result.stderr!r}"
+        f"harness_claude_code_detect_hitl must be declared (S5 contract); declare -F failed: stderr={result.stderr!r}"
     )
     assert "harness_claude_code_detect_hitl" in result.stdout
 
@@ -133,10 +135,13 @@ def test_empty_file_returns_zero(tmp_path):
 
 def test_no_assistant_events_returns_zero(tmp_path):
     """System-only stream has no assistant turn → not a wedge."""
-    jsonl = _write_jsonl(tmp_path / "sys.jsonl", [
-        {"type": "system", "subtype": "init"},
-        {"type": "result", "subtype": "success", "is_error": False},
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "sys.jsonl",
+        [
+            {"type": "system", "subtype": "init"},
+            {"type": "result", "subtype": "success", "is_error": False},
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == 0
 
 
@@ -145,26 +150,35 @@ def test_no_assistant_events_returns_zero(tmp_path):
 
 def test_wedge_text_ending_with_question_mark_exits_42(tmp_path):
     """AFK + last assistant turn = text-only ending in `?` → HITL exit."""
-    jsonl = _write_jsonl(tmp_path / "wedge.jsonl", [
-        _assistant_text("Should I use option A or B?"),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "wedge.jsonl",
+        [
+            _assistant_text("Should I use option A or B?"),
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == HITL_EXIT
 
 
 def test_exit_code_is_exactly_42(tmp_path):
     """ADR-0010 contract: code is 42 specifically, not generic nonzero."""
-    jsonl = _write_jsonl(tmp_path / "wedge.jsonl", [
-        _assistant_text("What should I do?"),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "wedge.jsonl",
+        [
+            _assistant_text("What should I do?"),
+        ],
+    )
     code = _detect(jsonl, {"MENTAT_INTERACTIVE": "0"})
     assert code == 42, f"HITL exit must be 42 (ADR-0010); got {code}"
 
 
 def test_trailing_whitespace_stripped(tmp_path):
     """`?` followed by trailing whitespace/newline still counts as question end."""
-    jsonl = _write_jsonl(tmp_path / "wedge.jsonl", [
-        _assistant_text("Should I continue?   \n\n  "),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "wedge.jsonl",
+        [
+            _assistant_text("Should I continue?   \n\n  "),
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == HITL_EXIT
 
 
@@ -173,44 +187,59 @@ def test_trailing_whitespace_stripped(tmp_path):
 
 def test_text_ending_with_period_returns_zero(tmp_path):
     """A statement (ending `.`) is not a wedge."""
-    jsonl = _write_jsonl(tmp_path / "ok.jsonl", [
-        _assistant_text("Done. Implemented the feature."),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "ok.jsonl",
+        [
+            _assistant_text("Done. Implemented the feature."),
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == 0
 
 
 def test_tool_use_in_last_turn_returns_zero(tmp_path):
     """Last assistant turn contains tool_use → real work, not a wedge."""
-    jsonl = _write_jsonl(tmp_path / "tool.jsonl", [
-        _assistant_text("Reading file."),
-        _assistant_tool_use("Read"),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "tool.jsonl",
+        [
+            _assistant_text("Reading file."),
+            _assistant_tool_use("Read"),
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == 0
 
 
 def test_earlier_tool_use_does_not_save_wedge(tmp_path):
     """Earlier turn had tool_use, but LAST turn is text-only ending in `?` →
     wedge. S5 contract scopes detection to the final assistant turn."""
-    jsonl = _write_jsonl(tmp_path / "trailing_wedge.jsonl", [
-        _assistant_tool_use("Read"),
-        _assistant_text("Did that help? Should I try something else?"),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "trailing_wedge.jsonl",
+        [
+            _assistant_tool_use("Read"),
+            _assistant_text("Did that help? Should I try something else?"),
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == HITL_EXIT
 
 
 def test_question_in_middle_only_returns_zero(tmp_path):
     """A `?` inside the text but not at the end is not a wedge."""
-    jsonl = _write_jsonl(tmp_path / "mid.jsonl", [
-        _assistant_text("I considered: should we A? No, B is better. Done."),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "mid.jsonl",
+        [
+            _assistant_text("I considered: should we A? No, B is better. Done."),
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == 0
 
 
 def test_empty_text_block_returns_zero(tmp_path):
     """Empty-text assistant turn → not a wedge (nothing to inspect)."""
-    jsonl = _write_jsonl(tmp_path / "empty_text.jsonl", [
-        _assistant_text(""),
-    ])
+    jsonl = _write_jsonl(
+        tmp_path / "empty_text.jsonl",
+        [
+            _assistant_text(""),
+        ],
+    )
     assert _detect(jsonl, {"MENTAT_INTERACTIVE": "0"}) == 0
 
 
@@ -260,12 +289,8 @@ def test_detector_references_mentat_interactive():
     """Source must reference MENTAT_INTERACTIVE — the AFK gate is mandatory
     per ADR-0010 (HITL only fires inside an AFK chunk)."""
     src = HARNESS.read_text()
-    assert "MENTAT_INTERACTIVE" in src, (
-        "claude-code.sh must reference MENTAT_INTERACTIVE in detector path"
-    )
-    assert "detect_hitl" in src, (
-        "claude-code.sh must define harness_claude_code_detect_hitl"
-    )
+    assert "MENTAT_INTERACTIVE" in src, "claude-code.sh must reference MENTAT_INTERACTIVE in detector path"
+    assert "detect_hitl" in src, "claude-code.sh must define harness_claude_code_detect_hitl"
 
 
 def test_detector_uses_exit_code_42():
@@ -273,6 +298,4 @@ def test_detector_uses_exit_code_42():
     code from ADR-0010. Drift guard: future renumbering breaks contract."""
     src = HARNESS.read_text()
     # 42 must appear in detector body (return/exit 42).
-    assert "42" in src, (
-        "claude-code.sh must encode HITL exit code 42 (ADR-0010)"
-    )
+    assert "42" in src, "claude-code.sh must encode HITL exit code 42 (ADR-0010)"

@@ -1,4 +1,5 @@
 """B1/B2/B3 mentat-diff: script behaviors, flags, audit, orchestrate hook."""
+
 import json
 import os
 import subprocess
@@ -40,7 +41,7 @@ def _run_end_of_batch(root: str, holding: str, landed: int, total: int, logdir: 
     rtk_stub = os.path.join(logdir, "_rtk_stub")
     os.makedirs(logdir, exist_ok=True)
     with open(rtk_stub, "w") as f:
-        f.write("#!/usr/bin/env bash\nexec \"$@\"\n")
+        f.write('#!/usr/bin/env bash\nexec "$@"\n')
     os.chmod(rtk_stub, 0o755)
     script = textwrap.dedent(f"""
         #!/usr/bin/env bash
@@ -92,11 +93,13 @@ def _make_rtk_stub(bin_dir: str) -> None:
     """Write a minimal rtk stub that passes through to git (drops the 'rtk' prefix)."""
     stub = os.path.join(bin_dir, "rtk")
     with open(stub, "w") as f:
-        f.write("#!/usr/bin/env bash\nexec \"$@\"\n")
+        f.write('#!/usr/bin/env bash\nexec "$@"\n')
     os.chmod(stub, 0o755)
 
 
-def _run_mentat_diff(root: str, holding: str, *extra_args: str, session: str = "pytest-$$") -> subprocess.CompletedProcess:
+def _run_mentat_diff(
+    root: str, holding: str, *extra_args: str, session: str = "pytest-$$"
+) -> subprocess.CompletedProcess:
     """Run mentat-diff against a git fixture. Returns CompletedProcess."""
     with tempfile.TemporaryDirectory() as stub_dir:
         _make_rtk_stub(stub_dir)
@@ -115,6 +118,7 @@ def _run_mentat_diff(root: str, holding: str, *extra_args: str, session: str = "
 
 # --- B3: wiki stub ---
 
+
 def test_wiki_stub_exists():
     """docs/wiki/commands/mentat-diff.md stub must exist."""
     assert os.path.isfile(WIKI_STUB), f"wiki stub not found: {WIKI_STUB}"
@@ -128,6 +132,7 @@ def test_wiki_stub_documents_flags():
 
 
 # --- B1: script behaviors ---
+
 
 def test_b1_branch_resolve_and_header():
     """mentat-diff resolves holding branch, prints header with branch/base/tip/files."""
@@ -181,9 +186,7 @@ def test_b1_since_flag():
     with tempfile.TemporaryDirectory() as tmp:
         root, holding = _make_git_fixture(tmp)
         # main tip = merge-base by definition in this fixture
-        base_sha = subprocess.check_output(
-            ["git", "-C", root, "rev-parse", "main"], text=True
-        ).strip()
+        base_sha = subprocess.check_output(["git", "-C", root, "rev-parse", "main"], text=True).strip()
         result = _run_mentat_diff(root, holding, f"--since={base_sha}")
         assert result.returncode == 0, f"failed:\n{result.stderr}"
         out = result.stdout
@@ -201,6 +204,7 @@ def test_b1_audit_diff_emit_jsonl():
         assert result.returncode == 0, f"failed:\n{result.stderr}"
         # Find the audit JSONL file written by this session
         import glob
+
         matches = glob.glob(os.path.join(log_base, "mentat-diff-*.jsonl"))
         assert matches, f"no audit JSONL found in {log_base}"
         events = [json.loads(line) for line in open(matches[0]) if line.strip()]
@@ -215,6 +219,7 @@ def test_b1_audit_diff_emit_jsonl():
 
 # --- B2: orchestrate hook ---
 
+
 def test_clean_drain_log_contains_diff_header():
     """LANDED==TOTAL → orchestrate log contains '--- mentat-diff ---' with file count."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -225,9 +230,7 @@ def test_clean_drain_log_contains_diff_header():
         logfile = os.path.join(logdir, "mentat-orchestrate-test-session.jsonl")
         assert os.path.exists(logfile), "orchestrate log not created"
         content = open(logfile).read()
-        assert "--- mentat-diff ---" in content, (
-            f"log missing '--- mentat-diff ---':\n{content}"
-        )
+        assert "--- mentat-diff ---" in content, f"log missing '--- mentat-diff ---':\n{content}"
         assert "files  : 1" in content, f"log missing file count line:\n{content}"
 
 
@@ -238,9 +241,7 @@ def test_clean_drain_stderr_contains_diff_section():
         logdir = os.path.join(tmp, "logs")
         result = _run_end_of_batch(root, holding, landed=1, total=1, logdir=logdir)
         assert result.returncode == 0, f"script failed:\n{result.stderr}"
-        assert "--- mentat-diff ---" in result.stderr, (
-            f"stderr missing diff header:\n{result.stderr}"
-        )
+        assert "--- mentat-diff ---" in result.stderr, f"stderr missing diff header:\n{result.stderr}"
 
 
 def test_eject_path_log_contains_skip_note():
@@ -250,12 +251,8 @@ def test_eject_path_log_contains_skip_note():
         logdir = os.path.join(tmp, "logs")
         result = _run_end_of_batch(root, holding, landed=0, total=1, logdir=logdir)
         combined = result.stdout + result.stderr
-        assert "skipped cumulative diff" in combined, (
-            f"missing skip note:\n{combined}"
-        )
-        assert f"mentat-diff {holding}" in combined, (
-            f"missing manual-run hint with holding branch:\n{combined}"
-        )
+        assert "skipped cumulative diff" in combined, f"missing skip note:\n{combined}"
+        assert f"mentat-diff {holding}" in combined, f"missing manual-run hint with holding branch:\n{combined}"
 
 
 def test_eject_path_no_diff_in_log():
@@ -267,6 +264,4 @@ def test_eject_path_no_diff_in_log():
         logfile = os.path.join(logdir, "mentat-orchestrate-test-session.jsonl")
         if os.path.exists(logfile):
             content = open(logfile).read()
-            assert "--- mentat-diff ---" not in content, (
-                f"diff header should not appear on eject path:\n{content}"
-            )
+            assert "--- mentat-diff ---" not in content, f"diff header should not appear on eject path:\n{content}"

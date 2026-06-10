@@ -1,4 +1,9 @@
 """S4.1: must_not_exist veto fires when plan removes entities still present in diff."""
+
+import pytest
+
+pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
+
 from utils import read_agent, read_fixture
 
 

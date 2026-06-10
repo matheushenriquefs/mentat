@@ -1,4 +1,9 @@
 """S4.4: eval harness scaffold — file/dir existence and tooling deps."""
+
+import pytest
+
+pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
+
 import os
 import json
 

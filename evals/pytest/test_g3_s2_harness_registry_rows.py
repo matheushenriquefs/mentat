@@ -26,13 +26,23 @@ REGISTRY = ROOT / ".agents" / "bin" / "lib" / "harness-registry.jsonc"
 HARNESS_DIR = ROOT / ".agents" / "bin" / "lib" / "harness"
 
 CANONICAL_NAMES = (
-    "aider", "amp", "claude-code", "codex", "copilot",
-    "cursor", "gemini", "openhands",
+    "aider",
+    "amp",
+    "claude-code",
+    "codex",
+    "copilot",
+    "cursor",
+    "gemini",
+    "openhands",
 )
 
 REQUIRED_FIELDS = (
-    "name", "bin", "base_args", "supports_afk",
-    "disallowed_tools_arg", "system_prompt_template",
+    "name",
+    "bin",
+    "base_args",
+    "supports_afk",
+    "disallowed_tools_arg",
+    "system_prompt_template",
 )
 
 AFK_ADAPTERS = ("claude-code", "cursor")
@@ -58,8 +68,7 @@ def test_registry_has_eight_harness_rows():
 def test_registry_row_keys_match_canonical_set():
     parsed = _load()
     assert set(parsed["harnesses"]) == set(CANONICAL_NAMES), (
-        f"row keys {sorted(parsed['harnesses'])} must equal canonical "
-        f"set {sorted(CANONICAL_NAMES)}"
+        f"row keys {sorted(parsed['harnesses'])} must equal canonical set {sorted(CANONICAL_NAMES)}"
     )
 
 
@@ -79,9 +88,7 @@ def test_every_row_has_all_required_fields():
 def test_row_name_field_equals_key():
     parsed = _load()
     for key, row in parsed["harnesses"].items():
-        assert row["name"] == key, (
-            f"row[{key!r}].name == {row['name']!r}, must equal key"
-        )
+        assert row["name"] == key, f"row[{key!r}].name == {row['name']!r}, must equal key"
 
 
 def test_row_bin_is_non_empty_string():
@@ -98,9 +105,7 @@ def test_row_base_args_is_list_of_strings():
         ba = row["base_args"]
         assert isinstance(ba, list), f"row[{name!r}].base_args must be list, got {type(ba).__name__}"
         for i, arg in enumerate(ba):
-            assert isinstance(arg, str), (
-                f"row[{name!r}].base_args[{i}] must be string, got {type(arg).__name__}"
-            )
+            assert isinstance(arg, str), f"row[{name!r}].base_args[{i}] must be string, got {type(arg).__name__}"
 
 
 def test_row_supports_afk_is_bool():
@@ -114,17 +119,13 @@ def test_row_supports_afk_is_bool():
 def test_row_disallowed_tools_arg_is_string():
     parsed = _load()
     for name, row in parsed["harnesses"].items():
-        assert isinstance(row["disallowed_tools_arg"], str), (
-            f"row[{name!r}].disallowed_tools_arg must be string"
-        )
+        assert isinstance(row["disallowed_tools_arg"], str), f"row[{name!r}].disallowed_tools_arg must be string"
 
 
 def test_row_system_prompt_template_is_string():
     parsed = _load()
     for name, row in parsed["harnesses"].items():
-        assert isinstance(row["system_prompt_template"], str), (
-            f"row[{name!r}].system_prompt_template must be string"
-        )
+        assert isinstance(row["system_prompt_template"], str), f"row[{name!r}].system_prompt_template must be string"
 
 
 # -- supports_afk binding ----------------------------------------------------
@@ -146,9 +147,7 @@ def test_every_row_name_has_adapter_file():
     parsed = _load()
     for name in parsed["harnesses"]:
         adapter = HARNESS_DIR / f"{name}.sh"
-        assert adapter.is_file(), (
-            f"row[{name!r}] must correspond to {adapter.relative_to(ROOT)} — missing"
-        )
+        assert adapter.is_file(), f"row[{name!r}] must correspond to {adapter.relative_to(ROOT)} — missing"
 
 
 # -- AFK-enforcing adapters carry non-empty system prompt clause -------------
@@ -178,8 +177,7 @@ def test_claude_code_disallowed_tools_arg_names_ask_user_question():
     parsed = _load()
     arg = parsed["harnesses"]["claude-code"]["disallowed_tools_arg"]
     assert "AskUserQuestion" in arg, (
-        f"claude-code disallowed_tools_arg must reference AskUserQuestion "
-        f"(per G3-S4 plan), got {arg!r}"
+        f"claude-code disallowed_tools_arg must reference AskUserQuestion (per G3-S4 plan), got {arg!r}"
     )
 
 
@@ -206,8 +204,7 @@ def test_row_bin_matches_adapter_executable():
     for name, expected in expected_bins.items():
         actual = parsed["harnesses"][name]["bin"]
         assert actual == expected, (
-            f"row[{name!r}].bin == {actual!r}, expected {expected!r} "
-            f"(must match printf token in lib/harness/{name}.sh)"
+            f"row[{name!r}].bin == {actual!r}, expected {expected!r} (must match printf token in lib/harness/{name}.sh)"
         )
 
 
@@ -224,8 +221,7 @@ def test_required_fields_list_unchanged():
 def test_on_unknown_still_refuse():
     parsed = _load()
     assert parsed["on_unknown"] == "refuse", (
-        f"on_unknown must remain 'refuse' (S1 fail-closed invariant), "
-        f"got {parsed['on_unknown']!r}"
+        f"on_unknown must remain 'refuse' (S1 fail-closed invariant), got {parsed['on_unknown']!r}"
     )
 
 

@@ -33,8 +33,8 @@ LIB = ROOT / ".agents" / "bin" / "lib" / "container-state.sh"
 # Helpers S5 must invoke. -down doesn't need ensure_workspace_folder or
 # assert_safe_directory — it asserts ownership (slug-label filter) and removes.
 LIB_HELPERS_USED_BY_DOWN = (
-    "container_slug_for_cwd",   # replaces inline `basename "$PWD"`
-    "container_id_for",         # canonical CID/ownership probe
+    "container_slug_for_cwd",  # replaces inline `basename "$PWD"`
+    "container_id_for",  # canonical CID/ownership probe
 )
 
 
@@ -53,17 +53,13 @@ def test_script_exists_and_executable():
 
 
 def test_script_bash_syntax_clean():
-    r = subprocess.run(
-        ["bash", "-n", str(SCRIPT)], capture_output=True, text=True
-    )
+    r = subprocess.run(["bash", "-n", str(SCRIPT)], capture_output=True, text=True)
     assert r.returncode == 0, f"bash -n failed:\n{r.stderr}"
 
 
 def test_lib_exists_as_prerequisite():
     """S5 is blocked-by S2 — the lib must already exist on disk."""
-    assert LIB.is_file(), (
-        f"S5 cannot delegate to a lib that does not exist: {LIB}"
-    )
+    assert LIB.is_file(), f"S5 cannot delegate to a lib that does not exist: {LIB}"
 
 
 # -- Delegation: script sources the lib --------------------------------------
@@ -72,12 +68,9 @@ def test_lib_exists_as_prerequisite():
 def test_script_sources_container_state_lib():
     """S5 core delta: the script must source lib/container-state.sh."""
     text = SCRIPT.read_text()
-    pattern = re.compile(
-        r"^\s*(\.|source)\s+.*lib/container-state\.sh\b", re.MULTILINE
-    )
+    pattern = re.compile(r"^\s*(\.|source)\s+.*lib/container-state\.sh\b", re.MULTILINE)
     assert pattern.search(text), (
-        "mentat-container-down must source lib/container-state.sh — "
-        "S5 delegation depends on it"
+        "mentat-container-down must source lib/container-state.sh — S5 delegation depends on it"
     )
 
 
@@ -99,8 +92,7 @@ def test_script_sources_lib_before_first_helper_call():
                 continue
             if re.search(rf"\b{re.escape(helper)}\b", line):
                 assert j > source_idx, (
-                    f"{helper} called at line {j+1} before lib sourced "
-                    f"(source at line {source_idx+1})"
+                    f"{helper} called at line {j + 1} before lib sourced (source at line {source_idx + 1})"
                 )
                 break
 
@@ -122,8 +114,7 @@ def test_script_invokes_container_id_for():
     Comments stripped."""
     text = _strip_comments(SCRIPT.read_text())
     assert re.search(r"\bcontainer_id_for\b", text), (
-        "mentat-container-down must look up / probe the container via "
-        "container_id_for (plan S5 spec)"
+        "mentat-container-down must look up / probe the container via container_id_for (plan S5 spec)"
     )
 
 
@@ -140,7 +131,7 @@ def test_inline_slug_basename_derivation_removed():
         no_comments,
     )
     assert bad is None, (
-        "inline `SLUG=$(basename \"$PWD\")` must be replaced by "
+        'inline `SLUG=$(basename "$PWD")` must be replaced by '
         "container_slug_for_cwd call "
         f"(found: {bad.group(0) if bad else ''!r})"
     )
@@ -168,8 +159,8 @@ def test_container_id_for_fires_before_docker_rm():
     assert first_cid is not None, "script must call container_id_for"
     assert first_rm is not None, "script must still call `docker rm` to tear down"
     assert first_cid < first_rm, (
-        f"container_id_for at line {first_cid+1} must precede `docker rm` "
-        f"at line {first_rm+1} — ownership probe runs before destructive op"
+        f"container_id_for at line {first_cid + 1} must precede `docker rm` "
+        f"at line {first_rm + 1} — ownership probe runs before destructive op"
     )
 
 
@@ -185,26 +176,19 @@ def test_docker_rm_calls_are_slug_label_gated():
     """
     text = SCRIPT.read_text()
     no_comments = _strip_comments(text)
-    rm_lines = [
-        line for line in no_comments.splitlines()
-        if re.search(r"\bdocker\s+rm\b", line)
-    ]
+    rm_lines = [line for line in no_comments.splitlines() if re.search(r"\bdocker\s+rm\b", line)]
     assert rm_lines, "script must still call docker rm"
     label_filter_assigned = bool(
-        re.search(r'docker\s+ps\s+-aq\s+--filter\s+"label=mentat_slug=\$SLUG"',
-                  no_comments)
-        or re.search(r'docker\s+ps\s+-aq\s+--filter\s+"label=mentat_slug=\$\{?SLUG\}?"',
-                     no_comments)
+        re.search(r'docker\s+ps\s+-aq\s+--filter\s+"label=mentat_slug=\$SLUG"', no_comments)
+        or re.search(r'docker\s+ps\s+-aq\s+--filter\s+"label=mentat_slug=\$\{?SLUG\}?"', no_comments)
     )
     cid_assigned_via_lib = bool(
         re.search(r'\bCID\s*=\s*"\$\(\s*container_id_for\b', no_comments)
         or re.search(r'\bcid\s*=\s*"\$\(\s*container_id_for\b', no_comments)
     )
     for line in rm_lines:
-        looks_slug_gated = (
-            bool(re.search(r'\$\{?ids\}?', line)) and label_filter_assigned
-        ) or (
-            bool(re.search(r'\$\{?CID\}?|\$\{?cid\}?', line)) and cid_assigned_via_lib
+        looks_slug_gated = (bool(re.search(r"\$\{?ids\}?", line)) and label_filter_assigned) or (
+            bool(re.search(r"\$\{?CID\}?|\$\{?cid\}?", line)) and cid_assigned_via_lib
         )
         assert looks_slug_gated, (
             f"docker rm line must operate on slug-label-derived ids OR a "
@@ -229,20 +213,26 @@ def test_script_exits_zero_on_already_down(tmp_path):
     bin_dir.mkdir()
     log = tmp_path / "calls.log"
 
-    _make_fake_bin(bin_dir, "docker", textwrap.dedent(f"""\
+    _make_fake_bin(
+        bin_dir,
+        "docker",
+        textwrap.dedent(f"""\
         #!/bin/bash
         echo "docker $*" >> {log}
         case "$1" in
           ps) ;;  # empty stdout — no containers anywhere
           rm) echo "BUG: docker rm called when no container exists" >&2; exit 99 ;;
         esac
-        """))
+        """),
+    )
 
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path)}
     r = subprocess.run(
         [str(SCRIPT)],
         cwd=str(wt),
-        capture_output=True, text=True, env=env,
+        capture_output=True,
+        text=True,
+        env=env,
     )
     assert r.returncode == 0, (
         f"already-down must exit 0; got rc={r.returncode}\n"
@@ -269,12 +259,12 @@ def test_script_aborts_outside_worktree(tmp_path):
     r = subprocess.run(
         [str(SCRIPT)],
         cwd=str(tmp_path),
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
         env={"PATH": "/usr/bin:/bin"},
     )
     assert r.returncode != 0, (
-        f"script must exit nonzero outside a git worktree; got rc=0\n"
-        f"stdout={r.stdout!r}\nstderr={r.stderr!r}"
+        f"script must exit nonzero outside a git worktree; got rc=0\nstdout={r.stdout!r}\nstderr={r.stderr!r}"
     )
     assert "worktree" in r.stderr.lower() or "git" in r.stderr.lower(), (
         f"abort msg must name cause; got stderr={r.stderr!r}"
@@ -314,7 +304,10 @@ def test_down_only_targets_current_slug_label(tmp_path):
 
     # Fake docker: returns fake CID for slug A; would return separate CID for
     # slug B (but slug B's filter must never appear in calls).
-    _make_fake_bin(bin_dir, "docker", textwrap.dedent(f"""\
+    _make_fake_bin(
+        bin_dir,
+        "docker",
+        textwrap.dedent(f"""\
         #!/bin/bash
         echo "docker $*" >> {log}
         case "$1" in
@@ -327,39 +320,34 @@ def test_down_only_targets_current_slug_label(tmp_path):
             ;;
           rm) exit 0 ;;
         esac
-        """))
+        """),
+    )
 
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path)}
     r = subprocess.run(
         [str(SCRIPT)],
         cwd=str(wt_a),
-        capture_output=True, text=True, env=env,
+        capture_output=True,
+        text=True,
+        env=env,
     )
     assert r.returncode == 0, (
-        f"down on slug A must succeed; got rc={r.returncode}\n"
-        f"stdout={r.stdout!r}\nstderr={r.stderr!r}"
+        f"down on slug A must succeed; got rc={r.returncode}\nstdout={r.stdout!r}\nstderr={r.stderr!r}"
     )
     calls = log.read_text() if log.exists() else ""
     # Slug A must appear in ps filter (ownership probe and/or cleanup).
-    assert f"mentat_slug={slug_a}" in calls, (
-        f"ps filter must scope to slug A; got calls:\n{calls}"
-    )
+    assert f"mentat_slug={slug_a}" in calls, f"ps filter must scope to slug A; got calls:\n{calls}"
     # Slug B must NEVER appear — the script must not probe siblings.
-    assert f"mentat_slug={slug_b}" not in calls, (
-        f"down on slug A must not query slug B's label; got calls:\n{calls}"
-    )
+    assert f"mentat_slug={slug_b}" not in calls, f"down on slug A must not query slug B's label; got calls:\n{calls}"
     # rm must have fired against the slug-A-derived CID(s) only.
-    rm_lines = [line for line in calls.splitlines()
-                if re.match(r"docker\s+rm\b", line)]
+    rm_lines = [line for line in calls.splitlines() if re.match(r"docker\s+rm\b", line)]
     assert rm_lines, f"docker rm must fire when slug A's container exists; calls=\n{calls}"
     for line in rm_lines:
         assert "fakecidA" in line, (
-            f"docker rm line must target slug-A CID (fakecidA); "
-            f"found: {line!r}\nfull calls:\n{calls}"
+            f"docker rm line must target slug-A CID (fakecidA); found: {line!r}\nfull calls:\n{calls}"
         )
         assert "fakecidB" not in line, (
-            f"docker rm line must not target slug-B CID; "
-            f"found: {line!r}\nfull calls:\n{calls}"
+            f"docker rm line must not target slug-B CID; found: {line!r}\nfull calls:\n{calls}"
         )
 
 
@@ -378,7 +366,10 @@ def test_down_running_container_invokes_lib_helpers_end_to_end(tmp_path):
     bin_dir.mkdir()
     log = tmp_path / "calls.log"
 
-    _make_fake_bin(bin_dir, "docker", textwrap.dedent(f"""\
+    _make_fake_bin(
+        bin_dir,
+        "docker",
+        textwrap.dedent(f"""\
         #!/bin/bash
         echo "docker $*" >> {log}
         case "$1" in
@@ -389,13 +380,16 @@ def test_down_running_container_invokes_lib_helpers_end_to_end(tmp_path):
             ;;
           rm) exit 0 ;;
         esac
-        """))
+        """),
+    )
 
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path)}
     r = subprocess.run(
         [str(SCRIPT)],
         cwd=str(wt),
-        capture_output=True, text=True, env=env,
+        capture_output=True,
+        text=True,
+        env=env,
     )
     assert r.returncode == 0, (
         f"down path must succeed; got rc={r.returncode}\n"
@@ -405,17 +399,13 @@ def test_down_running_container_invokes_lib_helpers_end_to_end(tmp_path):
 
     calls = log.read_text() if log.exists() else ""
     # container_id_for shape: `docker ps -q --filter label=mentat_slug=<slug>`
-    ps_q_lines = [line for line in calls.splitlines()
-                  if re.match(r"docker\s+ps\s+-q\b", line)]
-    assert ps_q_lines, (
-        f"container_id_for must invoke `docker ps -q ...`; got calls:\n{calls}"
-    )
+    ps_q_lines = [line for line in calls.splitlines() if re.match(r"docker\s+ps\s+-q\b", line)]
+    assert ps_q_lines, f"container_id_for must invoke `docker ps -q ...`; got calls:\n{calls}"
     assert any(f"mentat_slug={slug}" in line for line in ps_q_lines), (
         f"`docker ps -q` must carry slug label; got ps -q lines:\n{ps_q_lines}"
     )
     # Removal fires.
-    rm_lines = [line for line in calls.splitlines()
-                if re.match(r"docker\s+rm\b", line)]
+    rm_lines = [line for line in calls.splitlines() if re.match(r"docker\s+rm\b", line)]
     assert rm_lines, f"docker rm must fire on running-slug down; calls=\n{calls}"
 
 
@@ -430,8 +420,5 @@ def test_all_required_invariants_have_lib_calls():
         "slug": r"\bcontainer_slug_for_cwd\b",
         "container-id": r"\bcontainer_id_for\b",
     }
-    missing = [name for name, pat in invariants.items()
-               if not re.search(pat, text)]
-    assert not missing, (
-        f"invariants missing lib-call sites in mentat-container-down: {missing}"
-    )
+    missing = [name for name, pat in invariants.items() if not re.search(pat, text)]
+    assert not missing, f"invariants missing lib-call sites in mentat-container-down: {missing}"
