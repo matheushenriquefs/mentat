@@ -42,9 +42,9 @@ Selection: `~/.mentat/config.jsonc` `harness:` key; `--harness` flag overrides.
 
 **Verdict JSONL shape:**
 ```
-{slug, outcome, tip, reason?, conflicted_files?, resume_cmd?, findings?}
-  outcome ∈ {success, eject}
-  reason  ∈ {rebase-conflict, gate-fail, not-ff, implement-fail, hitl-ambiguity}
+{slug, status, tip, reason?, conflicted_files?, resume_cmd?, findings?}
+  status ∈ {success, eject}
+  reason ∈ {rebase-conflict, gate-fail, not-ff, implement-fail, hitl-ambiguity}
 ```
 
 Exit codes: 0 all-landed; 1 partial; ≥2 tool error.
