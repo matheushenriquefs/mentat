@@ -1,4 +1,4 @@
-"""Tests for mentat-orchestrate final_review module."""
+"""Tests for mentat-orchestrate batch_review module."""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ def load_module(name: str):
     return mod
 
 
-def test_final_review_advisory_emits_batch_reviewed():
-    fr = load_module("final_review")
+def test_batch_review_advisory_emits_batch_reviewed():
+    fr = load_module("batch_review")
 
     with patch.object(fr, "_emit_event") as mock_emit:
         fr.review(session_id="sess-1")

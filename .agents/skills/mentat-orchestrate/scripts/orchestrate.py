@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""mentat-orchestrate — run / fan-out / land-queue / final-review."""
+"""mentat-orchestrate — run / fan-out / land-queue / batch-review."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ _utils = _load_sibling("utils")
 _routing = _load_sibling("routing")
 _fan_out = _load_sibling("fan_out")
 _land_queue = _load_sibling("land_queue")
-_final_review = _load_sibling("final_review")
+_batch_review = _load_sibling("batch_review")
 
 
 def _resolve_plan_refs(refs: list[str]) -> list[Path]:
@@ -102,7 +102,7 @@ def run_orchestrate(
         print(f"[dry-run] would anchor: {[p.slug for p in anchored]}")
         print(f"[dry-run] would spawn: {[p.slug for p in auto]}")
         _land_all([], holding=holding)
-        _final_review.review(session_id=os.environ.get("MENTAT_SESSION", "dry-run"))
+        _batch_review.review(session_id=os.environ.get("MENTAT_SESSION", "dry-run"))
         return 0
 
     # Spawn AFK plans headless
@@ -119,7 +119,7 @@ def run_orchestrate(
     results = _land_all(all_chunks, holding=holding)
 
     session_id = os.environ.get("MENTAT_SESSION", f"session-{os.getpid()}")
-    _final_review.review(session_id)
+    _batch_review.review(session_id)
 
     any_ejected = any(r.get("status") == "eject" for r in results)
     return 1 if any_ejected else 0
@@ -142,7 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
     lq_p = sub.add_parser("land-queue", help="Debug: land chunks from stdin")
     lq_p.add_argument("holding", help="Holding branch")
 
-    fr_p = sub.add_parser("final-review", help="Debug: re-run final review")
+    fr_p = sub.add_parser("batch-review", help="Debug: re-run batch review")
     fr_p.add_argument("session", help="Session ID")
 
     return p
@@ -175,8 +175,8 @@ def main() -> None:
         for r in results:
             print(json.dumps(r))
 
-    elif args.cmd == "final-review":
-        _final_review.review(args.session)
+    elif args.cmd == "batch-review":
+        _batch_review.review(args.session)
 
 
 if __name__ == "__main__":

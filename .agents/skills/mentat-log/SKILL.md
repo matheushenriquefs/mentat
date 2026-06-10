@@ -42,7 +42,7 @@ Subcommands: `emit`, `validate`, `query`, `prune`.
 - `chunk.ejected` — when a chunk fails gate, has a rebase conflict, or needs HITL.
 - `gate.evaluated` — each gate result (code or LLM).
 - `review.submitted` — each reviewer score in the ADR-0003 gate pass.
-- `batch.reviewed` — end-of-queue advisory final review.
+- `batch.reviewed` — end-of-queue advisory batch review.
 
 ## Environment variables
 
@@ -54,3 +54,29 @@ Subcommands: `emit`, `validate`, `query`, `prune`.
 | `MENTAT_SLUG` | `manual-<pid>` | Agent slug for log filename |
 
 Log dir created with `mode=0o700` on first write. Reject + sidecar on: unknown event, missing required field, non-JSON payload.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 1 | Validation failure or prune dry-run found violations |
+| 64 | CLI arg parse error / missing subcommand |
+| 70 | Unhandled Python exception |
+
+## Rules
+
+- `EVENT_CATALOG` in `log.py` is single source of truth; no event emitted outside catalog.
+- `emit` writes atomically: temp file + rename, never partial append.
+- `validate` reads all `.jsonl` files under `MENTAT_LOG_PATH`; exit 0 if all valid.
+- `query` filters by `event`, `session`, `repo`, `since`, or `slug`; outputs JSONL to stdout.
+- `prune` deletes entries older than `--days`; `--dry-run` prints without deleting.
+- Sidecar file (`.bad`) written beside any rejected entry for forensics.
+
+## Constraints
+
+- Log path is `~/.mentat/logs/<repo>/<session>/<slug>.jsonl`.
+- `mode=0o700` on log dir; log files `mode=0o600`.
+- `emit` never raises on I/O error — logs to stderr, exits 0 (fire-and-forget contract).
+- `validate` and `query` raise on I/O error — callers rely on exit code.
+- No external dependencies; stdlib only.
