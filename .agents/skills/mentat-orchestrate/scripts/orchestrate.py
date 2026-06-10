@@ -12,13 +12,27 @@ from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parent
 _SKILL_ROOT = _SCRIPTS.parents[2]
-sys.path.insert(0, str(_SCRIPTS))
 
-import utils as _utils
-import routing as _routing
-import fan_out as _fan_out
-import land_queue as _land_queue
-import final_review as _final_review
+import importlib.util as _ilu
+
+
+def _load_sibling(name: str):
+    here = Path(__file__).parent
+    key = f"{here.parent.name}.{name}"
+    if key in sys.modules:
+        return sys.modules[key]
+    spec = _ilu.spec_from_file_location(key, here / f"{name}.py")
+    mod = _ilu.module_from_spec(spec)
+    sys.modules[key] = mod
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+_utils = _load_sibling("utils")
+_routing = _load_sibling("routing")
+_fan_out = _load_sibling("fan_out")
+_land_queue = _load_sibling("land_queue")
+_final_review = _load_sibling("final_review")
 
 
 def _resolve_plan_refs(refs: list[str]) -> list[Path]:
@@ -75,8 +89,7 @@ def _land_all(chunk_slugs: list[str], *, holding: str) -> list[dict]:
 
 
 def _final_review(session_id: str) -> None:
-    _final_review_mod = _final_review
-    _final_review_mod.review(session_id)
+    _final_review.review(session_id)
 
 
 def run_orchestrate(
