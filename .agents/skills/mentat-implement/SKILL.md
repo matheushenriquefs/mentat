@@ -71,6 +71,22 @@ mentat-implement <single-plan-slug>
 - All emit calls route through `mentat-log emit`; never write JSONL directly.
 - Read-only test mount enforced per `<slug>.tests.json` manifest when present.
 
+## Read-only test mount (ADR-0010)
+
+When `~/.agents/plans/<slug>.tests.json` exists, `mentat-implement` reads it before
+`/mentat-container-up`:
+
+```json
+{ "closed": ["tests/test_foo.py"], "open": ["tests/test_new.py"] }
+```
+
+- `closed - open` paths → mounted `readonly` via `--mount type=bind,...,readonly`.
+- `open` paths → writable (plan author declared intent to modify them).
+- Absent manifest → no extra mounts; ADR-0006 soft layer still applies.
+
+`mark-test-writable <path>` subcommand flips a closed path writable for the red-test
+step; reverts to `ro,bind` after red commits. Audited as `test.writable.requested`.
+
 ## Constraints
 
 - HITL class: `AskUserQuestion` allowed at any phase.
