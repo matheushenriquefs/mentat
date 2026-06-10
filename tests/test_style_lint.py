@@ -22,7 +22,7 @@ lint = _load()
 
 
 def _thin_skill(tmp_path: Path, content: str) -> Path:
-    d = tmp_path / ".agents" / "skills" / "mentat-git"
+    d = tmp_path / ".agents" / "skills" / "mentat-install"
     d.mkdir(parents=True)
     p = d / "SKILL.md"
     p.write_text(content)
@@ -47,11 +47,11 @@ def _crew_agent(tmp_path: Path, content: str) -> Path:
 
 CLEAN_THIN = textwrap.dedent("""\
     ---
-    name: mentat-git
-    description: Git operations in the devcontainer. Use when committing.
+    name: mentat-install
+    description: Install mentat skills into the devcontainer. Use when bootstrapping.
     ---
 
-    1. Run `python3 ~/.agents/skills/mentat-git/scripts/git.py commit`.
+    1. Run `python3 ~/.agents/skills/mentat-install/scripts/install.py`.
     2. Done.
 """)
 
@@ -318,7 +318,7 @@ def test_crew_missing_tools_key(tmp_path):
 
 
 def test_thin_missing_name_key(tmp_path):
-    no_name = CLEAN_THIN.replace("name: mentat-git\n", "")
+    no_name = CLEAN_THIN.replace("name: mentat-install\n", "")
     p = _thin_skill(tmp_path, no_name)
     errs = lint.lint_file(p)
     assert any("'name'" in e for e in errs)

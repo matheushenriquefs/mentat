@@ -64,6 +64,7 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py batch-review 
 - Gate required on each chunk before land; ejected chunk leaves worktree intact.
 - `batch-review` is advisory; never blocks the batch.
 - All emit calls route through `mentat-log emit` per ADR-0007.
+- Doctor handoff fires after batch settle; never blocks shell return.
 
 ## Constraints
 
@@ -73,3 +74,7 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py batch-review 
 - `--dry-run` prints what would run; does not spawn or land.
 - Session id from `$MENTAT_SESSION` for audit events.
 - `batch-review` is always advisory; ejected counts do not affect its exit code.
+
+## Doctor handoff
+
+Non-zero exit (`≥1` chunk ejected, container miss, malformed plan, unhandled exception) → spawn `mentat-session doctor --reason=batch-failed` non-blocking after the batch settles. Doctor failure is swallowed; the batch exit code is authoritative.
