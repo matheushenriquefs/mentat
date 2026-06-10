@@ -6,6 +6,7 @@
     "promptfoo": "^0.100.0"
   },
   "scripts": {
-    "eval": "promptfoo eval --config evals/promptfoo/promptfooconfig.yaml"
+    "eval": "promptfoo eval --config evals/promptfoo/promptfooconfig.yaml",
+    "embed-docs": "python3 tasks/embed_docs.py"
   }
 }
