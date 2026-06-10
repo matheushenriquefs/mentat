@@ -1,6 +1,8 @@
-import subprocess
 import os
+import subprocess
+
 import pytest
+
 from utils import read_agent
 
 

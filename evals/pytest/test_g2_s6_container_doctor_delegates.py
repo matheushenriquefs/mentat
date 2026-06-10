@@ -226,7 +226,7 @@ def test_doctor_healthy_worktree_returns_clean(tmp_path):
     fail_lines = [ln for ln in out.splitlines() if ln.startswith("FAIL")]
     state_terms = ("container", "workspaceFolder", "safe.directory", "slug")
     leaking = [ln for ln in fail_lines if any(term in ln for term in state_terms)]
-    assert not leaking, f"healthy worktree must have no FAIL on state predicates; got:\n" + "\n".join(leaking)
+    assert not leaking, "healthy worktree must have no FAIL on state predicates; got:\n" + "\n".join(leaking)
 
 
 def test_doctor_missing_workspace_folder_names_path(tmp_path):

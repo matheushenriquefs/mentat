@@ -7,13 +7,12 @@ import os
 import stat
 from pathlib import Path
 
-
-
 LOG_SCRIPT = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-log/scripts/log.py"
 
 
 def run_log(args: list[str], env: dict | None = None, input: str | None = None):
     import subprocess
+
     full_env = {**os.environ, **(env or {})}
     return subprocess.run(
         ["python3", str(LOG_SCRIPT), *args],
@@ -48,7 +47,7 @@ def test_emit_unknown_event_rejected(tmp_path):
 def test_emit_missing_required_field_routes_to_sidecar(tmp_path):
     env = {"MENTAT_LOG_PATH": str(tmp_path), "MENTAT_SESSION": "s1", "MENTAT_REPO": "repo1"}
     # plan.started requires "path"
-    result = run_log(["emit", "mentat-plan", "plan.started", '{}'], env=env)
+    result = run_log(["emit", "mentat-plan", "plan.started", "{}"], env=env)
     assert result.returncode != 0
     sidecar_files = list(tmp_path.rglob("*.stderr"))
     assert sidecar_files, "no sidecar written"
@@ -65,13 +64,15 @@ def test_emit_creates_log_dir_0700(tmp_path):
 
 def test_validate_catches_missing_field(tmp_path):
     # Write a JSONL with a missing required field
-    bad_row = json.dumps({
-        "ts": "2026-01-01T00:00:00+00:00",
-        "agent": "mentat-plan",
-        "session": "s1",
-        "event": "plan.started",
-        "payload": {},  # missing "path"
-    })
+    bad_row = json.dumps(
+        {
+            "ts": "2026-01-01T00:00:00+00:00",
+            "agent": "mentat-plan",
+            "session": "s1",
+            "event": "plan.started",
+            "payload": {},  # missing "path"
+        }
+    )
     log_file = tmp_path / "test.jsonl"
     log_file.write_text(bad_row + "\n")
     result = run_log(["validate", str(log_file)])
@@ -103,6 +104,7 @@ def test_query_filters_by_agent(tmp_path):
 
 def test_prune_drops_old_dirs(tmp_path):
     import time
+
     repo_dir = tmp_path / "repo1"
     old_session = repo_dir / "old-session"
     new_session = repo_dir / "new-session"
@@ -114,6 +116,7 @@ def test_prune_drops_old_dirs(tmp_path):
     env = {"MENTAT_LOG_PATH": str(tmp_path), "MENTAT_REPO": "repo1"}
     # Prune sessions older than 5 days
     import datetime
+
     cutoff = (datetime.date.today() - datetime.timedelta(days=5)).isoformat()
     result = run_log(["prune", "--before", cutoff], env=env)
     assert result.returncode == 0, result.stderr
@@ -124,9 +127,8 @@ def test_prune_drops_old_dirs(tmp_path):
 def test_event_catalog_matches_parent_plan():
     """Pin: exactly 9 canonical events with exact names from plan §A."""
     import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "log", LOG_SCRIPT
-    )
+
+    spec = importlib.util.spec_from_file_location("log", LOG_SCRIPT)
     mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     catalog = mod.EVENT_CATALOG
@@ -142,6 +144,6 @@ def test_event_catalog_matches_parent_plan():
         "batch.reviewed",
     }
     assert set(catalog.keys()) == expected, (
-        f"catalog mismatch. extra={set(catalog)-expected} missing={expected-set(catalog)}"
+        f"catalog mismatch. extra={set(catalog) - expected} missing={expected - set(catalog)}"
     )
     assert len(catalog) == 9

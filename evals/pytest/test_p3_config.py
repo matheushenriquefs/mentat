@@ -6,7 +6,6 @@ pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrit
 
 import os
 import subprocess
-import json
 import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
-
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-session/scripts"
 
@@ -51,11 +52,19 @@ def test_chunks_in_session_lists_all(tmp_path):
 def test_verdict_for_chunk_landed(tmp_path):
     doctor_mod = load_module("doctor")
     session_dir = tmp_path / "sess-1"
-    _write_log(session_dir, "mentat-orchestrate", [
-        {"ts": "2026-01-01T00:00:00+00:00", "agent": "mentat-orchestrate",
-         "session": "sess-1", "event": "chunk.landed",
-         "payload": {"slug": "my-chunk", "sha": "abc123", "holding": "main"}},
-    ])
+    _write_log(
+        session_dir,
+        "mentat-orchestrate",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "agent": "mentat-orchestrate",
+                "session": "sess-1",
+                "event": "chunk.landed",
+                "payload": {"slug": "my-chunk", "sha": "abc123", "holding": "main"},
+            },
+        ],
+    )
     verdict = doctor_mod.build_verdict(session_dir)
     assert "landed" in verdict.lower() or "success" in verdict.lower()
 
@@ -63,11 +72,19 @@ def test_verdict_for_chunk_landed(tmp_path):
 def test_verdict_for_chunk_ejected_implement_failed(tmp_path):
     doctor_mod = load_module("doctor")
     session_dir = tmp_path / "sess-1"
-    _write_log(session_dir, "mentat-implement", [
-        {"ts": "2026-01-01T00:00:00+00:00", "agent": "mentat-implement",
-         "session": "sess-1", "event": "chunk.ejected",
-         "payload": {"slug": "my-chunk", "reason": "implement-failed", "where": "/tmp"}},
-    ])
+    _write_log(
+        session_dir,
+        "mentat-implement",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "agent": "mentat-implement",
+                "session": "sess-1",
+                "event": "chunk.ejected",
+                "payload": {"slug": "my-chunk", "reason": "implement-failed", "where": "/tmp"},
+            },
+        ],
+    )
     verdict = doctor_mod.build_verdict(session_dir)
     assert "implement-failed" in verdict or "TDD" in verdict or "gate" in verdict.lower()
 
@@ -75,11 +92,19 @@ def test_verdict_for_chunk_ejected_implement_failed(tmp_path):
 def test_verdict_for_chunk_ejected_hitl_required(tmp_path):
     doctor_mod = load_module("doctor")
     session_dir = tmp_path / "sess-1"
-    _write_log(session_dir, "mentat-implement", [
-        {"ts": "2026-01-01T00:00:00+00:00", "agent": "mentat-implement",
-         "session": "sess-1", "event": "chunk.ejected",
-         "payload": {"slug": "my-chunk", "reason": "hitl-required", "where": "/tmp"}},
-    ])
+    _write_log(
+        session_dir,
+        "mentat-implement",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "agent": "mentat-implement",
+                "session": "sess-1",
+                "event": "chunk.ejected",
+                "payload": {"slug": "my-chunk", "reason": "hitl-required", "where": "/tmp"},
+            },
+        ],
+    )
     verdict = doctor_mod.build_verdict(session_dir)
     assert "hitl" in verdict.lower() or "ambiguity" in verdict.lower() or "self-answered" in verdict.lower()
 
@@ -87,11 +112,19 @@ def test_verdict_for_chunk_ejected_hitl_required(tmp_path):
 def test_doctor_writes_diagnosis_in_session_dir(tmp_path):
     doctor_mod = load_module("doctor")
     session_dir = tmp_path / "sess-1"
-    _write_log(session_dir, "mentat-orchestrate", [
-        {"ts": "2026-01-01T00:00:00+00:00", "agent": "mentat-orchestrate",
-         "session": "sess-1", "event": "chunk.landed",
-         "payload": {"slug": "x", "sha": "abc", "holding": "main"}},
-    ])
+    _write_log(
+        session_dir,
+        "mentat-orchestrate",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "agent": "mentat-orchestrate",
+                "session": "sess-1",
+                "event": "chunk.landed",
+                "payload": {"slug": "x", "sha": "abc", "holding": "main"},
+            },
+        ],
+    )
     doctor_mod.write_diagnosis(session_dir)
     diagnosis = session_dir / "diagnosis.md"
     assert diagnosis.exists()
@@ -102,11 +135,19 @@ def test_doctor_writes_diagnosis_in_session_dir(tmp_path):
 def test_expected_vs_actual_derived(tmp_path):
     doctor_mod = load_module("doctor")
     session_dir = tmp_path / "sess-1"
-    _write_log(session_dir, "mentat-implement", [
-        {"ts": "2026-01-01T00:00:00+00:00", "agent": "mentat-implement",
-         "session": "sess-1", "event": "chunk.ejected",
-         "payload": {"slug": "x", "reason": "gate-failed", "where": "/tmp"}},
-    ])
+    _write_log(
+        session_dir,
+        "mentat-implement",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "agent": "mentat-implement",
+                "session": "sess-1",
+                "event": "chunk.ejected",
+                "payload": {"slug": "x", "reason": "gate-failed", "where": "/tmp"},
+            },
+        ],
+    )
     verdict = doctor_mod.build_verdict(session_dir)
     # <where> placeholder must be filled in; no unfilled angle-bracket placeholders
     assert "<where>" not in verdict
@@ -115,11 +156,19 @@ def test_expected_vs_actual_derived(tmp_path):
 def test_regression_marks_unknown_when_no_prior_landed(tmp_path):
     doctor_mod = load_module("doctor")
     session_dir = tmp_path / "sess-1"
-    _write_log(session_dir, "mentat-implement", [
-        {"ts": "2026-01-01T00:00:00+00:00", "agent": "mentat-implement",
-         "session": "sess-1", "event": "chunk.ejected",
-         "payload": {"slug": "x", "reason": "implement-failed", "where": "/tmp"}},
-    ])
+    _write_log(
+        session_dir,
+        "mentat-implement",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "agent": "mentat-implement",
+                "session": "sess-1",
+                "event": "chunk.ejected",
+                "payload": {"slug": "x", "reason": "implement-failed", "where": "/tmp"},
+            },
+        ],
+    )
     verdict = doctor_mod.build_verdict(session_dir)
     assert "unknown" in verdict.lower()
 
@@ -161,9 +210,6 @@ def test_diagnose_feeds_doctor_output_into_loop(tmp_path):
 
 # ── track.py ─────────────────────────────────────────────────────────────────
 
-import io
-from contextlib import redirect_stdout
-
 
 def test_track_streams_latest(tmp_path):
     """stream() reads JSONL events and prints each one."""
@@ -171,10 +217,16 @@ def test_track_streams_latest(tmp_path):
     session_dir = tmp_path / "sess-1"
     session_dir.mkdir(parents=True)
     (session_dir / "events.jsonl").write_text(
-        json.dumps({
-            "ts": "2026-01-01T00:00:00Z", "agent": "mentat-plan",
-            "session": "sess-1", "event": "plan.started", "payload": {"path": "/a.md"},
-        }) + "\n"
+        json.dumps(
+            {
+                "ts": "2026-01-01T00:00:00Z",
+                "agent": "mentat-plan",
+                "session": "sess-1",
+                "event": "plan.started",
+                "payload": {"path": "/a.md"},
+            }
+        )
+        + "\n"
     )
     buf = io.StringIO()
     with redirect_stdout(buf):
@@ -188,10 +240,16 @@ def test_track_named_session(tmp_path):
     session_dir = tmp_path / "named-session"
     session_dir.mkdir(parents=True)
     (session_dir / "events.jsonl").write_text(
-        json.dumps({
-            "ts": "t", "agent": "a", "session": "named-session",
-            "event": "chunk.landed", "payload": {},
-        }) + "\n"
+        json.dumps(
+            {
+                "ts": "t",
+                "agent": "a",
+                "session": "named-session",
+                "event": "chunk.landed",
+                "payload": {},
+            }
+        )
+        + "\n"
     )
     buf = io.StringIO()
     with redirect_stdout(buf):
@@ -205,10 +263,16 @@ def test_track_color_by_event_type(tmp_path):
     session_dir = tmp_path / "sess-color"
     session_dir.mkdir(parents=True)
     (session_dir / "events.jsonl").write_text(
-        json.dumps({
-            "ts": "t", "agent": "a", "session": "s",
-            "event": "plan.started", "payload": {},
-        }) + "\n"
+        json.dumps(
+            {
+                "ts": "t",
+                "agent": "a",
+                "session": "s",
+                "event": "plan.started",
+                "payload": {},
+            }
+        )
+        + "\n"
     )
     buf = io.StringIO()
     with redirect_stdout(buf):

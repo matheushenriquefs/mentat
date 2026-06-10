@@ -34,8 +34,7 @@ _utils = _load_sibling("utils")
 
 def _emit_installed() -> None:
     subprocess.run(
-        ["python3", str(_LOG_SCRIPT), "emit", "mentat-install", "plan.started",
-         '{"path":"install"}'],
+        ["python3", str(_LOG_SCRIPT), "emit", "mentat-install", "plan.started", '{"path":"install"}'],
         capture_output=True,
     )
 

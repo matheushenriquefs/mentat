@@ -11,10 +11,7 @@ def read_config() -> dict:
     config_path = Path.home() / ".mentat" / "config.jsonc"
     if not config_path.exists():
         return {}
-    text = "\n".join(
-        line for line in config_path.read_text().splitlines()
-        if not line.lstrip().startswith("//")
-    )
+    text = "\n".join(line for line in config_path.read_text().splitlines() if not line.lstrip().startswith("//"))
     try:
         return json.loads(text)
     except json.JSONDecodeError:

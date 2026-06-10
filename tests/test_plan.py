@@ -6,8 +6,7 @@ import importlib.util
 import os
 import subprocess
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-
+from unittest.mock import MagicMock, patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-plan/scripts"
 LOG_SCRIPT = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-log/scripts/log.py"

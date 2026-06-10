@@ -36,9 +36,7 @@ pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrit
 import json
 import os
 import re
-import shutil
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 

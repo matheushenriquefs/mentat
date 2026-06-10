@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 Verdict = Literal["pass", "block", "advise"]
 
@@ -22,7 +22,7 @@ class GateResult:
     reason: str
 
 
-def score_plan(raw: dict) -> GateResult:
+def score_plan(raw: dict[str, Any]) -> GateResult:
     """Plan alignment ≥ PLAN_THRESHOLD → pass; must_not_exist veto overrides."""
     if raw.get("veto") == "must_not_exist":
         return GateResult("block", 0.0, raw.get("veto_detail", "must_not_exist veto"))
@@ -32,7 +32,7 @@ def score_plan(raw: dict) -> GateResult:
     return GateResult("block", score, f"plan alignment {score:.2f} < {PLAN_THRESHOLD}")
 
 
-def score_test(raw: dict) -> GateResult:
+def score_test(raw: dict[str, Any]) -> GateResult:
     """Test faithfulness ≥ TEST_THRESHOLD → pass; deterministic veto overrides."""
     veto = raw.get("veto", "clean")
     if veto and veto != "clean":
@@ -43,7 +43,7 @@ def score_test(raw: dict) -> GateResult:
     return GateResult("block", score, f"test alignment {score:.2f} < {TEST_THRESHOLD}")
 
 
-def score_bug(raw: dict) -> GateResult:
+def score_bug(raw: dict[str, Any]) -> GateResult:
     """Trajectory blacklist, latent-bug sev≥high, and severe hallucination are hard vetoes."""
     if raw.get("blacklist") not in (None, "clean"):
         return GateResult("block", 0.0, f"blacklist: {raw['blacklist']}")
@@ -54,7 +54,7 @@ def score_bug(raw: dict) -> GateResult:
     return GateResult("pass", 1.0, "")
 
 
-def score_smell(raw: dict) -> GateResult:
+def score_smell(raw: dict[str, Any]) -> GateResult:
     """Smell review is advisory only — never blocks, never vetoes."""
     score = float(raw.get("score", 1.0))
     if score < SMELL_THRESHOLD:

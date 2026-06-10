@@ -61,7 +61,6 @@ def _strip_comments(text: str) -> str:
 def test_script_exists_and_executable():
     """Sanity: the script the slice edits must exist and be runnable."""
     assert SCRIPT.is_file(), f"script missing: {SCRIPT}"
-    import os
 
     assert os.access(SCRIPT, os.X_OK), f"script not executable: {SCRIPT}"
 

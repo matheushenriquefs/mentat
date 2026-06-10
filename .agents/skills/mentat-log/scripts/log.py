@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime
 import json
 import os
@@ -11,19 +12,23 @@ import sys
 from pathlib import Path
 
 EVENT_CATALOG: dict[str, list[str]] = {
-    "plan.started":    ["path"],
-    "plan.succeeded":  ["path"],
-    "plan.failed":     ["path", "reason"],
-    "chunk.spawned":   ["slug", "plan", "harness", "worktree"],
-    "chunk.landed":    ["slug", "sha", "holding"],
-    "chunk.ejected":   ["slug", "reason", "where"],
-    "gate.evaluated":  ["gate", "verdict", "severity", "message"],
+    "plan.started": ["path"],
+    "plan.succeeded": ["path"],
+    "plan.failed": ["path", "reason"],
+    "chunk.spawned": ["slug", "plan", "harness", "worktree"],
+    "chunk.landed": ["slug", "sha", "holding"],
+    "chunk.ejected": ["slug", "reason", "where"],
+    "gate.evaluated": ["gate", "verdict", "severity", "message"],
     "review.submitted": ["reviewer", "score", "threshold", "verdict"],
-    "batch.reviewed":  ["session", "summary"],
+    "batch.reviewed": ["session", "summary"],
 }
 
 _VALID_REASONS_EJECTED = {
-    "implement-failed", "gate-failed", "rebase-conflicted", "not-ff", "hitl-required",
+    "implement-failed",
+    "gate-failed",
+    "rebase-conflicted",
+    "not-ff",
+    "hitl-required",
 }
 
 
@@ -57,16 +62,14 @@ def _sidecar_file(base: Path, repo: str, session: str, agent: str, slug: str) ->
 
 def _ensure_log_dir(log_root: Path) -> None:
     log_root.mkdir(parents=True, exist_ok=True)
-    try:
+    with contextlib.suppress(OSError):
         log_root.chmod(0o700)
-    except OSError:
-        pass
 
 
 def _reject(base: Path, repo: str, session: str, agent: str, slug: str, event: str, reason: str) -> None:
     sc = _sidecar_file(base, repo, session, agent, slug)
     sc.parent.mkdir(parents=True, exist_ok=True)
-    ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    ts = datetime.datetime.now(datetime.UTC).isoformat()
     sc.parent.parent.parent.mkdir(parents=True, exist_ok=True)
     with sc.open("a") as f:
         f.write(f"{ts}  reject event={event} reason={reason}\n")
@@ -120,7 +123,7 @@ def cmd_emit(args: argparse.Namespace) -> int:
 
     base = _log_root()
     repo = _repo()
-    session = _session() or f"manual-{int(datetime.datetime.now(datetime.timezone.utc).timestamp())}-{os.getpid()}"
+    session = _session() or f"manual-{int(datetime.datetime.now(datetime.UTC).timestamp())}-{os.getpid()}"
     slug = _agent_slug()
 
     _ensure_log_dir(base)
@@ -132,7 +135,7 @@ def cmd_emit(args: argparse.Namespace) -> int:
         return 1
 
     row = {
-        "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "ts": datetime.datetime.now(datetime.UTC).isoformat(),
         "agent": agent,
         "session": session,
         "event": event,
@@ -195,6 +198,7 @@ def cmd_query(args: argparse.Namespace) -> int:
 
 def cmd_prune(args: argparse.Namespace) -> int:
     import shutil
+
     base = _log_root()
     repo = _repo()
     try:

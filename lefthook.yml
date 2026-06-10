@@ -18,3 +18,15 @@ pre-commit:
         b="$(git rev-parse --abbrev-ref HEAD)"
         [ "$b" = "$h" ] && { echo "ERR: direct commit to holding branch '$h' — ADR-0002"; exit 1; }
         exit 0
+    ruff-format:
+      glob: "**/*.py"
+      run: python3 ~/.agents/skills/mentat-container/scripts/container.py run 'uv run ruff format --check {staged_files}'
+    ruff-lint:
+      glob: "**/*.py"
+      run: python3 ~/.agents/skills/mentat-container/scripts/container.py run 'uv run ruff check {staged_files}'
+    pyright:
+      glob: "**/*.py"
+      run: python3 ~/.agents/skills/mentat-container/scripts/container.py run 'uv run pyright'
+    pytest-fast:
+      glob: "**/*.py"
+      run: python3 ~/.agents/skills/mentat-container/scripts/container.py run 'pytest tests/ -q'

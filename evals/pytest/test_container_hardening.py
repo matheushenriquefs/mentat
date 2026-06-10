@@ -6,7 +6,6 @@ pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrit
 
 import os
 import re
-import stat
 import subprocess
 
 BIN = os.path.join(os.path.dirname(__file__), "..", "..", "bin")

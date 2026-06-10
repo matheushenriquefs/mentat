@@ -61,8 +61,7 @@ def parse_frontmatter(plan_path: Path) -> dict[str, str]:
 
 def _emit_event(event: str, payload: dict) -> None:
     subprocess.run(
-        ["python3", str(_LOG_SCRIPT), "emit", "mentat-implement", event,
-         __import__("json").dumps(payload)],
+        ["python3", str(_LOG_SCRIPT), "emit", "mentat-implement", event, __import__("json").dumps(payload)],
         capture_output=True,
     )
 
@@ -116,24 +115,39 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
 
     if result.returncode != 0:
         slug = plan_path.stem
-        _emit_event("chunk.ejected", {
-            "slug": slug, "reason": "implement-failed", "where": str(plan_path.parent),
-        })
+        _emit_event(
+            "chunk.ejected",
+            {
+                "slug": slug,
+                "reason": "implement-failed",
+                "where": str(plan_path.parent),
+            },
+        )
         return 1
 
     if afk and _detect_self_answer(result):
         slug = plan_path.stem
-        _emit_event("chunk.ejected", {
-            "slug": slug, "reason": "hitl-required", "where": str(plan_path.parent),
-        })
+        _emit_event(
+            "chunk.ejected",
+            {
+                "slug": slug,
+                "reason": "hitl-required",
+                "where": str(plan_path.parent),
+            },
+        )
         return 42
 
     verdict, message = _run_gates(None)
     if verdict == "block":
         slug = plan_path.stem
-        _emit_event("chunk.ejected", {
-            "slug": slug, "reason": "gate-failed", "where": str(plan_path.parent),
-        })
+        _emit_event(
+            "chunk.ejected",
+            {
+                "slug": slug,
+                "reason": "gate-failed",
+                "where": str(plan_path.parent),
+            },
+        )
         return 1
 
     return 0
@@ -153,8 +167,7 @@ def main() -> None:
 
     if len(args.plan_refs) > 1:
         print(
-            "mentat-implement: accepts one plan at a time. "
-            "Use mentat-orchestrate for multi-plan runs.",
+            "mentat-implement: accepts one plan at a time. Use mentat-orchestrate for multi-plan runs.",
             file=sys.stderr,
         )
         sys.exit(1)

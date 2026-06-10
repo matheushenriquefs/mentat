@@ -33,6 +33,7 @@ def write_default_config(path: Path, *, dry_run: bool = False) -> None:
     if dry_run:
         return
     import json
+
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         path.write_text(json.dumps({"harness": "claude-code", "diff_tool": None}, indent=2) + "\n")

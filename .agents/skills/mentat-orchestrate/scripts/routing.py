@@ -71,9 +71,7 @@ def partition(plans: list[Plan]) -> tuple[list[Plan], list[Plan]]:
     auto: list[Plan] = []
 
     for plan in topo:
-        if plan.class_ == "HITL":
-            anchored.append(plan)
-        elif _has_downstream_hitl(plan.slug, plans_by_slug):
+        if plan.class_ == "HITL" or _has_downstream_hitl(plan.slug, plans_by_slug):
             anchored.append(plan)
         else:
             auto.append(plan)

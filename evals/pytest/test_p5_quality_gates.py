@@ -5,7 +5,6 @@ import pytest
 pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
 
 import os
-import stat
 import subprocess
 import tempfile
 
@@ -30,7 +29,6 @@ def _bash_n(path: str):
 
 
 def _infer_class(path: str) -> str | None:
-    import fnmatch
 
     if "/docs/adr/" in path and path.endswith(".md"):
         return "adr"

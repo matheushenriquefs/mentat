@@ -30,13 +30,11 @@ def cmd_commit(git_args: list[str]) -> int:
     if cid:
         docker = os.environ.get("MENTAT_DOCKER", "docker")
         wt_result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True,
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
         )
-        ws = (
-            f"/workspaces/{Path(wt_result.stdout.strip()).name}"
-            if wt_result.returncode == 0
-            else "/workspaces/mentat"
-        )
+        ws = f"/workspaces/{Path(wt_result.stdout.strip()).name}" if wt_result.returncode == 0 else "/workspaces/mentat"
         cmd = [docker, "exec", "--workdir", ws, cid, "git", "commit"] + git_args
         result = subprocess.run(cmd)
     else:
