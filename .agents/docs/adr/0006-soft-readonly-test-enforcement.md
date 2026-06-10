@@ -1,130 +1,44 @@
-# ADR 0006: Soft read-only tests — implement-contract + blacklist, driver agnostic
+# ADR 0006: Soft read-only test enforcement — impl-contract + blacklist, driver agnostic
 
 Status: Accepted (locked)
 Date: 2026-06-04
-Amended: 2026-06-07 (G3-S10) — HITL axis cross-reference: a HITL exit
-(`42` + `hitl-ambiguity`) is NOT a blacklist hit. ADR-0010 owns the
-canonical contract.
+Amended: 2026-06-09 (v2 — pytest semantics; trajectory blacklist enforced via `llm/test.md`)
 
 ## Context
 
-ImpossibleBench's headline result: make test files read-only (or hidden) during
-implementation and agent cheating drops to near zero — a model won't try to game a
-target it can't edit. ADR 0003's trajectory blacklist catches the test-tampering
-*move* after it happens; read-only is the *preventive* version. The report flagged
-adding it as the single highest-value control.
+ImpossibleBench: make test files read-only during implementation and agent cheating
+drops to near zero. ADR-0003's trajectory blacklist catches test-tampering after it
+happens; read-only is the preventive version. Kernel-level read-only mount rejected
+because it requires the driver to know which files are tests — breaking ADR-0004's
+language/layout agnosticism.
 
-The obvious implementation — mount the test files read-only in the devcontainer —
-turns out to break the system's founding rule. Hard-to-reverse: it shapes
-`/mentat-implement`'s contract and the `mentat-bug-reviewer` veto set, so it's locked here.
+## Decision
 
-## The trap we rejected: a driver-built read-only mount
+Enforcement in two layers, both agnostic:
 
-Mounting tests read-only requires *knowing which files are tests*. There is no
-agnostic way for the driver or `mentat-container-up` to know that:
+**Soft preventive layer — `mentat-implement` contract.** During a TDD slice, once
+the failing test is written, the agent works impl-only: it does not modify existing
+test files until the slice is green. Rule, not kernel guarantee.
 
-- Many projects have no single `tests/` dir. JS/TS routinely co-locate `foo.ts`
-  with `foo.test.ts`, or scatter `__tests__/` through `src/`.
-- A whole-dir read-only mount would freeze the impl files the agent must write.
-- A file-level mount can't cover a test file that doesn't exist yet — and TDD
-  slices create new test files mid-session.
-- Globbing `*.test.*` / `*_test.*` / `test_*.py` to bind-mount each file is the
-  driver acquiring language- and framework-specific layout knowledge. That is
-  exactly the tool/model/platform/language agnosticism ADR 0004 forbids ("the
-  driver names no project tool … agnostic by construction").
+**Hard detective layer — trajectory blacklist (`gates/llm/test.md`).** LLM gate
+reads agent's edit trajectory. Test-file write during impl phase, weakened assertion,
+redirected runner → blacklisted move. Deterministic veto: score `0.0`.
 
-Co-located tests + TDD + a kernel mount is pick-two. We don't pick the mount.
+Enforcement is pytest-shaped:
+1. Write failing test → commit.
+2. Implement → `task test` green.
+3. Gate pass → commit per slice.
 
-## Decision — enforcement is the agent's, in two layers, both agnostic
+HITL exit `42` (`hitl-ambiguity`) is NOT a blacklist hit — separate axis (ADR-0004).
 
-The same pattern ADR 0004 already uses for re-gating (spawn an agent that reads the
-repo's own CLAUDE.md/AGENTS.md and runs *that* project's gates — the driver names
-no tool): the agent holds the project knowledge, the driver holds none.
-
-- **Soft preventive layer — the `/mentat-implement` contract.** During a TDD slice,
-  once the failing test is written, the agent works impl-only: it does not modify
-  existing test files until the slice is green. The agent already knows which files
-  are tests — it had to discover the test runner to run the loop at all. This is a
-  *rule*, not a kernel guarantee: it reduces the agent's tendency to game (the
-  ImpossibleBench effect) without the driver knowing a single test path.
-
-- **Hard detective layer — the trajectory blacklist (ADR 0003).** The real gate
-  stays where it is already agnostic and deterministic: `mentat-bug-reviewer` reads
-  the agent's own edit/tool trajectory. A test-file write during the impl phase, a
-  weakened assertion, a redirected runner — all surface as blacklisted *moves*
-  regardless of language or layout, because the lens reads *what the agent did*,
-  not *where the files live*.
-
-Prevention is soft by design; enforcement is the blacklist. We do not pretend the
-contract is airtight, so we do not weaken the blacklist on the strength of it.
-
-## Consequence for the blacklist: keep everything, add one
-
-Because there is no kernel mount, **nothing is "fully covered" by prevention** — so
-no blacklist entry is retired. All ADR-0003 entries stay. One entry is ADDED, because
-a soft "don't edit tests" rule creates a new incentive to fake green without touching
-the test file:
-
-- **NEW — runner redirection to a writable copy.** Pointing the test runner at a
-  duplicated/relocated test tree, or setting config/env so tests resolve from a
-  writable path, then editing those. Original tests look untouched; the green is
-  fake. → blacklisted move.
-
-See ADR 0003's amended blacklist set for the full list.
-
-## Rejected alternatives
-
-- **Kernel/bind read-only mount of test files.** Breaks agnosticism (above). The
-  whole reason this ADR is shaped the way it is.
-- **Mount only when a separate `tests/` dir exists; blacklist-only otherwise.**
-  Two code paths for the same guarantee, and the "detect a test dir" half is still
-  layout knowledge in the driver. Rejected for the same agnosticism reason.
-- **Hiding test files instead of read-only.** TDD needs the agent to read and run
-  the tests; hiding them defeats the loop. ImpossibleBench's "hide OR read-only" —
-  we can use neither at the mount layer, hence the soft-contract substitute.
-- **Treating the soft rule as sufficient (dropping blacklist test-write entries).**
-  A rule is not enforcement. The blacklist is the gate; the rule only lowers the
-  temptation. Considered (the "Hybrid" drop) and rejected once the mount fell.
-
-## HITL axis (ADR-0010 cross-reference) — added 2026-06-07 by G3-S10
-
-The blacklist defined above is a **reward-hacking** detector: a reviewer-side
-score `0.0` veto over the agent's diff/trajectory. A HITL exit — adapter exit
-code `42` with audit reason `hitl-ambiguity` per ADR-0010 — is a **separate
-axis** and explicitly NOT a blacklist hit.
-
-The distinction matters because the two failure modes have opposite shapes:
-
-- **Blacklist hit** — the agent *did something forbidden* (edited tests,
-  weakened an assertion, redirected the runner). The diff exists; the reviewer
-  scored it `0.0`. The chunk is rejected on the strength of the trajectory.
-- **HITL `hitl-ambiguity` (ADR-0010)** — the AFK harness adapter *refused to
-  guess* at ambiguity in the plan. Exit code `42`. No diff was produced; the
-  reviewer never runs. The chunk is ejected by `mentat-land-queue` for operator
-  review, not because the agent cheated.
-
-Conflating the two would either (a) waste a blacklist slot on something the
-blacklist cannot catch (the agent never edited anything), or (b) let a
-genuinely ambiguous plan be filed away as "agent gamed the tests" — the wrong
-post-mortem. Reviewers and future ADRs MUST keep them separate.
-
-**Three orthogonal mechanisms — same map as ADR-0003 §"HITL axis":**
-
-| Axis | Signal | Owned by |
-|---|---|---|
-| HITL | exit `42` + `hitl-ambiguity` reason | ADR-0010 |
-| Reward-hacking blacklist | score `0.0` on forbidden move/sequence | this ADR + ADR-0003 |
-| Scored-review veto | threshold (plan/test ≥ 0.88) | ADR-0003 |
-
-A HITL exit is **not a blacklist hit**, not a scored-review veto, and not
-`implement-fail`. See ADR-0010 §"Axis discipline" for the canonical table.
+Blacklist entries kept (nothing retired by soft prevention):
+- Writing to test file during impl phase.
+- Weakening/deleting an assertion.
+- Redirecting test runner to a writable copy.
+- Any move that produces green without genuine impl.
 
 ## Consequences
 
-`/mentat-implement` gains a one-line impl-only-after-red contract clause. `mentat-bug-reviewer`
-gains the runner-redirection move and keeps all others. The driver and
-`mentat-container-*` scripts are untouched — they never learn what a test file is. This
-ADR is index-only in AGENTS.md (title only; body on demand — ADR 0001's budget).
-Why the soft posture: ImpossibleBench is a frequency result, not an impossibility
-proof — runner redirection and impl-only gaming survive any test-file lock, so the
-detective blacklist remains load-bearing.
+`mentat-implement` gains impl-only-after-red contract clause. `gates/llm/test.md`
+carries the trajectory blacklist. Driver and container scripts untouched — no test
+path knowledge in the driver. ADR is index-only in AGENTS.md.

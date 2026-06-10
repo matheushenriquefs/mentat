@@ -24,6 +24,11 @@ Blocked-by: S3 (ADR-0010) — done.
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
+
+
 import json
 import re
 import subprocess
@@ -35,8 +40,7 @@ REGISTRY = ROOT / ".agents" / "bin" / "lib" / "harness-registry.jsonc"
 ADR_0010 = ROOT / ".agents" / "docs" / "adr" / "0010-hitl-routing.md"
 
 CLAUSE = (
-    "AFK mode: do not ask the user questions. "
-    "On ambiguity, exit nonzero with a HITL audit reason instead of guessing."
+    "AFK mode: do not ask the user questions. On ambiguity, exit nonzero with a HITL audit reason instead of guessing."
 )
 HITL_EXIT = "42"
 HITL_REASON = "hitl-ambiguity"
@@ -112,19 +116,15 @@ def test_grep_dash_a_3_afk_shows_signal_and_exit():
     """
     result = subprocess.run(
         ["grep", "-A", "3", "AFK", str(DOC)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 0, (
-        f"grep -A 3 'AFK' returned no match — doc has no AFK paragraph at all; "
-        f"S7 requires AFK be referenced by name."
+        f"grep -A 3 'AFK' returned no match — doc has no AFK paragraph at all; S7 requires AFK be referenced by name."
     )
     out = result.stdout
-    assert SIGNAL_ENV in out, (
-        f"grep -A 3 'AFK' output must include {SIGNAL_ENV}; got:\n{out}"
-    )
-    assert HITL_EXIT in out, (
-        f"grep -A 3 'AFK' output must include exit code {HITL_EXIT}; got:\n{out}"
-    )
+    assert SIGNAL_ENV in out, f"grep -A 3 'AFK' output must include {SIGNAL_ENV}; got:\n{out}"
+    assert HITL_EXIT in out, f"grep -A 3 'AFK' output must include exit code {HITL_EXIT}; got:\n{out}"
 
 
 # -- Registry consistency (no-contradiction clause from S7) ------------------

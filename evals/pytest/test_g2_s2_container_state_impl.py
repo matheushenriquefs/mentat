@@ -51,7 +51,10 @@ def _source_call(call: str, cwd: str | None = None, env: dict | None = None):
     full = f". {LIB}; {call}"
     cmd = ["bash", "-c", full]
     return subprocess.run(
-        cmd, capture_output=True, text=True, cwd=cwd,
+        cmd,
+        capture_output=True,
+        text=True,
+        cwd=cwd,
         env={**os.environ, **(env or {})},
     )
 
@@ -76,10 +79,7 @@ def test_lib_file_exists():
 def test_lib_passes_bash_n():
     """Plan S2 verify: `bash -n container-state.sh` clean."""
     res = subprocess.run(["bash", "-n", str(LIB)], capture_output=True, text=True)
-    assert res.returncode == 0, (
-        f"bash -n failed (rc={res.returncode}):\n"
-        f"stdout={res.stdout!r}\nstderr={res.stderr!r}"
-    )
+    assert res.returncode == 0, f"bash -n failed (rc={res.returncode}):\nstdout={res.stdout!r}\nstderr={res.stderr!r}"
 
 
 def test_lib_defines_all_five_helpers():
@@ -89,9 +89,7 @@ def test_lib_defines_all_five_helpers():
     assert res.returncode == 0, f"sourcing failed: {res.stderr}"
     defined = set(res.stdout.split())
     missing = [h for h in HELPERS if h not in defined]
-    assert not missing, (
-        f"helpers not defined as functions: {missing}\nsaw: {sorted(defined)}"
-    )
+    assert not missing, f"helpers not defined as functions: {missing}\nsaw: {sorted(defined)}"
 
 
 def test_lib_source_is_side_effect_free():
@@ -128,26 +126,22 @@ def test_container_slug_for_cwd_exit_zero_always():
 def test_container_id_for_missing_slug_exits_nonzero(tmp_path):
     """Plan: 'no running container for slug → exit 1.' Fake docker
     returns nothing — helper must exit nonzero."""
-    fake = _make_fake_docker(tmp_path, 'exit 0')  # empty stdout
+    fake = _make_fake_docker(tmp_path, "exit 0")  # empty stdout
     res = _source_call(
         'container_id_for "any-slug"',
         env={"MENTAT_DOCKER": str(fake)},
     )
-    assert res.returncode != 0, (
-        f"container_id_for must exit nonzero on miss; got rc=0 stdout={res.stdout!r}"
-    )
-    assert res.stdout.strip() == "", (
-        f"no CID should be printed on miss; got {res.stdout!r}"
-    )
+    assert res.returncode != 0, f"container_id_for must exit nonzero on miss; got rc=0 stdout={res.stdout!r}"
+    assert res.stdout.strip() == "", f"no CID should be printed on miss; got {res.stdout!r}"
 
 
 def test_container_id_for_hit_returns_cid(tmp_path):
     """Fake docker prints a CID — helper must echo it on stdout and exit 0."""
-    body = textwrap.dedent('''\
+    body = textwrap.dedent("""\
         if [ "$1" = "ps" ]; then
           echo "abc123def456"
         fi
-    ''')
+    """)
     fake = _make_fake_docker(tmp_path, body)
     res = _source_call(
         'container_id_for "any-slug"',
@@ -172,29 +166,25 @@ def test_container_id_for_passes_label_filter(tmp_path):
     )
     assert res.returncode == 0
     argv = log.read_text().splitlines() if log.exists() else []
-    assert "label=mentat_slug=the-slug" in argv, (
-        f"docker not invoked with mentat_slug label filter; saw argv={argv!r}"
-    )
+    assert "label=mentat_slug=the-slug" in argv, f"docker not invoked with mentat_slug label filter; saw argv={argv!r}"
     assert "ps" in argv, f"docker subcommand must be `ps`; saw {argv!r}"
 
 
 def test_container_id_for_returns_single_cid_when_multiple(tmp_path):
     """Design doc: 'multiple matches are a separate failure — the lib
     returns the first.' Lock head-1 behaviour."""
-    body = textwrap.dedent('''\
+    body = textwrap.dedent("""\
         if [ "$1" = "ps" ]; then
           printf 'firstcid\\nsecondcid\\n'
         fi
-    ''')
+    """)
     fake = _make_fake_docker(tmp_path, body)
     res = _source_call(
         'container_id_for "any-slug"',
         env={"MENTAT_DOCKER": str(fake)},
     )
     assert res.returncode == 0
-    assert res.stdout.strip() == "firstcid", (
-        f"expected only first CID on stdout; got {res.stdout!r}"
-    )
+    assert res.stdout.strip() == "firstcid", f"expected only first CID on stdout; got {res.stdout!r}"
 
 
 # -- ensure_workspace_folder: docker exec test -d ----------------------------
@@ -205,12 +195,12 @@ def test_ensure_workspace_folder_missing_path_fails_loud(tmp_path):
     stderr names the missing path.' Fake docker:
       - `ps` returns a CID (so container_id_for upstream succeeds)
       - `exec ... test -d` exits 1 (path missing)"""
-    body = textwrap.dedent('''\
+    body = textwrap.dedent("""\
         case "$1" in
           ps)   echo "cid123" ;;
           exec) exit 1 ;;
         esac
-    ''')
+    """)
     fake = _make_fake_docker(tmp_path, body)
     sub = tmp_path / "slug-here"
     sub.mkdir()
@@ -220,22 +210,18 @@ def test_ensure_workspace_folder_missing_path_fails_loud(tmp_path):
         cwd=str(sub),
         env={"MENTAT_DOCKER": str(fake)},
     )
-    assert res.returncode != 0, (
-        f"helper must fail when ws missing in container; rc=0 stderr={res.stderr!r}"
-    )
-    assert missing in res.stderr, (
-        f"stderr must name the exact missing path; got {res.stderr!r}"
-    )
+    assert res.returncode != 0, f"helper must fail when ws missing in container; rc=0 stderr={res.stderr!r}"
+    assert missing in res.stderr, f"stderr must name the exact missing path; got {res.stderr!r}"
 
 
 def test_ensure_workspace_folder_existing_path_succeeds(tmp_path):
     """Healthy path: container has the dir → helper exits 0."""
-    body = textwrap.dedent('''\
+    body = textwrap.dedent("""\
         case "$1" in
           ps)   echo "cid123" ;;
           exec) exit 0 ;;
         esac
-    ''')
+    """)
     fake = _make_fake_docker(tmp_path, body)
     sub = tmp_path / "slug-here"
     sub.mkdir()
@@ -244,9 +230,7 @@ def test_ensure_workspace_folder_existing_path_succeeds(tmp_path):
         cwd=str(sub),
         env={"MENTAT_DOCKER": str(fake)},
     )
-    assert res.returncode == 0, (
-        f"helper must succeed when ws present; stderr={res.stderr!r}"
-    )
+    assert res.returncode == 0, f"helper must succeed when ws present; stderr={res.stderr!r}"
 
 
 def test_ensure_workspace_folder_no_container_fails_loud(tmp_path):
@@ -262,9 +246,7 @@ def test_ensure_workspace_folder_no_container_fails_loud(tmp_path):
         env={"MENTAT_DOCKER": str(fake)},
     )
     assert res.returncode != 0
-    assert res.stderr.strip(), (
-        f"must speak when no container; stderr={res.stderr!r}"
-    )
+    assert res.stderr.strip(), f"must speak when no container; stderr={res.stderr!r}"
 
 
 # -- assert_safe_directory: git config inspection ----------------------------
@@ -274,7 +256,7 @@ def test_assert_safe_directory_missing_entry_fails_loud(tmp_path):
     """Plan: 'safe.directory is unset or does not include <ws> → exit
     nonzero, stderr names <ws>.' Fake docker returns a different set
     of safe.directory entries (none matching the requested path)."""
-    body = textwrap.dedent('''\
+    body = textwrap.dedent("""\
         case "$1" in
           ps)   echo "cid123" ;;
           exec)
@@ -284,7 +266,7 @@ def test_assert_safe_directory_missing_entry_fails_loud(tmp_path):
             echo "/yet/another"
             ;;
         esac
-    ''')
+    """)
     fake = _make_fake_docker(tmp_path, body)
     sub = tmp_path / "slug-here"
     sub.mkdir()
@@ -294,13 +276,8 @@ def test_assert_safe_directory_missing_entry_fails_loud(tmp_path):
         cwd=str(sub),
         env={"MENTAT_DOCKER": str(fake)},
     )
-    assert res.returncode != 0, (
-        f"helper must fail when ws not in safe.directory; "
-        f"rc=0 stderr={res.stderr!r}"
-    )
-    assert missing_ws in res.stderr, (
-        f"stderr must name {missing_ws!r}; got {res.stderr!r}"
-    )
+    assert res.returncode != 0, f"helper must fail when ws not in safe.directory; rc=0 stderr={res.stderr!r}"
+    assert missing_ws in res.stderr, f"stderr must name {missing_ws!r}; got {res.stderr!r}"
 
 
 def test_assert_safe_directory_present_entry_succeeds(tmp_path):
@@ -323,20 +300,18 @@ def test_assert_safe_directory_present_entry_succeeds(tmp_path):
         cwd=str(sub),
         env={"MENTAT_DOCKER": str(fake)},
     )
-    assert res.returncode == 0, (
-        f"helper must succeed when entry present; stderr={res.stderr!r}"
-    )
+    assert res.returncode == 0, f"helper must succeed when entry present; stderr={res.stderr!r}"
 
 
 def test_assert_safe_directory_exact_match_not_prefix(tmp_path):
     """`grep -Fxq` is the locked match: full-line, fixed-string. Path
     `/foo` must NOT match an entry `/foobar` — prefix matches are bugs."""
-    body = textwrap.dedent('''\
+    body = textwrap.dedent("""\
         case "$1" in
           ps)   echo "cid123" ;;
           exec) echo "/foobar/extra" ;;
         esac
-    ''')
+    """)
     fake = _make_fake_docker(tmp_path, body)
     sub = tmp_path / "slug-here"
     sub.mkdir()
@@ -345,9 +320,7 @@ def test_assert_safe_directory_exact_match_not_prefix(tmp_path):
         cwd=str(sub),
         env={"MENTAT_DOCKER": str(fake)},
     )
-    assert res.returncode != 0, (
-        "prefix /foo must NOT match /foobar/extra; got rc=0 (bug)"
-    )
+    assert res.returncode != 0, "prefix /foo must NOT match /foobar/extra; got rc=0 (bug)"
 
 
 # -- synthesize_compose_if_absent --------------------------------------------
@@ -357,12 +330,9 @@ def test_synthesize_compose_if_absent_fails_when_nothing_present(tmp_path):
     """Plan: 'worktree has no compose file and no Dockerfile → exit 1,
     stderr names the worktree.'"""
     res = _source_call("synthesize_compose_if_absent", cwd=str(tmp_path))
-    assert res.returncode != 0, (
-        f"helper must fail in empty dir; rc=0 stderr={res.stderr!r}"
-    )
+    assert res.returncode != 0, f"helper must fail in empty dir; rc=0 stderr={res.stderr!r}"
     assert str(tmp_path) in res.stderr or "compose" in res.stderr.lower(), (
-        f"stderr must mention worktree path or compose context; "
-        f"got {res.stderr!r}"
+        f"stderr must mention worktree path or compose context; got {res.stderr!r}"
     )
 
 
@@ -370,14 +340,9 @@ def test_synthesize_compose_if_absent_noop_when_devcontainer_exists(tmp_path):
     """If `.devcontainer/devcontainer.json` already exists, helper is a
     no-op and exits 0 — that's the 'absent' guard."""
     (tmp_path / ".devcontainer").mkdir()
-    (tmp_path / ".devcontainer" / "devcontainer.json").write_text(
-        '{"name":"t","workspaceFolder":"/workspaces/t"}'
-    )
+    (tmp_path / ".devcontainer" / "devcontainer.json").write_text('{"name":"t","workspaceFolder":"/workspaces/t"}')
     res = _source_call("synthesize_compose_if_absent", cwd=str(tmp_path))
-    assert res.returncode == 0, (
-        f"helper must no-op when devcontainer.json exists; "
-        f"stderr={res.stderr!r}"
-    )
+    assert res.returncode == 0, f"helper must no-op when devcontainer.json exists; stderr={res.stderr!r}"
 
 
 # -- No silent fallback discipline -------------------------------------------
@@ -397,15 +362,12 @@ def test_failing_helpers_speak_on_stderr(tmp_path):
     must_speak = [
         ('ensure_workspace_folder "/x"', sub),
         ('assert_safe_directory "/x"', sub),
-        ('synthesize_compose_if_absent', tmp_path),
+        ("synthesize_compose_if_absent", tmp_path),
     ]
     for call, cwd in must_speak:
         res = _source_call(call, cwd=str(cwd), env=env)
         assert res.returncode != 0, f"{call!r} should fail but rc=0"
-        assert res.stderr.strip(), (
-            f"{call!r} failed silently — stderr empty; "
-            f"violates 'no silent fallback'"
-        )
+        assert res.stderr.strip(), f"{call!r} failed silently — stderr empty; violates 'no silent fallback'"
 
 
 # -- Drift guard against design doc ------------------------------------------
@@ -421,6 +383,4 @@ def test_lib_implements_every_helper_in_design_doc():
     res = _source_call("declare -F | awk '{print $3}'")
     defined = set(res.stdout.split())
     missing = [h for h in doc_helpers if h not in defined]
-    assert not missing, (
-        f"design doc lists {missing} but lib does not define them"
-    )
+    assert not missing, f"design doc lists {missing} but lib does not define them"

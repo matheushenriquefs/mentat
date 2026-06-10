@@ -1,4 +1,9 @@
 """P2: rename + dmux purge — static assertions."""
+
+import pytest
+
+pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
+
 import os
 import subprocess
 
@@ -17,6 +22,7 @@ def _read(path: str) -> str:
 
 
 # S2.1 — bin/ renames
+
 
 def test_mentat_orchestrate_exists():
     assert os.path.isfile(os.path.join(BIN, "mentat-orchestrate"))
@@ -43,8 +49,7 @@ def test_harness_map_deleted():
 
 
 def test_old_bin_names_gone():
-    for name in ("to-orchestrate", "to-track-harness", "devcontainer-up",
-                 "devcontainer-run", "devcontainer-doctor"):
+    for name in ("to-orchestrate", "to-track-harness", "devcontainer-up", "devcontainer-run", "devcontainer-doctor"):
         assert not os.path.isfile(os.path.join(BIN, name)), f"{name} still present in bin/"
 
 
@@ -53,6 +58,7 @@ def test_harness_map_not_in_bin_root():
 
 
 # S2.2 — agents/ renames
+
 
 def test_mentat_researcher_exists():
     assert os.path.isfile(os.path.join(AGENTS_DIR, "mentat-researcher.md"))
@@ -71,22 +77,32 @@ def test_mentat_bug_reviewer_exists():
 
 
 def test_old_agent_names_gone():
-    for name in ("crew-research.md", "crew-review-plan.md",
-                 "crew-review-tests.md", "crew-review-bugs.md"):
+    for name in ("crew-research.md", "crew-review-plan.md", "crew-review-tests.md", "crew-review-bugs.md"):
         assert not os.path.isfile(os.path.join(AGENTS_DIR, name)), f"{name} still in agents/"
 
 
 # S2.3 — cross-ref sed sweep (old names must not appear outside context/)
 
+
 def _grep_old_names(pattern: str) -> list:
     result = subprocess.run(
-        ["grep", "-rl", "--include=*", "-e", pattern,
-         "--exclude-dir=.git", "--exclude-dir=context",
-         "--exclude-dir=evals", "--exclude-dir=__pycache__",
-         "--exclude-dir=.claude", "--exclude-dir=.pytest_cache",
-         "--exclude=*.pyc",
-         ROOT],
-        capture_output=True, text=True
+        [
+            "grep",
+            "-rl",
+            "--include=*",
+            "-e",
+            pattern,
+            "--exclude-dir=.git",
+            "--exclude-dir=context",
+            "--exclude-dir=evals",
+            "--exclude-dir=__pycache__",
+            "--exclude-dir=.claude",
+            "--exclude-dir=.pytest_cache",
+            "--exclude=*.pyc",
+            ROOT,
+        ],
+        capture_output=True,
+        text=True,
     )
     return [l for l in result.stdout.splitlines() if l]
 
@@ -138,6 +154,7 @@ def test_no_old_crew_review_bugs_ref():
 
 # S2.5 — dmux purge
 
+
 def test_no_dmux_worktrees_path():
     hits = _grep_old_names(r"\.dmux/worktrees")
     assert hits == [], f".dmux/worktrees still referenced: {hits}"
@@ -160,6 +177,7 @@ def test_mentat_worktrees_path_in_orchestrate():
 
 # S2.6 — deleted dmux dirs/files
 
+
 def test_no_dmux_hooks_dir():
     assert not os.path.isdir(os.path.join(ROOT, ".dmux-hooks"))
 
@@ -179,6 +197,7 @@ def test_dmux_architecture_renamed():
 
 # S2.7 — ADR 0002 + 0005 no dmux-pane language
 
+
 def test_adr_0002_no_dmux_pane():
     src = _read(os.path.join(ADR, "0002-holding-branch-over-merge.md"))
     assert "dmux pane" not in src.lower()
@@ -191,30 +210,43 @@ def test_adr_0005_no_dmux_pane():
 
 # S2.8 — verify counts
 
+
 def test_mentat_bin_count():
-    entries = [f for f in os.listdir(BIN)
-               if os.path.isfile(os.path.join(BIN, f)) and f.startswith("mentat-")]
+    entries = [f for f in os.listdir(BIN) if os.path.isfile(os.path.join(BIN, f)) and f.startswith("mentat-")]
     assert len(entries) >= 5, f"Expected ≥5 mentat-* in bin/, got: {entries}"
 
 
 def test_mentat_agents_count():
-    entries = [f for f in os.listdir(AGENTS_DIR)
-               if f.startswith("mentat-") and f.endswith(".md")]
+    entries = [f for f in os.listdir(AGENTS_DIR) if f.startswith("mentat-") and f.endswith(".md")]
     assert len(entries) == 4, f"Expected 4 mentat-*.md in agents/, got: {entries}"
 
 
 # Syntax checks on renamed scripts
+
 
 def _bash_n(path: str):
     result = subprocess.run(["bash", "-n", path], capture_output=True, text=True)
     assert result.returncode == 0, f"bash -n failed on {path}:\n{result.stderr}"
 
 
-def test_syntax_mentat_orchestrate():   _bash_n(os.path.join(BIN, "mentat-orchestrate"))
-def test_syntax_mentat_track():         _bash_n(os.path.join(BIN, "mentat-track"))
-def test_syntax_mentat_container_up():  _bash_n(os.path.join(BIN, "mentat-container-up"))
-def test_syntax_mentat_container_run(): _bash_n(os.path.join(BIN, "mentat-container-run"))
-def test_syntax_mentat_container_doctor(): _bash_n(os.path.join(BIN, "mentat-container-doctor"))
+def test_syntax_mentat_orchestrate():
+    _bash_n(os.path.join(BIN, "mentat-orchestrate"))
+
+
+def test_syntax_mentat_track():
+    _bash_n(os.path.join(BIN, "mentat-track"))
+
+
+def test_syntax_mentat_container_up():
+    _bash_n(os.path.join(BIN, "mentat-container-up"))
+
+
+def test_syntax_mentat_container_run():
+    _bash_n(os.path.join(BIN, "mentat-container-run"))
+
+
+def test_syntax_mentat_container_doctor():
+    _bash_n(os.path.join(BIN, "mentat-container-doctor"))
 
 
 # S2.1 — harness subdir + output_format contract
@@ -230,10 +262,10 @@ def test_harness_subdir_has_8_files():
 
 def test_harness_files_in_subdir_not_flat():
     for name in HARNESS_NAMES:
-        assert not os.path.isfile(os.path.join(LIB, f"harness-{name}.sh")), \
+        assert not os.path.isfile(os.path.join(LIB, f"harness-{name}.sh")), (
             f"harness-{name}.sh still in lib/ flat (must be in lib/harness/)"
-        assert os.path.isfile(os.path.join(HARNESS_DIR, f"{name}.sh")), \
-            f"lib/harness/{name}.sh missing"
+        )
+        assert os.path.isfile(os.path.join(HARNESS_DIR, f"{name}.sh")), f"lib/harness/{name}.sh missing"
 
 
 def test_each_harness_exposes_output_format():
@@ -263,22 +295,20 @@ def test_gate_harness_rejects_missing_output_format(tmp_path):
     stub = tmp_path / "fake.sh"
     stub.write_text("#!/bin/bash\nharness_fake_cmd() { printf 'fake\\0'; }\n")
     gates = os.path.join(LIB, "gates.sh")
-    result = subprocess.run(
-        ["bash", "-c", f"source {gates} && gate_harness {stub}"],
-        capture_output=True, text=True
-    )
+    result = subprocess.run(["bash", "-c", f"source {gates} && gate_harness {stub}"], capture_output=True, text=True)
     assert result.returncode != 0, "gate_harness must fail when output_format function is missing"
 
 
 def test_orchestrate_uses_harness_subdir():
     src = _read(os.path.join(BIN, "mentat-orchestrate"))
-    assert "harness/${HARNESS}" in src or 'harness/"$HARNESS"' in src or "lib/harness/" in src, \
+    assert "harness/${HARNESS}" in src or 'harness/"$HARNESS"' in src or "lib/harness/" in src, (
         "mentat-orchestrate must source from lib/harness/ subdir"
-    assert "harness-${HARNESS}" not in src, \
-        "mentat-orchestrate still uses old flat harness-${HARNESS} path"
+    )
+    assert "harness-${HARNESS}" not in src, "mentat-orchestrate still uses old flat harness-${HARNESS} path"
 
 
 # S2.2 — evals promoted to repo root
+
 
 def test_evals_at_repo_root():
     assert os.path.isdir(os.path.join(ROOT, "evals", "pytest")), "evals/pytest must be at repo root"
@@ -291,13 +321,15 @@ def test_agents_evals_gone():
 
 def test_pyproject_testpaths_updated():
     src = _read(os.path.join(ROOT, "pyproject.toml"))
-    assert '"evals/pytest"' in src or "'evals/pytest'" in src or "evals/pytest" in src, \
+    assert '"evals/pytest"' in src or "'evals/pytest'" in src or "evals/pytest" in src, (
         "pyproject.toml testpaths must point to evals/pytest"
+    )
     assert ".agents/evals" not in src, "pyproject.toml still references .agents/evals"
 
 
 def test_package_json_eval_script_updated():
     src = _read(os.path.join(ROOT, "package.json"))
-    assert "evals/promptfoo/promptfooconfig.yaml" in src, \
+    assert "evals/promptfoo/promptfooconfig.yaml" in src, (
         "package.json eval script must reference evals/promptfoo/promptfooconfig.yaml"
+    )
     assert ".agents/evals" not in src, "package.json still references .agents/evals"

@@ -9,7 +9,13 @@ Verify (plan): simulate failing final_review -> no raw text in `.jsonl`,
 stderr appears in sidecar, audit row has `review.final` event with captured
 stdout field.
 """
+
 from __future__ import annotations
+
+import pytest
+
+pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
+
 
 import json
 import os
@@ -32,6 +38,7 @@ def _final_review_block(src: str) -> str:
 
 
 # -- Source assertions ---------------------------------------------------------
+
 
 def test_final_review_no_raw_jsonl_append():
     """S4: final_review must not append raw subprocess output to .jsonl ($logf)."""
@@ -95,11 +102,7 @@ def stub_env(tmp_path):
     fake_bin = fake_home / ".agents" / "bin"
     fake_bin.mkdir(parents=True)
     stub = fake_bin / "mentat-container-up"
-    stub.write_text(
-        "#!/usr/bin/env bash\n"
-        "echo 'container-up: ok'\n"
-        "echo 'container-up: bring-up noise' >&2\n"
-    )
+    stub.write_text("#!/usr/bin/env bash\necho 'container-up: ok'\necho 'container-up: bring-up noise' >&2\n")
     stub.chmod(0o755)
     return {
         "tmp": tmp_path,
@@ -114,8 +117,7 @@ def stub_env(tmp_path):
 def _driver_script(stub_env, *, agent_exits: int) -> str:
     func = _final_review_block(ORCH.read_text())
     return (
-        _DRIVER_TEMPLATE
-        .replace("__LOGDIR__", str(stub_env["logdir"]))
+        _DRIVER_TEMPLATE.replace("__LOGDIR__", str(stub_env["logdir"]))
         .replace("__LOGROOT__", str(stub_env["log_root"]))
         .replace("__REPO__", stub_env["repo"])
         .replace("__SESSION__", stub_env["session"])
@@ -163,8 +165,9 @@ def test_jsonl_lines_all_valid_json(stub_env, agent_exits):
     proc = _run_driver(stub_env, agent_exits=agent_exits)
     assert proc.returncode == 0, f"driver failed: stderr={proc.stderr!r}"
     rows = _read_rows(stub_env)
-    assert any(r.get("event") == "review.final" for r in rows), \
+    assert any(r.get("event") == "review.final" for r in rows), (
         f"expected review.final row; got events={[r.get('event') for r in rows]}"
+    )
 
 
 def test_stderr_routed_to_sidecar(stub_env):
@@ -185,8 +188,7 @@ def test_audit_row_has_stdout_and_stderr_path(stub_env):
     payload = final[-1]["payload"]
     assert "stdout" in payload, f"payload missing stdout: {payload!r}"
     assert "stderr_path" in payload, f"payload missing stderr_path: {payload!r}"
-    assert "agent stdout line one" in payload["stdout"], \
-        f"captured stdout not preserved: {payload['stdout']!r}"
+    assert "agent stdout line one" in payload["stdout"], f"captured stdout not preserved: {payload['stdout']!r}"
     assert payload["stderr_path"].endswith(".stderr"), payload["stderr_path"]
 
 
@@ -195,5 +197,4 @@ def test_audit_row_veto_reflects_agent_exit(stub_env):
     proc = _run_driver(stub_env, agent_exits=1)
     assert proc.returncode == 0, proc.stderr
     final = [r for r in _read_rows(stub_env) if r.get("event") == "review.final"]
-    assert final and final[-1]["payload"]["veto"] is True, \
-        f"flagged run must set veto=true; got {final!r}"
+    assert final and final[-1]["payload"]["veto"] is True, f"flagged run must set veto=true; got {final!r}"

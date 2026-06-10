@@ -1,0 +1,45 @@
+version: "3"
+
+tasks:
+  install:
+    desc: Install dev dependencies
+    cmds:
+      - uv sync
+
+  test:
+    desc: Run tests
+    cmds:
+      - pytest {{.CLI_ARGS}}
+
+  lint:
+    desc: Lint with ruff
+    cmds:
+      - ruff check .
+
+  format:
+    desc: Format with ruff
+    cmds:
+      - ruff format .
+      - ruff check . --fix
+
+  typecheck:
+    desc: Type-check with pyright
+    cmds:
+      - pyright
+
+  check:
+    desc: Lint, format, and typecheck
+    cmds:
+      - task: lint
+      - task: format
+      - task: typecheck
+
+  release:
+    desc: Tag and push a release
+    cmds:
+      - python tasks/release.py {{.CLI_ARGS}}
+
+  docs:sync:
+    desc: Sync docs
+    cmds:
+      - python tasks/docs_sync.py {{.CLI_ARGS}}

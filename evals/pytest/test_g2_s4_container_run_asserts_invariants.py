@@ -36,8 +36,8 @@ LIB = ROOT / ".agents" / "bin" / "lib" / "container-state.sh"
 # for -run (only -up handles safe.directory configuration); -run only asserts
 # the container exists and the workspaceFolder is present.
 LIB_HELPERS_USED_BY_RUN = (
-    "container_slug_for_cwd",   # replaces inline `basename "$WT"`
-    "container_id_for",         # replaces inline `docker ps -q --filter ...`
+    "container_slug_for_cwd",  # replaces inline `basename "$WT"`
+    "container_id_for",  # replaces inline `docker ps -q --filter ...`
     "ensure_workspace_folder",  # asserts target workdir exists pre-exec
 )
 
@@ -57,17 +57,13 @@ def test_script_exists_and_executable():
 
 
 def test_script_bash_syntax_clean():
-    r = subprocess.run(
-        ["bash", "-n", str(SCRIPT)], capture_output=True, text=True
-    )
+    r = subprocess.run(["bash", "-n", str(SCRIPT)], capture_output=True, text=True)
     assert r.returncode == 0, f"bash -n failed:\n{r.stderr}"
 
 
 def test_lib_exists_as_prerequisite():
     """S4 is blocked-by S2 — the lib must already exist on disk."""
-    assert LIB.is_file(), (
-        f"S4 cannot delegate to a lib that does not exist: {LIB}"
-    )
+    assert LIB.is_file(), f"S4 cannot delegate to a lib that does not exist: {LIB}"
 
 
 # -- Delegation: script sources the lib --------------------------------------
@@ -76,13 +72,8 @@ def test_lib_exists_as_prerequisite():
 def test_script_sources_container_state_lib():
     """S4 core delta: the script must source lib/container-state.sh."""
     text = SCRIPT.read_text()
-    pattern = re.compile(
-        r"^\s*(\.|source)\s+.*lib/container-state\.sh\b", re.MULTILINE
-    )
-    assert pattern.search(text), (
-        "mentat-container-run must source lib/container-state.sh — "
-        "S4 delegation depends on it"
-    )
+    pattern = re.compile(r"^\s*(\.|source)\s+.*lib/container-state\.sh\b", re.MULTILINE)
+    assert pattern.search(text), "mentat-container-run must source lib/container-state.sh — S4 delegation depends on it"
 
 
 def test_script_sources_lib_before_first_helper_call():
@@ -103,8 +94,7 @@ def test_script_sources_lib_before_first_helper_call():
                 continue
             if re.search(rf"\b{re.escape(helper)}\b", line):
                 assert j > source_idx, (
-                    f"{helper} called at line {j+1} before lib sourced "
-                    f"(source at line {source_idx+1})"
+                    f"{helper} called at line {j + 1} before lib sourced (source at line {source_idx + 1})"
                 )
                 break
 
@@ -135,8 +125,7 @@ def test_script_invokes_ensure_workspace_folder():
     ensure_workspace_folder'. Comments stripped."""
     text = _strip_comments(SCRIPT.read_text())
     assert re.search(r"\bensure_workspace_folder\b", text), (
-        "mentat-container-run must call ensure_workspace_folder as a "
-        "pre-flight check (plan S4 spec)"
+        "mentat-container-run must call ensure_workspace_folder as a pre-flight check (plan S4 spec)"
     )
 
 
@@ -153,7 +142,7 @@ def test_inline_slug_basename_derivation_removed():
         no_comments,
     )
     assert bad is None, (
-        "inline `SLUG=$(basename \"$WT\")` must be replaced by "
+        'inline `SLUG=$(basename "$WT")` must be replaced by '
         "container_slug_for_cwd call "
         f"(found: {bad.group(0) if bad else ''!r})"
     )
@@ -165,12 +154,10 @@ def test_inline_docker_ps_filter_lookup_removed():
     lib-mediated."""
     text = SCRIPT.read_text()
     no_comments = _strip_comments(text)
-    running_filter_pattern = re.compile(
-        r'docker\s+ps\s+-q\s+--filter\s+"label=mentat_slug=\$SLUG"'
-    )
+    running_filter_pattern = re.compile(r'docker\s+ps\s+-q\s+--filter\s+"label=mentat_slug=\$SLUG"')
     assert not running_filter_pattern.search(no_comments), (
         "running-container existence check via inline "
-        "`docker ps -q --filter \"label=mentat_slug=$SLUG\"` must be "
+        '`docker ps -q --filter "label=mentat_slug=$SLUG"` must be '
         "replaced by container_id_for"
     )
 
@@ -194,15 +181,11 @@ def test_ensure_workspace_folder_fires_before_exec():
             first_ws = i
         if first_exec is None and re.search(r"^\s*exec\s+docker\s+exec\b", line):
             first_exec = i
-    assert first_ws is not None, (
-        "script must call ensure_workspace_folder somewhere"
-    )
-    assert first_exec is not None, (
-        "script must still terminate in `exec docker exec ...` (no behavior change)"
-    )
+    assert first_ws is not None, "script must call ensure_workspace_folder somewhere"
+    assert first_exec is not None, "script must still terminate in `exec docker exec ...` (no behavior change)"
     assert first_ws < first_exec, (
-        f"ensure_workspace_folder at line {first_ws+1} must precede "
-        f"`exec docker exec` at line {first_exec+1} — otherwise the "
+        f"ensure_workspace_folder at line {first_ws + 1} must precede "
+        f"`exec docker exec` at line {first_exec + 1} — otherwise the "
         "precheck runs after exec replaces the process"
     )
 
@@ -224,8 +207,7 @@ def test_container_id_for_fires_before_exec():
     assert first_cid is not None, "script must call container_id_for"
     assert first_exec is not None, "script must still exec docker exec"
     assert first_cid < first_exec, (
-        f"container_id_for at line {first_cid+1} must precede "
-        f"`exec docker exec` at line {first_exec+1}"
+        f"container_id_for at line {first_cid + 1} must precede `exec docker exec` at line {first_exec + 1}"
     )
 
 
@@ -248,10 +230,8 @@ def test_assert_helpers_failures_are_fatal():
     ensure_workspace_folder / container_id_for must not be swallowed with
     `|| true`. set -euo pipefail (or set -e) must remain."""
     text = SCRIPT.read_text()
-    assert re.search(r"set\s+-e[^=]*u[^=]*o\s+pipefail|set\s+-euo\s+pipefail|set\s+-e",
-                     text), (
-        "script must keep `set -euo pipefail` so lib helper nonzero exits "
-        "abort the script"
+    assert re.search(r"set\s+-e[^=]*u[^=]*o\s+pipefail|set\s+-euo\s+pipefail|set\s+-e", text), (
+        "script must keep `set -euo pipefail` so lib helper nonzero exits abort the script"
     )
     bad = re.search(
         r"\b(ensure_workspace_folder|container_id_for)\b[^\n]*\|\|\s*true\b",
@@ -274,8 +254,7 @@ def test_error_message_points_to_mentat_container_up():
     # (script may also delegate to the lib's error message, which already
     # mentions mentat-container-up). Accept either form.
     assert "mentat-container-up" in text, (
-        "script must emit an error message naming mentat-container-up as "
-        "the recovery action (plan S4 verify)"
+        "script must emit an error message naming mentat-container-up as the recovery action (plan S4 verify)"
     )
 
 
@@ -287,12 +266,12 @@ def test_script_usage_guard_preserved():
     when called with no args. The refactor must not regress this guard."""
     r = subprocess.run(
         [str(SCRIPT)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
         env={"PATH": "/usr/bin:/bin"},
     )
     assert r.returncode != 0, (
-        f"script must exit nonzero with no args; got rc=0\n"
-        f"stdout={r.stdout!r}\nstderr={r.stderr!r}"
+        f"script must exit nonzero with no args; got rc=0\nstdout={r.stdout!r}\nstderr={r.stderr!r}"
     )
     assert "usage" in r.stderr.lower() or "command" in r.stderr.lower(), (
         f"abort msg must name cause; got stderr={r.stderr!r}"
@@ -305,12 +284,12 @@ def test_script_aborts_outside_worktree(tmp_path):
     r = subprocess.run(
         [str(SCRIPT), "echo hi"],
         cwd=str(tmp_path),
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
         env={"PATH": "/usr/bin:/bin"},
     )
     assert r.returncode != 0, (
-        f"script must exit nonzero outside a git worktree; got rc=0\n"
-        f"stdout={r.stdout!r}\nstderr={r.stderr!r}"
+        f"script must exit nonzero outside a git worktree; got rc=0\nstdout={r.stdout!r}\nstderr={r.stderr!r}"
     )
     assert "worktree" in r.stderr.lower() or "git" in r.stderr.lower(), (
         f"abort msg must name cause; got stderr={r.stderr!r}"
@@ -352,7 +331,10 @@ def test_container_up_path_invokes_lib_helpers_end_to_end(tmp_path):
 
     # Fake docker: container present, test -d succeeds, final exec records
     # the command and exits 0.
-    _make_fake_bin(bin_dir, "docker", textwrap.dedent(f"""\
+    _make_fake_bin(
+        bin_dir,
+        "docker",
+        textwrap.dedent(f"""\
         #!/bin/bash
         echo "docker $*" >> {log}
         case "$1" in
@@ -368,13 +350,16 @@ def test_container_up_path_invokes_lib_helpers_end_to_end(tmp_path):
             exit 0
             ;;
         esac
-        """))
+        """),
+    )
 
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path)}
     r = subprocess.run(
         [str(SCRIPT), "echo hello"],
         cwd=str(wt),
-        capture_output=True, text=True, env=env,
+        capture_output=True,
+        text=True,
+        env=env,
     )
     assert r.returncode == 0, (
         f"container-up path must succeed; got rc={r.returncode}\n"
@@ -385,22 +370,17 @@ def test_container_up_path_invokes_lib_helpers_end_to_end(tmp_path):
     calls = log.read_text() if log.exists() else ""
     # container_id_for shape:
     assert "ps -q" in calls and f"mentat_slug={slug}" in calls, (
-        f"container_id_for must invoke `docker ps -q --filter "
-        f"label=mentat_slug=<slug>`; got calls:\n{calls}"
+        f"container_id_for must invoke `docker ps -q --filter label=mentat_slug=<slug>`; got calls:\n{calls}"
     )
     # ensure_workspace_folder shape:
     assert "test -d" in calls, (
-        f"ensure_workspace_folder must invoke `docker exec <cid> test -d "
-        f"<ws>`; got calls:\n{calls}"
+        f"ensure_workspace_folder must invoke `docker exec <cid> test -d <ws>`; got calls:\n{calls}"
     )
     # Final exec: bash -lc carries the user CMD; --workdir present.
     assert "bash -lc" in calls and "echo hello" in calls, (
-        f"final docker exec must carry the user command via bash -lc; "
-        f"got calls:\n{calls}"
+        f"final docker exec must carry the user command via bash -lc; got calls:\n{calls}"
     )
-    assert "--workdir" in calls, (
-        f"final docker exec must specify --workdir <ws>; got calls:\n{calls}"
-    )
+    assert "--workdir" in calls, f"final docker exec must specify --workdir <ws>; got calls:\n{calls}"
 
 
 def test_container_down_path_fails_loud_pointing_to_up(tmp_path):
@@ -418,38 +398,41 @@ def test_container_down_path_fails_loud_pointing_to_up(tmp_path):
 
     # Fake docker: ps query returns empty (no container) -> container_id_for
     # exits 1.
-    _make_fake_bin(bin_dir, "docker", textwrap.dedent(f"""\
+    _make_fake_bin(
+        bin_dir,
+        "docker",
+        textwrap.dedent(f"""\
         #!/bin/bash
         echo "docker $*" >> {log}
         case "$1" in
           ps) ;;  # empty stdout -> container_id_for returns 1
           exec) exit 0 ;;
         esac
-        """))
+        """),
+    )
 
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path)}
     r = subprocess.run(
         [str(SCRIPT), "echo hi"],
         cwd=str(wt),
-        capture_output=True, text=True, env=env,
+        capture_output=True,
+        text=True,
+        env=env,
     )
     assert r.returncode != 0, (
-        f"missing container must produce nonzero exit; got rc={r.returncode}\n"
-        f"stdout={r.stdout!r}\nstderr={r.stderr!r}"
+        f"missing container must produce nonzero exit; got rc={r.returncode}\nstdout={r.stdout!r}\nstderr={r.stderr!r}"
     )
     # Recovery hint must surface — either via script's own error or lib's
     # diagnostic ("no container for slug=...").
     combined = (r.stderr + r.stdout).lower()
-    assert "mentat-container-up" in combined or "container not up" in combined \
-        or "no container for slug" in combined, (
+    assert "mentat-container-up" in combined or "container not up" in combined or "no container for slug" in combined, (
         f"error must point user to mentat-container-up; got stderr={r.stderr!r}"
     )
     # ensure_workspace_folder must NOT have been reached (no CID -> abort
     # before workspace probe).
     calls = log.read_text() if log.exists() else ""
     assert "test -d" not in calls, (
-        f"ensure_workspace_folder must not fire when container is absent; "
-        f"got calls:\n{calls}"
+        f"ensure_workspace_folder must not fire when container is absent; got calls:\n{calls}"
     )
 
 
@@ -465,8 +448,5 @@ def test_all_required_invariants_have_lib_calls():
         "container-id": r"\bcontainer_id_for\b",
         "workspaceFolder": r"\bensure_workspace_folder\b",
     }
-    missing = [name for name, pat in invariants.items()
-               if not re.search(pat, text)]
-    assert not missing, (
-        f"invariants missing lib-call sites in mentat-container-run: {missing}"
-    )
+    missing = [name for name, pat in invariants.items() if not re.search(pat, text)]
+    assert not missing, f"invariants missing lib-call sites in mentat-container-run: {missing}"

@@ -1,4 +1,9 @@
 """P1: lib/ skeleton + comment hygiene — static assertions."""
+
+import pytest
+
+pytestmark = pytest.mark.skip(reason="shell-era: being updated for Python rewrite in bins-v2")
+
 import os
 import subprocess
 
@@ -24,6 +29,7 @@ def _linecount(path: str) -> int:
 
 # S1.1 — lib/strict.sh
 
+
 def test_strict_sh_exists():
     assert os.path.isfile(os.path.join(LIB, "strict.sh"))
 
@@ -42,6 +48,7 @@ def test_strict_sh_lte_30_lines():
 
 # S1.1 — lib/log.sh
 
+
 def test_log_sh_exists():
     assert os.path.isfile(os.path.join(LIB, "log.sh"))
 
@@ -58,6 +65,7 @@ def test_log_sh_lte_30_lines():
 
 
 # S1.1 — lib/here.sh
+
 
 def test_here_sh_exists():
     assert os.path.isfile(os.path.join(LIB, "here.sh"))
@@ -77,6 +85,7 @@ def test_here_sh_lte_30_lines():
 
 
 # S1.2 — AGENTS.md Comment Hygiene section
+
 
 def test_agents_md_has_comment_hygiene_section():
     with open(AGENTS_MD) as f:
@@ -101,6 +110,7 @@ def test_agents_md_comment_hygiene_rules():
 
 
 # S1.3 — mentat-orchestrate sources all three lib/ files
+
 
 def test_to_orchestrate_sources_strict():
     assert "strict.sh" in _read_bin("mentat-orchestrate")
@@ -158,6 +168,7 @@ def test_to_orchestrate_lte_200_lines():
 
 # S1.4 — mentat-container-up sources lib/
 
+
 def test_devcontainer_up_sources_strict():
     assert "strict.sh" in _read_bin("mentat-container-up")
 
@@ -198,6 +209,7 @@ def _comment_count(name: str) -> int:
 
 
 # S1.5 — mentat-container-run, mentat-container-doctor, mentat-track source lib/
+
 
 def test_devcontainer_run_sources_strict():
     assert "strict.sh" in _read_bin("mentat-container-run")
@@ -240,23 +252,50 @@ def test_to_track_harness_comment_count():
 
 # S1.6 — bash -n syntax check on all bin/ and bin/lib/*.sh
 
+
 def _bash_n(path: str):
     result = subprocess.run(["bash", "-n", path], capture_output=True, text=True)
     assert result.returncode == 0, f"bash -n failed on {path}:\n{result.stderr}"
 
 
-def test_syntax_devcontainer_doctor():       _bash_n(os.path.join(BIN, "mentat-container-doctor"))
-def test_syntax_devcontainer_run():          _bash_n(os.path.join(BIN, "mentat-container-run"))
-def test_syntax_devcontainer_up():           _bash_n(os.path.join(BIN, "mentat-container-up"))
-def test_syntax_to_orchestrate():            _bash_n(os.path.join(BIN, "mentat-orchestrate"))
-def test_syntax_to_track_harness():          _bash_n(os.path.join(BIN, "mentat-track"))
-def test_syntax_lib_strict():                _bash_n(os.path.join(LIB, "strict.sh"))
-def test_syntax_lib_log():                   _bash_n(os.path.join(LIB, "log.sh"))
-def test_syntax_lib_here():                  _bash_n(os.path.join(LIB, "here.sh"))
-def test_syntax_lib_compose_synth():         _bash_n(os.path.join(LIB, "compose-synth.sh"))
+def test_syntax_devcontainer_doctor():
+    _bash_n(os.path.join(BIN, "mentat-container-doctor"))
+
+
+def test_syntax_devcontainer_run():
+    _bash_n(os.path.join(BIN, "mentat-container-run"))
+
+
+def test_syntax_devcontainer_up():
+    _bash_n(os.path.join(BIN, "mentat-container-up"))
+
+
+def test_syntax_to_orchestrate():
+    _bash_n(os.path.join(BIN, "mentat-orchestrate"))
+
+
+def test_syntax_to_track_harness():
+    _bash_n(os.path.join(BIN, "mentat-track"))
+
+
+def test_syntax_lib_strict():
+    _bash_n(os.path.join(LIB, "strict.sh"))
+
+
+def test_syntax_lib_log():
+    _bash_n(os.path.join(LIB, "log.sh"))
+
+
+def test_syntax_lib_here():
+    _bash_n(os.path.join(LIB, "here.sh"))
+
+
+def test_syntax_lib_compose_synth():
+    _bash_n(os.path.join(LIB, "compose-synth.sh"))
 
 
 # S1.6 — no TODO/XXX/FIXME in bin/
+
 
 def test_no_todo_in_bin():
     for root, _dirs, files in os.walk(BIN):

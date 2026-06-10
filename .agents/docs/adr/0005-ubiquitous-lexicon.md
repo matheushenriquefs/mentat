@@ -1,79 +1,46 @@
-# ADR 0005: Ubiquitous lexicon — slice/chunk/batch, one Laravel borrow
+# ADR 0005: Ubiquitous lexicon — slice/chunk/batch + gate/smell/verdict
 
 Status: Accepted (locked)
 Date: 2026-06-03
+Amended: 2026-06-09 (v2 — expanded with gate machinery vocabulary)
 
 ## Context
 
-The system's terms (`slice`, `chunk`, `slug`, holding branch, land) grew across
-ADRs 0001-0004 and the `to-*`/`mentat-container-*` scripts. They were *consistent
-in spirit* but never collected, and two gaps bit: (1) `slice` and `chunk` were
-used near-interchangeably in prose though they name different layers; (2) there
-was no noun for "the whole set of chunks in one `mentat-orchestrate` run" — code
-said `SLUGS[@]`, prose said "the queue" / "the whole run". One word imported
-from Laravel (`batch`) closes that gap; nothing else there maps. Locked here so
-every command, ADR, and script speaks one vocabulary.
+The system's terms grew across ADRs 0001–0004 and the `to-*`/`mentat-container-*`
+scripts — consistent in spirit but never collected. Two gaps bit: `slice` and `chunk`
+used interchangeably; no noun for the whole set of chunks in one run. Gate machinery
+(ADR-0003 v2) adds its own vocabulary; collected here.
 
 ## Decision — the lexicon
 
-- **slice** — a *planned* vertical tracer-bullet cut. An INPUT artifact: a
-  `plan.md`. Taxonomy owned by `/mentat-plan` + `/mentat-issues` (AFK/HITL tags theirs).
-- **chunk** — the *running execution* of one slice: worktree + devcontainer +
-  its own branch off `main`, running `/mentat-implement`. One slice → one chunk.
-- **batch** — the full set of chunks in one `mentat-orchestrate` run. The parallel
-  fan-out group; lands when all-green, ejects per-chunk on red.
-- **slug** — a chunk's unique id; also its worktree dirname and `mentat_slug`
-  container label. (`mentat-<epoch>-<pid>-<rand>`.)
-- **harness** — the headless agent CLI (`cursor-agent` | `claude`). The thing
-  `--harness=` selects, `mentat-track` watches, each harness file self-declares
-  its output format, and `harness_cmd()` builds an invocation of. Never "build" (collides with
-  Docker `build:` in `mentat-container-up`).
-- **holding branch** (`$HOLDING`, `branch/<feature>`) — own-branch land target
-  with no commits of its own (ADR 0002).
-- **land** — the cross-branch move: rebase the chunk onto `$HOLDING`
-  in-container, re-gate, host `merge --ff-only` (ADR 0004). Never plain
-  "merge" — host-side `git merge` is the rejected mechanism (ADR 0002).
+**Orchestration:**
+- **slice** — a *planned* vertical tracer-bullet cut. INPUT: a `plan.md`.
+- **chunk** — the *running execution* of one slice: worktree + container + branch.
+- **batch** — the full set of chunks in one `mentat-orchestrate run`.
+- **slug** — chunk's unique id; worktree dirname; `mentat_slug` container label.
+- **holding branch** — `branch/<feature>`, no own commits; chunks FF onto it.
+- **land** — FF-merge a chunk's tip onto the holding branch after all gates pass.
+- **eject** — preserve a chunk's worktree for repair on gate-fail or conflict.
+- **plan class** — `AFK` (headless, `--disallowedTools AskUserQuestion`) | `HITL` (interactive).
 
-slice : chunk :: plan : process. If a sentence is about the cut, say slice; if
-it's about the worktree/container/branch doing the work, say chunk; if it's
-about all of them together in one run, say batch.
+**Review machinery (expanded for ADR-0003 v2):**
+- **gate** — anything that evaluates a chunk and emits a verdict (umbrella).
+- **code gate** — deterministic Python gate. Lives in `.agents/lib/gates/code/`.
+- **llm gate** — LLM reviewer agent prompt. Lives in `.agents/lib/gates/llm/`.
+- **smell** — Fowler code smell. Advisory by default.
+- **severity** — per-gate: `info` / `low` / `med` / `high` / `critical`.
+- **threshold** — (llm gates only) numeric score above which advisory flips blocking.
+- **verdict** — typed gate output: `pass` / `block` / `advise`.
 
-## The one Laravel borrow — `batch`, noun only
+slice : chunk :: plan : process. If about the cut → slice; about the execution → chunk;
+about all of them together in one run → batch.
 
-`batch` is taken from Laravel's job batching (parallel group, monitor
-completion, act when all done / on first failure) because it's idiomatic and
-ground-truthable against their docs. **We adopt the noun, NOT the semantics.**
-Laravel batch jobs are independent and order-free; our chunks are not — landing
-is serial and each chunk rebases onto the tip the previous one left (ADR 0004's
-merge queue). So `batch` names the group; it does NOT imply `then()`/`catch()`/
-`finally()` independence or any dispatch/handle/worker model. Read "batch" as
-"the run's chunks," nothing more.
-
-## Rejected
-
-- **`chunk(s)` for the group.** Plural of the execution unit is a pile of
-  chunks, never a name for the group-as-a-unit — can't say "re-gate the batch"
-  or "the batch lands all-green". Different layer, needs its own noun.
-- **Laravel `Job` for chunk.** Imports serialize→store→pop→worker; our chunk is
-  a live worktree+container, not a serialized payload. Keep `chunk`.
-- **Laravel `Chain` for the land pass.** Chain = sequential, skip-rest-on-fail.
-  Ours ejects-and-continues. Close enough to mislead. Keep "land pass / merge
-  queue" — git vocabulary, already correct.
-- **Laravel `dispatch`/`handle`/`release`/`tries`.** Queue-backend verbs with no
-  worktree analog.
-- **`run` / `wave` for the group.** Fine, but not ground-truthable; `batch` is
-  the idiomatic pick.
-
-## Terse file-style — confirmed, not changed
-
-Sanity-checked: the in-house `to-*` style (dense, telegraphic, imperative) is
-consistent across AGENTS.md and the ADRs. No edits. The rule, stated once: that
-terseness is for FILES (ADRs, AGENTS.md/CLAUDE.md, command bodies, script
-comments) — prose with a human in chat is exempt.
+`batch` borrowed from Laravel job batching (parallel group), noun only — NOT Laravel's
+independent `then()`/`catch()`/`finally()` semantics. Landing is serial; each chunk
+rebases onto the tip the previous one left.
 
 ## Consequences
 
-`harness_cmd` replaces `build_cmd` in `mentat-orchestrate` (this lexicon's rename).
-ADRs and AGENTS.md use slice/chunk/batch per the layers above. New terms join
-this table rather than drifting in inline. This ADR is index-only in AGENTS.md
-(titles-only; body on demand — ADR 0001's context budget).
+Every command, ADR, and script speaks one vocabulary. New terms join this table.
+ADRs/AGENTS.md use slice/chunk/batch/gate/verdict per the layers above. This ADR is
+index-only in AGENTS.md (title only; body on demand — ADR 0001's budget).

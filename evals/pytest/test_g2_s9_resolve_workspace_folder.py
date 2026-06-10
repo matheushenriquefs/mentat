@@ -13,6 +13,7 @@ Verify (from plan):
 - mentat-container-up no longer defines local `workspace_folder()`
 - only lib/container-state.sh reads .devcontainer/devcontainer.json
 """
+
 from __future__ import annotations
 
 import os
@@ -52,9 +53,7 @@ def test_resolve_workspace_folder_reads_explicit_field(tmp_path):
     _seed_devcontainer(sub, '{"name":"x","workspaceFolder":"/workspaces/mentat"}')
     res = _run_helper("resolve_workspace_folder", sub)
     assert res.returncode == 0, f"rc={res.returncode} stderr={res.stderr!r}"
-    assert res.stdout.strip() == "/workspaces/mentat", (
-        f"expected explicit field, got {res.stdout!r}"
-    )
+    assert res.stdout.strip() == "/workspaces/mentat", f"expected explicit field, got {res.stdout!r}"
 
 
 def test_resolve_workspace_folder_fallback_to_slug(tmp_path):
@@ -63,9 +62,7 @@ def test_resolve_workspace_folder_fallback_to_slug(tmp_path):
     sub.mkdir()
     res = _run_helper("resolve_workspace_folder", sub)
     assert res.returncode == 0, f"rc={res.returncode} stderr={res.stderr!r}"
-    assert res.stdout.strip() == "/workspaces/myslug", (
-        f"expected slug fallback, got {res.stdout!r}"
-    )
+    assert res.stdout.strip() == "/workspaces/myslug", f"expected slug fallback, got {res.stdout!r}"
 
 
 def test_resolve_workspace_folder_fallback_when_field_absent(tmp_path):
@@ -75,9 +72,7 @@ def test_resolve_workspace_folder_fallback_when_field_absent(tmp_path):
     _seed_devcontainer(sub, '{"name":"x","build":{"dockerfile":"../Dockerfile"}}')
     res = _run_helper("resolve_workspace_folder", sub)
     assert res.returncode == 0, f"rc={res.returncode} stderr={res.stderr!r}"
-    assert res.stdout.strip() == "/workspaces/myslug", (
-        f"expected slug fallback, got {res.stdout!r}"
-    )
+    assert res.stdout.strip() == "/workspaces/myslug", f"expected slug fallback, got {res.stdout!r}"
 
 
 def test_resolve_workspace_folder_tolerates_jsonc_comments(tmp_path):
@@ -107,9 +102,7 @@ def test_mentat_container_run_does_not_hardcode_slug_workspace():
 def test_mentat_container_run_uses_lib_helper():
     """Positive proof: run calls resolve_workspace_folder."""
     src = RUN.read_text()
-    assert "resolve_workspace_folder" in src, (
-        "mentat-container-run must call lib helper resolve_workspace_folder"
-    )
+    assert "resolve_workspace_folder" in src, "mentat-container-run must call lib helper resolve_workspace_folder"
 
 
 # -- mentat-container-up's local workspace_folder() collapsed into lib ------
