@@ -65,6 +65,8 @@ Log dir created with `mode=0o700` on first write. Reject + sidecar on: unknown e
 ## Rules
 
 - `EVENT_CATALOG` in `log.py` is single source of truth; no event emitted outside catalog.
+- Naming follows ADR-0007 §Naming policy: past-tense verbs, `resource.action` shape, sub-reasons live in payload not in name.
+- Extend existing payloads with new fields; coin a new event only when handler logic genuinely diverges.
 - `emit` writes atomically: temp file + rename, never partial append.
 - `validate` reads all `.jsonl` files under `MENTAT_LOG_PATH`; exit 0 if all valid.
 - `query` filters by `event`, `session`, `repo`, `since`, or `slug`; outputs JSONL to stdout.
