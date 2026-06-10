@@ -5,7 +5,7 @@ description: >
   Use when you need to create a new plan file or canonicalize a plan slug-or-path reference.
 ---
 
-Write structured plan files to `~/.agents/plans/` and resolve plan slug-or-path references to canonical absolute paths.
+Write structured plan files to `~/.agents/plans/` and resolve plan slug-or-path references to canonical absolute paths. Plans capture grilled requirements as tracer-bullet vertical slices, each AFK- or HITL-tagged, with explicit `blocked_by` between dependent slices.
 
 ## How to invoke
 
@@ -27,9 +27,49 @@ Subcommands: `write`, `resolve-slug`.
 Bare slug (no `/`, no `.md` suffix) → `~/.agents/plans/<slug>.md`.
 Slash or `.md` suffix → treated as a path (expanduser + resolve).
 
-## Flow
+## Authoring flow
 
-1. Run `/grill-with-docs` to grill requirements and split into slices.
-2. Write plan body to a temp file.
-3. `python3 ~/.agents/skills/mentat-plan/scripts/plan.py write <slug> <body-path>`
-4. Emits `plan.started` then `plan.succeeded` (or `plan.failed` on write error).
+1. Slugify the subject for the plan path: `~/.agents/plans/<slug>.md`.
+2. Run `/grill-with-docs` to grill requirements against existing docs (`CONTEXT.md` and ADRs are created lazily as decisions crystallize).
+3. Decompose into tracer-bullet vertical slices.
+4. Tag each slice **AFK** (gate clears unattended → eligible to auto-spawn) or **HITL** (needs an architectural call → anchors in calling session).
+5. Note `blocked_by` between slices for true dependencies; orchestrator topo-sorts.
+6. Write body to a temp file, then `plan.py write <slug> <temp-path>`.
+
+## Tracer-bullet slicing
+
+Each slice cuts through every layer end-to-end and is verifiable alone. Prefer many-thin over few-thick — the slice is the orchestration unit, so a clean vertical cut is why parallel chunks compose instead of colliding.
+
+A slice is well-formed when:
+- It can be implemented, tested, and reviewed without partial work from any sibling.
+- Its diff lives in a bounded set of paths.
+- Its gate passes deterministically on its own merits (red test → green).
+
+## Sibling-plan split
+
+If slices form ≥2 groups with disjoint write-sets and no chain between groups, emit one sibling plan per group plus a parent index file:
+
+```
+mentat-thing.md           # parent index: lists sibling plans, no slices
+mentat-thing-core.md      # sibling A: core slices
+mentat-thing-ui.md        # sibling B: ui slices
+```
+
+Otherwise emit one plan. The heuristic exists so `mentat-orchestrate` can fan groups in parallel without artificial barriers.
+
+## Rules
+
+- Plan frontmatter requires `id`, `status`, `class`, `blocked_by`. Optional: `parent`, `supersedes`, `created_at`.
+- `class` is `AFK` or `HITL`; lives in frontmatter, never overridden at runtime.
+- `blocked_by` lists slugs (not paths). Frontmatter parsing and cycle detection live in `mentat-orchestrate` (exits 65 on either).
+- Slug doubles as the plan's `id` field; filename and `id` should match or orchestrator topo-sort gets confused.
+- One commit per slice during implementation (`mentat-implement` contract); no squash.
+- Script body is stdlib-only; no PyYAML dependency (frontmatter parsing is delegated to `mentat-orchestrate`).
+
+## Constraints
+
+- Plan files live under `~/.agents/plans/` only; no project-local plan storage.
+- `write` overwrites an existing plan at the same slug without warning — slug collisions are caller responsibility.
+- `resolve-slug` is pure path arithmetic; it does not stat or validate the slug.
+- All audit emissions route through `mentat-log emit`; the skill never writes JSONL directly.
+- `write` is atomic only at the OS level: a successful write emits `plan.succeeded`; an `OSError` emits `plan.failed` and propagates to the caller.

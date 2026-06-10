@@ -52,6 +52,13 @@ rm .commit-msg
 | 69 | Container bring-up failed |
 | non-zero (other) | Underlying `git` exit code (FF-conflict, pre-commit fail, etc.) |
 
+## Environment
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MENTAT_DOCKER` | `docker` | Override docker binary (test isolation) |
+| `MENTAT_LOG_PATH` | `~/.mentat/logs` | Inherited from `mentat-log` for audit emits |
+
 ## Rules
 
 - Commit routes through the running devcontainer only — never the host (ADR-0004).
@@ -59,6 +66,7 @@ rm .commit-msg
 - Rebase is FF-only; non-FF → caller's eject path, not a force-push.
 - One commit per slice via this skill; squash forbidden.
 - Diff base defaults to `main`; override via positional arg.
+- Stdlib-only script body; no PyYAML or other PyPI deps.
 
 ## Constraints
 
