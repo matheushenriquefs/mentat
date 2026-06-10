@@ -27,33 +27,22 @@
 Mentat needs Python 3.11+ and Docker. Everything else runs inside the devcontainer.
 
 ```bash
-# clone
 git clone https://github.com/matheushenriquefs/mentat && cd mentat
 
-# dev install
-task install                            # uv sync
-
-# user install (idempotent — sets up ~/.mentat/ + ~/.agents/ + harness symlinks)
+# idempotent — sets up ~/.mentat/ + ~/.agents/ + harness symlinks
 .agents/bin/mentat-install              # interactive
 .agents/bin/mentat-install --yes        # skip confirmation
 .agents/bin/mentat-install --dry-run    # preview only
 ```
 
-Dev commands:
-
-```bash
-task check   # lint + format + typecheck
-task test    # pytest tests/
-```
-
 ## Quick Start
 
 ```
-# 1. create a plan (interactive grilling session)
-/mentat-plan write my-feature /tmp/body.md
+# 1. plan — agent grills requirements, writes ~/.agents/plans/add-csv-export.md
+/mentat-plan add-csv-export
 
-# 2. orchestrate — fan slices out as parallel chunks, land serial
-/mentat-orchestrate run branch/my-feature my-feature
+# 2. orchestrate — fan slices out as parallel chunks, land serial onto holding branch
+/mentat-orchestrate run holding/add-csv-export add-csv-export
 
 # 3. watch the batch land
 /mentat-session track
@@ -61,8 +50,8 @@ task test    # pytest tests/
 # 4. inspect ejected chunks (if any)
 /mentat-session doctor
 
-# 5. merge holding into main when green
-git checkout main && git merge --ff-only branch/my-feature
+# 5. review what landed on holding before merging upstream
+/mentat-git diff main..holding/add-csv-export
 ```
 
 ## What it does
@@ -77,6 +66,16 @@ git checkout main && git merge --ff-only branch/my-feature
 - **Harness-agnostic** — pluggable headless-agent CLIs (`claude-code`, `cursor` today). Drop a module to add another.
 - **Plugin API** — extend rubrics and gates without forking core.
 - **Stdlib-only bin layer** — installs without pip. Dev layer uses `uv`/`ruff`/`pyright`/`pytest`.
+
+## Development
+
+Contributing to Mentat itself (not running it on a target repo):
+
+```bash
+task install   # uv sync — dev dependencies (ruff, pyright, pytest)
+task check     # lint + format + typecheck
+task test      # pytest tests/
+```
 
 ## Documentation
 
