@@ -6,7 +6,7 @@ Domain vocabulary for mentat. Canonical definitions; ADRs are the source of auth
 
 - **gate** — anything that evaluates a chunk and emits a verdict (umbrella).
 - **code gate** — gate implemented in Python (deterministic). Lives in `.agents/lib/gates/code/`.
-- **llm gate** — gate implemented as a reviewer agent prompt. Lives in `.agents/lib/gates/llm/`.
+- **reviewer subagent** — LLM reviewer spawned via Agent tool. Source: `.agents/agents/mentat-*-reviewer.md`; installed via harness symlinks. Replaces retired LLM rubric files.
 - **smell** — Fowler code smell. Advisory by default. Both code and llm gates can emit smells.
 - **severity** — per-gate: `info` / `low` / `med` / `high` / `critical`.
 - **threshold** — (llm gates only) numeric score above which advisory flips to blocking.

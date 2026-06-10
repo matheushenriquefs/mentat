@@ -44,9 +44,10 @@ Detected harnesses: `claude-code` (`~/.claude/`), `cursor` (`~/.cursor/`).
 ├── skills/mentat-<bin>/                           # dev tree of skills (where rewrite happens)
 │   ├── SKILL.md                                   # skill manifest + invocation docs
 │   └── scripts/                                   # Python source (stdlib only, except tests/)
-├── lib/gates/{code,llm}/                          # filesystem-as-registry for gates
-│   ├── code/*.py                                  # deterministic gates: run(chunk_path) -> Verdict
-│   └── llm/*.md                                   # LLM reviewer prompts (system prompt body)
+├── lib/gates/code/                                # deterministic Python gates
+│   └── *.py                                       # run(chunk_path) -> (verdict, message)
+├── lib/gates/score.py                             # aggregates subagent JSON verdicts (ADR-0003)
+├── agents/mentat-*-reviewer.md                    # LLM reviewer subagents (harness-agnostic)
 ├── lib/                                           # shared host code (tasks/ runs from here)
 └── docs/                                          # CONTEXT, PATHS, mentat-architecture, ADRs
 ```
@@ -72,7 +73,7 @@ These paths are from the shell era and should not exist on a post-rewrite instal
 | `~/.agents/bin/lib/audit.sh` | shell emitter replaced by `mentat-log emit` |
 | `~/.agents/bin/lib/audit-schema.jsonc` | schema moved into `mentat-log/scripts/log.py` as `EVENT_CATALOG` |
 | `~/.agents/bin/lib/harness-registry.jsonc` | adapters hard-coded as Python modules in `mentat-implement` |
-| `~/.agents/agents/mentat-*-reviewer.md` | moved to `.agents/lib/gates/llm/` |
+| `~/.agents/lib/gates/llm/` | LLM rubric files retired; rubric content moved into `.agents/agents/mentat-*-reviewer.md` subagent bodies (ADR-0003 v3) |
 | `~/.agents/bin/mentat-precommit` | replaced by lefthook snippet |
 | `~/.agents/bin/mentat-config` | user edits `~/.mentat/config.jsonc` directly |
 | `~/.agents/bin/mentat-update` | vendir wrapper removed |

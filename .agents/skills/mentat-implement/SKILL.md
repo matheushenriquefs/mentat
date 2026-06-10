@@ -45,7 +45,7 @@ mentat-implement <single-plan-slug>
 - No `MENTAT_BATCH_CLASS` env var. Class lives in plan frontmatter (source of truth).
 - HITL exit code = `42` (sentinel; clear from 0 / 1 / signal codes).
 - Harness: default from `~/.mentat/config.jsonc` `harness:` key; override via `--harness`.
-- Gate runner: iterates `.agents/lib/gates/code/*.py` (`run(chunk_path)`) and `.agents/lib/gates/llm/*.md` (subprocess to harness).
+- Gate runner: iterates `.agents/lib/gates/code/*.py` (`run(chunk_path)`); spawns reviewer subagents (`mentat-{plan,test,bug,smell}-reviewer`) via Agent tool; `score.py` aggregates.
 
 ## Exit codes
 
@@ -54,4 +54,28 @@ mentat-implement <single-plan-slug>
 | 0 | All slices green, plan complete |
 | 1 | TDD or gate failure |
 | 42 | AFK ambiguity — HITL required |
-| ≥2 | Tool/config error |
+| 64 | CLI arg parse error / missing plan slug |
+| 65 | Malformed plan frontmatter |
+| 66 | Plan slug not found |
+| 69 | Container down at preflight |
+| 70 | Unhandled Python exception |
+| 78 | `~/.mentat/config.jsonc` missing or invalid |
+
+## Rules
+
+- One plan slug per invocation. Refuse multi-slug input with exit 64.
+- Container required (ADR-0004). Exit 69 if container down at preflight.
+- AFK class forbids `AskUserQuestion`; ambiguity → emit `chunk.ejected`, exit 42.
+- Stale-ref sweep required after any rename before commit.
+- One commit per slice via `/mentat-commit`. No squash.
+- All emit calls route through `mentat-log emit`; never write JSONL directly.
+- Read-only test mount enforced per `<slug>.tests.json` manifest when present.
+
+## Constraints
+
+- HITL class: `AskUserQuestion` allowed at any phase.
+- AFK class: no interactive prompts. Ambiguity is ejection, not a question.
+- Harness selection from `~/.mentat/config.jsonc`; `--harness` flag overrides.
+- Plan class read from frontmatter only; no env var override.
+- Session id from `$MENTAT_SESSION` (`<epoch>-<pid>` format).
+- Gate pass required for each slice before proceeding to next.
