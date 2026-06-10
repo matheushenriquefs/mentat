@@ -66,11 +66,11 @@ def test_resolve_workspace_folder_falls_back_when_missing(tmp_path):
     assert result == f"/workspaces/{tmp_path.name}"
 
 
-# ── compose_synth ────────────────────────────────────────────────────────────
+# ── compose_render ────────────────────────────────────────────────────────────
 
 
-def test_compose_synth_pure_returns_string(tmp_path):
-    cs = load_module("compose_synth")
+def test_compose_render_pure_returns_string(tmp_path):
+    cs = load_module("compose_render")
     compose_yml = tmp_path / "docker-compose.yml"
     compose_yml.write_text(
         "services:\n  app:\n    build: .\n    volumes:\n      - ..:/workspaces/app\n"
@@ -82,8 +82,8 @@ def test_compose_synth_pure_returns_string(tmp_path):
     assert "service" in data
 
 
-def test_compose_synth_no_side_effects(tmp_path):
-    cs = load_module("compose_synth")
+def test_compose_render_no_side_effects(tmp_path):
+    cs = load_module("compose_render")
     compose_yml = tmp_path / "docker-compose.yml"
     compose_yml.write_text(
         "services:\n  app:\n    build: .\n    volumes:\n      - ..:/workspaces/app\n"

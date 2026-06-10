@@ -173,18 +173,19 @@ def test_devcontainer_up_sources_strict():
     assert "strict.sh" in _read_bin("mentat-container-up")
 
 
-def test_devcontainer_up_sources_compose_synth():
-    assert "compose-synth.sh" in _read_bin("mentat-container-up")
+def test_devcontainer_up_sources_compose_render():
+    assert "compose_render" in _read_bin("mentat-container-up")
 
 
-def test_compose_synth_exists():
-    assert os.path.isfile(os.path.join(LIB, "compose-synth.sh"))
+def test_compose_render_exists():
+    scripts = os.path.join(os.path.dirname(__file__), "..", "..", ".agents", "skills", "mentat-container", "scripts")
+    assert os.path.isfile(os.path.join(scripts, "compose_render.py"))
 
 
-def test_compose_synth_has_synthesize_functions():
-    src = _read_lib("compose-synth.sh")
-    assert "synthesize_devcontainer()" in src
-    assert "synthesize_devcontainer_from_dockerfile()" in src
+def test_compose_render_has_synth_function():
+    scripts = os.path.join(os.path.dirname(__file__), "..", "..", ".agents", "skills", "mentat-container", "scripts")
+    src = open(os.path.join(scripts, "compose_render.py")).read()
+    assert "def synth(" in src
 
 
 def test_devcontainer_up_lte_150_lines():
@@ -290,8 +291,10 @@ def test_syntax_lib_here():
     _bash_n(os.path.join(LIB, "here.sh"))
 
 
-def test_syntax_lib_compose_synth():
-    _bash_n(os.path.join(LIB, "compose-synth.sh"))
+def test_syntax_lib_compose_render():
+    scripts = os.path.join(os.path.dirname(__file__), "..", "..", ".agents", "skills", "mentat-container", "scripts")
+    result = subprocess.run(["python3", "-m", "py_compile", os.path.join(scripts, "compose_render.py")], capture_output=True)
+    assert result.returncode == 0
 
 
 # S1.6 — no TODO/XXX/FIXME in bin/
