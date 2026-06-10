@@ -3,8 +3,6 @@ name: mentat-orchestrate
 description: >
   Fan out multiple plans in parallel, land them serially onto a holding branch.
   Use when you want to orchestrate a batch of plan slices across worktrees.
-metadata:
-  version: "0.1.0"
 ---
 
 Hybrid orchestrator: one bin, three stage modules (`fan_out`, `land_queue`, `batch_review`), four subcommands. Reads plan frontmatter to partition plans into anchored (HITL) and auto-spawned (AFK) groups. Spawns AFK plans in parallel via `ProcessPoolExecutor`; runs HITL plans in the current session. Lands all chunks serially onto the holding branch with gate checks.
@@ -74,3 +72,4 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py batch-review 
 - Plan class read from frontmatter only; no env var override.
 - `--dry-run` prints what would run; does not spawn or land.
 - Session id from `$MENTAT_SESSION` for audit events.
+- `batch-review` is always advisory; ejected counts do not affect its exit code.

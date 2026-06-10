@@ -3,8 +3,6 @@ name: mentat-implement
 description: >
   Execute a single mentat plan atomically in the current session.
   Use when you want to implement one plan slice-by-slice with TDD, gates, and per-slice commits.
-metadata:
-  version: "0.1.0"
 ---
 
 Atomic single-plan executor. ONE job: execute one plan in the calling session. No routing, no worktree spawning, no multi-plan dispatch — those are orchestrate concerns.
