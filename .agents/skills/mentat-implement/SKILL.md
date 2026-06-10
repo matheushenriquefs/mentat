@@ -17,6 +17,30 @@ python3 ~/.agents/skills/mentat-implement/scripts/implement.py <plan-ref> [--har
 
 Multi-slug → exit 1 with "use mentat-orchestrate for multi-plan".
 
+## Preflight
+
+1. **Worktree.** If `pwd` doesn't match `$MENTAT_WORKTREE` or `.*/worktrees/[^/]+/?$`, invoke `mentat-git worktree create <plan-slug>` and cd into the new worktree.
+2. **Worktree-create failure** → emit `chunk.ejected{reason: preflight}` and halt.
+3. **Slice artifacts.** Derive a bash predicate per slice (exists / absent / `grep -c <pattern> <file> -ge N`). Skip slices whose predicate already passes; refuse to re-run DONE slices.
+4. **Container** auto-ups via `mentat-container up`; second miss → exit 69.
+
+## Gate formula
+
+After all slices green, spawn `mentat-plan-reviewer`, `mentat-test-reviewer`, `mentat-bug-reviewer`, `mentat-smell-reviewer` in parallel. Per ADR-0003 (never average, veto-style):
+
+```
+gate_pass =
+      deterministic_checks_all_green     # VETO — tests / coverage delta ≥ 0 / no weakened assertion
+  AND trajectory_blacklist_clean         # VETO — bug-reviewer blacklist
+  AND max_latent_bug_sev < high          # VETO — bug-reviewer latent-bug lens
+  AND plan_alignment    ≥ 0.88           # plan-reviewer threshold
+  AND test_asserts_plan ≥ 0.88           # test-reviewer threshold
+  AND smell_findings.hard_tier == []     # VETO — smell-reviewer hard tier
+  AND smell_findings.soft_tier[sev=high] == []  # VETO — soft tier sev=high
+```
+
+Any veto/threshold fail → fix, re-commit, re-spawn. Do not rebase on FAIL. Dismissals enumerate refuted findings + disproof in `review.submitted.payload.reason`; prose-only dismissal forbidden.
+
 ## Execution flow
 
 ```
@@ -64,7 +88,8 @@ mentat-implement <single-plan-slug>
 - One plan slug per invocation. Refuse multi-slug input with exit 64.
 - Container required (ADR-0004). Exit 69 if container down at preflight.
 - AFK class forbids `AskUserQuestion`; ambiguity → emit `chunk.ejected`, exit 42.
-- Stale-ref sweep required after any rename before commit.
+- Rename/delete: `git mv`/`git rm` first in own commit; post-commit `git ls-files | grep <old>` must be empty.
+- Stale-ref sweep: after any rename/delete, run the plan's `rg` lines; non-zero hits → abort the slice.
 - One commit per slice via `/mentat-commit`. No squash.
 - All emit calls route through `mentat-log emit`; never write JSONL directly.
 - Read-only test mount enforced per `<slug>.tests.json` manifest when present.
