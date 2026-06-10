@@ -1,5 +1,36 @@
 {
   "skill_name": "mentat-implement",
-  "evals": [],
-  "eval_queries": []
+  "description": "Atomic single-plan executor with AFK/HITL harness routing",
+  "evals": [
+    {
+      "id": "refuses-multi-slug",
+      "description": "rejects >1 plan slug with actionable message",
+      "type": "functional"
+    },
+    {
+      "id": "afk-disallows-questions",
+      "description": "AFK plan passes --disallowedTools AskUserQuestion to harness",
+      "type": "functional"
+    },
+    {
+      "id": "hitl-allows-questions",
+      "description": "HITL plan does not restrict tools",
+      "type": "functional"
+    },
+    {
+      "id": "exits-42-on-self-answer",
+      "description": "exits 42 + emits chunk.ejected{reason:hitl-required} on AFK ambiguity",
+      "type": "functional"
+    },
+    {
+      "id": "gate-fail-exits-1",
+      "description": "exits 1 + emits chunk.ejected{reason:gate-failed} on gate block",
+      "type": "functional"
+    }
+  ],
+  "eval_queries": [
+    "implement plan my-feature",
+    "implement plan my-feature --harness cursor",
+    "implement plan my-feature --model claude-opus-4-7"
+  ]
 }
