@@ -9,6 +9,10 @@ from pathlib import Path
 def safe_symlink(source: Path, target: Path, *, dry_run: bool = False) -> None:
     if dry_run:
         return
+    # Path.mkdir(exist_ok=True) raises FileExistsError if parent is a broken symlink,
+    # because is_dir() returns False when the target is missing. Clear it first.
+    if target.parent.is_symlink() and not target.parent.exists():
+        target.parent.unlink()
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists() or target.is_symlink():
         target.unlink()
