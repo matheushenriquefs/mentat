@@ -9,7 +9,7 @@ Core vocabulary (ADR 0005 — ubiquitous lexicon).
 | **batch** | All chunks in a single orchestrate run |
 | **holding branch** | Shared branch chunks land on serially after green gate |
 | **worktree** | Isolated git worktree; one per chunk |
-| **land gate** | Review pass (plan + test + bug + smell reviewers) before merge |
+| **land gate** | Review pass (plan + test + bug + smell + context reviewers) before merge |
 | **HITL** | Human-in-the-loop — pause for user confirmation before proceeding |
 | **AFK** | Can proceed without user; no confirmation pause |
 
