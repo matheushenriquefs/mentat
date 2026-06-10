@@ -4,6 +4,19 @@ Rules for agents working inside Mentat — the orchestration harness.
 
 See [CONTEXT.md](CONTEXT.md) for the full glossary. See [docs/adr/README.md](docs/adr/README.md) for the ADR index. See [README.md](README.md) for the public overview.
 
+> **Mentat is agnostic by design.** Surfaces it touches stay swappable along these axes:
+> - **Multiplexer** — any pane manager, or none.
+> - **Harness** — any agent CLI / IDE assistant; drop a module to add one.
+> - **Model provider** — vendor and tier chosen per skill; no hardcoded SKUs.
+> - **OS** — any POSIX. Windows out of scope.
+> - **Arch** — any host arch; container resolves via `linux/$(uname -m)`.
+> - **Container engine** — any rootful daemon speaking compose v2.
+> - **Shell** — any POSIX shell; scripts call `python3` not the user's `$SHELL`.
+> - **Editor** — honor `$EDITOR` when set; never assume one.
+> - **Target-repo toolchain** — mentat names none. The container provides (ADR-0004).
+
+**Context budget.** When your context fills past ~70%, proactively summarize your core instructions, slice state, and decisions-so-far into a smaller form before continuing. Claude Code auto-compacts at ~95% — that's a safety net, not the primary mechanism. (Source: cursor.com/blog/self-summarization — self-summary cuts compaction error 50%.)
+
 ## Critical Constraints
 
 - **Devcontainer-only execution for target-repo work.** All target-repo commands run via `python3 ~/.agents/skills/mentat-container/scripts/container.py run '<cmd>'`. Never call project tools (linters, test runners, formatters, interpreters) on the host. (ADR-0004)
