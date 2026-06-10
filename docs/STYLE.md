@@ -159,7 +159,7 @@ for contributor-facing docs. Skill and agent files follow their voice class abov
 
 Reference docs (this file, EXIT-CODES.md, PLUGINS.md): information-oriented, scan-friendly.
 Explanation docs (CONTEXT.md, ADRs): understanding-oriented, prose-heavy.
-How-to docs (installer.md, devcontainer-arch.md): task-oriented, step-by-step.
+How-to docs (INSTALLER.md): task-oriented, step-by-step.
 
 ---
 
