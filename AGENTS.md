@@ -2,26 +2,15 @@
 
 Rules for agents working inside Mentat — the orchestration harness.
 
-See [CONTEXT.md](CONTEXT.md) for the full glossary and ADR index. See [README.md](README.md) for the public overview.
+See [CONTEXT.md](CONTEXT.md) for the full glossary. See [docs/adr/README.md](docs/adr/README.md) for the ADR index. See [README.md](README.md) for the public overview.
 
 ## Critical Constraints
 
-- **Devcontainer-only execution for target-repo work.** All target-repo commands run via `bin/mentat-container-run '<cmd>'`. Never call project tools (linters, test runners, formatters, interpreters) on the host. (ADR 0004)
+- **Devcontainer-only execution for target-repo work.** All target-repo commands run via `bin/mentat-container-run '<cmd>'`. Never call project tools (linters, test runners, formatters, interpreters) on the host. (ADR-0004)
 - **Never fabricate.** If a verification step fails or an ADR doesn't cover a case, say so. Don't invent citations or outcomes.
 - **No secrets.** No API keys, tokens, or credentials in any file — not in comments, not in examples.
-- **Mentat names no target-repo toolchain.** The driver and all Mentat files are agnostic — they do not reference specific languages, test frameworks, or build tools. Those live in the target repo's own docs (ADR 0004).
-- **Agent prompts must be self-contained.** References at most 1 level deep. No grill/slice/round numbers, no parent-doc refs, no version history of how the prompt got here. Reader is a stranger with no project history. Use `mentat-context-reviewer` to audit.
-
-## Naming Conventions
-
-| Layer | Convention | Examples |
-|---|---|---|
-| Skills / agents | kebab-case, `mentat-` prefix or role-noun | `caveman`, `mentat-bug-reviewer`, `mentat-implement` |
-| Commands | kebab-case, `mentat-` prefix | `mentat-plan`, `mentat-rebase`, `mentat-scaffold` |
-| ADRs | `NNNN-kebab.md` | `0004-parallel-slicing-orchestration.md` |
-| Worktree slugs | `mentat-<epoch>-<pid>-<rand>` | `mentat-1780705140700` |
-
-Frontmatter shapes and body structure per file class are defined in the [Style](#style) section below.
+- **Mentat names no target-repo toolchain.** The driver and all Mentat files are agnostic — they do not reference specific languages, test frameworks, or build tools. Those live in the target repo's own docs (ADR-0004).
+- **Agent prompts must be self-contained.** References at most 1 level deep. No plan/slice/round numbers, no parent-doc refs, no version history. Reader is a stranger with no project history. Use `mentat-context-reviewer` to audit.
 
 ## Workflow Rules
 
@@ -31,235 +20,47 @@ When editing prompt files in `.agents/`:
 2. Run verification with `bin/mentat-container-run '<test cmd>'` if the target repo has one.
 3. Commit via `/mentat-commit` (routes through devcontainer if one exists).
 
-### Promotion workflow
-
 Until Mentat has release tags, promote harness changes to the user's global install:
 
 ```bash
 cp -R .agents/ ~/.agents/
 ```
 
-This overwrites the global `~/.agents/` with the repo's version. Run only when `.agents/` changes are stable and reviewed.
+## Comments
 
-Directory index: see [.agents/AGENTS.md](.agents/AGENTS.md) for the harness layout.
-
-## Comment Hygiene
-
-Default: write no comments. Add one only when the *why* is non-obvious — a hidden constraint, subtle invariant, or workaround for a specific bug.
-
-- Comment *why*, not *what*. Well-named identifiers explain what.
-- No commented-out code. Delete it.
-- No TODO comments. File an ADR or an issue.
-- One short line max. No narrative essays inside functions.
-- Docstring/header for public entry points only.
-- No references to current task, fix, or callers ("used by X", "added for Y") — those belong in the PR description and rot as the codebase evolves.
-- Remove duplicate comment blocks. One canonical statement per fact.
+Default: write no comments. Add one only when the *why* is non-obvious — a hidden constraint, subtle invariant, or workaround for a specific bug. Comment *why*, not *what*. No commented-out code. No TODO comments. One short line max.
 
 ## Style
 
-Writing rules for skills, commands, and crew-agent definitions in Mentat and its target repos.
+Writing rules for skills, agents, and commands: see [docs/STYLE.md](docs/STYLE.md).
 
-### Forbidden words
-
-Drop from all files: `just`, `simply`, `really`, `basically`, `actually`. Drop pleasantries: `sure`, `certainly`, `of course`, `happy to`. Drop hedging: `might want to`, `you could try`, `feel free to`.
-
-### Frontmatter
-
-Three shapes — one per file class. Use the exact keys below; no extras unless listed as optional.
-
-**Pocock-style skill:**
-```yaml
----
-name: <skill-name>
-description: <third-person, "Use when..." trigger clause>
----
-```
-Optional: `argument-hint` (user-facing hint for `$ARGUMENTS`). `disable-model-invocation: true` (rare — ultra-lightweight trigger only).
-
-**Crew-agent definition:**
-```yaml
----
-name: <crew-name>
-description: >
-  <one-sentence summary.>
-  <two-sentence detail. Output contract. Refusal statement.>
-tools: [Tool1, Tool2]
----
-```
-`tools` is a hard read-only guarantee — no read-write tools unless the agent must write (rare).
-
-Exemplar: `.agents/agents/mentat-researcher.md` — `description: > Read-only fact locator…`
-
-**mentat-* command:**
-```yaml
----
-description: <imperative, action-verb-first, one sentence>
----
-```
-No other keys.
-
-### Body structure by file class
-
-**Pocock-style skill:** Three-level hierarchy.
-```
-# Title                       ← matches frontmatter name
-## Phase N — Name             ← or ## Section Name
-### Substep or type           ← optional third level
-```
-Phase naming: `Phase N — <Name>`. Step naming: numbered list inside sections. Checklists: `- [ ] item`.
-
-**Crew-agent definition:** Flat, one level only.
-```
-## Section
-```
-No `###`. No sub-sections. Caveman-ultra fragments. No code blocks unless the output schema requires exact formatting.
-
-Exemplar: `.agents/agents/mentat-bug-reviewer.md` — flat `## Output`, `## Blacklist`, `## Refusals`.
-
-**mentat-* command:** Numbered list, no headers.
-```
-1. `/caveman ultra`.
-2. Step two.
-3. Conditional: `gate_pass → continue. Any veto → fix, re-commit.`
-```
-No `##` headers. No `###`. ≤ 30 lines total.
-
-### Code blocks
-
-| File class | Frequency | Bash lang-tag |
-|---|---|---|
-| Pocock skill | Moderate | Required for shell |
-| Crew agent | Rare — structured prose templates only | Required if used |
-| mentat-* command | High — bash-heavy | Required for shell |
-
-Inline backticks for paths, variables, symbols, and command names.
-
-### Length
-
-| File class | Target | Max before offload |
-|---|---|---|
-| Pocock skill | 75–110 lines | 120 lines → offload to `references/` |
-| Crew agent | 60–85 lines | — |
-| mentat-* command | ≤ 30 lines | — |
-
-### Voice
-
-| File class | Voice | Articles |
-|---|---|---|
-| Pocock skill | Imperative, terse | Kept |
-| Crew agent | Caveman fragments | Dropped |
-| mentat-* command | Imperative, terse | Kept |
-
-### Cross-references
-
-Inline markdown links: `[text](path)`. Relative paths preferred. No wiki-links (`[[…]]`). No bare paths.
-
-In mentat-* commands, reference skills by invocation: `/skill-name`. No inline links.
-
-### Shell conventions
-
-Bash + `jq` only on the host (ADR 0004). Target-repo tools run via `mentat-container-run '<cmd>'` — never called directly on the host. No host interpreter references in Mentat files. Language tag `bash` required on shell blocks.
+Naming convention: kebab-case with `mentat-` prefix for skills and commands. ADRs: `NNNN-kebab.md`. Worktree slugs: `mentat-<epoch>-<pid>`.
 
 ## Quality Gates
 
-Every modified file must pass its class checker before commit.
-Run locally: `lefthook run pre-commit --files $(git diff --name-only "$base")`.
-Wired into `mentat-orchestrate` pre-land step via lefthook (host-side; harness tools only — ADR 0004).
-Checker dispatch: [.agents/bin/mentat-precommit](.agents/bin/mentat-precommit) (invoked by lefthook).
+Every modified file passes its class checker before commit. Run: `lefthook run pre-commit --files $(git diff --name-only "$base")`. Gate thresholds and reviewer subagents: [ADR-0003](docs/adr/0003-scored-review-gate.md). Tier-1 linter (`lint.py`) enforces LOC budgets, banned words, and article-drop for crew agents on every commit.
 
-| Gate | Triggers | Command | Class |
-|------|----------|---------|-------|
-| ADR | `docs/adr/*.md` | sections: ## Context, ## Decision, ## Consequences present | precommit |
-| Skill/agent | `agents/*.md` | YAML frontmatter present (first 10 lines contain ---) | precommit |
-| Command | `commands/*.md` | YAML frontmatter present | precommit |
-| Workflow doc | `AGENTS.md`, `CONTEXT.md`, `README.md` | cross-ref links present | precommit |
-| Shell | `bin/**`, `lib/**/*.sh` | `bash -n` + shellcheck (advisory if absent) | precommit |
-| Config | `*.jsonc` | `jq -e` validates JSON structure | precommit |
-| Harness | `bin/lib/harness/*.sh` | `harness_<name>_cmd` and `harness_<name>_output_format` defined | precommit |
-| Python lint | `evals/pytest/**/*.py` | `mentat-container-run "uv run ruff check"` | precommit |
-| Python format | `evals/pytest/**/*.py` | `mentat-container-run "uv run ruff format --check"` | precommit |
-| Python types | `evals/pytest/**/*.py` | `mentat-container-run "uv run pyright"` | precommit |
-| Pytest | `evals/pytest/test_*.py` modified | `mentat-container-run "uv run pytest <file>"` | test-when-modified |
-| Agent/skill eval | `agents/*.md` or `skills/*/SKILL.md` modified | `npx promptfoo eval --filter-providers <name>` | test-when-modified |
-| ADR metadata | `docs/adr/*.md` modified | must include `**Decided:** <YYYY-MM-DD>` and `**Author:** <handle>` | test-when-modified |
-| Docs in sync | `bin/**` or `commands/**` modified | `bin/lib/docs-sync.sh` — old basename in README/AGENTS/CONTEXT → 0 hits | precommit |
-| Vendor pins | `vendir.yml` modified or >24h since sync | `vendir sync --diff` | precommit |
-| Holding-branch guard | always on commit | branch ≠ `main`; blocks direct commits to holding branch (ADR-0002) | precommit |
+## Audit
 
-Unknown file classes pass silently (gate is additive, not a whitelist).
-`test-when-modified` rows are enforced by convention; `precommit` rows run via lefthook.
-
-See [.agents/bin/lib/precommit-gates.sh](.agents/bin/lib/precommit-gates.sh) for checker implementations and [.agents/bin/mentat-precommit](.agents/bin/mentat-precommit) for the dispatch script.
-
-## Audit emission
-
-Every command (`mentat-plan`, `mentat-implement`, `mentat-rebase`, `mentat-eval`, `mentat-release`) must emit start + complete events via `mentat_audit`. Source `audit.sh` first:
-
-```sh
-source ~/.agents/bin/lib/audit.sh
-mentat_audit <agent> <verb>.start '{}'
-# ... do work ...
-mentat_audit <agent> <verb>.complete '{...}'
-```
-
-Event verb registry (canonical verbs per ADR-0009):
-
-| Actor | Verbs |
-|---|---|
-| mentat-plan | `plan.start`, `plan.complete` |
-| mentat-implement | `implement.start`, `implement.complete`, `implement.preflight` |
-| mentat-rebase | `rebase.start`, `rebase.complete`, `rebase.conflict` |
-| mentat-eval | `eval.start`, `eval.complete` |
-| mentat-release | `release.start`, `release.complete` |
-| mentat-orchestrate | `land.complete`, `review.final` |
-| mentat-update | `sync.complete` |
-
-Payload schema: see `.agents/lib/audit_schema.py`. Reviewer outputs must use `ReviewVerdictPayload`. Never write raw `printf` to a `.jsonl` file outside `audit.sh`.
-
-**Audit log retention:** Run `mentat-logs-prune` weekly to gzip logs older than 7 days and delete logs older than 30 days. No external caller wires this — run manually or via cron.
+Every command emits start + complete events via `mentat-log emit`. Event catalog: [ADR-0007](docs/adr/0007-audit-envelope.md). Use `mentat-session track` for live monitoring.
 
 ## Ship Surface
 
-Files rsynced to `~/.agents/` by `mentat-install` (all paths under `.agents/`):
-
-| Ships | Dev-only (excluded) |
-|-------|---------------------|
-| `bin/`, `commands/`, `skills/` (excl. vendor/), `agents/`, `docs/`, `lib/` | `skills/vendor/` (regenerated by `mentat-update` on install) |
-| `AGENTS.md`, `README.md`, `CREDITS.md` | `evals/`, `context/`, `plans/`, `.dmux/`, `.mentat/` |
-| `.devcontainer/`, `lefthook.yml`, `pyproject.toml`, `vendir.yml`, `vendir.lock.yml` | `bin/mentat-install`, `bin/mentat-update`, `bin/mentat-release`, `bin/mentat-credits-gen` |
-
-Dev-only paths are excluded via `--exclude` in `mentat-install`. Consumer regenerates vendored skills via `mentat-update` (wraps `vendir sync`).
+`mentat-install` rsyncs `.agents/` to `~/.agents/`. Excluded: `skills/vendor/`, `evals/`, `plans/`, `.dmux/`, `.mentat/`. Consumer regenerates vendored skills via `mentat-update`.
 
 ## Platform Support
 
-Mentat targets POSIX shells (bash 4+, zsh) on Linux + macOS. Windows is out of scope — relies on POSIX `rename(2)`, `ln` hardlink atomicity, and standard GNU/BSD coreutils. WSL works as a Linux environment, not native Windows.
+Mentat targets POSIX shells (bash 4+, zsh) on Linux + macOS. Windows is out of scope — relies on POSIX `rename(2)`, `ln` hardlink atomicity, and standard GNU/BSD coreutils.
 
 ## Attribution
 
-When you borrow a concept, schema, or protocol from another repo without vendoring its code, add an entry to `CREDITS.md` under `## Inspired by` citing the upstream URL, the upstream's GitHub repo description verbatim (via `gh repo view <user>/<repo> --json description -q .description`), and one sentence naming the specific primitive borrowed. Never fabricate the description. Vendored code is auto-credited from `vendir.lock.yml`; inspiration credits are hand-maintained.
-
-## Slice completion discipline (S11)
-
-**Slice tags in commit subjects are aspirational.** A commit subject like `feat: ... (S3-S5)` records intent, not verified completion. Verify artifacts on disk via the slice's predicate before claiming a slice is done. Never skip a slice unless the pre-flight table marks it DONE.
-
-**Stale-ref registry.** After any rename or delete, run `rg` for the old name before committing. Known recently-renamed terms — agents run this sweep:
-
-| Old term | Renamed/deleted | Check command |
-|---|---|---|
-| `mentat-setup` | → `mentat-install` | `rg -n '\bmentat-setup\b' . --count` |
-| `mentat-sync-upstream` | deleted | `rg -n 'mentat-sync-upstream' . --count` |
-| `upstreams.jsonc` | deleted | `rg -n 'upstreams\.jsonc' . --count` |
-| `/to-rebase` | → `/mentat-rebase` | `rg -n '/to-rebase' .agents/ --count` |
-| `/to-implement` | → `/mentat-implement` | `rg -n '/to-implement' .agents/ --count` |
-| `/to-plan` | → `/mentat-plan` | `rg -n '/to-plan' .agents/ --count` |
-
-Non-zero hit = abort commit. Emit `staleref.sweep {terms, hits}` audit event.
-
-**Reviewer score floor = hard halt.** Any reviewer below threshold is a veto — read every line of output. To dismiss a finding, emit `review.dismiss` with `reason` enumerating each refuted finding and the artifact check that disproved it.
+When borrowing a concept from another repo, add an entry to `CREDITS.md` under `## Inspired by` citing the upstream URL, the upstream's GitHub repo description verbatim, and one sentence naming the specific primitive borrowed.
 
 ## See also
 
-- [CONTEXT.md](CONTEXT.md) — glossary (slice/chunk/batch/land/eject/…) + ADR index + flagged ambiguities
-- [README.md](README.md) — public overview, quickstart, no-framework thesis
-- [CREDITS.md](CREDITS.md) — vendored skill attributions (auto-generated)
-- [.agents/AGENTS.md](.agents/AGENTS.md) — system harness rules (sub-agent delegation, container rule, ADR index)
+- [CONTEXT.md](CONTEXT.md) — glossary + ADR index + flagged ambiguities
+- [docs/STYLE.md](docs/STYLE.md) — full writing rules
+- [docs/adr/README.md](docs/adr/README.md) — ADR index
+- [README.md](README.md) — public overview, quickstart
+- [CREDITS.md](CREDITS.md) — vendored skill attributions
+- [.agents/AGENTS.md](.agents/AGENTS.md) — system harness rules
