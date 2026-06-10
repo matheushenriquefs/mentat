@@ -1,5 +1,15 @@
 {
   "skill_name": "mentat-git",
-  "evals": [],
-  "eval_queries": []
+  "description": "Git operations routed through devcontainer when present",
+  "evals": [
+    {"id": "commit-routes-container", "description": "commit routes via docker exec when container running", "type": "functional"},
+    {"id": "commit-fallback-host", "description": "commit falls back to host git when no container", "type": "functional"},
+    {"id": "rebase-ff-only", "description": "rebase enforces fast-forward only", "type": "functional"},
+    {"id": "diff-config-tool", "description": "diff uses diff_tool from config when set", "type": "functional"}
+  ],
+  "eval_queries": [
+    "commit staged changes with message 'fix: typo'",
+    "rebase onto main branch",
+    "show cumulative diff vs main"
+  ]
 }
