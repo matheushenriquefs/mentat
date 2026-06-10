@@ -7,6 +7,9 @@ pre-commit:
         out=$(rg -n '\bmentat-update\b|\bmentat-credits-gen\b|upstreams\.jsonc|/to-(rebase|commit|plan|implement|scaffold|eval)\b' {staged_files} 2>/dev/null || true)
         [ -z "$out" ] && exit 0
         echo "stale-ref advisory: $out" && exit 0
+    style-lint:
+      glob: "{.agents/skills/mentat-*/SKILL.md,.agents/agents/*.md}"
+      run: python3 .agents/lib/style/lint.py {staged_files}
     holding-branch-guard:
       run: |
         [ "${MENTAT_RELEASE:-0}" = "1" ] && exit 0
