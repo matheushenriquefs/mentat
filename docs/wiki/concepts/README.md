@@ -13,4 +13,4 @@ Core vocabulary (ADR 0005 — ubiquitous lexicon).
 | **HITL** | Human-in-the-loop — pause for user confirmation before proceeding |
 | **AFK** | Can proceed without user; no confirmation pause |
 
-See `~/.agents/docs/adr/` for system-level decisions and `docs/adr/` for repo decisions.
+See `docs/adr/` for architecture decisions.

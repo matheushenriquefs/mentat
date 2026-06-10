@@ -43,6 +43,6 @@ quote-style = "double"
 
 [tool.pyright]
 include = ["tests", ".agents/skills/mentat-*/scripts", ".agents/lib", "tasks"]
-exclude = [".agents/docs/adr/archive", "tests/fixtures", "evals/pytest", "tests", "conftest.py"]
+exclude = ["docs/adr/archive", "tests/fixtures", "evals/pytest", "tests", "conftest.py"]
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
