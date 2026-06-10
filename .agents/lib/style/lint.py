@@ -14,7 +14,7 @@ BANNED_RE = re.compile(
 )
 ARTICLE_RE = re.compile(r"(?<!\w)(a|an|the)\s", re.IGNORECASE)
 
-_THIN = {"mentat-git", "mentat-skill", "mentat-install", "mentat-plan"}
+_THIN = {"mentat-skill", "mentat-install"}
 _FULL = {
     "mentat-prd",
     "mentat-tasks",
@@ -23,6 +23,8 @@ _FULL = {
     "mentat-container",
     "mentat-log",
     "mentat-session",
+    "mentat-git",
+    "mentat-plan",
 }
 
 
