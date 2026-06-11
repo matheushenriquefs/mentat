@@ -25,6 +25,7 @@ Single source of truth for every path mentat reads or writes.
 ~/.agents/                                         # harness/agent-shared
 ├── plans/<slug>.md                                # canonical plan path
 ├── agents/mentat-researcher.md                    # non-gate research agent
+├── docs/adr/                                      # symlink → <clone>/docs/adr (shipped by mentat-install)
 └── skills/mentat-<bin>/                           # canonical skill location (clone-or-copy from repo)
 ```
 
