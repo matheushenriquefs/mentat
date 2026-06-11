@@ -75,6 +75,11 @@ def do_install(
         print("[dry-run] no changes made.")
         return 0
 
+    if ip.conflicts:
+        print("Aborted: real file/dir at one or more symlink targets (D13).", file=sys.stderr)
+        print("Resolve manually and re-run.", file=sys.stderr)
+        return 65
+
     if not skip_companions:
         _companions.install_all(yes=yes)
 

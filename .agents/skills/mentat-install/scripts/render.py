@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .plan import InstallPlan
 
 _GREEN = "\033[32m"
 _CYAN = "\033[36m"
@@ -11,7 +15,7 @@ _RED = "\033[31m"
 _RESET = "\033[0m"
 
 
-def render(plan, *, color: bool | None = None) -> str:
+def render(plan: InstallPlan, *, color: bool | None = None) -> str:
     if color is None:
         color = sys.stdout.isatty()
 
@@ -29,6 +33,11 @@ def render(plan, *, color: bool | None = None) -> str:
         lines.append("Updated:")
         for a in plan.update:
             lines.append(f"  {_c('~', _CYAN)} {a.target}")
+
+    if plan.conflicts:
+        lines.append("Conflicts (real file/dir at target — D13 abort policy):")
+        for p in plan.conflicts:
+            lines.append(f"  {_c('✗', _RED)} {p}")
 
     if plan.stale:
         lines.append("Stale (manual cleanup recommended):")
