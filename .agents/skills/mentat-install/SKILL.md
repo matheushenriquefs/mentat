@@ -31,8 +31,8 @@ python3 ~/.agents/skills/mentat-install/scripts/install.py [--dry-run] [--yes] [
 
 ## Companion phase
 
-Before symlink work, prompts for two 3rd-party suites (matt-pocock-skills, juliusbrussee-caveman). Per companion: `questionary.confirm("Have you installed <name>?")` → Yes skips, No shows docs URL + editable command, then optional `subprocess.run` of the edited command. `check=False` — failures don't abort. `--yes` / `--skip-companions` short-circuit. No TTY → auto-skip. Soft-imports `questionary`; falls back to `input()` if absent. See `scripts/companions.py` for the COMPANIONS list.
+Before symlink work, prompts for two 3rd-party suites (matt-pocock-skills, juliusbrussee-caveman) via a Clack-style stdlib TUI (banner + boxed prompts + ASCII spinner) modeled on `npx skills@latest add` ground truth. Per companion: `[Y/n] Have you installed <name>?` → Yes skips, No shows docs URL + editable command + spinner-wrapped `subprocess.run`. `check=False` — failures don't abort, surface as `○ failed (exit N) — re-run manually`. `--yes` / `--skip-companions` short-circuit. No TTY → auto-skip. See `scripts/companions.py` for the COMPANIONS list.
 
 ## Runtime deps
 
-Stdlib only at the bin layer (ADR-0008). `questionary` is an optional UX upgrade for the companion phase — install via `pip install --user questionary` if richer prompts are desired; otherwise plain `input()` works.
+Stdlib only at the bin layer (ADR-0008). No third-party dependencies — no `questionary`, no `rich`. Pure `input()` + ANSI escape sequences + threading for the spinner.
