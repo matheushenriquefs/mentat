@@ -124,6 +124,29 @@ def _fan_out_plans(plans: list[_routing.Plan], *, harness: str | None, model: st
     return chunks
 
 
+def _prune_stale_containers() -> None:
+    import re as _re
+
+    try:
+        result = subprocess.run(
+            [
+                "docker", "container", "prune", "-f",
+                "--filter", "label=mentat_slug",
+                "--filter", "until=1h",
+            ],
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        result = None
+    reclaimed: int | None = None
+    if result and result.returncode == 0 and result.stdout:
+        m = _re.search(r"Total reclaimed space:\s+(\d+)", result.stdout)
+        if m:
+            reclaimed = int(m.group(1))
+    _utils.emit_event("session.prune", {"reclaimed_bytes": reclaimed})
+
+
 def _worktree_for_slug(slug: str) -> Path:
     """Find worktree path registered for branch <slug>. Falls back to cwd."""
     r = subprocess.run(["git", "worktree", "list", "--porcelain"], capture_output=True, text=True)
@@ -176,6 +199,8 @@ def run_orchestrate(
         _land_all([], holding=holding)
         _batch_review.review(session_id=os.environ.get("MENTAT_SESSION", "dry-run"))
         return 0
+
+    _prune_stale_containers()
 
     # Spawn AFK plans headless. session_ids are emitted by `_fan_out_plans` for
     # tracking; the land queue is keyed by plan.slug so the Scheduler built from
