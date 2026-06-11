@@ -10,8 +10,8 @@ import sys
 from pathlib import Path
 
 _SKILL_ROOT = Path(__file__).resolve().parents[3]
-_LOG_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-log/scripts/log.py"
-_GATES_CODE = _SKILL_ROOT / ".agents/lib/gates/code"
+_LOG_SCRIPT = _SKILL_ROOT / "skills/mentat-log/scripts/log.py"
+_GATES_CODE = _SKILL_ROOT / "lib/gates/code"
 
 
 def resolve_plan_ref(ref: str) -> Path:

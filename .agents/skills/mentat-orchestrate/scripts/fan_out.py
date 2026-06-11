@@ -8,9 +8,9 @@ import sys
 from pathlib import Path
 
 _SKILL_ROOT = Path(__file__).resolve().parents[3]
-_LOG_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-log/scripts/log.py"
-_IMPLEMENT_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-implement/scripts/implement.py"
-_CONTAINER_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-container/scripts/container.py"
+_LOG_SCRIPT = _SKILL_ROOT / "skills/mentat-log/scripts/log.py"
+_IMPLEMENT_SCRIPT = _SKILL_ROOT / "skills/mentat-implement/scripts/implement.py"
+_CONTAINER_SCRIPT = _SKILL_ROOT / "skills/mentat-container/scripts/container.py"
 
 import importlib.util as _ilu
 
