@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+from tests.conftest import load_script
 
 HARNESS_DIR = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts/harness"
 
 
 def load_module(name: str):
-    path = HARNESS_DIR / f"{name}.py"
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod
+    return load_script(HARNESS_DIR / f"{name}.py", name)
 
 
 def test_claude_code_adapter_afk_disallows_questions():
