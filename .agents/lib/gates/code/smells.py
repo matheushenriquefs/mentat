@@ -1,8 +1,8 @@
-"""Deterministic smell detector. Port of bin/lib/smells.sh.
+"""Deterministic smell detector.
 
-Walks Python sources under chunk_path with the stdlib `ast` module — no
-language-bridge shells. Advisory only (never blocks): findings surface in
-the gate.evaluated audit row so reviewers can flag what ruff misses.
+Walks Python sources under chunk_path with the stdlib `ast` module.
+Advisory only (never blocks): findings surface in the gate.evaluated
+audit row so reviewers can flag what ruff misses.
 
 LLM-only smells (Feature Envy, Shotgun Surgery, etc.) live in
 mentat-smell-reviewer; this module catches the mechanical ones.

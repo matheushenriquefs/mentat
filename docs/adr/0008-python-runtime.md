@@ -52,6 +52,5 @@ logging, no `print` in library code, no commented-out code, no TODO comments.
 
 `python3` hard dep on user box (already via devcontainer feature). Bash dropped
 from user-facing surface. Test suite established (~1,000 LOC target).
-Old `.agents/bin/mentat-*` + `.agents/bin/lib/*.sh` + `.agents/bin/lib/harness/*.sh`
-deleted in bins-v2 B13. Exception: `.agents/bin/mentat-install` thin shell
-bootstrap wrapper kept (parent plan §J).
+Exception: `.agents/bin/mentat-install` thin shell bootstrap wrapper kept
+(parent plan §J).

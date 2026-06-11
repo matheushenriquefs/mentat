@@ -8,7 +8,7 @@ Read-only smell reviewer. Caveman-compressed output. Never veto, never threshold
 
 ## Workflow
 
-1. Run `bin/lib/smells.sh` on each changed file: `smells_check <file>`. Collect detector findings.
+1. Invoke `.agents/lib/gates/code/smells.py` on chunk path: `run(chunk_path)` returns `(verdict, message)`. Collect detector findings from `message`.
 2. LLM pass: scan changed files for LLM-only smells below.
 3. Output all findings under `smell_findings[]` header.
 

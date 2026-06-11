@@ -1,12 +1,11 @@
-"""Deterministic pre-commit gate. Port of bin/lib/precommit-gates.sh.
+"""Deterministic pre-commit gate.
 
 File-class dispatcher: ADR docs need three sections, agent/command docs need YAML
 frontmatter, workflow docs need at least one cross-ref link, *.jsonc must parse
 as JSON after stripping pure `//` comment lines.
 
-Shell-only checks (bash -n, shellcheck, jq, promptfoo) are downgraded to
-"advise" when their interpreters aren't on PATH so the gate stays portable in
-container or host runs.
+External-interpreter checks (bash -n, jq) are downgraded to "advise" when their
+interpreters aren't on PATH so the gate stays portable in container or host runs.
 """
 
 from __future__ import annotations

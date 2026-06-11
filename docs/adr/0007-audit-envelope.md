@@ -64,6 +64,6 @@ Catalog stays at 9 events. Consumer skills extend via payload fields (e.g. `chun
 
 ## Consequences
 
-`audit.sh`, `audit_schema.py`, `audit-schema.jsonc` deleted. All bins subprocess to
-`mentat-log emit`. Schema changes: amend `EVENT_CATALOG` dict in one file. Old log
-path `~/.agents/mentat/logs/` is stale; `mentat-install` reports it for cleanup.
+All bins subprocess to `mentat-log emit`. Schema changes: amend `EVENT_CATALOG`
+dict in one file. Old log path `~/.agents/mentat/logs/` is stale;
+`mentat-install` reports it for cleanup.

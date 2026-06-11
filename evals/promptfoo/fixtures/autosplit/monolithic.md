@@ -2,21 +2,19 @@
 
 ## Goal
 
-Wire `.mentat.jsonc` config into `mentat-orchestrate` so users stop passing `--harness` and `--model` flags every invocation. All work touches a single call chain.
+Wire `~/.mentat/config.jsonc` into `mentat-orchestrate` so users stop passing `--harness` and `--model` flags every invocation. All work touches a single call chain.
 
 ## Slices
 
-- S1: write `bin/lib/config.sh` — `mentat_config()` reads `.mentat.jsonc` via `sed | jq`
-- S2: write `bin/lib/config-validate.sh` — validates schema, exits 2 on bad value; calls `mentat_config()`
-- S3: update `bin/mentat-orchestrate` — replace flag parse loop with `mentat_config` calls; source `config.sh`; source `config-validate.sh`
-- S4: write `.agents/.mentat.jsonc` default — sane starter config; validated by S2 checker
-- S5: write `.agents/.mentat.jsonc.example` — inline `//` comments documenting every key; references S4
+- write `lib/config.py` — `load_config()` reads `~/.mentat/config.jsonc` via stdlib `json.loads` after stripping `//` lines
+- write `lib/config_validate.py` — validates schema, raises `ConfigError` on bad value; calls `load_config()`
+- update `skills/mentat-orchestrate/scripts/orchestrate.py` — replace flag parse loop with `load_config()` calls; import `config`; import `config_validate`
+- write `~/.mentat/config.jsonc.example` — inline `//` comments documenting every key
 
 ## Dependencies
 
-S2 blocked by S1 (calls `mentat_config`).
-S3 blocked by S2 (validates on startup).
-S4 blocked by S2 (must validate clean).
-S5 blocked by S4 (documents the same keys).
+`config_validate.py` blocked by `config.py` (calls `load_config`).
+`orchestrate.py` blocked by `config_validate.py` (validates on startup).
+`config.jsonc.example` blocked by `config_validate.py` (documents the same keys).
 
-All slices write to `.agents/bin/` or `.agents/` root — one write-set, one chain.
+All slices write to `.agents/lib/`, `.agents/skills/mentat-orchestrate/scripts/`, or `~/.mentat/` — one write-set, one chain.
