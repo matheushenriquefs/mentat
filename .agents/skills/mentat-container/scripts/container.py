@@ -35,14 +35,35 @@ def _git_root() -> Path:
 
 
 def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
+    import json as _json
+    import re as _re
+
     dcj = wt / ".devcontainer" / "devcontainer.json"
+    expected_ws = f"/workspaces/{slug}"
+
     if dcj.exists():
-        return
-    try:
-        content = compose_render.synth(wt)
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        raise SystemExit(1) from exc
+        try:
+            data = _json.loads(dcj.read_text())
+        except Exception:
+            data = {}
+        if data.get("workspaceFolder") == expected_ws:
+            return
+        old_ws = data.get("workspaceFolder") or "/workspaces/mentat"
+        data["name"] = slug
+        data["workspaceFolder"] = expected_ws
+        if "workspaceMount" in data:
+            data["workspaceMount"] = _re.sub(r"target=[^,]+", f"target={expected_ws}", data["workspaceMount"])
+        for key in ("postCreateCommand", "onCreateCommand"):
+            if key in data:
+                data[key] = data[key].replace(old_ws, expected_ws)
+        content = _json.dumps(data, indent=2)
+    else:
+        try:
+            content = compose_render.synth(wt)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            raise SystemExit(1) from exc
+
     dcj.parent.mkdir(parents=True, exist_ok=True)
     tmp = dcj.parent / (dcj.name + ".tmp")
     tmp.write_text(content)
