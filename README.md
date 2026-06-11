@@ -111,7 +111,7 @@ curl -fsSL https://raw.githubusercontent.com/matheushenriquefs/mentat/main/insta
 | **AFK vs HITL** | Slice-level tags control whether agents stall for human review or proceed unattended. AFK depends on the scored gate. |
 | **Audit envelope** | Every command emits start + complete events. NDJSON to `~/.mentat/logs/<repo>/<session>/`. |
 | **Harness-agnostic** | Pluggable headless-agent CLIs (`claude-code`, `cursor` today). Drop a module to add another. |
-| **Plugin API** | Extend rubrics and gates without forking core. |
+| **Plugin API** | Pluggable harness adapters and diff renderers without forking core. |
 | **Stdlib-only bin layer** | Installs without pip. Dev layer uses `uv` / `ruff` / `pyright` / `pytest`. |
 
 ## Development
