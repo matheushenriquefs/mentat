@@ -64,7 +64,7 @@ def _load_plans(paths: list[Path]) -> list[_routing.Plan]:
 
 def _run_anchored_plans(plans: list[_routing.Plan], *, harness: str | None, model: str | None) -> list[str]:
     """Run anchored (HITL or forced-anchor AFK) plans in current session."""
-    implement_script = _SKILL_ROOT / ".agents/skills/mentat-implement/scripts/implement.py"
+    implement_script = _SKILL_ROOT / "skills/mentat-implement/scripts/implement.py"
     chunks: list[str] = []
     for plan in plans:
         cmd = ["python3", str(implement_script), str(plan.path)]
