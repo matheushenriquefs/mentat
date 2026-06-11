@@ -11,6 +11,13 @@ from unittest.mock import patch
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
 
+class _FakePopen:
+    """Stand-in for subprocess.Popen — returns immediate exit on poll()."""
+
+    def poll(self) -> int:
+        return 0
+
+
 def load_module(name: str):
     path = SCRIPTS / f"{name}.py"
     spec = importlib.util.spec_from_file_location(name, path)
@@ -29,7 +36,7 @@ def test_fan_out_spawns_worktree_and_subprocess(tmp_path):
 
     def fake_spawn(p, harness=None, model=None):
         spawn_calls.append(p)
-        return "sess-abc"
+        return ("sess-abc", _FakePopen())
 
     with patch.object(fan_out, "_spawn_worktree_subprocess", side_effect=fake_spawn):
         with patch.object(fan_out, "_emit_event"):
@@ -46,7 +53,7 @@ def test_fan_out_prints_track_command_immediately(tmp_path):
 
     fake_session_id = "session-123"
 
-    with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=fake_session_id):
+    with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=(fake_session_id, _FakePopen())):
         buf = io.StringIO()
         with redirect_stdout(buf):
             session_id = fan_out.spawn(plan)
@@ -62,7 +69,7 @@ def test_fan_out_emits_chunk_spawned(tmp_path):
     routing = load_module("routing")
     plan = routing.Plan(slug="my-plan", class_="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
 
-    with patch.object(fan_out, "_spawn_worktree_subprocess", return_value="sess-1"):
+    with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=("sess-1", _FakePopen())):
         with patch.object(fan_out, "_emit_event") as mock_emit:
             fan_out.spawn(plan)
 
@@ -78,7 +85,7 @@ def test_fan_out_stdout_emits_chunk_slugs_newline_delim(tmp_path):
         routing.Plan(slug=f"plan-{i}", class_="AFK", blocked_by=[], path=tmp_path / f"plan-{i}.md") for i in range(3)
     ]
 
-    with patch.object(fan_out, "_spawn_worktree_subprocess", return_value="sess-x"):
+    with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=("sess-x", _FakePopen())):
         buf = io.StringIO()
         with redirect_stdout(buf):
             for p in plans:

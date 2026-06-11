@@ -2,39 +2,26 @@
 
 from __future__ import annotations
 
-import importlib.util
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+from tests.conftest import init_git_repo, load_script
+
 _SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts"
 
 
 def _load():
-    spec = importlib.util.spec_from_file_location("implement_mod", _SCRIPTS / "implement.py")
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def _init_repo(path: Path) -> None:
-    subprocess.run(["git", "init", "-b", "main", str(path)], check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.email", "t@t"], cwd=path, check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.name", "T"], cwd=path, check=True, capture_output=True)
-    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=path, check=True, capture_output=True)
-    (path / "README").write_text("hi\n")
-    subprocess.run(["git", "add", "."], cwd=path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=path, check=True, capture_output=True)
+    return load_script(_SCRIPTS / "implement.py", "implement_mod")
 
 
 @pytest.fixture
 def main_repo(tmp_path, monkeypatch):
     r = tmp_path / "main"
     r.mkdir()
-    _init_repo(r)
+    init_git_repo(r)
     monkeypatch.chdir(r)
     monkeypatch.delenv("MENTAT_SKIP_PREFLIGHT", raising=False)
     return r
@@ -139,14 +126,27 @@ def test_main_invokes_preflight_then_chdir(main_repo, tmp_path, monkeypatch):
     plan = plan_dir / "feat-cli.md"
     plan.write_text("---\nid: feat-cli\nclass: AFK\n---\n# x\n")
 
-    with patch.object(impl, "_run_and_doctor", return_value=0) as mock_run:
-        with patch.object(impl.sys, "argv", ["implement.py", str(plan)]):
-            with pytest.raises(SystemExit) as exc:
-                impl.main()
+    chdir_targets: list[Path] = []
+    real_chdir = impl.os.chdir
+
+    def spy_chdir(p):
+        chdir_targets.append(Path(p))
+        real_chdir(p)
+
+    with patch.object(impl.os, "chdir", side_effect=spy_chdir):
+        with patch.object(impl, "_run_and_doctor", return_value=0) as mock_run:
+            with patch.object(impl.sys, "argv", ["implement.py", str(plan)]):
+                with pytest.raises(SystemExit) as exc:
+                    impl.main()
+
     assert exc.value.code == 0
     assert mock_run.call_count == 1
-    # Worktree was created
-    assert (main_repo.parent / "feat-cli").is_dir()
+    expected = (main_repo.parent / "feat-cli").resolve()
+    assert expected.is_dir()
+    # Verify os.chdir actually fired with the worktree path before run_plan was invoked.
+    assert any(p.resolve() == expected for p in chdir_targets), (
+        f"chdir never called with worktree target; saw: {chdir_targets}"
+    )
 
 
 def test_main_emits_eject_on_preflight_conflict(main_repo, tmp_path, monkeypatch):

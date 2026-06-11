@@ -31,7 +31,7 @@ A plan is split into vertical slices. Each slice fans out in parallel as a *chun
 ```mermaid
 flowchart LR
     P["mentat-plan<br/><i>plan.md</i>"] --> O["mentat-orchestrate"]
-    O --> F{{"fan out<br/>≤ 3 parallel"}}
+    O --> F{{"fan out<br/>parallel"}}
     F --> C1["chunk A<br/>worktree + devcontainer"]
     F --> C2["chunk B<br/>worktree + devcontainer"]
     F --> C3["chunk C<br/>worktree + devcontainer"]
@@ -83,7 +83,7 @@ git clone https://github.com/matheushenriquefs/mentat && cd mentat
 /mentat-plan add-csv-export-plan
 
 # 2. orchestrate — fan slices out as parallel chunks, land serial onto holding
-/mentat-orchestrate run feat/add-csv-export add-csv-export-plan
+/mentat-orchestrate run holding/add-csv-export add-csv-export-plan
 
 # 3. watch the batch land
 /mentat-session track

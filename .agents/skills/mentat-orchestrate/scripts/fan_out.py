@@ -30,25 +30,31 @@ def _load_sibling(name: str):
 _utils = _load_sibling("utils")
 
 
-def _spawn_worktree_subprocess(plan_path: Path, *, harness: str | None = None, model: str | None = None) -> str:
-    """Spawn a headless mentat-implement in a new worktree. Returns session ID."""
+def _spawn_worktree_subprocess(
+    plan_path: Path, *, harness: str | None = None, model: str | None = None
+) -> tuple[str, subprocess.Popen]:
+    """Spawn a headless mentat-implement in a new worktree.
+
+    Returns (session_id, Popen). The caller may use the Popen to throttle
+    concurrent spawns via Popen.poll().
+    """
     session_id = f"auto-{plan_path.stem}-{os.getpid()}"
     cmd = ["python3", str(_IMPLEMENT_SCRIPT), str(plan_path)]
     if harness:
         cmd += ["--harness", harness]
     if model:
         cmd += ["--model", model]
-    subprocess.Popen(cmd, env={**os.environ, "MENTAT_SESSION": session_id})
-    return session_id
+    proc = subprocess.Popen(cmd, env={**os.environ, "MENTAT_SESSION": session_id})
+    return session_id, proc
 
 
 def _emit_event(event: str, payload: dict) -> None:
     _utils.emit_event(event, payload)
 
 
-def spawn(plan, *, harness: str | None = None, model: str | None = None) -> str:
-    """Spawn plan headless. Print track command immediately. Return session ID."""
-    session_id = _spawn_worktree_subprocess(plan.path, harness=harness, model=model)
+def spawn_with_proc(plan, *, harness: str | None = None, model: str | None = None) -> tuple[str, subprocess.Popen]:
+    """Spawn plan headless. Print track command immediately. Return (session_id, Popen)."""
+    session_id, proc = _spawn_worktree_subprocess(plan.path, harness=harness, model=model)
     _emit_event(
         "chunk.spawned",
         {
@@ -60,4 +66,10 @@ def spawn(plan, *, harness: str | None = None, model: str | None = None) -> str:
     )
     print(f"python3 ~/.agents/skills/mentat-session/scripts/session.py track {session_id}")
     print(session_id)
+    return session_id, proc
+
+
+def spawn(plan, *, harness: str | None = None, model: str | None = None) -> str:
+    """Spawn plan headless. Discards Popen handle. Returns session ID."""
+    session_id, _proc = spawn_with_proc(plan, harness=harness, model=model)
     return session_id

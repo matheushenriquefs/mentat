@@ -15,7 +15,6 @@ _SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS))
 
 import compose_render
-
 import utils
 
 
