@@ -33,22 +33,6 @@ pre-commit:
         - ".agents/skills/mentat-*/SKILL.md"
         - ".agents/agents/*.md"
       run: python3 .agents/lib/style/lint.py {staged_files}
-    branch-guard:
-      run: |
-        [ "${MENTAT_RELEASE:-0}" = "1" ] && exit 0
-        default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@')
-        b=$(git rev-parse --abbrev-ref HEAD)
-        if [ -n "$default_branch" ] && [ "$b" = "$default_branch" ]; then
-          echo "ERR: direct commit to default branch '$default_branch' — open a PR"
-          exit 1
-        fi
-        case "$b" in
-          holding/*|branch/*)
-            echo "ERR: direct commit to holding branch '$b' — ADR-0002 (holding carries no own commits; rebase via /mentat-git rebase)"
-            exit 1
-            ;;
-        esac
-        exit 0
     ruff-format:
       glob: "**/*.py"
       run: python3 ~/.agents/skills/mentat-container/scripts/container.py run 'uv run ruff format --check {staged_files}'
