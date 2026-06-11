@@ -8,13 +8,13 @@ For the domain glossary, see [CONTEXT.md](../CONTEXT.md). For decisions, see [do
 
 ## What Mentat does
 
-Mentat is a Python harness for running AI coding agents against vertical-slice plans. It cuts a plan into independent slices, fans them out into parallel devcontainer-isolated chunks, and lands each one back onto a holding branch through a serial merge queue. Each land is gated. Failures eject without blocking the queue. Mentat is harness-agnostic — it doesn't know what coding agent runs inside each chunk, only how to start one and read its audit stream.
+Mentat is a multi-harness orchestrator for AI coding agents. It cuts a plan into independent vertical slices, fans them out into parallel devcontainer-isolated chunks, and lands each one back onto a holding branch through a serial merge queue. Each land is gated. Failures eject without blocking the queue. Surfaces stay swappable (multiplexer, harness, model, OS, arch, container engine, shell, editor, target-repo toolchain) — see `AGENTS.md` for the agnosticism mantra.
 
 The core property: **parallel-out, serial-in.** Implementation parallelism amplifies throughput; serial landing keeps the holding branch coherent.
 
 ## Parallel fan-out, serial land
 
-Slices run as chunks: one worktree + one devcontainer + one branch off `main`, each running its own coding agent session. The orchestrator spawns up to 3 chunks concurrently (hard cap — process supervision, not a tunable). Once all gates clear inside a chunk, it queues for landing.
+Slices run as chunks: one worktree + one devcontainer + one branch off `main`, each running its own coding agent session. The orchestrator spawns chunks concurrently (default 3; tunable via `~/.mentat/config.jsonc` `concurrency` key). Once all gates clear inside a chunk, it queues for landing.
 
 Landing is single-threaded by construction: one ref can't move concurrently, and serial landing lets sibling divergence resolve by rebasing onto the tip the previous chunk left. See [ADR-0004](./adr/0004-parallel-orchestration.md).
 
@@ -57,7 +57,7 @@ See [ADR-0006](./adr/0006-soft-readonly-test-enforcement.md) and [ADR-0010](./ad
 
 Each slice carries a `class:` tag in its plan frontmatter:
 
-- **AFK** — headless, no `AskUserQuestion` allowed. Ambiguity at runtime is ejection, not a question. The harness invocation passes `--disallowedTools AskUserQuestion` + a system clause forbidding self-answer.
+- **AFK** — headless, no interactive user-prompt tool allowed. Ambiguity at runtime is ejection, not a question. The harness adapter disables its interactive-prompt tool (e.g. Claude Code's `AskUserQuestion`, Cursor's equivalent) and adds a system clause forbidding self-answer.
 - **HITL** — interactive. Stalls for review at decision points.
 
 The orchestrator routes plans accordingly. AFK depends on the scored gate (ADR-0003) — that's what makes trusting unattended runs possible.
@@ -74,10 +74,12 @@ See [ADR-0007](./adr/0007-audit-envelope.md).
 
 ## Plugin API
 
-Two extension slots, Vite-derived:
+Four extension surfaces, all swap-in / no-fork:
 
 - **Rubric slot** — drop a reviewer subagent body into `.agents/agents/<name>-reviewer.md`. Auto-discovered.
 - **Gate slot** — drop a Python module exposing `run(chunk_path) -> (verdict, message)` into `.agents/lib/gates/code/`. Auto-discovered.
+- **Diff provider** — implement `DiffProvider.render(base, head) -> str`. Built-in: `git`. Declare in `~/.mentat/config.jsonc` `diff_tool`.
+- **Harness adapter** — implement `HarnessProvider.spawn(prompt, **opts)`. Built-in: `claude-code`, `cursor`. Declare in `~/.mentat/config.jsonc` `harness`.
 
 Mentat core stays minimal; project-specific concerns extend through slots without forking.
 
@@ -89,9 +91,7 @@ User-facing bin layer (`.agents/skills/mentat-*/scripts/`): stdlib-only Python 3
 
 Dev layer (`tests/`, `evals/`): pinned dependencies via `uv`. Linting via `ruff`, type checking via `pyright`, tests via `pytest`. Driven from `pyproject.toml`.
 
-All target-repo tools (the consumer's linter, test runner, etc.) run in the devcontainer via `mentat-container run '<cmd>'` — never on the host.
-
-See [ADR-0008](./adr/0008-python-runtime.md).
+See [ADR-0008](./adr/0008-python-runtime.md). Target-repo tool routing lives in the [Devcontainer-first](#devcontainer-first) section below.
 
 ## Sub-agent delegation
 

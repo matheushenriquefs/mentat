@@ -78,7 +78,7 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 
 **"tool" — Mentat-internal vs. target-repo.** A "tool" inside Mentat means a MCP/skill resource (bash, grep, agent). A "tool" in the target repo means its linter/test runner/formatter. Context usually disambiguates; when unclear, say "harness tool" vs. "project tool".
 
-**"agent" — the LLM unit vs. the `agents/` directory.** In prose, "agent" = the running LLM instance executing a chunk. The `agents/` directory holds *prompt files* that define crew-agent personas — not the agents themselves. Use "crew-agent definition" for the file; "agent" for the live run.
+**"agent" — the LLM unit vs. the `agents/` directory.** In prose, "agent" = the running LLM instance executing a chunk. The `agents/` directory holds *prompt files* that define agent personas — not the agents themselves. Use "agent definition" for the file; "agent" for the live run.
 
 **"Mentat" — system vs. Dune character.** In code and docs, "Mentat" (capitalized) is the harness. The Dune origin is context for the name; it does not appear in technical prose.
 

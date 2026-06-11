@@ -38,11 +38,11 @@ git clone https://github.com/matheushenriquefs/mentat && cd mentat
 ## Quick Start
 
 ```
-# 1. plan — agent grills requirements, writes ~/.agents/plans/add-csv-export.md
-/mentat-plan add-csv-export
+# 1. plan — agent grills requirements, writes ~/.agents/plans/add-csv-export-plan.md
+/mentat-plan add-csv-export-plan
 
 # 2. orchestrate — fan slices out as parallel chunks, land serial onto holding branch
-/mentat-orchestrate run holding/add-csv-export add-csv-export
+/mentat-orchestrate run feat/add-csv-export add-csv-export-plan
 
 # 3. watch the batch land
 /mentat-session track

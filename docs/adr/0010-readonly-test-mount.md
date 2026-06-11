@@ -32,7 +32,7 @@ new naming scheme.
 - Unlisted files — unconstrained (new test files freely creatable, per OCP
   extension principle).
 
-**Sub-agent prompt for enumeration** (Pocock voice, language-agnostic):
+**Sub-agent prompt for enumeration** (language-agnostic):
 
 > List test files in this repo. Return absolute paths only. Skip generated tests
 > and vendored dependencies.

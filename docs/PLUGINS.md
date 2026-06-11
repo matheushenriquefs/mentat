@@ -1,7 +1,7 @@
 # Plugins — Mentat Plugin API
 
-Mentat uses a Vite-style plugin API. Plugins extend or replace built-in diff rendering
-and harness adapters. ADR-0009 documents the design decisions.
+Plugins extend or replace Mentat's built-in slots: diff rendering, harness adapter,
+reviewer subagents, and deterministic code gates. ADR-0009 documents the design decisions.
 
 ---
 
@@ -125,7 +125,7 @@ Each entry point must be a zero-argument factory returning `MentatPlugin`.
 
 ## Naming convention
 
-PyPI package name: `mentat-plugin-<name>`. Mirrors Vite's `vite-plugin-X`.
+PyPI package name: `mentat-plugin-<name>`.
 
 ---
 
