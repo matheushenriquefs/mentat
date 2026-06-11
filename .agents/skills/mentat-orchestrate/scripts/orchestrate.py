@@ -160,10 +160,12 @@ def run_orchestrate(
         _batch_review.review(session_id=os.environ.get("MENTAT_SESSION", "dry-run"))
         return 0
 
-    # Spawn AFK plans headless
-    auto_chunks: list[str] = []
+    # Spawn AFK plans headless. session_ids are emitted by `_fan_out_plans` for
+    # tracking; the land queue is keyed by plan.slug so the Scheduler built from
+    # `auto` can resolve `blocked_by` (session_ids don't appear in any plan's
+    # blocked_by list).
     if auto:
-        auto_chunks = _fan_out_plans(auto, harness=harness, model=model)
+        _fan_out_plans(auto, harness=harness, model=model)
 
     # Anchored (HITL) plans: emit chunk.spawned{harness:hitl-in-session} and return
     # control to caller. They do NOT land in this invocation — caller drives
@@ -171,7 +173,7 @@ def run_orchestrate(
     if anchored:
         _emit_anchored_chunks(anchored, harness=harness, model=model)
 
-    results = _land_all(auto_chunks, holding=holding, plans=auto)
+    results = _land_all([p.slug for p in auto], holding=holding, plans=auto)
 
     session_id = os.environ.get("MENTAT_SESSION", f"session-{os.getpid()}")
     _batch_review.review(session_id)
