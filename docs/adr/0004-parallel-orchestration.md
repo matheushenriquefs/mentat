@@ -4,6 +4,8 @@ Status: Accepted (locked)
 Date: 2026-05-31
 Amended: 2026-06-09 (v2 — hybrid 1-bin+3-modules shape; Python ProcessPoolExecutor;
 folds 0010 hitl-routing + 0011 decomp + 0012 harness-registry)
+Amended: 2026-06-11 (v3 — cross-chunk dep gating via scheduler.py; upstream-HITL
+promotion; eject cascade payload on chunk.ejected)
 
 ## Context
 
@@ -27,8 +29,14 @@ Stage modules under `scripts/`: `fan_out.py`, `land_queue.py`, `batch_review.py`
 
 Read each plan's `class: AFK|HITL` frontmatter. Topological sort by `blocked_by`.
 - `HITL` plans → anchored in current interactive session.
-- `AFK` plans with no downstream HITL dep → auto-spawned headless.
-- `AFK` plans downstream of HITL → anchored (HITL must complete first).
+- `AFK` plans with no HITL anywhere in the dep chain → auto-spawned headless.
+- `AFK` plans with a downstream HITL → anchored (HITL must complete first).
+- `AFK` plans with an upstream HITL → anchored (caller must drive the
+  upstream HITL in-session before the downstream AFK can spawn — its
+  worktree can't safely auto-spawn against the pre-batch base).
+
+The walks live in `scheduler.py` (`_has_downstream_hitl`, `_has_upstream_hitl`).
+`routing.py` is a backward-compat shim that re-exports from `scheduler`.
 
 AFK headless contract: harness adapter invoked with `--disallowedTools AskUserQuestion`
 + system clause forbidding self-answer. Exit `42` = `hitl-ambiguity` (AFK adapter
@@ -48,6 +56,25 @@ Selection: `~/.mentat/config.jsonc` `harness:` key; `--harness` flag overrides.
 ```
 
 Exit codes: 0 all-landed; 1 partial; ≥2 tool error.
+
+**Cross-chunk dependency gating (v3 amendment):**
+
+`land_queue.drain` accepts an optional `Scheduler` (`scheduler.py`). With one,
+the drain pulls the next-ready chunk via `Scheduler.next_ready(pending)` — a
+chunk lands only when every slug in its `blocked_by` is already in
+`scheduler.landed`. `B(blocked_by=[A])` waits for `A.landed` even if B's
+chunk arrived first; rebase-at-land then carries A's commits underneath B.
+
+Eject cascade: when a chunk ejects (gate-failed, rebase-conflicted, not-ff),
+`Scheduler.mark_ejected` walks the reverse-dep graph and returns every
+downstream slug. `land_queue.drain` emits one `chunk.ejected` per cascaded
+slug with payload `{reason:"upstream_ejected", upstream:<X>}` — payload-only
+extension per ADR-0007 (no new event name) — and skips the cascaded slugs
+without rebase or gate. Sibling chunks (no dep on the ejected one) keep
+flowing.
+
+Cycle / missing upstream → drain returns a single `status:"stalled"` verdict
+with the pending list; orchestrate exits 1.
 
 ## Consequences
 
