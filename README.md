@@ -55,7 +55,7 @@ flowchart LR
 
 ## Requirements
 
-| | |
+| Dependency | Version |
 |---|---|
 | **Python** | 3.11+ (stdlib only at the bin layer) |
 | **Docker** | 24+ with daemon running |
@@ -63,7 +63,7 @@ flowchart LR
 | **git** | 2.40+ (worktree support is load-bearing) |
 | **OS** | macOS, Linux |
 
-Project tools (`ruff`, `pyright`, `uv`, `pytest`) run inside the devcontainer — they do not need to exist on the host.
+The development toolchain (`ruff`, `pyright`, `uv`, `pytest`) ships with the devcontainer image; no host installation is required.
 
 ## Install
 
