@@ -70,9 +70,18 @@ Host arch (`uname -m`) and image platform are checked at `up` time. When host is
 `arm64` and image is `linux/amd64` (or vice versa), `up` emits a visible warning about
 emulation overhead before proceeding. No blocking — emulation is slow but functional.
 
+Synthesized `devcontainer.json` (Dockerfile path) pins `runArgs: ["--platform", "linux/<arch>"]`
+to the host: `platform.machine()` is mapped — `arm64`/`aarch64` → `linux/arm64`,
+`x86_64`/`amd64` → `linux/amd64`. Unknown machines: `runArgs` omitted, Docker default.
+`MENTAT_PLATFORM` env var overrides (e.g. `MENTAT_PLATFORM=linux/amd64` forces amd64 on arm64 host).
+
+The `compose.yml.tmpl` branch substitutes the same arch value into the user template's `$arch`.
+Static `docker-compose.yml` is user-owned and untouched — pin `platform:` there yourself if needed.
+
 ## Constraints
 
 - Container must be running before `run`. No auto-start inside `run`.
 - `MENTAT_DOCKER` env var overrides the `docker` binary path (test isolation only).
+- `MENTAT_PLATFORM` env var overrides host-arch detection for synth.
 - `devcontainer.json` written only when absent; never overwritten if present.
 - Arch mismatch emits a warning via `doctor`; it does not exit non-zero.
