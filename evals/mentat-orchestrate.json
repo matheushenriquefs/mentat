@@ -33,6 +33,6 @@
     "orchestrate run main plan-a plan-b --dry-run",
     "orchestrate fan-out my-plan",
     "orchestrate land-queue main",
-    "orchestrate final-review session-123"
+    "orchestrate batch-review session-123"
   ]
 }
