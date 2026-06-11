@@ -34,6 +34,13 @@ _STALE_PATHS = [
     ".agents/lib/gates/llm",
 ]
 
+# Rel-target under ~/.agents/ → rel-source under <clone>/.
+# ADRs ship: AGENTS.md tells agents to "check ADRs in the area you're touching"
+# and references ~/.agents/docs/adr/ — broken without this symlink.
+_DOCS_SYMLINKS = {
+    "docs/adr": "docs/adr",
+}
+
 
 class Action:
     def __init__(self, action_type: str, source: Path | None, target: Path) -> None:
@@ -124,7 +131,18 @@ def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
             else:
                 add.append(Action("symlink", source, link))
 
-    # 4. Stale paths
+    # 4. Docs symlinks (ADRs, STYLE — agents read these via ~/.agents/docs/)
+    if clone_root is not None:
+        for rel_target, rel_source in _DOCS_SYMLINKS.items():
+            target = home / ".agents" / rel_target
+            source = clone_root / rel_source
+            if target.exists():
+                if target.is_symlink() and target.resolve() != source.resolve():
+                    update.append(Action("symlink", source, target))
+            else:
+                add.append(Action("symlink", source, target))
+
+    # 5. Stale paths
     for stale_rel in _STALE_PATHS:
         stale_path = home / stale_rel
         if stale_path.exists():
