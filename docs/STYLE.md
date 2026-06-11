@@ -1,9 +1,8 @@
-# Style Guide — Mentat Skills, Agents, and Commands
+# Style Guide — Mentat Skills and Agents
 
 Writing rules for all files in `.agents/skills/`, `.agents/agents/`, and `docs/`.
 Structural framing follows [Diátaxis](https://diataxis.fr/) — reference for spec files,
-how-to for workflow docs. Voice rules are mentat-specific, derived from 34 files across
-Pocock skills, crew agents, and mentat commands (see `context/style-invariants.md`).
+how-to for workflow docs.
 
 Enforced by: Tier 1 deterministic linter (`.agents/lib/style/lint.py`, lefthook pre-commit).
 Tier 2 semantic conformance: promptfoo eval (`task eval`).
@@ -24,7 +23,7 @@ Used for: `mentat-install`.
 - Articles: kept.
 - LOC budget: ≤40.
 
-### Full Pocock Skill
+### Full Skill
 
 Used for: `mentat-prd`, `mentat-tasks`, `mentat-implement`, `mentat-orchestrate`,
 `mentat-container`, `mentat-log`, `mentat-session`, `mentat-git`, `mentat-plan`, `mentat-skill`.
@@ -37,7 +36,7 @@ Used for: `mentat-prd`, `mentat-tasks`, `mentat-implement`, `mentat-orchestrate`
 - Articles: kept.
 - LOC budget: 75–120.
 
-### Crew Agent
+### Agent
 
 Used for: `mentat-researcher`, reviewers, all files in `.agents/agents/`.
 
@@ -55,10 +54,10 @@ Used for: `mentat-researcher`, reviewers, all files in `.agents/agents/`.
 
 | Path pattern | Voice class | LOC budget |
 |---|---|---|
-| `.agents/skills/mentat-install/SKILL.md` | Thin skill | ≤40 |
-| `.agents/skills/mentat-{prd,tasks,implement,orchestrate,container,log,session,git,plan,skill}/SKILL.md` | Full Pocock | 75–120 |
-| `.agents/agents/mentat-*-reviewer.md` | Crew | 60–100 |
-| `.agents/agents/mentat-researcher.md` | Crew | 60–100 |
+| `.agents/skills/mentat-install/SKILL.md` | Thin Skill | ≤40 |
+| `.agents/skills/mentat-{prd,tasks,implement,orchestrate,container,log,session,git,plan,skill}/SKILL.md` | Full Skill | 75–120 |
+| `.agents/agents/mentat-*-reviewer.md` | Agent | 60–100 |
+| `.agents/agents/mentat-researcher.md` | Agent | 60–100 |
 | `docs/*.md` | Diátaxis (free) | n/a |
 | `AGENTS.md` | — | ≤150 |
 | `CONTEXT.md` | Glossary | n/a |
@@ -69,7 +68,7 @@ Used for: `mentat-researcher`, reviewers, all files in `.agents/agents/`.
 
 Three shapes; use exact keys only.
 
-**Thin skill / Full Pocock skill:**
+**Thin Skill / Full Skill:**
 ```yaml
 ---
 name: <skill-name>
@@ -79,7 +78,7 @@ description: <third-person, "Use when..." trigger clause>
 Optional: `argument-hint` (user-facing hint for `$ARGUMENTS`).
 Do not add `metadata:`, `version:`, or any other keys.
 
-**Crew agent:**
+**Agent:**
 ```yaml
 ---
 name: <agent-name>
@@ -90,25 +89,15 @@ tools: [Tool1, Tool2]
 ---
 ```
 
-**Slash-command file:**
-```yaml
----
-description: <imperative, action-verb-first, one sentence>
----
-```
-No other keys.
-
 ---
 
 ## Body Structure
 
-**Thin skill:** Numbered action list. No `##` headers.
+**Thin Skill:** Numbered action list. No `##` headers.
 
-**Full Pocock skill:** `# Title` → `## Phase N — Name` → `### Substep` (optional).
+**Full Skill:** `# Title` → `## Phase N — Name` → `### Substep` (optional).
 
-**Crew agent:** `## Section` only. No `###`. No nested sub-sections.
-
-**Slash-command file:** Numbered list, no headers, ≤30 lines.
+**Agent:** `## Section` only. No `###`. No nested sub-sections.
 
 ---
 
@@ -118,7 +107,7 @@ Drop from all files: `just`, `simply`, `really`, `basically`, `actually`, `obvio
 Drop pleasantries: `sure`, `certainly`, `of course`, `happy to`.
 Drop hedging: `might want to`, `feel free to`.
 
-Crew agents additionally drop all articles (`a`, `an`, `the`) from body prose.
+Agents additionally drop all articles (`a`, `an`, `the`) from body prose.
 
 ---
 
@@ -126,9 +115,8 @@ Crew agents additionally drop all articles (`a`, `an`, `the`) from body prose.
 
 | Class | Frequency | Language tag |
 |---|---|---|
-| Thin / Full skill | Moderate | Required for shell (`bash`) |
-| Crew agent | Rare | Required if used |
-| Slash-command | High | Required for shell |
+| Thin Skill / Full Skill | Moderate | Required for shell (`bash`) |
+| Agent | Rare | Required if used |
 
 Inline backticks for: paths, variables, symbols, command names.
 
@@ -136,10 +124,10 @@ Inline backticks for: paths, variables, symbols, command names.
 
 ## Cross-References
 
-- Skills/commands: use `/skill-name` invocation notation.
+- Skills: use `/skill-name` invocation notation.
 - Prose: use `[text](path)` markdown links, relative paths preferred.
 - No wiki-links (`[[…]]`). No bare paths without backtick.
-- Crew agents: self-contained. No cross-references.
+- Agents: self-contained. No cross-references.
 
 ---
 
@@ -166,7 +154,7 @@ How-to docs (INSTALLER.md): task-oriented, step-by-step.
 ## Enforcement
 
 - **Tier 1 — deterministic** (`.agents/lib/style/lint.py`): frontmatter keys, LOC budget,
-  banned words, article-drop for crew agents. Runs in lefthook `pre-commit` as `style-lint`.
+  banned words, article-drop for agents. Runs in lefthook `pre-commit` as `style-lint`.
   Commit blocked on violation.
 - **Tier 2 — semantic** (promptfoo, `task eval`): voice class conformance, structural rules,
   third-person and "Use when..." trigger presence. Runs on PR.

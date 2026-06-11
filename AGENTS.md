@@ -51,7 +51,7 @@ Naming convention: kebab-case with `mentat-` prefix for skills and commands. ADR
 
 ## Quality Gates
 
-Every modified file passes its class checker before commit. Run: `lefthook run pre-commit --files $(git diff --name-only "$base")`. Gate thresholds and reviewer subagents: [ADR-0003](docs/adr/0003-scored-review-gate.md). Tier-1 linter (`lint.py`) enforces LOC budgets, banned words, and article-drop for crew agents on every commit.
+Every modified file passes its class checker before commit. Run: `lefthook run pre-commit --files $(git diff --name-only "$base")`. Gate thresholds and reviewer subagents: [ADR-0003](docs/adr/0003-scored-review-gate.md). Tier-1 linter (`lint.py`) enforces LOC budgets, banned words, and article-drop for agents on every commit.
 
 ## Audit
 

@@ -35,13 +35,9 @@ pick a convention, document it, move on.
 `EX_SOFTWARE (70)` is reserved for unhandled Python exceptions only.
 
 **Code 42:** Fabricated sentinel, not in sysexits. AFK plans exit 42 when
-`AskUserQuestion` ambiguity is detected mid-session. Distinct from 0/1/signal codes.
-
-**Code 99 dropped:** `mentat-container run` previously returned 99 when the
-container was down. Replaced by 69 (`EX_UNAVAILABLE`).
-
-**`≥2 = tool error` bucket retired:** Old catch-all replaced by sysexits-grounded
-specifics above. Any exit code not in this table is a bug.
+the interactive user-prompt tool is invoked mid-session (any harness adapter —
+Claude Code's `AskUserQuestion`, Cursor's equivalent, etc.). Distinct from
+0/1/signal codes.
 
 ---
 

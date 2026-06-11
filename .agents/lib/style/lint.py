@@ -78,9 +78,9 @@ def lint_file(path: Path) -> list[str]:
     if cls == "thin" and loc > 40:
         errs.append(f"{path}: thin skill {loc} LOC exceeds 40")
     elif cls == "full" and not (75 <= loc <= 120):
-        errs.append(f"{path}: full Pocock skill {loc} LOC ({loc}) not in 75–120")
+        errs.append(f"{path}: full skill {loc} LOC ({loc}) not in 75–120")
     elif cls == "crew" and not (60 <= loc <= 100):
-        errs.append(f"{path}: crew agent {loc} LOC not in 60–100")
+        errs.append(f"{path}: agent {loc} LOC not in 60–100")
 
     body = "\n".join(lines[fm_end:])
     clean = _strip_fences(body)
@@ -94,7 +94,7 @@ def lint_file(path: Path) -> list[str]:
         for m in ARTICLE_RE.finditer(clean):
             raw_pos = body.find(m.group())
             lineno = (body[:raw_pos].count("\n") if raw_pos >= 0 else 0) + fm_end + 1
-            errs.append(f"{path}:{lineno}: crew agent must drop article '{m.group().strip()}'")
+            errs.append(f"{path}:{lineno}: agent must drop article '{m.group().strip()}'")
 
     return errs
 
