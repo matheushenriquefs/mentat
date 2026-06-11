@@ -66,7 +66,7 @@ def test_precommit_agent_with_frontmatter_passes(tmp_path):
 
 def test_precommit_workflow_no_links_blocks(tmp_path):
     pre = _load_precommit()
-    (tmp_path / "README.md").write_text("# title\n\nplain prose, no links\n")
+    (tmp_path / "CONTEXT.md").write_text("# title\n\nplain prose, no links\n")
     verdict, msg = pre.run(tmp_path)
     assert verdict == "block"
     assert "cross-ref" in msg
@@ -74,7 +74,7 @@ def test_precommit_workflow_no_links_blocks(tmp_path):
 
 def test_precommit_workflow_with_links_passes(tmp_path):
     pre = _load_precommit()
-    (tmp_path / "README.md").write_text("# title\n\nSee [details](./docs/x.md)\n")
+    (tmp_path / "CONTEXT.md").write_text("# title\n\nSee [details](./docs/x.md)\n")
     verdict, _ = pre.run(tmp_path)
     assert verdict == "pass"
 
