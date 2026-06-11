@@ -3,20 +3,51 @@ pre-commit:
   commands:
     stale-ref:
       glob: "**/*"
+      exclude:
+        - ".agents/skills/mentat-install/scripts/plan.py"
+        - ".agents/docs/PATHS.md"
+        - "lefthook.yml"
       run: |
-        out=$(rg -n '\bmentat-update\b|\bmentat-credits-gen\b|upstreams\.jsonc|/to-(rebase|commit|plan|implement|scaffold|eval)\b' {staged_files} 2>/dev/null || true)
+        out=$(rg -nF \
+          -e 'mentat-update' \
+          -e 'mentat-credits-gen' \
+          -e 'mentat-sync-upstream' \
+          -e 'mentat-sync-check' \
+          -e 'mentat-precommit' \
+          -e 'mentat-config' \
+          -e 'upstreams.jsonc' \
+          -e '.mentatrc.jsonc' \
+          -e 'gates/llm/' \
+          -e 'Pocock' \
+          -e '/to-rebase' \
+          -e '/to-commit' \
+          -e '/to-plan' \
+          -e '/to-implement' \
+          -e '/to-scaffold' \
+          -e '/to-eval' \
+          {staged_files} 2>/dev/null || true)
         [ -z "$out" ] && exit 0
         echo "stale-ref advisory: $out" && exit 0
     style-lint:
-      glob: "{.agents/skills/mentat-*/SKILL.md,.agents/agents/*.md}"
+      glob:
+        - ".agents/skills/mentat-*/SKILL.md"
+        - ".agents/agents/*.md"
       run: python3 .agents/lib/style/lint.py {staged_files}
-    holding-branch-guard:
+    branch-guard:
       run: |
         [ "${MENTAT_RELEASE:-0}" = "1" ] && exit 0
-        h="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
-            || { echo "ERR: holding-branch-guard: cannot resolve holding branch name"; exit 1; })"
-        b="$(git rev-parse --abbrev-ref HEAD)"
-        [ "$b" = "$h" ] && { echo "ERR: direct commit to holding branch '$h' — ADR-0002"; exit 1; }
+        default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@')
+        b=$(git rev-parse --abbrev-ref HEAD)
+        if [ -n "$default_branch" ] && [ "$b" = "$default_branch" ]; then
+          echo "ERR: direct commit to default branch '$default_branch' — open a PR"
+          exit 1
+        fi
+        case "$b" in
+          holding/*|branch/*)
+            echo "ERR: direct commit to holding branch '$b' — ADR-0002 (holding carries no own commits; rebase via /mentat-git rebase)"
+            exit 1
+            ;;
+        esac
         exit 0
     ruff-format:
       glob: "**/*.py"
