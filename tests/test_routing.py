@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import load_script
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
 
 def load_module(name: str):
-    path = SCRIPTS / f"{name}.py"
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod
+    return load_script(SCRIPTS / f"{name}.py", name)
 
 
 def make_plan(slug: str, class_: str, blocked_by: list[str] | None = None):

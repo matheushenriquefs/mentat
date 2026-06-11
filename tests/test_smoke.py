@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+from tests.conftest import load_script
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_module_from(path: Path, name: str):
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod
+    return load_script(path, name)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

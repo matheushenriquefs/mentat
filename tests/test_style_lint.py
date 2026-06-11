@@ -2,23 +2,16 @@
 
 from __future__ import annotations
 
-import importlib.util
 import textwrap
 from pathlib import Path
 
 import pytest
 
+from tests.conftest import load_script
+
 LIB = Path(__file__).resolve().parents[1] / ".agents/lib/style/lint.py"
 
-
-def _load():
-    spec = importlib.util.spec_from_file_location("lint", LIB)
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod
-
-
-lint = _load()
+lint = load_script(LIB, "lint")
 
 
 def _thin_skill(tmp_path: Path, content: str) -> Path:

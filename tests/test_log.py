@@ -126,11 +126,9 @@ def test_prune_drops_old_dirs(tmp_path):
 
 def test_event_catalog_matches_parent_plan():
     """Pin: exactly 9 canonical events with exact names from plan §A."""
-    import importlib.util
+    from tests.conftest import load_script
 
-    spec = importlib.util.spec_from_file_location("log", LOG_SCRIPT)
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    mod = load_script(LOG_SCRIPT, "log")
     catalog = mod.EVENT_CATALOG
     expected = {
         "plan.started",
