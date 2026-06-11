@@ -49,7 +49,7 @@ Detected harnesses: `claude-code` (`~/.claude/`), `cursor` (`~/.cursor/`).
 ├── lib/gates/score.py                             # aggregates subagent JSON verdicts (ADR-0003)
 ├── agents/mentat-*-reviewer.md                    # LLM reviewer subagents (harness-agnostic)
 ├── lib/                                           # shared host code (tasks/ runs from here)
-└── docs/                                          # CONTEXT, PATHS (harness-internal docs)
+└── docs/PATHS.md                                  # filesystem layout (harness-internal). Lexicon lives in repo CONTEXT.md + docs/adr/0005-ubiquitous-lexicon.md
 ```
 
 ## Repo user-facing docs (`<repo>/docs/`)

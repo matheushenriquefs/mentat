@@ -1,12 +1,21 @@
-"""embed-docs: check renamed/deleted files have no stale references in docs."""
+"""docs-sync: check renamed/deleted files have no stale references in docs."""
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
 
-DOCS = ["README.md", "AGENTS.md", "CONTEXT.md", "CREDITS.md"]
+ROOT_DOCS = ["README.md", "AGENTS.md", "CONTEXT.md", "CREDITS.md"]
+
+
+def docs() -> list[str]:
+    out = list(ROOT_DOCS)
+    d = Path("docs")
+    if d.is_dir():
+        out.extend(str(p) for p in sorted(d.rglob("*.md")))
+    return out
 
 
 def staged_deleted() -> list[str]:
@@ -31,16 +40,14 @@ def check(staged: list[str]) -> int:
         if p.exists():
             continue
         base = p.name
-        for doc in DOCS:
+        for doc in docs():
             doc_path = Path(doc)
             if not doc_path.exists():
                 continue
             text = doc_path.read_text()
-            import re
-
             hits = len(re.findall(rf"\b{re.escape(base)}\b", text))
             if hits > 0:
-                print(f"embed-docs: {base!r} removed but still in {doc} ({hits} hit(s))", file=sys.stderr)
+                print(f"docs-sync: {base!r} removed but still in {doc} ({hits} hit(s))", file=sys.stderr)
                 fail = 1
     return fail
 
