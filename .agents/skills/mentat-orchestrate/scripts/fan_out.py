@@ -30,21 +30,43 @@ def _load_sibling(name: str):
 _utils = _load_sibling("utils")
 
 
+def _log_dir_for(session_id: str) -> Path:
+    """Per-session log dir. Honors MENTAT_LOG_PATH (default ~/.mentat/logs) and
+    MENTAT_REPO (default cwd basename)."""
+    base = Path(os.environ.get("MENTAT_LOG_PATH", str(Path.home() / ".mentat" / "logs")))
+    repo = os.environ.get("MENTAT_REPO", Path.cwd().name)
+    return base / repo / session_id
+
+
 def _spawn_worktree_subprocess(
     plan_path: Path, *, harness: str | None = None, model: str | None = None
 ) -> tuple[str, subprocess.Popen]:
     """Spawn a headless mentat-implement in a new worktree.
 
+    Generates a deterministic session id, creates ~/.mentat/logs/<repo>/<sid>/
+    with mode 0o700, and exports MENTAT_SESSION + MENTAT_SESSION_LOG to the
+    child so the harness adapter can redirect stream-json into the log file.
+
     Returns (session_id, Popen). The caller may use the Popen to throttle
     concurrent spawns via Popen.poll().
     """
     session_id = f"auto-{plan_path.stem}-{os.getpid()}"
+    log_dir = _log_dir_for(session_id)
+    log_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(log_dir, 0o700)
+    session_log = log_dir / "session.jsonl"
+
     cmd = ["python3", str(_IMPLEMENT_SCRIPT), str(plan_path)]
     if harness:
         cmd += ["--harness", harness]
     if model:
         cmd += ["--model", model]
-    proc = subprocess.Popen(cmd, env={**os.environ, "MENTAT_SESSION": session_id})
+    env = {
+        **os.environ,
+        "MENTAT_SESSION": session_id,
+        "MENTAT_SESSION_LOG": str(session_log),
+    }
+    proc = subprocess.Popen(cmd, env=env)
     return session_id, proc
 
 
