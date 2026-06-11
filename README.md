@@ -86,7 +86,6 @@ task test      # pytest tests/
 - **[Style guide](./docs/STYLE.md)** — voice classes, LOC budgets, banned words.
 - **[Plugin API](./docs/PLUGINS.md)** — rubric + gate extension slots.
 - **[Exit codes](./docs/EXIT-CODES.md)** — BSD sysexits convention.
-- **[Installer design](./docs/INSTALLER.md)** — TUI flows.
 
 ## License
 

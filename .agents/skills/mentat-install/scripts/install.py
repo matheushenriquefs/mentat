@@ -30,6 +30,7 @@ def _load_sibling(name: str):
 _plan = _load_sibling("plan")
 _render = _load_sibling("render")
 _utils = _load_sibling("utils")
+_companions = _load_sibling("companions")
 
 
 def _emit_installed() -> None:
@@ -61,6 +62,7 @@ def do_install(
     yes: bool = False,
     dry_run: bool = False,
     color: bool | None = None,
+    skip_companions: bool = False,
 ) -> int:
     if home is None:
         home = Path.home()
@@ -72,6 +74,9 @@ def do_install(
     if dry_run:
         print("[dry-run] no changes made.")
         return 0
+
+    if not skip_companions:
+        _companions.install_all(yes=yes)
 
     if not yes and sys.stdin.isatty():
         answer = input("Proceed? [y/N] ")
@@ -99,6 +104,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dry-run", action="store_true", help="Preview only, no writes")
     p.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
     p.add_argument("--no-color", action="store_true", help="Disable ANSI output")
+    p.add_argument("--skip-companions", action="store_true", help="Skip 3rd-party companion install prompts")
     return p
 
 
@@ -113,7 +119,15 @@ def main() -> None:
     if (cwd / ".agents" / "skills").is_dir():
         clone_root = cwd
 
-    sys.exit(do_install(yes=args.yes, dry_run=args.dry_run, color=color, clone_root=clone_root))
+    sys.exit(
+        do_install(
+            yes=args.yes,
+            dry_run=args.dry_run,
+            color=color,
+            clone_root=clone_root,
+            skip_companions=args.skip_companions,
+        )
+    )
 
 
 if __name__ == "__main__":
