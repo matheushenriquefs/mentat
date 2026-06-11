@@ -70,12 +70,25 @@ def run_gates(chunk_path: Path | None) -> tuple[str, str]:
     return ("pass", "")
 
 
-def read_config() -> dict:
-    config_path = Path.home() / ".mentat" / "config.jsonc"
-    if not config_path.exists():
-        return {}
-    text = "\n".join(line for line in config_path.read_text().splitlines() if not line.lstrip().startswith("//"))
+def _load_jsonc(path: Path) -> dict:
+    text = "\n".join(line for line in path.read_text().splitlines() if not line.lstrip().startswith("//"))
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         return {}
+
+
+def _repo_config_path() -> Path | None:
+    r = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    return Path(r.stdout.strip()) / ".mentat" / "config.jsonc"
+
+
+def read_config() -> dict:
+    global_path = Path.home() / ".mentat" / "config.jsonc"
+    global_cfg = _load_jsonc(global_path) if global_path.exists() else {}
+    repo_path = _repo_config_path()
+    if repo_path is None or not repo_path.exists():
+        return global_cfg
+    return {**global_cfg, **_load_jsonc(repo_path)}

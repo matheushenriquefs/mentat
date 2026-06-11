@@ -283,12 +283,25 @@ def cmd_doctor(wt: Path) -> int:  # noqa: C901
         try:
             lines = [ln for ln in config.read_text().splitlines() if not ln.strip().startswith("//")]
             _json.loads("\n".join(lines))
-            print(_col("config.jsonc", "valid"))
+            print(_col("config.jsonc (global)", "valid"))
         except Exception:
-            print(_col("config.jsonc", "invalid — parse error"))
+            print(_col("config.jsonc (global)", "invalid — parse error"))
             warnings.append("config.jsonc parse error")
     else:
-        print(_col("config.jsonc", "absent"))
+        print(_col("config.jsonc (global)", "absent"))
+    _repo_root_r = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    if _repo_root_r.returncode == 0:
+        repo_cfg = Path(_repo_root_r.stdout.strip()) / ".mentat" / "config.jsonc"
+        if repo_cfg.exists():
+            try:
+                lines = [ln for ln in repo_cfg.read_text().splitlines() if not ln.strip().startswith("//")]
+                _json.loads("\n".join(lines))
+                print(_col("config.jsonc (repo overlay)", "valid"))
+            except Exception:
+                print(_col("config.jsonc (repo overlay)", "invalid — parse error"))
+                warnings.append("repo config.jsonc parse error")
+        else:
+            print(_col("config.jsonc (repo overlay)", "absent"))
     logs_dir = mentat_dir / "logs"
     if logs_dir.exists():
         session_n = sum(1 for _ in logs_dir.iterdir() if _.is_dir())
