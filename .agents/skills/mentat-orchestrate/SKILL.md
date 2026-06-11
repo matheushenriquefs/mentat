@@ -94,6 +94,7 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py batch-review 
 - `--dry-run` prints what would run; does not spawn or land.
 - Session id from `$MENTAT_SESSION` for audit events.
 - `batch-review` is always advisory; ejected counts do not affect its exit code.
+- Config resolved as layered stack: CLI flag > `<repo-root>/.mentat/config.jsonc` > `~/.mentat/config.jsonc`. Scaffold repo overlay with `mentat-install --repo`.
 
 ## Doctor handoff
 

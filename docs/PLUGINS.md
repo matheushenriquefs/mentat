@@ -83,6 +83,12 @@ delta = "mentat_plugin_delta:plugin"
 }
 ```
 
+> **Note — layered config and plugin lists:** When a `<repo>/.mentat/config.jsonc`
+> overlay is present, its `plugins` list **replaces** (not extends) the global list.
+> Shallow merge means the entire `plugins` key from the repo wins. This avoids
+> globally-installed plugins activating silently in scoped repos. If you need both
+> global and repo plugins, list them all in the repo overlay.
+
 ---
 
 ## Harness plugin example
