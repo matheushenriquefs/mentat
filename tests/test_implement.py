@@ -100,7 +100,14 @@ def test_implement_single_afk_plan_succeeds(tmp_path):
     assert call_kwargs.kwargs.get("afk") is True or (call_kwargs.args[1] if len(call_kwargs.args) > 1 else False)
 
 
-def test_implement_single_hitl_plan_allows_questions(tmp_path):
+def test_implement_single_hitl_plan_hands_off_to_caller(tmp_path):
+    """HITL plans must NOT spawn a sub-claude via the harness adapter.
+
+    The harness shells `claude --headless` which loses AskUserQuestion.
+    implement.py emits chunk.spawned{harness:"hitl-in-session"} and returns 0,
+    handing control back to the calling Claude session which drives the TDD
+    loop in-session.
+    """
     impl = load_module("implement")
     plan = _write_plan(tmp_path, "hitl-plan", class_="HITL")
 
@@ -108,12 +115,15 @@ def test_implement_single_hitl_plan_allows_questions(tmp_path):
     fake_result.returncode = 0
 
     with patch.object(impl, "_invoke_harness", return_value=fake_result) as mock_invoke:
-        rc = impl.run_plan(plan, harness="fake")
+        with patch.object(impl, "_emit_event") as mock_emit:
+            rc = impl.run_plan(plan, harness="fake")
 
     assert rc == 0
-    call_kwargs = mock_invoke.call_args
-    afk_val = call_kwargs.kwargs.get("afk", True)
-    assert afk_val is False
+    mock_invoke.assert_not_called()
+    events = [c.args[0] for c in mock_emit.call_args_list]
+    assert "chunk.spawned" in events
+    spawned_payload = next(c.args[1] for c in mock_emit.call_args_list if c.args[0] == "chunk.spawned")
+    assert spawned_payload.get("harness") == "hitl-in-session"
 
 
 def test_implement_harness_flag_overrides_config(tmp_path):

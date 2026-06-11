@@ -259,8 +259,30 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     plan_class = fm.get("class", "HITL")
     afk = plan_class == "AFK"
 
-    # Inject read-only test mounts before container-up (ADR-0010)
     slug = plan_path.stem
+
+    # HITL plans run in the calling Claude session — never spawn a sub-claude
+    # via the harness adapter (it would shell `claude --headless` and lose
+    # AskUserQuestion). Emit chunk.spawned{harness:"hitl-in-session"} and
+    # return control to the caller; the calling session reads the audit log
+    # and drives the TDD loop itself.
+    if not afk:
+        _emit_event(
+            "chunk.spawned",
+            {
+                "slug": slug,
+                "plan": str(plan_path),
+                "harness": "hitl-in-session",
+                "worktree": str(Path.cwd()),
+            },
+        )
+        print(
+            f"mentat-implement: {slug} is class:HITL — drive in calling Claude session.\nPlan: {plan_path}",
+            file=sys.stderr,
+        )
+        return 0
+
+    # Inject read-only test mounts before container-up (ADR-0010)
     closed, open_ = read_tests_manifest(slug)
     ro = compute_ro_mounts(closed, open_)
     if ro:
