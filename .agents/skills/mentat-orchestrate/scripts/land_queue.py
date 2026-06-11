@@ -193,7 +193,34 @@ def drain(chunks: list[Chunk], *, holding: str, scheduler=None) -> list[dict]:
         pending.remove(ready)
         if verdict.get("status") == "success":
             scheduler.mark_landed(ready)
-        else:
-            scheduler.mark_ejected(ready)
+            continue
+
+        # Eject cascade: every chunk that transitively depends on `ready`
+        # is preemptively ejected — no rebase, no gate, payload-only
+        # extension to chunk.ejected (ADR-0007).
+        cascaded = scheduler.mark_ejected(ready)
+        for downstream in cascaded:
+            if downstream not in pending:
+                continue
+            chunk = by_slug.get(downstream)
+            where = str(chunk.worktree) if chunk else ""
+            _emit_event(
+                "chunk.ejected",
+                {
+                    "slug": downstream,
+                    "reason": "upstream_ejected",
+                    "upstream": ready,
+                    "where": where,
+                },
+            )
+            results.append(
+                {
+                    "slug": downstream,
+                    "status": "eject",
+                    "reason": "upstream_ejected",
+                    "upstream": ready,
+                }
+            )
+            pending.remove(downstream)
 
     return results
