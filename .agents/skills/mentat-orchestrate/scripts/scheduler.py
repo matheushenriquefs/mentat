@@ -110,6 +110,61 @@ def _has_upstream_hitl(
     return False
 
 
+class Scheduler:
+    """Tracks landing state of a plan set; yields next chunk whose deps are met.
+
+    `next_ready(candidates)` walks the candidate slugs in order and returns the
+    first one whose `blocked_by` is wholly satisfied (every upstream is in
+    `landed`). An unknown slug — chunk has no loaded plan — is treated as
+    immediately ready, so ad-hoc/external chunks keep flowing the way they
+    did before slice-2.
+
+    `mark_landed` / `mark_ejected` are the only state mutations. They are
+    additive: once a slug enters either set, it stays put. Ejection cascade
+    (slice-3) walks the reverse-dep graph and pushes downstream slugs into
+    `ejected` so they get skipped, not stalled.
+    """
+
+    def __init__(self, plans: list[Plan]) -> None:
+        self._plans: dict[str, Plan] = {p.slug: p for p in plans}
+        self.landed: set[str] = set()
+        self.ejected: set[str] = set()
+
+    def next_ready(self, candidates: list[str]) -> str | None:
+        for slug in candidates:
+            if slug in self.landed or slug in self.ejected:
+                continue
+            plan = self._plans.get(slug)
+            if plan is None:
+                return slug
+            deps = set(plan.blocked_by)
+            if deps - self.landed:
+                continue
+            return slug
+        return None
+
+    def mark_landed(self, slug: str) -> None:
+        self.landed.add(slug)
+
+    def mark_ejected(self, slug: str) -> list[str]:
+        """Eject slug + cascade to every downstream slug. Return cascaded list (slice-3)."""
+        self.ejected.add(slug)
+        cascaded: list[str] = []
+        # Walk reverse-dep graph: any plan that lists an ejected slug in
+        # blocked_by also gets ejected; repeat until fixed-point.
+        changed = True
+        while changed:
+            changed = False
+            for other_slug, other in self._plans.items():
+                if other_slug in self.ejected:
+                    continue
+                if any(dep in self.ejected for dep in other.blocked_by):
+                    self.ejected.add(other_slug)
+                    cascaded.append(other_slug)
+                    changed = True
+        return cascaded
+
+
 def partition(plans: list[Plan]) -> tuple[list[Plan], list[Plan]]:
     """Return (anchored, auto) after topological sort.
 
