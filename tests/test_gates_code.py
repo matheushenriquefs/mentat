@@ -64,6 +64,34 @@ def test_precommit_agent_with_frontmatter_passes(tmp_path):
     assert verdict == "pass"
 
 
+def test_precommit_skill_md_missing_frontmatter_blocks(tmp_path):
+    pre = _load_precommit()
+    skill_dir = tmp_path / "skills" / "mentat-foo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("# no frontmatter here\n")
+    verdict, msg = pre.run(tmp_path)
+    assert verdict == "block"
+    assert "frontmatter" in msg
+
+
+def test_precommit_skill_md_with_frontmatter_passes(tmp_path):
+    pre = _load_precommit()
+    skill_dir = tmp_path / "skills" / "mentat-foo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\nname: foo\n---\nbody\n")
+    verdict, _ = pre.run(tmp_path)
+    assert verdict == "pass"
+
+
+def test_precommit_skills_non_skill_md_passes_without_frontmatter(tmp_path):
+    pre = _load_precommit()
+    triage = tmp_path / "skills" / "mentat-foo" / "triage"
+    triage.mkdir(parents=True)
+    (triage / "OUT-OF-SCOPE.md").write_text("# Knowledge doc, no frontmatter\n")
+    verdict, _ = pre.run(tmp_path)
+    assert verdict == "pass"
+
+
 def test_precommit_workflow_no_links_blocks(tmp_path):
     pre = _load_precommit()
     (tmp_path / "CONTEXT.md").write_text("# title\n\nplain prose, no links\n")
