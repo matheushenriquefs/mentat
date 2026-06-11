@@ -59,7 +59,28 @@ def _branch_exists(main_root: Path, branch: str) -> bool:
     return r.returncode == 0
 
 
-def cmd_worktree_create(slug: str, *, base: str = "main", parent: Path | None = None) -> int:
+def _detect_default_branch(repo_root: Path) -> str:
+    """Detect the repo's default branch. Detection order:
+    1. git symbolic-ref --short refs/remotes/origin/HEAD (strip origin/ prefix)
+    2. git config --get init.defaultBranch
+    3. literal "main"
+    """
+    r = _git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], cwd=repo_root)
+    if r.returncode == 0:
+        ref = r.stdout.strip()
+        if ref.startswith("origin/"):
+            return ref[len("origin/") :]
+        if ref:
+            return ref
+
+    r = _git(["config", "--get", "init.defaultBranch"], cwd=repo_root)
+    if r.returncode == 0 and r.stdout.strip():
+        return r.stdout.strip()
+
+    return "main"
+
+
+def cmd_worktree_create(slug: str, *, base: str | None = None, parent: Path | None = None) -> int:
     """Create sibling worktree at <parent>/<slug> on new branch <slug> from <base>.
 
     Exit codes:
@@ -81,6 +102,9 @@ def cmd_worktree_create(slug: str, *, base: str = "main", parent: Path | None = 
     if _existing_worktree(main_root, target):
         print(str(target))
         return 0
+
+    if base is None:
+        base = _detect_default_branch(main_root)
 
     if target.exists():
         print(
