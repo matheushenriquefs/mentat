@@ -62,7 +62,6 @@ Detected harnesses: `claude-code` (`~/.claude/`), `cursor` (`~/.cursor/`).
 │   └── NNNN-<kebab>.md                            # one per decision (canonical location)
 ├── ARCHITECTURE.md                                # canonical narrative overview
 ├── STYLE.md                                       # voice + LOC budget
-├── INSTALLER.md                                   # installer TUI design
 ├── PLUGINS.md                                     # plugin API contract
 ├── EXIT-CODES.md                                  # BSD sysexits convention
 └── wiki/                                          # (mirror to GitHub wiki — out-of-repo source)

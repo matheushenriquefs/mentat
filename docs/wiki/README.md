@@ -11,4 +11,3 @@ Parallel-slicing orchestration harness. Fan out planned chunks across worktrees 
 - [Style guide](../STYLE.md) — voice classes, LOC budgets, banned words.
 - [Plugin API](../PLUGINS.md) — rubric + gate extension slots.
 - [Exit codes](../EXIT-CODES.md) — BSD sysexits convention.
-- [Installer design](../INSTALLER.md) — TUI flows.

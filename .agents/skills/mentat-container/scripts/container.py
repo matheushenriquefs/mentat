@@ -269,8 +269,8 @@ def cmd_doctor(wt: Path) -> int:  # noqa: C901
     print("[companions]")
     pocock = (Path.home() / ".claude/skills/diagnose/SKILL.md").exists()
     caveman = (Path.home() / ".claude/plugins/marketplaces/caveman").exists()
-    print(_col("matt-pocock", "present" if pocock else "missing — see docs/INSTALLER.md"))
-    print(_col("julius-caveman", "present" if caveman else "missing — see docs/INSTALLER.md"))
+    print(_col("matt-pocock", "present" if pocock else "missing — run mentat-install"))
+    print(_col("julius-caveman", "present" if caveman else "missing — run mentat-install"))
     if not pocock or not caveman:
         advisories.append("companion(s) missing")
     print()
