@@ -37,7 +37,7 @@ def _classify(path: Path) -> str | None:
 
     if "docs" in parts and "adr" in parts and path.suffix == ".md" and name != "README.md":
         return "adr"
-    if "skills" in parts and path.suffix == ".md":
+    if "skills" in parts and name == "SKILL.md":
         return "skill"
     if "agents" in parts and name != "AGENTS.md" and path.suffix == ".md":
         return "skill"
