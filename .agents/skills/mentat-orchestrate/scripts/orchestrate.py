@@ -124,6 +124,23 @@ def _fan_out_plans(plans: list[_routing.Plan], *, harness: str | None, model: st
     return chunks
 
 
+def _worktree_for_slug(slug: str) -> Path:
+    """Find worktree path registered for branch <slug>. Falls back to cwd."""
+    r = subprocess.run(["git", "worktree", "list", "--porcelain"], capture_output=True, text=True)
+    if r.returncode == 0:
+        current: Path | None = None
+        for line in r.stdout.splitlines():
+            if line.startswith("worktree "):
+                current = Path(line[len("worktree ") :])
+            elif (
+                line.startswith("branch refs/heads/")
+                and current is not None
+                and line[len("branch refs/heads/") :] == slug
+            ):
+                return current
+    return Path.cwd()
+
+
 def _land_all(chunk_slugs: list[str], *, holding: str, plans: list | None = None) -> list[dict]:
     """Land all chunks onto holding branch serially.
 
@@ -134,7 +151,7 @@ def _land_all(chunk_slugs: list[str], *, holding: str, plans: list | None = None
     path for callers that don't know about cross-chunk deps (e.g. the
     debug `land-queue` subcommand reading slugs from stdin).
     """
-    chunks = [_land_queue.Chunk(slug=s, worktree=Path.cwd()) for s in chunk_slugs]
+    chunks = [_land_queue.Chunk(slug=s, worktree=_worktree_for_slug(s)) for s in chunk_slugs]
     if plans is None:
         return _land_queue.drain(chunks, holding=holding)
     _scheduler = _load_sibling("scheduler")

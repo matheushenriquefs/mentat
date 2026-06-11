@@ -16,7 +16,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-_SKIP_DIRS = {".git", "__pycache__", ".ruff_cache", ".pytest_cache", "node_modules", ".dmux", ".mentat"}
+_SKIP_DIRS = {".git", "__pycache__", ".ruff_cache", ".pytest_cache", "node_modules", ".dmux", ".mentat", "context"}
 
 _LINK_RE = re.compile(r"\[.+?\]\(.+?\.md\)")
 _COMMENT_LINE_RE = re.compile(r"^\s*//")
@@ -35,13 +35,15 @@ def _classify(path: Path) -> str | None:
     parts = path.parts
     name = path.name
 
-    if "docs" in parts and "adr" in parts and path.suffix == ".md":
+    if "docs" in parts and "adr" in parts and path.suffix == ".md" and name != "README.md":
         return "adr"
-    if "agents" in parts and path.suffix == ".md":
+    if "skills" in parts and path.suffix == ".md":
+        return "skill"
+    if "agents" in parts and name != "AGENTS.md" and path.suffix == ".md":
         return "skill"
     if "commands" in parts and path.suffix == ".md":
         return "command"
-    if name in ("AGENTS.md", "STYLE.md", "README.md", "CONTEXT.md"):
+    if name == "CONTEXT.md":
         return "workflow"
     if path.suffix == ".jsonc":
         return "jsonc"
