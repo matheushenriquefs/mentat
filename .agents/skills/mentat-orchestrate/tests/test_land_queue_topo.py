@@ -52,6 +52,7 @@ def _install_stubs(monkeypatch, ff_calls: list[str], gate_block: set[str] | None
     monkeypatch.setattr(land_queue, "_run_gates", fake_gates)
     monkeypatch.setattr(land_queue, "_ff_merge", fake_ff)
     monkeypatch.setattr(land_queue, "_emit_event", lambda *a, **kw: None)
+    monkeypatch.setattr(land_queue, "_teardown_container", lambda slug: None)
 
 
 def test_chain_lands_in_topo_order(tmp_path, monkeypatch) -> None:
@@ -130,6 +131,7 @@ def test_blocked_chunk_waits_until_upstream_lands(tmp_path, monkeypatch) -> None
     monkeypatch.setattr(land_queue, "_run_gates", fake_gates)
     monkeypatch.setattr(land_queue, "_ff_merge", fake_ff)
     monkeypatch.setattr(land_queue, "_emit_event", lambda *a, **kw: None)
+    monkeypatch.setattr(land_queue, "_teardown_container", lambda slug: None)
 
     chunk_b, chunk_a = _chunk("b", tmp_path), _chunk("a", tmp_path)
     land_queue.drain([chunk_b, chunk_a], holding="holding", scheduler=sched)

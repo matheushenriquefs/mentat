@@ -65,6 +65,7 @@ def _install_stubs(
     monkeypatch.setattr(land_queue, "_run_gates", fake_gates)
     monkeypatch.setattr(land_queue, "_ff_merge", fake_ff)
     monkeypatch.setattr(land_queue, "_emit_event", fake_emit)
+    monkeypatch.setattr(land_queue, "_teardown_container", lambda slug: None)
 
 
 def test_upstream_eject_cascades_downstream(tmp_path, monkeypatch) -> None:
@@ -153,6 +154,7 @@ def test_rebase_conflict_cascades(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(land_queue, "_run_gates", lambda c: ("pass", ""))
     monkeypatch.setattr(land_queue, "_ff_merge", lambda c, h: True)
     monkeypatch.setattr(land_queue, "_emit_event", fake_emit)
+    monkeypatch.setattr(land_queue, "_teardown_container", lambda slug: None)
 
     land_queue.drain(chunks, holding="holding", scheduler=sched)
 
@@ -182,4 +184,4 @@ def test_eject_event_envelope_unchanged(tmp_path, monkeypatch) -> None:
     land_queue.drain(chunks, holding="holding", scheduler=sched)
 
     event_names = {e for e, _ in emitted}
-    assert event_names <= {"chunk.ejected"}, f"only chunk.ejected expected; got {event_names}"
+    assert event_names <= {"chunk.ejected", "chunk.teardown"}, f"unexpected events; got {event_names}"
