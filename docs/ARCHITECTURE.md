@@ -110,7 +110,15 @@ Headless agent CLIs are pluggable. Current Python-era adapters:
 
 Adding a harness: drop a module exposing `cmd()`, `output_format()`, `normalize()` into the harness dir. The orchestrator auto-discovers and the implementation skill picks it up. No core changes needed.
 
-Selection: `~/.mentat/config.jsonc` `harness:` key (default `claude-code`); override per invocation with `--harness <name>`.
+Config is resolved as a layered stack (highest precedence first):
+
+| Layer | Source | Precedence |
+|---|---|---|
+| CLI flag | `--harness <n>`, `--model <s>` | highest |
+| Repo overlay | `<repo-root>/.mentat/config.jsonc` | over global |
+| Global | `~/.mentat/config.jsonc` | base |
+
+Merge is shallow (`{**global, **repo}`); repo wins per top-level key. Plugin lists are NOT merged — a repo `plugins` key replaces the global list. Scaffold with `mentat-install --repo`.
 
 ## Devcontainer-first
 

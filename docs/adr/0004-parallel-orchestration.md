@@ -48,6 +48,28 @@ detected ambiguity). HITL: interactive, normal.
 Python adapters in `mentat-implement/scripts/harness/`. No JSONC file.
 Selection: `~/.mentat/config.jsonc` `harness:` key; `--harness` flag overrides.
 
+**v4 amendment — layered config + per-repo overlay:**
+
+Config is now resolved as a layered stack (highest precedence first):
+
+| Layer | Source | Precedence |
+|---|---|---|
+| CLI flag | `--harness <n>`, `--model <s>` | highest |
+| Repo overlay | `<repo-root>/.mentat/config.jsonc` | over global |
+| Global | `~/.mentat/config.jsonc` | base |
+
+Merge: shallow `{**global, **repo}` — repo wins per top-level key. Plugin
+lists are NOT merged; a repo `plugins` key replaces the global list entirely
+to avoid accidental activation of globally-installed plugins in scoped repos.
+
+Repo root resolved via `git rev-parse --show-toplevel` in each skill entry
+(not memoized; called once per invocation). Non-zero rc (outside git repo)
+falls back to global only. Malformed repo JSONC is swallowed; global config
+is kept.
+
+`mentat-install --repo` scaffolds `<repo>/.mentat/config.jsonc` with a
+commented-out template and appends `.mentat/` to `.gitignore`.
+
 **Verdict JSONL shape:**
 ```
 {slug, status, tip, reason?, conflicted_files?, resume_cmd?, findings?}
