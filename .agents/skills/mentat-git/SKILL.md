@@ -13,6 +13,7 @@ Container-routing git wrapper. Container required (ADR-0004) — auto-ups via `m
 python3 ~/.agents/skills/mentat-git/scripts/git.py commit [-- <git commit args>]
 python3 ~/.agents/skills/mentat-git/scripts/git.py rebase <holding-branch>
 python3 ~/.agents/skills/mentat-git/scripts/git.py diff [<base>]
+python3 ~/.agents/skills/mentat-git/scripts/git.py worktree create <slug> [--base <branch>] [--parent <dir>]
 ```
 
 ## Commit flow
@@ -44,12 +45,26 @@ rm .commit-msg
 2. Compute base SHA via `git merge-base <base> HEAD`.
 3. Print stat + full diff `base..HEAD`. Honor `diff_tool` from `~/.mentat/config.jsonc` if set.
 
+## Worktree create flow
+
+1. Resolve main repo root via `git rev-parse --git-common-dir`.
+2. Default parent dir = sibling of main repo root; override via `--parent`.
+3. Target path = `<parent>/<slug>`. Branch name = `<slug>`. Base branch = `--base` (default `main`).
+4. Idempotent: target already a registered worktree → exit 0, print path.
+5. Path exists but unregistered → exit 65 (conflict; never overwrite).
+6. Base branch missing → exit 66.
+7. Else `git worktree add -b <slug> <target> <base>`; print resolved target path on success.
+8. Runs on host — `git worktree add` writes to main repo's `.git/worktrees/`, which is not bind-mounted into the new slug's container.
+
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | Success |
+| 65 | Worktree path conflict (path exists, not a registered worktree) |
+| 66 | Worktree base branch does not exist |
 | 69 | Container bring-up failed |
+| 70 | Unexpected git error (e.g. `worktree create` outside a repo) |
 | non-zero (other) | Underlying `git` exit code (FF-conflict, pre-commit fail, etc.) |
 
 ## Environment
