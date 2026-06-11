@@ -14,11 +14,12 @@ from pathlib import Path
 from typing import Any
 
 _SCRIPTS = Path(__file__).resolve().parent
-_SKILL_ROOT = _SCRIPTS.parents[2]
-_LOG_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-log/scripts/log.py"
-_SESSION_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-session/scripts/session.py"
-_GIT_SCRIPT = _SCRIPTS.parents[1] / "mentat-git/scripts/git.py"
-_GATES_CODE = _SKILL_ROOT / ".agents/lib/gates/code"
+_SKILLS_DIR = _SCRIPTS.parents[1]
+_AGENTS_DIR = _SCRIPTS.parents[2]
+_LOG_SCRIPT = _SKILLS_DIR / "mentat-log/scripts/log.py"
+_SESSION_SCRIPT = _SKILLS_DIR / "mentat-session/scripts/session.py"
+_GIT_SCRIPT = _SKILLS_DIR / "mentat-git/scripts/git.py"
+_GATES_CODE = _AGENTS_DIR / "lib/gates/code"
 
 # Exit codes that trigger auto-doctor: TDD/gate fail, HITL ambiguity, CLI/plan errors,
 # container down, unhandled exceptions, missing config. Signal exits (130/143) skipped.
