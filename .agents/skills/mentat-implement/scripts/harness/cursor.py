@@ -7,6 +7,11 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+_AFK_SYSTEM_CLAUSE = (
+    "[AFK MODE: make autonomous decisions, do not ask the user questions, "
+    "do not use interactive prompts, proceed without confirmation]"
+)
+
 
 class Result:
     def __init__(self, returncode: int, session_log: Any = None) -> None:
@@ -15,27 +20,29 @@ class Result:
 
 
 def invoke(prompt: str, *, afk: bool, model: str | None) -> Result:
-    """Invoke cursor headless with the given prompt.
+    """Invoke cursor-agent headless with the given prompt.
 
-    Reads MENTAT_SESSION / MENTAT_SESSION_LOG from env (set by mentat-orchestrate
-    fan_out). When both are set the run is captured: cursor gets
-    --session-id <id> + --output-format stream-json, and stdout is redirected
-    into <session_log>. Result.session_log carries the path back so the
-    self-answer detector and mentat-session track can read it.
+    cursor-agent CLI shape (verified 2026-06-11):
+      binary: cursor-agent
+      headless: --print
+      capture: --output-format stream-json (when session_log set)
+      model: --model <model>
+      no --session-id (cursor uses internal chat IDs, not mentat session IDs)
+      no --disallowedTools (inject AFK clause into prompt prefix instead)
 
-    afk=True → --disallowedTools AskUserQuestion (mirrors claude-code AFK contract).
+    Reads MENTAT_SESSION_LOG from env (set by mentat-orchestrate fan_out).
+    When set, stdout is redirected into <session_log>. Result.session_log
+    carries the path back so the self-answer detector and mentat-session
+    track can read it.
     """
-    session_id = os.environ.get("MENTAT_SESSION")
     session_log_env = os.environ.get("MENTAT_SESSION_LOG")
     session_log = Path(session_log_env) if session_log_env else None
 
-    cmd = ["cursor", "--headless", "--print", prompt]
-    if session_id:
-        cmd += ["--session-id", session_id]
+    full_prompt = f"{_AFK_SYSTEM_CLAUSE}\n\n{prompt}" if afk else prompt
+
+    cmd = ["cursor-agent", "--print", "--trust", full_prompt]
     if session_log is not None:
         cmd += ["--output-format", "stream-json"]
-    if afk:
-        cmd += ["--disallowedTools", "AskUserQuestion"]
     if model:
         cmd += ["--model", model]
 
