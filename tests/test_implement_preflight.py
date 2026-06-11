@@ -1,0 +1,173 @@
+"""FOLLOW-UP #24 — mentat-implement preflight: auto-create worktree via mentat-git."""
+
+from __future__ import annotations
+
+import importlib.util
+import subprocess
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts"
+
+
+def _load():
+    spec = importlib.util.spec_from_file_location("implement_mod", _SCRIPTS / "implement.py")
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _init_repo(path: Path) -> None:
+    subprocess.run(["git", "init", "-b", "main", str(path)], check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t"], cwd=path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "T"], cwd=path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=path, check=True, capture_output=True)
+    (path / "README").write_text("hi\n")
+    subprocess.run(["git", "add", "."], cwd=path, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=path, check=True, capture_output=True)
+
+
+@pytest.fixture
+def main_repo(tmp_path, monkeypatch):
+    r = tmp_path / "main"
+    r.mkdir()
+    _init_repo(r)
+    monkeypatch.chdir(r)
+    monkeypatch.delenv("MENTAT_SKIP_PREFLIGHT", raising=False)
+    return r
+
+
+def test_is_main_worktree_true_in_main(main_repo):
+    impl = _load()
+    assert impl._is_main_worktree(main_repo) is True
+
+
+def test_is_main_worktree_false_in_sibling(main_repo):
+    impl = _load()
+    sibling = main_repo.parent / "feat-a"
+    subprocess.run(
+        ["git", "worktree", "add", "-b", "feat-a", str(sibling), "main"],
+        cwd=main_repo,
+        check=True,
+        capture_output=True,
+    )
+    assert impl._is_main_worktree(sibling) is False
+
+
+def test_is_main_worktree_false_outside_repo(tmp_path):
+    impl = _load()
+    assert impl._is_main_worktree(tmp_path) is False
+
+
+def test_preflight_creates_worktree_in_main_repo(main_repo):
+    impl = _load()
+    rc, target = impl.preflight_worktree("feat-x")
+    assert rc == 0
+    assert target is not None
+    assert target.is_dir()
+    assert target.name == "feat-x"
+
+
+def test_preflight_idempotent_when_already_created(main_repo):
+    impl = _load()
+    rc1, t1 = impl.preflight_worktree("feat-x")
+    rc2, t2 = impl.preflight_worktree("feat-x")
+    assert rc1 == 0 and rc2 == 0
+    assert t1 == t2
+
+
+def test_preflight_skips_when_env_set(main_repo, monkeypatch):
+    impl = _load()
+    monkeypatch.setenv("MENTAT_SKIP_PREFLIGHT", "1")
+    rc, target = impl.preflight_worktree("feat-x")
+    assert rc == 0
+    assert target is None
+    assert not (main_repo.parent / "feat-x").exists()
+
+
+def test_preflight_skips_when_not_in_repo(tmp_path, monkeypatch):
+    impl = _load()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MENTAT_SKIP_PREFLIGHT", raising=False)
+    rc, target = impl.preflight_worktree("feat-x")
+    assert rc == 0
+    assert target is None
+
+
+def test_preflight_skips_inside_sibling_worktree(main_repo, monkeypatch):
+    impl = _load()
+    sibling = main_repo.parent / "feat-a"
+    subprocess.run(
+        ["git", "worktree", "add", "-b", "feat-a", str(sibling), "main"],
+        cwd=main_repo,
+        check=True,
+        capture_output=True,
+    )
+    monkeypatch.chdir(sibling)
+    rc, target = impl.preflight_worktree("feat-b")
+    assert rc == 0
+    assert target is None
+    assert not (main_repo.parent / "feat-b").exists()
+
+
+def test_preflight_returns_65_on_path_conflict(main_repo):
+    impl = _load()
+    (main_repo.parent / "feat-conflict").mkdir()
+    rc, target = impl.preflight_worktree("feat-conflict")
+    assert rc == 65
+    assert target is None
+
+
+def test_preflight_returns_66_on_missing_base(main_repo, monkeypatch):
+    """preflight calls mentat-git with default base=main; force a non-main repo to trip 66."""
+    impl = _load()
+    # Rename current branch off `main` so worktree create can't find base "main"
+    subprocess.run(["git", "branch", "-m", "main", "trunk"], cwd=main_repo, check=True, capture_output=True)
+    rc, target = impl.preflight_worktree("feat-y")
+    assert rc == 66
+    assert target is None
+
+
+def test_main_invokes_preflight_then_chdir(main_repo, tmp_path, monkeypatch):
+    """CLI entry: preflight runs, cwd flips to the worktree, then plan execution starts."""
+    impl = _load()
+    plan_dir = tmp_path / "plans"
+    plan_dir.mkdir()
+    plan = plan_dir / "feat-cli.md"
+    plan.write_text("---\nid: feat-cli\nclass: AFK\n---\n# x\n")
+
+    with patch.object(impl, "_run_and_doctor", return_value=0) as mock_run:
+        with patch.object(impl.sys, "argv", ["implement.py", str(plan)]):
+            with pytest.raises(SystemExit) as exc:
+                impl.main()
+    assert exc.value.code == 0
+    assert mock_run.call_count == 1
+    # Worktree was created
+    assert (main_repo.parent / "feat-cli").is_dir()
+
+
+def test_main_emits_eject_on_preflight_conflict(main_repo, tmp_path, monkeypatch):
+    impl = _load()
+    plan_dir = tmp_path / "plans"
+    plan_dir.mkdir()
+    plan = plan_dir / "feat-conflict.md"
+    plan.write_text("---\nid: feat-conflict\nclass: AFK\n---\n# x\n")
+    (main_repo.parent / "feat-conflict").mkdir()
+
+    emits = []
+
+    def fake_emit(event, payload):
+        emits.append((event, payload))
+
+    with patch.object(impl, "_emit_event", side_effect=fake_emit):
+        with patch.object(impl.sys, "argv", ["implement.py", str(plan)]):
+            with pytest.raises(SystemExit) as exc:
+                impl.main()
+
+    assert exc.value.code == 65
+    assert any(
+        event == "chunk.ejected" and payload.get("reason") == "preflight-worktree-failed" for event, payload in emits
+    )

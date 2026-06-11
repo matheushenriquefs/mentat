@@ -17,6 +17,7 @@ _SCRIPTS = Path(__file__).resolve().parent
 _SKILL_ROOT = _SCRIPTS.parents[2]
 _LOG_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-log/scripts/log.py"
 _SESSION_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-session/scripts/session.py"
+_GIT_SCRIPT = _SCRIPTS.parents[1] / "mentat-git/scripts/git.py"
 _GATES_CODE = _SKILL_ROOT / ".agents/lib/gates/code"
 
 # Exit codes that trigger auto-doctor: TDD/gate fail, HITL ambiguity, CLI/plan errors,
@@ -134,6 +135,63 @@ def _auto_doctor() -> None:
         diag = Path(_logs_path()) / "diagnosis.md"
         if diag.exists():
             subprocess.run([editor, str(diag)], check=False)
+
+
+def _is_main_worktree(cwd: Path) -> bool:
+    """True iff cwd is the main worktree (--git-dir == --git-common-dir)."""
+    common = subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+    gd = subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-dir"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+    if common.returncode != 0 or gd.returncode != 0:
+        return False
+    return Path(common.stdout.strip()).resolve() == Path(gd.stdout.strip()).resolve()
+
+
+def preflight_worktree(slug: str) -> tuple[int, Path | None]:
+    """Auto-create a worktree for slug if cwd is the main worktree.
+
+    Returns (rc, target). rc=0 → success (target valid or skipped intentionally).
+    rc=65 → path conflict. rc=66 → base branch missing. Other → bubble up.
+
+    Skipped (rc=0, target=None) when:
+      - MENTAT_SKIP_PREFLIGHT env var is set
+      - cwd is not in a git repo (test envs)
+      - cwd is already a non-main worktree (we're already inside a slug)
+    """
+    if os.environ.get("MENTAT_SKIP_PREFLIGHT"):
+        return (0, None)
+    if not _GIT_SCRIPT.exists():
+        return (0, None)
+    cwd = Path.cwd()
+    in_repo = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+    if in_repo.returncode != 0:
+        return (0, None)
+    if not _is_main_worktree(cwd):
+        return (0, None)
+
+    result = subprocess.run(
+        ["python3", str(_GIT_SCRIPT), "worktree", "create", slug],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return (result.returncode, None)
+    line = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
+    return (0, Path(line) if line else None)
 
 
 def _run_and_doctor(plan_path: Path, *, harness: str | None = None, model: str | None = None) -> int:
@@ -268,6 +326,27 @@ def main() -> None:
     if not plan_path.exists():
         print(f"mentat-implement: plan not found: {plan_path}", file=sys.stderr)
         sys.exit(1)
+
+    slug = plan_path.stem
+    pf_rc, target = preflight_worktree(slug)
+    if pf_rc != 0:
+        _emit_event(
+            "chunk.ejected",
+            {
+                "slug": slug,
+                "reason": "preflight-worktree-failed",
+                "where": str(plan_path.parent),
+                "logs_path": _logs_path(),
+                "preflight_exit": pf_rc,
+            },
+        )
+        print(
+            f"mentat-implement: preflight worktree create failed (exit {pf_rc})",
+            file=sys.stderr,
+        )
+        sys.exit(pf_rc)
+    if target is not None:
+        os.chdir(target)
 
     sys.exit(_run_and_doctor(plan_path, harness=args.harness, model=args.model))
 

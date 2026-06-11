@@ -19,8 +19,8 @@ Multi-slug → exit 1 with "use mentat-orchestrate for multi-plan".
 
 ## Preflight
 
-1. **Worktree.** If `pwd` doesn't match `$MENTAT_WORKTREE` or `.*/worktrees/[^/]+/?$`, invoke `mentat-git worktree create <plan-slug>` and cd into the new worktree.
-2. **Worktree-create failure** → emit `chunk.ejected{reason: preflight}` and halt.
+1. **Worktree.** When cwd is the main worktree (`git rev-parse --git-dir` == `--git-common-dir`), invoke `mentat-git worktree create <plan-slug>` and `chdir` into the new worktree. Already in a sibling worktree → skipped. Not in a repo → skipped. `MENTAT_SKIP_PREFLIGHT=1` → skipped (test isolation).
+2. **Worktree-create failure** (path conflict / missing base / git error) → emit `chunk.ejected{reason: preflight-worktree-failed, preflight_exit: <rc>}` and exit with the same rc (65/66/70).
 3. **Slice artifacts.** Derive a bash predicate per slice (exists / absent / `grep -c <pattern> <file> -ge N`). Skip slices whose predicate already passes; refuse to re-run DONE slices.
 4. **Container** auto-ups via `mentat-container up`; second miss → exit 69.
 
