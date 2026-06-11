@@ -2,22 +2,19 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+from tests.conftest import load_script
+
 _SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-container/scripts"
 
 
 def _load_compose_render():
-    spec = importlib.util.spec_from_file_location("compose_render", _SCRIPTS / "compose_render.py")
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    return load_script(_SCRIPTS / "compose_render.py", "compose_render")
 
 
 @pytest.fixture

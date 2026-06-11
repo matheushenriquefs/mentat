@@ -71,6 +71,7 @@ def test_commit_exits_69_when_bringup_fails():
         patch.object(utils_mod, "container_id_for_cwd", return_value=None),
         patch.object(commit_mod, "utils", utils_mod),
     ):
+
         def fake_run(cmd, **kwargs):
             return MagicMock(returncode=0)
 

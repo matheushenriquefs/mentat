@@ -7,6 +7,7 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parent
@@ -76,11 +77,36 @@ def _run_anchored_plans(plans: list[_routing.Plan], *, harness: str | None, mode
     return chunks
 
 
+def _concurrency_cap() -> int:
+    """Max parallel AFK chunk processes. Honors ADR-0004: default 3, tunable via config."""
+    cfg = _utils.read_config()
+    raw = cfg.get("concurrency", 3)
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        print(
+            f"mentat-orchestrate: config.jsonc `concurrency` not int ({raw!r}); defaulting to 3",
+            file=sys.stderr,
+        )
+        return 3
+    return max(1, n)
+
+
 def _fan_out_plans(plans: list[_routing.Plan], *, harness: str | None, model: str | None) -> list[str]:
-    """Spawn AFK plans headless. Returns list of session/chunk IDs."""
+    """Spawn AFK plans headless, capped at the configured concurrency.
+
+    Blocks the loop when `cap` subprocesses are still alive — waits for one to
+    exit via Popen.poll() before spawning the next plan. The cap defaults to 3
+    (ADR-0004) and can be overridden via ~/.mentat/config.jsonc `concurrency`.
+    """
+    cap = _concurrency_cap()
     chunks: list[str] = []
+    live: list[subprocess.Popen] = []
     for plan in plans:
-        session_id = _fan_out.spawn(plan, harness=harness, model=model)
+        while sum(1 for p in live if p.poll() is None) >= cap:
+            time.sleep(0.1)
+        session_id, proc = _fan_out.spawn_with_proc(plan, harness=harness, model=model)
+        live.append(proc)
         chunks.append(session_id)
     return chunks
 

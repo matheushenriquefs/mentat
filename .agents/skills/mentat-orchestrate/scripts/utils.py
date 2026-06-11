@@ -6,6 +6,7 @@ import importlib.util
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 _SKILL_ROOT = Path(__file__).resolve().parents[3]
@@ -38,10 +39,19 @@ def parse_frontmatter(plan_path: Path) -> dict[str, str]:
 
 
 def emit_event(event: str, payload: dict) -> None:
-    subprocess.run(
+    """Fire-and-forget emit. Surfaces non-zero exit to stderr so failures aren't silent.
+
+    Caller is never aborted — events are advisory; the orchestrator must continue
+    even if the log script breaks. The stderr line lets operators notice.
+    """
+    r = subprocess.run(
         ["python3", str(_LOG_SCRIPT), "emit", "mentat-orchestrate", event, json.dumps(payload)],
         capture_output=True,
+        text=True,
     )
+    if r.returncode != 0:
+        err = (r.stderr or "").strip().splitlines()[-1:] or ["(no stderr)"]
+        print(f"mentat-orchestrate: emit {event!r} failed rc={r.returncode}: {err[0]}", file=sys.stderr)
 
 
 def run_gates(chunk_path: Path | None) -> tuple[str, str]:

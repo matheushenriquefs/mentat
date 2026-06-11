@@ -19,7 +19,22 @@ _AGENTS_DIR = _SCRIPTS.parents[2]
 _LOG_SCRIPT = _SKILLS_DIR / "mentat-log/scripts/log.py"
 _SESSION_SCRIPT = _SKILLS_DIR / "mentat-session/scripts/session.py"
 _GIT_SCRIPT = _SKILLS_DIR / "mentat-git/scripts/git.py"
+_GIT_WORKTREE_PY = _SKILLS_DIR / "mentat-git/scripts/worktree.py"
 _GATES_CODE = _AGENTS_DIR / "lib/gates/code"
+
+
+def _load_worktree_module():
+    spec = importlib.util.spec_from_file_location("mentat_git_worktree", _GIT_WORKTREE_PY)
+    if spec is None or spec.loader is None:
+        return None
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+    except Exception as e:  # syntax/import error in worktree.py shouldn't crash preflight
+        print(f"mentat-implement: worktree.py load failed: {e}", file=sys.stderr)
+        return None
+    return mod
+
 
 # Exit codes that trigger auto-doctor: TDD/gate fail, HITL ambiguity, CLI/plan errors,
 # container down, unhandled exceptions, missing config. Signal exits (130/143) skipped.
@@ -107,10 +122,15 @@ def parse_frontmatter(plan_path: Path) -> dict[str, str]:
 
 
 def _emit_event(event: str, payload: dict) -> None:
-    subprocess.run(
-        ["python3", str(_LOG_SCRIPT), "emit", "mentat-implement", event, __import__("json").dumps(payload)],
+    """Fire-and-forget emit. Surfaces non-zero exit to stderr so failures aren't silent."""
+    r = subprocess.run(
+        ["python3", str(_LOG_SCRIPT), "emit", "mentat-implement", event, json.dumps(payload)],
         capture_output=True,
+        text=True,
     )
+    if r.returncode != 0:
+        err = (r.stderr or "").strip().splitlines()[-1:] or ["(no stderr)"]
+        print(f"mentat-implement: emit {event!r} failed rc={r.returncode}: {err[0]}", file=sys.stderr)
 
 
 def _logs_path() -> str:
@@ -139,22 +159,14 @@ def _auto_doctor() -> None:
 
 
 def _is_main_worktree(cwd: Path) -> bool:
-    """True iff cwd is the main worktree (--git-dir == --git-common-dir)."""
-    common = subprocess.run(
-        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-    )
-    gd = subprocess.run(
-        ["git", "rev-parse", "--path-format=absolute", "--git-dir"],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-    )
-    if common.returncode != 0 or gd.returncode != 0:
+    """True iff cwd is inside the main worktree.
+
+    Delegates to mentat-git/worktree.is_main_worktree to keep one source of truth.
+    """
+    mod = _load_worktree_module()
+    if mod is None:
         return False
-    return Path(common.stdout.strip()).resolve() == Path(gd.stdout.strip()).resolve()
+    return bool(mod.is_main_worktree(cwd))
 
 
 def preflight_worktree(slug: str) -> tuple[int, Path | None]:
@@ -258,7 +270,6 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     result = _invoke_harness(harness, plan_body, afk=afk, model=model)
 
     if result.returncode != 0:
-        slug = plan_path.stem
         _emit_event(
             "chunk.ejected",
             {
@@ -271,7 +282,6 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
         return 1
 
     if afk and _detect_self_answer(result):
-        slug = plan_path.stem
         _emit_event(
             "chunk.ejected",
             {
@@ -285,7 +295,6 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
 
     verdict, message = _run_gates(None)
     if verdict == "block":
-        slug = plan_path.stem
         _emit_event(
             "chunk.ejected",
             {

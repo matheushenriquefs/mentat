@@ -32,6 +32,7 @@ cmd_commit = _commit.cmd_commit
 cmd_rebase = _rebase.cmd_rebase
 cmd_diff = _diff.cmd_diff
 cmd_worktree_create = _worktree.cmd_worktree_create
+is_main_worktree = _worktree.is_main_worktree
 
 
 def build_parser() -> argparse.ArgumentParser:

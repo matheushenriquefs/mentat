@@ -32,6 +32,15 @@ def _main_repo_root(cwd: Path) -> Path | None:
     return common_dir.parent if common_dir.name == ".git" else common_dir
 
 
+def is_main_worktree(cwd: Path) -> bool:
+    """True iff cwd is inside the main worktree (--git-dir == --git-common-dir)."""
+    common = _git(["rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=cwd)
+    gd = _git(["rev-parse", "--path-format=absolute", "--git-dir"], cwd=cwd)
+    if common.returncode != 0 or gd.returncode != 0:
+        return False
+    return Path(common.stdout.strip()).resolve() == Path(gd.stdout.strip()).resolve()
+
+
 def _existing_worktree(main_root: Path, target: Path) -> bool:
     """True iff `target` is a path registered in `git worktree list`."""
     r = _git(["worktree", "list", "--porcelain"], cwd=main_root)
@@ -91,6 +100,21 @@ def cmd_worktree_create(slug: str, *, base: str = "main", parent: Path | None = 
         cwd=main_root,
     )
     if r.returncode != 0:
+        # TOCTOU window: another process may have raced us between the
+        # pre-checks above and `git worktree add`. Map git's stderr so the
+        # caller still sees 65 (path conflict) / 66 (missing base) instead of
+        # an opaque "unexpected git error".
+        stderr_lower = (r.stderr or "").lower()
+        if "already exists" in stderr_lower or "not an empty directory" in stderr_lower:
+            print(f"mentat-git: path {target} exists but is not a registered worktree", file=sys.stderr)
+            return 65
+        if (
+            "invalid reference" in stderr_lower
+            or "unknown revision" in stderr_lower
+            or "not a valid object name" in stderr_lower
+        ):
+            print(f"mentat-git: base branch {base!r} does not exist", file=sys.stderr)
+            return 66
         print(f"mentat-git: worktree add failed:\n{r.stderr}", file=sys.stderr)
         return r.returncode or 70
 

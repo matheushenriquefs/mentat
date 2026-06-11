@@ -28,10 +28,7 @@ def cmd_commit(git_args: list[str]) -> int:
     """Stage and commit through the devcontainer. Auto-up if down (ADR-0004)."""
     cid = utils.container_id_for_cwd()
     if not cid:
-        container_script = (
-            Path(__file__).resolve().parents[2]
-            / "mentat-container/scripts/container.py"
-        )
+        container_script = Path(__file__).resolve().parents[2] / "mentat-container/scripts/container.py"
         subprocess.run(["python3", str(container_script), "up"], check=False)
         cid = utils.container_id_for_cwd()
         if not cid:
