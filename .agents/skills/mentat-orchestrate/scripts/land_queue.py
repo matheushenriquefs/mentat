@@ -155,9 +155,45 @@ def land(chunk: Chunk, *, holding: str) -> dict:
     }
 
 
-def drain(chunks: list[Chunk], *, holding: str) -> list[dict]:
-    """Land all chunks serially. Returns list of verdict dicts."""
-    results: list[dict] = []
-    for chunk in chunks:
-        results.append(land(chunk, holding=holding))
+def drain(chunks: list[Chunk], *, holding: str, scheduler=None) -> list[dict]:
+    """Land all chunks serially.
+
+    Without `scheduler`: legacy behavior — iterate chunks in input order
+    and land each one. Independent AFK plans with no cross-deps stay on
+    this path (no scheduler passed) so the pre-slice-2 contract holds.
+
+    With `scheduler`: pull the next chunk whose plan deps are wholly
+    landed via `scheduler.next_ready`. Land it, mark landed/ejected,
+    repeat until pending is empty or no chunk is ready (cycle / missing
+    upstream → stalled verdict carries `pending` list).
+    """
+    if scheduler is None:
+        results: list[dict] = []
+        for chunk in chunks:
+            results.append(land(chunk, holding=holding))
+        return results
+
+    by_slug: dict[str, Chunk] = {c.slug: c for c in chunks}
+    pending: list[str] = [c.slug for c in chunks]
+    results = []
+
+    while pending:
+        ready = scheduler.next_ready(pending)
+        if ready is None:
+            results.append(
+                {
+                    "slug": None,
+                    "status": "stalled",
+                    "pending": list(pending),
+                }
+            )
+            return results
+        verdict = land(by_slug[ready], holding=holding)
+        results.append(verdict)
+        pending.remove(ready)
+        if verdict.get("status") == "success":
+            scheduler.mark_landed(ready)
+        else:
+            scheduler.mark_ejected(ready)
+
     return results

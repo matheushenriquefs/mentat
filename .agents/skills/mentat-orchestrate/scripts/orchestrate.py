@@ -124,10 +124,22 @@ def _fan_out_plans(plans: list[_routing.Plan], *, harness: str | None, model: st
     return chunks
 
 
-def _land_all(chunk_slugs: list[str], *, holding: str) -> list[dict]:
-    """Land all chunks onto holding branch serially."""
+def _land_all(chunk_slugs: list[str], *, holding: str, plans: list | None = None) -> list[dict]:
+    """Land all chunks onto holding branch serially.
+
+    When `plans` is provided, build a `Scheduler` so drain pulls chunks in
+    topo order (blocked downstream chunks wait for upstreams to land).
+    Independent AFKs with empty `blocked_by` flow in input order — same
+    contract as before slice-2. `plans=None` keeps the legacy iter-only
+    path for callers that don't know about cross-chunk deps (e.g. the
+    debug `land-queue` subcommand reading slugs from stdin).
+    """
     chunks = [_land_queue.Chunk(slug=s, worktree=Path.cwd()) for s in chunk_slugs]
-    return _land_queue.drain(chunks, holding=holding)
+    if plans is None:
+        return _land_queue.drain(chunks, holding=holding)
+    _scheduler = _load_sibling("scheduler")
+    sched = _scheduler.Scheduler(plans)
+    return _land_queue.drain(chunks, holding=holding, scheduler=sched)
 
 
 def run_orchestrate(
@@ -159,7 +171,7 @@ def run_orchestrate(
     if anchored:
         _emit_anchored_chunks(anchored, harness=harness, model=model)
 
-    results = _land_all(auto_chunks, holding=holding)
+    results = _land_all(auto_chunks, holding=holding, plans=auto)
 
     session_id = os.environ.get("MENTAT_SESSION", f"session-{os.getpid()}")
     _batch_review.review(session_id)
