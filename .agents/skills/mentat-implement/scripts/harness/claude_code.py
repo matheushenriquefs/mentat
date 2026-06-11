@@ -17,25 +17,21 @@ class Result:
 def invoke(prompt: str, *, afk: bool, model: str | None) -> Result:
     """Invoke claude-code headless with the given prompt.
 
-    Reads MENTAT_SESSION / MENTAT_SESSION_LOG from env (set by mentat-orchestrate
-    fan_out). When both are set the run is captured: claude gets
-    --session-id <id> + --output-format stream-json, and stdout is redirected
-    into <session_log>. Result.session_log carries the path back so the
-    self-answer detector and mentat-session track can read it.
+    Reads MENTAT_SESSION_LOG from env (set by mentat-orchestrate fan_out). When
+    set the run is captured: claude gets --output-format stream-json --verbose,
+    and stdout is redirected into <session_log>. Result.session_log carries the
+    path back so the self-answer detector and mentat-session track can read it.
 
     afk=True → --disallowedTools AskUserQuestion (AFK contract).
     """
-    session_id = os.environ.get("MENTAT_SESSION")
     session_log_env = os.environ.get("MENTAT_SESSION_LOG")
     session_log = Path(session_log_env) if session_log_env else None
 
     cmd = ["claude", "--print", prompt]
-    if session_id:
-        cmd += ["--session-id", session_id]
-    if session_log is not None:
-        cmd += ["--output-format", "stream-json"]
     if afk:
-        cmd += ["--disallowedTools", "AskUserQuestion"]
+        cmd += ["--dangerously-skip-permissions", "--disallowedTools", "AskUserQuestion"]
+    if session_log is not None:
+        cmd += ["--output-format", "stream-json", "--verbose"]
     if model:
         cmd += ["--model", model]
 
