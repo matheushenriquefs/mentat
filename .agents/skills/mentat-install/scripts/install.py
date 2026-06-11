@@ -101,6 +101,54 @@ def do_install(
     return 0
 
 
+_REPO_CONFIG_TEMPLATE = """\
+{
+  // Per-repo mentat config. Keys here overlay ~/.mentat/config.jsonc (repo wins, shallow merge).
+  // Uncomment and set values to override the global default.
+  //
+  // "harness": "cursor",        // claude-code | cursor
+  // "model": "claude-opus-4-7",
+  // "concurrency": 3,
+  // "plugins": []
+}
+"""
+
+
+def do_repo_install(*, repo_path: Path | None = None) -> int:
+    """Scaffold .mentat/config.jsonc + .gitignore entry in a repo.
+
+    repo_path defaults to git rev-parse --show-toplevel. No-op if
+    .mentat/config.jsonc already exists (exits 0 without overwriting).
+    """
+    if repo_path is None:
+        r = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+        if r.returncode != 0:
+            print("mentat-install --repo: not inside a git repo", file=sys.stderr)
+            return 1
+        repo_path = Path(r.stdout.strip())
+
+    cfg = repo_path / ".mentat" / "config.jsonc"
+    if cfg.exists():
+        print(f"mentat-install --repo: {cfg} already exists, skipping.")
+        return 0
+
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(_REPO_CONFIG_TEMPLATE)
+    print(f"mentat-install --repo: created {cfg}")
+
+    gi = repo_path / ".gitignore"
+    if gi.exists():
+        lines = gi.read_text().splitlines()
+        if ".mentat/" not in lines:
+            gi.write_text(gi.read_text().rstrip("\n") + "\n.mentat/\n")
+            print(f"mentat-install --repo: appended .mentat/ to {gi}")
+    else:
+        gi.write_text(".mentat/\n")
+        print(f"mentat-install --repo: created {gi} with .mentat/")
+
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="mentat-install",
@@ -110,12 +158,23 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
     p.add_argument("--no-color", action="store_true", help="Disable ANSI output")
     p.add_argument("--skip-companions", action="store_true", help="Skip 3rd-party companion install prompts")
+    p.add_argument(
+        "--repo",
+        metavar="PATH",
+        nargs="?",
+        const="",
+        help="Scaffold per-repo .mentat/config.jsonc (defaults to git repo root)",
+    )
     return p
 
 
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+
+    if args.repo is not None:
+        repo_path = Path(args.repo).resolve() if args.repo else None
+        sys.exit(do_repo_install(repo_path=repo_path))
 
     color = False if args.no_color else None
 
