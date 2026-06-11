@@ -1,79 +1,30 @@
-"""Topo-sort + partition plans into anchored vs auto-spawn."""
+"""Backward-compat shim — symbols moved to `scheduler.py`.
+
+`orchestrate.py` loads sibling modules via `_load_sibling`, which uses
+`importlib.util.spec_from_file_location` and never executes the parent
+package. That means a plain `from .scheduler import ...` won't resolve here.
+We replay the same loader pattern to pull scheduler in and re-export the
+public names this module used to define.
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import NamedTuple
+import importlib.util as _ilu
+import sys as _sys
+from pathlib import Path as _Path
 
+_here = _Path(__file__).parent
+_key = f"{_here.parent.name}.scheduler"
 
-class Plan(NamedTuple):
-    slug: str
-    class_: str
-    blocked_by: list[str]
-    path: Path
+if _key in _sys.modules:
+    _scheduler = _sys.modules[_key]
+else:
+    _spec = _ilu.spec_from_file_location(_key, _here / "scheduler.py")
+    _scheduler = _ilu.module_from_spec(_spec)
+    _sys.modules[_key] = _scheduler
+    _spec.loader.exec_module(_scheduler)  # type: ignore[union-attr]
 
-
-def _topo_sort(plans: list[Plan]) -> list[Plan]:
-    slug_map = {p.slug: p for p in plans}
-    visited: set[str] = set()
-    visiting: set[str] = set()
-    order: list[Plan] = []
-
-    def visit(slug: str) -> None:
-        if slug in visiting:
-            raise ValueError(f"cycle detected involving plan '{slug}'")
-        if slug in visited:
-            return
-        visiting.add(slug)
-        plan = slug_map.get(slug)
-        if plan:
-            for dep in plan.blocked_by:
-                visit(dep)
-        visiting.discard(slug)
-        visited.add(slug)
-        if plan:
-            order.append(plan)
-
-    for p in plans:
-        visit(p.slug)
-
-    return order
-
-
-def _has_downstream_hitl(slug: str, plans_by_slug: dict[str, Plan], _visited: set[str] | None = None) -> bool:
-    """Return True if any plan (directly or transitively) blocks on `slug` and is HITL."""
-    if _visited is None:
-        _visited = set()
-    if slug in _visited:
-        return False
-    _visited.add(slug)
-    for plan in plans_by_slug.values():
-        if slug in plan.blocked_by:
-            if plan.class_ == "HITL":
-                return True
-            if _has_downstream_hitl(plan.slug, plans_by_slug, _visited):
-                return True
-    return False
-
-
-def partition(plans: list[Plan]) -> tuple[list[Plan], list[Plan]]:
-    """Return (anchored_here, auto_spawn) after topological sort.
-
-    Rules (in topo order):
-    - HITL plan → anchored_here.
-    - AFK plan with downstream HITL dependency → anchored_here.
-    - AFK plan with no downstream HITL → auto_spawn.
-    """
-    topo = _topo_sort(plans)
-    plans_by_slug = {p.slug: p for p in plans}
-
-    anchored: list[Plan] = []
-    auto: list[Plan] = []
-
-    for plan in topo:
-        if plan.class_ == "HITL" or _has_downstream_hitl(plan.slug, plans_by_slug):
-            anchored.append(plan)
-        else:
-            auto.append(plan)
-
-    return anchored, auto
+Plan = _scheduler.Plan
+partition = _scheduler.partition
+_topo_sort = _scheduler._topo_sort
+_has_downstream_hitl = _scheduler._has_downstream_hitl
