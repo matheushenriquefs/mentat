@@ -34,28 +34,47 @@ def _git_root() -> Path:
     return Path(result.stdout.strip())
 
 
+def _git_mount_for_worktree(wt: Path) -> str | None:
+    """Return a bind-mount string for the main repo's .git dir if wt is a worktree."""
+    git_path = wt / ".git"
+    if not git_path.is_file():
+        return None
+    content = git_path.read_text().strip()
+    if not content.startswith("gitdir:"):
+        return None
+    gitdir = content.split(":", 1)[1].strip()
+    main_git = str(Path(gitdir).parent.parent)
+    return f"source={main_git},target={main_git},type=bind"
+
+
 def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
     import json as _json
     import re as _re
 
     dcj = wt / ".devcontainer" / "devcontainer.json"
     expected_ws = f"/workspaces/{slug}"
+    git_mount = _git_mount_for_worktree(wt)
 
     if dcj.exists():
         try:
             data = _json.loads(dcj.read_text())
         except Exception:
             data = {}
-        if data.get("workspaceFolder") == expected_ws:
+        ws_ok = data.get("workspaceFolder") == expected_ws
+        mount_ok = git_mount is None or git_mount in data.get("mounts", [])
+        if ws_ok and mount_ok:
             return
-        old_ws = data.get("workspaceFolder") or "/workspaces/mentat"
-        data["name"] = slug
-        data["workspaceFolder"] = expected_ws
-        if "workspaceMount" in data:
-            data["workspaceMount"] = _re.sub(r"target=[^,]+", f"target={expected_ws}", data["workspaceMount"])
-        for key in ("postCreateCommand", "onCreateCommand"):
-            if key in data:
-                data[key] = data[key].replace(old_ws, expected_ws)
+        if not ws_ok:
+            old_ws = data.get("workspaceFolder") or "/workspaces/mentat"
+            data["name"] = slug
+            data["workspaceFolder"] = expected_ws
+            if "workspaceMount" in data:
+                data["workspaceMount"] = _re.sub(r"target=[^,]+", f"target={expected_ws}", data["workspaceMount"])
+            for key in ("postCreateCommand", "onCreateCommand"):
+                if key in data:
+                    data[key] = data[key].replace(old_ws, expected_ws)
+        if git_mount and git_mount not in data.get("mounts", []):
+            data.setdefault("mounts", []).append(git_mount)
         content = _json.dumps(data, indent=2)
     else:
         try:
@@ -63,6 +82,10 @@ def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
         except ValueError as exc:
             print(str(exc), file=sys.stderr)
             raise SystemExit(1) from exc
+        if git_mount:
+            data = _json.loads(content)
+            data.setdefault("mounts", []).append(git_mount)
+            content = _json.dumps(data, indent=2)
 
     dcj.parent.mkdir(parents=True, exist_ok=True)
     tmp = dcj.parent / (dcj.name + ".tmp")
@@ -193,16 +216,27 @@ def cmd_run(wt: Path, command: str) -> int:
     return result.returncode
 
 
-def cmd_down(wt: Path) -> int:
-    slug = wt.name
+def cmd_down(*, slug: str) -> int:
     cid = utils.container_id_for(slug)
-    if not cid:
-        print(f"mentat-container: no running container for slug {slug}", file=sys.stderr)
-        return 0
-    result = subprocess.run([_docker(), "stop", cid], capture_output=True)
-    if result.returncode == 0:
-        print(cid)
-    return result.returncode
+    if cid:
+        result = subprocess.run([_docker(), "rm", "-f", cid], capture_output=True)
+        if result.returncode == 0:
+            print(cid)
+        return result.returncode
+
+    stopped = subprocess.run(
+        [_docker(), "ps", "-aq", "--filter", f"label=mentat_slug={slug}", "--filter", "status=exited"],
+        capture_output=True,
+        text=True,
+    )
+    if stopped.returncode == 0 and stopped.stdout.strip():
+        cid = stopped.stdout.strip()
+        result = subprocess.run([_docker(), "rm", "-f", cid], capture_output=True)
+        if result.returncode == 0:
+            print(cid)
+        return result.returncode
+
+    return 0
 
 
 def _col(label: str, value: str) -> str:
@@ -366,7 +400,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("up", help="Start devcontainer for cwd worktree")
     run_p = sub.add_parser("run", help="Exec command inside container")
     run_p.add_argument("command", nargs="+", help="Command to run")
-    sub.add_parser("down", help="Stop container")
+    down_p = sub.add_parser("down", help="Stop and remove container")
+    down_p.add_argument("--slug", default=None, help="Container slug (default: cwd git root name)")
     sub.add_parser("doctor", help="Diagnose container invariants")
     return p
 
@@ -374,14 +409,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    wt = _git_root() if args.cmd != "doctor" else Path.cwd()
 
     if args.cmd == "up":
-        sys.exit(cmd_up(wt))
+        sys.exit(cmd_up(_git_root()))
     elif args.cmd == "run":
-        sys.exit(cmd_run(wt, " ".join(args.command)))
+        sys.exit(cmd_run(_git_root(), " ".join(args.command)))
     elif args.cmd == "down":
-        sys.exit(cmd_down(wt))
+        slug = args.slug if args.slug else _git_root().name
+        sys.exit(cmd_down(slug=slug))
     elif args.cmd == "doctor":
         sys.exit(cmd_doctor(Path.cwd()))
 
