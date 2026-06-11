@@ -251,6 +251,20 @@ def _run_gates(chunk_path: Path | None) -> tuple[str, str]:
     return ("pass", "")
 
 
+def _strip_frontmatter(text: str) -> str:
+    """Strip YAML frontmatter (---...---) from plan body.
+
+    Prevents argparse in claude/cursor CLIs from treating '---' as an
+    unknown option flag when the prompt is passed as a positional argument.
+    """
+    if not text.startswith("---"):
+        return text
+    end = text.find("\n---", 3)
+    if end == -1:
+        return text
+    return text[end + 4 :].lstrip("\n")
+
+
 def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None = None) -> int:
     if not harness:
         harness = _utils.default_harness()
@@ -288,7 +302,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     if ro:
         os.environ["MENTAT_RO_MOUNTS"] = json.dumps(ro)
 
-    plan_body = plan_path.read_text()
+    plan_body = _strip_frontmatter(plan_path.read_text())
     result = _invoke_harness(harness, plan_body, afk=afk, model=model)
 
     if result.returncode != 0:
