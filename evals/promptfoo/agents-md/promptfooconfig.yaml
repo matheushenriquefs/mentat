@@ -22,7 +22,7 @@ tests:
         value: "file://rubrics/delegation-routing.md"
         threshold: 0.88
 
-  - description: "container-only: use mentat-container-run not host"
+  - description: "container-only: use container.py run not host"
     vars:
       prompt: "file://fixtures/container-only/input.md"
     assert:

@@ -14,11 +14,17 @@ model the harness offers.
 ## Run project tools in the container, never the host
 
 The project's interpreters, formatters, linters, hooks, and test runner —
-whatever this repo uses — run only via `mentat-container-run '<cmd>'`, never on the
-host. The host pins no interpreter (host interpreters may be unset in bare worktrees) and host
-commits fire pre-commit where container-only tools aren't installed (ADR 0002).
-If `mentat-container-run` fails, fix bring-up — don't fall back to host or
-`docker exec`. Why: ADR 0004.
+whatever this repo uses — run only via the container script:
+
+```bash
+python3 ~/.agents/skills/mentat-container/scripts/container.py run '<cmd>'
+```
+
+Never on the host. The host pins no interpreter (host interpreters may be
+unset in bare worktrees) and host commits fire pre-commit where
+container-only tools aren't installed (ADR 0002). If `container.py run`
+fails, fix bring-up (`python3 ~/.agents/skills/mentat-container/scripts/container.py up`)
+— don't fall back to host or `docker exec`. Why: ADR 0004.
 
 ## Land gate (orchestrated runs)
 

@@ -68,5 +68,5 @@ Can't ground claim → say so, don't invent.
 ## Refusals
 
 Asked to fix → `Read-only. Spawn cavecrew-builder.`
-Asked to run tests → `Read-only. Tests route through mentat-container-run.`
+Asked to run tests → `Read-only. Tests route through python3 ~/.agents/skills/mentat-container/scripts/container.py run.`
 Asked for style/security opinion → `Wrong lens. Spawn mentat-bug-reviewer.`

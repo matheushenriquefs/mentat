@@ -41,7 +41,7 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 : The codebase a batch implements against. Mentat is agnostic to its toolchain; all target-repo commands run in-container. _Avoid_: "the project" (ambiguous between Mentat and target).
 
 **Devcontainer**
-: Docker container for a chunk's target repo — where all project tools run. `mentat-container-up` brings it up; `mentat-container-run` executes commands inside. _Avoid_: "the container", "the Docker".
+: Docker container for a chunk's target repo — where all project tools run. `python3 ~/.agents/skills/mentat-container/scripts/container.py up` brings it up; `... container.py run '<cmd>'` executes commands inside. _Avoid_: "the container", "the Docker".
 
 **Headless agent CLI**
 : The harness CLI — `cursor-agent` or `claude-code`. What `--harness=` selects; `/mentat-session track` watches it; each harness adapter module under `.agents/skills/mentat-implement/scripts/harness/` declares its `cmd` and `output_format`. _Avoid_: "build" (collides with Docker `build:` in `mentat-container-up`).
@@ -59,7 +59,7 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 : A MCP/skill resource the orchestration layer uses — `bash`, `grep`, `Read`, `Agent`. Not a target-repo tool. _Avoid_: bare 'tool' when the distinction matters.
 
 **Project tool**
-: A target-repo command — linter, test runner, formatter, interpreter. Runs only via `mentat-container-run`, never on the host. _Avoid_: bare 'tool' when the distinction matters.
+: A target-repo command — linter, test runner, formatter, interpreter. Runs only via `python3 ~/.agents/skills/mentat-container/scripts/container.py run '<cmd>'`, never on the host. _Avoid_: bare 'tool' when the distinction matters.
 
 **Slug**
 : A chunk's unique id — also its worktree dirname and `mentat_slug` container label. Format: `mentat-<epoch>-<pid>-<rand>`. _Avoid_: "id", "name", "tag".
