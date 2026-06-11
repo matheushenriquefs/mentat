@@ -16,13 +16,6 @@ _SKILL_NAMES = [
     "mentat-install",
 ]
 
-_REVIEWER_NAMES = [
-    "mentat-bug-reviewer",
-    "mentat-plan-reviewer",
-    "mentat-smell-reviewer",
-    "mentat-test-reviewer",
-]
-
 _STALE_PATHS = [
     ".agents/mentat",
     ".agents/bin/mentat-config",
@@ -32,14 +25,44 @@ _STALE_PATHS = [
     ".agents/bin/lib/audit-schema.jsonc",
     ".agents/bin/lib/harness-registry.jsonc",
     ".agents/lib/gates/llm",
+    # Pre-D13 broken symlinks (target file missing .md suffix). Re-install fixes.
+    ".claude/agents/mentat-bug-reviewer",
+    ".claude/agents/mentat-plan-reviewer",
+    ".claude/agents/mentat-smell-reviewer",
+    ".claude/agents/mentat-test-reviewer",
+    ".cursor/agents/mentat-bug-reviewer",
+    ".cursor/agents/mentat-plan-reviewer",
+    ".cursor/agents/mentat-smell-reviewer",
+    ".cursor/agents/mentat-test-reviewer",
 ]
 
 # Rel-target under ~/.agents/ → rel-source under <clone>/.
-# ADRs ship: AGENTS.md tells agents to "check ADRs in the area you're touching"
-# and references ~/.agents/docs/adr/ — broken without this symlink.
-_DOCS_SYMLINKS = {
+# Dir/file symlinks that mirror the harness tree wholesale.
+_BULK_SYMLINKS = {
+    "AGENTS.md": ".agents/AGENTS.md",
+    "agents": ".agents/agents",
+    "bin": ".agents/bin",
+    "lib": ".agents/lib",
+    "docs/PATHS.md": ".agents/docs/PATHS.md",
+    # ADRs ship from repo root, not from .agents/ — user-facing canonical location.
     "docs/adr": "docs/adr",
 }
+
+
+def _discover_reviewers(clone_root: Path | None) -> list[str]:
+    """All .agents/agents/*.md file stems. Falls back to hardcoded list when no clone."""
+    if clone_root is not None:
+        agents_dir = clone_root / ".agents" / "agents"
+        if agents_dir.is_dir():
+            return sorted(p.stem for p in agents_dir.glob("*.md"))
+    return [
+        "mentat-bug-reviewer",
+        "mentat-context-reviewer",
+        "mentat-plan-reviewer",
+        "mentat-researcher",
+        "mentat-smell-reviewer",
+        "mentat-test-reviewer",
+    ]
 
 
 class Action:
@@ -58,14 +81,35 @@ class InstallPlan:
         add: list[Action],
         update: list[Action],
         stale: list[Path],
+        conflicts: list[Path],
         missing_companions: list[str],
         skipped: list[Action],
     ) -> None:
         self.add = add
         self.update = update
         self.stale = stale
+        self.conflicts = conflicts
         self.missing_companions = missing_companions
         self.skipped = skipped
+
+
+def _plan_symlink(
+    source: Path,
+    target: Path,
+    add: list[Action],
+    update: list[Action],
+    conflicts: list[Path],
+) -> None:
+    """Classify one symlink action: add / update / conflict-abort."""
+    if not target.exists() and not target.is_symlink():
+        add.append(Action("symlink", source, target))
+        return
+    if target.is_symlink():
+        if target.resolve() != source.resolve():
+            update.append(Action("symlink", source, target))
+        return
+    # Exists as real file/dir — D13 policy: abort, no silent overwrite.
+    conflicts.append(target)
 
 
 def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
@@ -73,7 +117,9 @@ def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
     add: list[Action] = []
     update: list[Action] = []
     stale: list[Path] = []
+    conflicts: list[Path] = []
     skipped: list[Action] = []
+    reviewer_names = _discover_reviewers(clone_root)
 
     agents_skills = home / ".agents" / "skills"
     # 1. ~/.mentat/{} dirs and config
@@ -92,60 +138,44 @@ def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
         target = agents_skills / skill
         if clone_root is not None:
             source = clone_root / ".agents" / "skills" / skill
-            if target.exists():
-                if target.is_symlink() and target.resolve() != source.resolve():
-                    update.append(Action("symlink", source, target))
-            else:
-                add.append(Action("symlink", source, target))
+            _plan_symlink(source, target, add, update, conflicts)
         else:
             if not target.exists():
                 add.append(Action("copy", None, target))
 
-    # 3. Harness detection
+    # 3. Bulk symlinks (.agents/AGENTS.md, agents/, bin/, lib/, docs/{PATHS.md,adr})
+    if clone_root is not None:
+        for rel_target, rel_source in _BULK_SYMLINKS.items():
+            target = home / ".agents" / rel_target
+            source = clone_root / rel_source
+            _plan_symlink(source, target, add, update, conflicts)
+
+    # 4. Per-harness fanout
     agents_agents = home / ".agents" / "agents"
     for harness_dir in [".claude", ".cursor"]:
         h_path = home / harness_dir
         if not h_path.exists():
             for skill in _SKILL_NAMES:
                 skipped.append(Action("symlink", None, h_path / "skills" / skill))
-            for reviewer in _REVIEWER_NAMES:
+            for reviewer in reviewer_names:
                 skipped.append(Action("symlink", None, h_path / "agents" / reviewer))
             continue
         for skill in _SKILL_NAMES:
             link = h_path / "skills" / skill
             source = clone_root / ".agents" / "skills" / skill if clone_root is not None else agents_skills / skill
-            if link.exists():
-                if link.is_symlink() and link.resolve() != source.resolve():
-                    update.append(Action("symlink", source, link))
-            else:
-                add.append(Action("symlink", source, link))
-        for reviewer in _REVIEWER_NAMES:
-            link = h_path / "agents" / reviewer
+            _plan_symlink(source, link, add, update, conflicts)
+        for reviewer in reviewer_names:
+            link = h_path / "agents" / f"{reviewer}.md"
             if clone_root is not None:
-                source = clone_root / ".agents" / "agents" / reviewer
+                source = clone_root / ".agents" / "agents" / f"{reviewer}.md"
             else:
-                source = agents_agents / reviewer
-            if link.exists():
-                if link.is_symlink() and link.resolve() != source.resolve():
-                    update.append(Action("symlink", source, link))
-            else:
-                add.append(Action("symlink", source, link))
+                source = agents_agents / f"{reviewer}.md"
+            _plan_symlink(source, link, add, update, conflicts)
 
-    # 4. Docs symlinks (ADRs, STYLE — agents read these via ~/.agents/docs/)
-    if clone_root is not None:
-        for rel_target, rel_source in _DOCS_SYMLINKS.items():
-            target = home / ".agents" / rel_target
-            source = clone_root / rel_source
-            if target.exists():
-                if target.is_symlink() and target.resolve() != source.resolve():
-                    update.append(Action("symlink", source, target))
-            else:
-                add.append(Action("symlink", source, target))
-
-    # 5. Stale paths
+    # 5. Stale paths (include broken symlinks — .exists() returns False on dangling)
     for stale_rel in _STALE_PATHS:
         stale_path = home / stale_rel
-        if stale_path.exists():
+        if stale_path.exists() or stale_path.is_symlink():
             stale.append(stale_path)
 
     missing_companions: list[str] = []
@@ -154,6 +184,7 @@ def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
         add=add,
         update=update,
         stale=stale,
+        conflicts=conflicts,
         missing_companions=missing_companions,
         skipped=skipped,
     )
