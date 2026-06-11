@@ -29,7 +29,7 @@ def invoke(prompt: str, *, afk: bool, model: str | None) -> Result:
     session_log_env = os.environ.get("MENTAT_SESSION_LOG")
     session_log = Path(session_log_env) if session_log_env else None
 
-    cmd = ["claude", "--headless", "--print", prompt]
+    cmd = ["claude", "--print", prompt]
     if session_id:
         cmd += ["--session-id", session_id]
     if session_log is not None:
