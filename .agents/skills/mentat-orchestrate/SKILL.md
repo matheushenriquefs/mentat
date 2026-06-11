@@ -21,10 +21,12 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py batch-review 
 ```
 1. Read frontmatter of each plan: id, class, blocked_by.
 2. Topological sort by blocked_by (raise on cycle).
-3. Partition in topo order:
+3. Partition in topo order (via `scheduler.partition`):
    - HITL plans → anchored_here
    - AFK with downstream HITL dep → anchored_here
-   - AFK with no downstream HITL dep → auto_spawn
+   - AFK with upstream HITL dep → anchored_here (caller must drive the
+     upstream HITL in-session before the downstream AFK can spawn)
+   - AFK with no HITL anywhere in the dep chain → auto_spawn
 4. Spawn auto_spawn in parallel (ProcessPoolExecutor).
    Print track command immediately after spawn.
 5. Emit `chunk.spawned{harness:"hitl-in-session"}` per anchored plan and
@@ -35,7 +37,14 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py batch-review 
    never subprocess-runs HITL implement — interactivity would be lost.
 6. Poll/wait for auto_spawn completions.
 7. Land auto_spawn chunks serially onto holding (HITL chunks land in the
-   follow-up `land-queue` call described in step 5).
+   follow-up `land-queue` call described in step 5). `land_queue.drain`
+   pulls chunks via `Scheduler.next_ready` — topo order is respected, so
+   `B(blocked_by=[A])` waits until `A.landed` even if B's chunk arrived
+   first. Ejecting a chunk cascades to every downstream chunk as
+   `chunk.ejected{reason:"upstream_ejected", upstream:<slug>}` —
+   payload-only extension per ADR-0007, no rebase/gate fired for the
+   cascaded slugs. Cycle / missing upstream → `status:"stalled"` with
+   the pending list and exit 1.
 8. batch-review at end of queue (advisory).
 9. Exit 0 all-landed; 1 if any ejected.
 ```
@@ -66,6 +75,11 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py batch-review 
 - Plans without `blocked_by` run in parallel with any other independent plan.
 - HITL plans always anchor in the calling session; AFK plans can auto-spawn.
 - AFK plan with a downstream HITL dep anchors in the calling session.
+- AFK plan with an upstream HITL dep anchors in the calling session — its
+  worktree can't safely spawn before the upstream HITL lands.
+- Cross-chunk dep gating in `land-queue`: `Scheduler.next_ready` orders
+  the drain by `blocked_by`; an ejected upstream cascades `upstream_ejected`
+  to every downstream chunk without touching their worktrees.
 - Land queue is serial: each chunk rebases onto the tip the previous one left.
 - Gate required on each chunk before land; ejected chunk leaves worktree intact.
 - `batch-review` is advisory; never blocks the batch.
