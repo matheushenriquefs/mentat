@@ -23,6 +23,8 @@ def _load_sibling(name: str):
 
 _utils = _load_sibling("utils")
 
+_CONTAINER_PY = Path.home() / ".agents/skills/mentat-container/scripts/container.py"
+
 
 class Chunk(NamedTuple):
     slug: str
@@ -83,6 +85,14 @@ def _ff_merge(chunk: Chunk, holding: str) -> bool:
 
 def _emit_event(event: str, payload: dict) -> None:
     _utils.emit_event(event, payload)
+
+
+def _teardown_container(slug: str) -> None:
+    ok = subprocess.run(
+        ["python3", str(_CONTAINER_PY), "down", "--slug", slug],
+        capture_output=True,
+    ).returncode == 0
+    _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
 
 
 def land(chunk: Chunk, *, holding: str) -> dict:
@@ -170,7 +180,9 @@ def drain(chunks: list[Chunk], *, holding: str, scheduler=None) -> list[dict]:
     if scheduler is None:
         results: list[dict] = []
         for chunk in chunks:
-            results.append(land(chunk, holding=holding))
+            verdict = land(chunk, holding=holding)
+            results.append(verdict)
+            _teardown_container(chunk.slug)
         return results
 
     by_slug: dict[str, Chunk] = {c.slug: c for c in chunks}
@@ -190,6 +202,7 @@ def drain(chunks: list[Chunk], *, holding: str, scheduler=None) -> list[dict]:
             return results
         verdict = land(by_slug[ready], holding=holding)
         results.append(verdict)
+        _teardown_container(ready)
         pending.remove(ready)
         if verdict.get("status") == "success":
             scheduler.mark_landed(ready)
@@ -222,5 +235,6 @@ def drain(chunks: list[Chunk], *, holding: str, scheduler=None) -> list[dict]:
                 }
             )
             pending.remove(downstream)
+            _teardown_container(downstream)
 
     return results
