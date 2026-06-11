@@ -15,7 +15,7 @@ See [CONTEXT.md](CONTEXT.md) for the full glossary. See [docs/adr/README.md](doc
 > - **Editor** — honor `$EDITOR` when set; never assume one.
 > - **Target-repo toolchain** — mentat names none. The container provides (ADR-0004).
 
-**Context budget.** When your context fills past ~70%, proactively summarize your core instructions, slice state, and decisions-so-far into a smaller form before continuing. Claude Code auto-compacts at ~95% — that's a safety net, not the primary mechanism. (Source: cursor.com/blog/self-summarization — self-summary cuts compaction error 50%.)
+**Context budget.** When your context fills past ~70%, proactively summarize your core instructions, slice state, and decisions-so-far into a smaller form before continuing.
 
 ## Critical Constraints
 
