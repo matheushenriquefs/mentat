@@ -195,7 +195,7 @@ def cmd_doctor(wt: Path) -> int:  # noqa: C901
     warnings: list[str] = []
     advisories: list[str] = []
 
-    print("\nmentat-doctor\n")
+    print("\nmentat-container doctor\n")
 
     # ── [host] ──────────────────────────────────────────────────────────────
     try:

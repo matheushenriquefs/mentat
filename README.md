@@ -136,7 +136,7 @@ task test      # pytest tests/
 
 ## Documentation
 
-| | |
+| Doc | Contents |
 |---|---|
 | [Architecture](./docs/ARCHITECTURE.md) | Narrative overview, 15 sections, ADR pointers. |
 | [Glossary](./CONTEXT.md) | Domain lexicon — slice / chunk / batch / land / eject / AFK / HITL. |

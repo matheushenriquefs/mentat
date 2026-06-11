@@ -19,7 +19,7 @@ python3 ~/.agents/skills/mentat-skill/scripts/skill.py scaffold <new-skill-name>
 
 ## Eval flow
 
-1. Functional pass: `bash .agents/skills/<skill>/eval/run.sh` (skill-specific harness; non-zero → abort).
+1. Functional pass: `python3 .agents/skills/<skill>/eval/run.py` (skill-specific harness; non-zero → abort).
 2. Cognitive current: `npx promptfoo eval --output /tmp/<skill>-current.json --no-progress-bar`.
 3. Cognitive main: extract `main`'s SKILL.md to a temp path, re-run promptfoo with `--prompts file:///tmp/<skill>-main.md`.
 4. Report delta table:

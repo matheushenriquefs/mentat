@@ -15,7 +15,7 @@ Manage a local markdown task store backed by POSIX atomics. No server, no databa
 
 ## Layout
 
-Tasks live at `<repo>/.mentat/tasks/<ID>-<slug>.md`. Cross-repo unified view: `ln -s ~/.agents/mentat/tasks .mentat/tasks` (user runs once).
+Tasks live at `<repo>/.mentat/tasks/<ID>-<slug>.md`. Cross-repo unified view: `ln -s ~/.mentat/tasks .mentat/tasks` (user runs once).
 
 Board-home vs worktree separation (ADR-0002): task files live on the holding branch. Chunks operating in worktrees write status back via the atomic protocol below.
 
