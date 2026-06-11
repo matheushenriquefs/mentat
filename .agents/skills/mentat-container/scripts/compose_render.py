@@ -4,9 +4,29 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import re
 from pathlib import Path
 from string import Template
+
+_ARCH_MAP = {
+    "arm64": "arm64",
+    "aarch64": "arm64",
+    "x86_64": "amd64",
+    "amd64": "amd64",
+}
+
+
+def _resolve_platform() -> str | None:
+    """Return docker --platform string (e.g. "linux/arm64") or None when unknown.
+
+    MENTAT_PLATFORM env var wins. Else maps platform.machine() through _ARCH_MAP.
+    """
+    override = os.environ.get("MENTAT_PLATFORM")
+    if override:
+        return override
+    arch = _ARCH_MAP.get(platform.machine().lower())
+    return f"linux/{arch}" if arch else None
 
 
 def _parse_compose_service(compose_text: str) -> str:
@@ -84,14 +104,13 @@ def _ro_mounts_from_env(workspace_folder: str, worktree_host: str) -> list[str]:
 
 def synth(worktree_path: Path) -> str:
     """Return devcontainer.json JSON string for worktree_path. Pure — no filesystem writes."""
-    import subprocess as _sp
-
     slug = worktree_path.name
 
     # Template path takes priority over auto-detection
     tmpl = worktree_path / ".devcontainer" / "compose.yml.tmpl"
     if tmpl.exists():
-        arch = _sp.run(["uname", "-m"], capture_output=True, text=True).stdout.strip() or "amd64"
+        platform_str = _resolve_platform()
+        arch = platform_str.split("/", 1)[1] if platform_str else "amd64"
         image_tag = os.environ.get("MENTAT_IMAGE_TAG", "latest")
         ws = f"/workspaces/{slug}"
         # Render but don't write; caller writes to .devcontainer/docker-compose.yml
@@ -159,6 +178,9 @@ def synth(worktree_path: Path) -> str:
         "workspaceFolder": ws,
         "workspaceMount": f"source=${{localWorkspaceFolder}},target={ws},type=bind",
     }
+    platform_str = _resolve_platform()
+    if platform_str:
+        dcj["runArgs"] = ["--platform", platform_str]
     if mounts:
         dcj["mounts"] = mounts
     return json.dumps(dcj, indent=2)
