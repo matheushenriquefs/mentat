@@ -27,9 +27,15 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py batch-review 
    - AFK with no downstream HITL dep → auto_spawn
 4. Spawn auto_spawn in parallel (ProcessPoolExecutor).
    Print track command immediately after spawn.
-5. Run anchored_here serially in current session.
+5. Emit `chunk.spawned{harness:"hitl-in-session"}` per anchored plan and
+   return control. Caller queries the audit log
+   (`mentat-log query chunk.spawned --session=$MENTAT_SESSION`) and invokes
+   `/mentat-implement <slug>` in-session per anchored slug, then re-invokes
+   `orchestrate land-queue <holding>` with the HITL slugs on stdin. Orchestrate
+   never subprocess-runs HITL implement — interactivity would be lost.
 6. Poll/wait for auto_spawn completions.
-7. Land all completed chunks (anchored + auto_spawn) serially onto holding.
+7. Land auto_spawn chunks serially onto holding (HITL chunks land in the
+   follow-up `land-queue` call described in step 5).
 8. batch-review at end of queue (advisory).
 9. Exit 0 all-landed; 1 if any ejected.
 ```

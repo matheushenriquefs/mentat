@@ -106,7 +106,7 @@ def test_orchestrate_anchored_runs_in_current_session(tmp_path):
             anchored_calls.append(p.slug)
         return ["chunk-hitl"]
 
-    with patch.object(orch, "_run_anchored_plans", side_effect=fake_run_anchored):
+    with patch.object(orch, "_emit_anchored_chunks", side_effect=fake_run_anchored):
         with patch.object(orch, "_land_all", return_value=[{"status": "success", "slug": "chunk-hitl", "tip": "abc"}]):
             with patch.object(orch, "_batch_review"):
                 orch.run_orchestrate(
@@ -149,7 +149,7 @@ def test_orchestrate_harness_flag_overrides_config(tmp_path):
         captured.append(harness)
         return []
 
-    with patch.object(orch, "_run_anchored_plans", side_effect=fake_run_anchored):
+    with patch.object(orch, "_emit_anchored_chunks", side_effect=fake_run_anchored):
         with patch.object(orch, "_land_all", return_value=[]):
             with patch.object(orch, "_batch_review"):
                 orch.run_orchestrate(

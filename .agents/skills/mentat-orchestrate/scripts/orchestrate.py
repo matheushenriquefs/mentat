@@ -62,17 +62,30 @@ def _load_plans(paths: list[Path]) -> list[_routing.Plan]:
     return plans
 
 
-def _run_anchored_plans(plans: list[_routing.Plan], *, harness: str | None, model: str | None) -> list[str]:
-    """Run anchored (HITL or forced-anchor AFK) plans in current session."""
-    implement_script = _SKILL_ROOT / "skills/mentat-implement/scripts/implement.py"
+def _emit_anchored_chunks(plans: list[_routing.Plan], *, harness: str | None, model: str | None) -> list[str]:
+    """Emit chunk.spawned{harness:hitl-in-session} per anchored plan, no subprocess.
+
+    HITL plans run in the **calling Claude session** — never via subprocess —
+    so AskUserQuestion works. The caller queries the audit log
+    (`mentat-log query chunk.spawned --session=$MENTAT_SESSION`) and drives
+    `/mentat-implement <slug>` in-session per anchored slug, then re-invokes
+    `orchestrate land-queue <holding>` with the HITL slugs on stdin.
+
+    Returns slugs anchored this invocation (caller may use them to drive
+    /mentat-implement). They are NOT appended to `_land_all` here — landing
+    happens on the post-implement land-queue call.
+    """
     chunks: list[str] = []
     for plan in plans:
-        cmd = ["python3", str(implement_script), str(plan.path)]
-        if harness:
-            cmd += ["--harness", harness]
-        if model:
-            cmd += ["--model", model]
-        subprocess.run(cmd)
+        _utils.emit_event(
+            "chunk.spawned",
+            {
+                "slug": plan.slug,
+                "plan": str(plan.path),
+                "harness": "hitl-in-session",
+                "worktree": str(Path.cwd()),
+            },
+        )
         chunks.append(plan.slug)
     return chunks
 
@@ -140,13 +153,13 @@ def run_orchestrate(
     if auto:
         auto_chunks = _fan_out_plans(auto, harness=harness, model=model)
 
-    # Run anchored plans in current session
-    anchored_chunks: list[str] = []
+    # Anchored (HITL) plans: emit chunk.spawned{harness:hitl-in-session} and return
+    # control to caller. They do NOT land in this invocation — caller drives
+    # /mentat-implement in-session, then re-invokes `orchestrate land-queue`.
     if anchored:
-        anchored_chunks = _run_anchored_plans(anchored, harness=harness, model=model)
+        _emit_anchored_chunks(anchored, harness=harness, model=model)
 
-    all_chunks = anchored_chunks + auto_chunks
-    results = _land_all(all_chunks, holding=holding)
+    results = _land_all(auto_chunks, holding=holding)
 
     session_id = os.environ.get("MENTAT_SESSION", f"session-{os.getpid()}")
     _batch_review.review(session_id)
