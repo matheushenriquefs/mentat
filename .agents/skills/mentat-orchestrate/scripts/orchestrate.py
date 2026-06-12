@@ -121,6 +121,8 @@ def _fan_out_plans(plans: list[_routing.Plan], *, harness: str | None, model: st
         session_id, proc = _fan_out.spawn_with_proc(plan, harness=harness, model=model)
         live.append(proc)
         chunks.append(session_id)
+    for p in live:
+        p.wait()
     return chunks
 
 
@@ -130,9 +132,14 @@ def _prune_stale_containers() -> None:
     try:
         result = subprocess.run(
             [
-                "docker", "container", "prune", "-f",
-                "--filter", "label=mentat_slug",
-                "--filter", "until=1h",
+                "docker",
+                "container",
+                "prune",
+                "-f",
+                "--filter",
+                "label=mentat_slug",
+                "--filter",
+                "until=1h",
             ],
             capture_output=True,
             text=True,
@@ -190,6 +197,8 @@ def run_orchestrate(
     model: str | None,
     dry_run: bool,
 ) -> int:
+    session_id = os.environ.get("MENTAT_SESSION") or f"mentat-orchestrate-{os.getpid()}"
+    os.environ["MENTAT_SESSION"] = session_id
     plans = _load_plans(plan_paths)
     anchored, auto = _routing.partition(plans)
 
@@ -197,7 +206,7 @@ def run_orchestrate(
         print(f"[dry-run] would anchor: {[p.slug for p in anchored]}")
         print(f"[dry-run] would spawn: {[p.slug for p in auto]}")
         _land_all([], holding=holding)
-        _batch_review.review(session_id=os.environ.get("MENTAT_SESSION", "dry-run"))
+        _batch_review.review(session_id=session_id)
         return 0
 
     _prune_stale_containers()
@@ -217,7 +226,6 @@ def run_orchestrate(
 
     results = _land_all([p.slug for p in auto], holding=holding, plans=auto)
 
-    session_id = os.environ.get("MENTAT_SESSION", f"session-{os.getpid()}")
     _batch_review.review(session_id)
 
     any_ejected = any(r.get("status") == "eject" for r in results)

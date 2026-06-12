@@ -11,8 +11,9 @@ import stat
 import sys
 from pathlib import Path
 
-ORCH_SCRIPTS = Path.home() / ".agents" / "skills" / "mentat-orchestrate" / "scripts"
-IMPL_SCRIPTS = Path.home() / ".agents" / "skills" / "mentat-implement" / "scripts"
+_HERE = Path(__file__).resolve().parent
+ORCH_SCRIPTS = _HERE.parent / "scripts"
+IMPL_SCRIPTS = _HERE.parent.parent / "mentat-implement" / "scripts"
 
 
 def _load(path: Path, name: str):

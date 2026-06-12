@@ -303,6 +303,11 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
         os.environ["MENTAT_RO_MOUNTS"] = json.dumps(ro)
 
     plan_body = _strip_frontmatter(plan_path.read_text())
+    if afk:
+        home_agents = str(Path.home()) + "/.agents/"
+        cwd_agents = str(Path.cwd()) + "/.agents/"
+        if home_agents != cwd_agents:
+            plan_body = plan_body.replace(home_agents, cwd_agents)
     result = _invoke_harness(harness, plan_body, afk=afk, model=model)
 
     if result.returncode != 0:

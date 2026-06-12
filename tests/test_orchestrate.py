@@ -178,6 +178,10 @@ class _ScriptedPopen:
             return None
         return 0
 
+    def wait(self):
+        self._remaining = 0
+        return 0
+
 
 def test_concurrency_cap_defaults_to_3_when_config_missing(monkeypatch):
     orch = load_module("orchestrate")

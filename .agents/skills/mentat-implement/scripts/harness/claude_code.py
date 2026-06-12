@@ -31,7 +31,10 @@ def invoke(prompt: str, *, afk: bool, model: str | None) -> Result:
     if afk:
         cmd += ["--dangerously-skip-permissions", "--disallowedTools", "AskUserQuestion"]
     if session_log is not None:
-        cmd += ["--output-format", "stream-json", "--verbose"]
+        cmd += ["--output-format", "stream-json"]
+        session_id = os.environ.get("MENTAT_SESSION")
+        if session_id:
+            cmd += ["--session-id", session_id]
     if model:
         cmd += ["--model", model]
 
