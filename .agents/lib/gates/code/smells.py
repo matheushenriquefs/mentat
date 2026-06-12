@@ -17,9 +17,15 @@ from __future__ import annotations
 
 import ast
 import os
+import sys
 from pathlib import Path
 
-_SKIP_DIRS = {".git", "__pycache__", ".ruff_cache", ".pytest_cache", "node_modules", ".dmux", ".mentat", ".venv"}
+_WALK_DIR = Path(__file__).resolve().parents[1]
+_AGENTS_ROOT = _WALK_DIR.parents[1]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
+
+from lib.gates._walk import SKIP_DIRS as _SKIP_DIRS  # noqa: E402
 
 
 def _limit(env_var: str, default: int) -> int:
@@ -93,6 +99,18 @@ def _iter_py(root: Path):
         if any(part in _SKIP_DIRS for part in p.parts):
             continue
         yield p
+
+
+class _SmellsGate:
+    id = "smells"
+    priority = 20
+
+    def run(self, ctx: object) -> tuple[str, str]:
+        chunk_path = getattr(ctx, "chunk_path", None)
+        return run(chunk_path)
+
+
+gate = _SmellsGate()
 
 
 def run(chunk_path: Path | None) -> tuple[str, str]:
