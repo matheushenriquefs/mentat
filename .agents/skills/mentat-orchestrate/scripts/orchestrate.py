@@ -10,10 +10,9 @@ import sys
 import time
 from pathlib import Path
 
-_SCRIPTS = Path(__file__).resolve().parent
-_SKILL_ROOT = _SCRIPTS.parents[2]
-if str(_SKILL_ROOT) not in sys.path:
-    sys.path.insert(0, str(_SKILL_ROOT))
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
 
 import importlib.util as _ilu
 

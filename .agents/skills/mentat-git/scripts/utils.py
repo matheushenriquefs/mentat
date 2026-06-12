@@ -7,9 +7,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-_SKILL_ROOT = Path(__file__).resolve().parents[3]
-if str(_SKILL_ROOT) not in sys.path:
-    sys.path.insert(0, str(_SKILL_ROOT))
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
 
 
 def container_id_for_cwd() -> str | None:
