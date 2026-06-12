@@ -121,16 +121,9 @@ def parse_frontmatter(plan_path: Path) -> dict[str, str]:
     return fm
 
 
-def _emit_event(event: str, payload: dict) -> None:
-    """Fire-and-forget emit. Surfaces non-zero exit to stderr so failures aren't silent."""
-    r = subprocess.run(
-        ["python3", str(paths.LOG_SCRIPT), "emit", "mentat-implement", event, json.dumps(payload)],
-        capture_output=True,
-        text=True,
-    )
-    if r.returncode != 0:
-        err = (r.stderr or "").strip().splitlines()[-1:] or ["(no stderr)"]
-        print(f"mentat-implement: emit {event!r} failed rc={r.returncode}: {err[0]}", file=sys.stderr)
+from lib.events import bind as _bind  # noqa: E402
+
+_emit_event = _bind("mentat-implement")
 
 
 def _logs_path() -> str:

@@ -8,11 +8,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-_SCRIPTS = Path(__file__).resolve().parent
-_SKILL_ROOT = _SCRIPTS.parents[2]
-_LOG_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-log/scripts/log.py"
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
 
 import importlib.util as _ilu
+
+from lib.events import bind  # noqa: E402
+
+_emit_installed_fn = bind("mentat-install")
 
 
 def _load_sibling(name: str):
@@ -34,10 +38,7 @@ _companions = _load_sibling("companions")
 
 
 def _emit_installed() -> None:
-    subprocess.run(
-        ["python3", str(_LOG_SCRIPT), "emit", "mentat-install", "plan.started", '{"path":"install"}'],
-        capture_output=True,
-    )
+    _emit_installed_fn("plan.started", {"path": "install"})
 
 
 def _execute_actions(ip, *, dry_run: bool) -> None:

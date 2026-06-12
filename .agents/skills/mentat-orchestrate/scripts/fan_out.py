@@ -7,12 +7,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-_SKILL_ROOT = Path(__file__).resolve().parents[3]
-_LOG_SCRIPT = _SKILL_ROOT / "skills/mentat-log/scripts/log.py"
-_IMPLEMENT_SCRIPT = _SKILL_ROOT / "skills/mentat-implement/scripts/implement.py"
-_CONTAINER_SCRIPT = _SKILL_ROOT / "skills/mentat-container/scripts/container.py"
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
 
 import importlib.util as _ilu
+
+from lib import paths  # noqa: E402
+from lib.events import bind  # noqa: E402
+
+_IMPLEMENT_SCRIPT = paths.SKILLS_DIR / "mentat-implement/scripts/implement.py"
+_CONTAINER_SCRIPT = paths.CONTAINER_SCRIPT
 
 
 def _load_sibling(name: str):
@@ -70,8 +75,7 @@ def _spawn_worktree_subprocess(
     return session_id, proc
 
 
-def _emit_event(event: str, payload: dict) -> None:
-    _utils.emit_event(event, payload)
+_emit_event = bind("mentat-orchestrate")
 
 
 def spawn_with_proc(plan, *, harness: str | None = None, model: str | None = None) -> tuple[str, subprocess.Popen]:

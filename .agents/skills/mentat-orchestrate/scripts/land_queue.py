@@ -27,6 +27,10 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]  # .agents/
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib.events import bind  # noqa: E402
+
+_emit_event = bind("mentat-orchestrate")
+
 
 class Chunk(NamedTuple):
     slug: str
@@ -97,10 +101,6 @@ def _ff_merge(chunk: Chunk, holding: str) -> bool:
         cwd=str(main_wt),
     )
     return result.returncode == 0
-
-
-def _emit_event(event: str, payload: dict) -> None:
-    _utils.emit_event(event, payload)
 
 
 def _teardown_container(slug: str) -> None:

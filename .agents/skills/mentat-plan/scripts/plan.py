@@ -4,12 +4,16 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 from pathlib import Path
 
-_SKILL_ROOT = Path(__file__).resolve().parents[3]
-_LOG_SCRIPT = _SKILL_ROOT / ".agents/skills/mentat-log/scripts/log.py"
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
+
+from lib.events import bind  # noqa: E402
+
+_emit = bind("mentat-plan")
 
 
 def resolve_plan(ref: str) -> Path:
@@ -22,26 +26,18 @@ def resolve_plan(ref: str) -> Path:
     return Path.home() / ".agents" / "plans" / f"{ref}.md"
 
 
-def _emit(event: str, payload: str) -> None:
-    subprocess.run(
-        ["python3", str(_LOG_SCRIPT), "emit", "mentat-plan", event, payload],
-        capture_output=True,
-    )
-
-
 def write_plan(slug: str, body_path: Path, *, plans_dir: Path | None = None) -> Path:
     if plans_dir is None:
         plans_dir = Path.home() / ".agents" / "plans"
     plans_dir.mkdir(parents=True, exist_ok=True)
     dest = plans_dir / f"{slug}.md"
-    path_str = str(dest)
 
-    _emit("plan.started", f'{{"path":"{path_str}"}}')
+    _emit("plan.started", {"path": str(dest)})
     try:
         dest.write_text(body_path.read_text())
-        _emit("plan.succeeded", f'{{"path":"{path_str}"}}')
+        _emit("plan.succeeded", {"path": str(dest)})
     except OSError as exc:
-        _emit("plan.failed", f'{{"path":"{path_str}","reason":"{exc}"}}')
+        _emit("plan.failed", {"path": str(dest), "reason": str(exc)})
         raise
     return dest
 
