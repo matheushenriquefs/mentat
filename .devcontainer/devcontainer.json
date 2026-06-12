@@ -1,5 +1,5 @@
 {
-  "name": "mentat",
+  "name": "mentat-deepen",
   "build": {
     "dockerfile": "Dockerfile"
   },
@@ -12,9 +12,9 @@
     }
   },
   "onCreateCommand": "sudo apt-get update && sudo apt-get install -y jq shellcheck && curl -LsSf https://astral.sh/uv/install.sh | sh",
-  "postCreateCommand": "cd /workspaces/mentat && ~/.local/bin/uv sync --group dev && npm install -g promptfoo && lefthook install",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/mentat,type=bind,consistency=cached",
-  "workspaceFolder": "/workspaces/mentat",
+  "postCreateCommand": "cd /workspaces/mentat-deepen && ~/.local/bin/uv sync --group dev && npm install -g promptfoo && lefthook install",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/mentat-deepen,type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/mentat-deepen",
   "runArgs": [
     "--init"
   ],

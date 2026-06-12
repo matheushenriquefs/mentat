@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 
 _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
+from lib import jsonc as _jsonc  # noqa: E402
 from lib import paths  # noqa: E402
 from lib.events import bind  # noqa: E402
 
 emit_event = bind("mentat-orchestrate")
+read_config = _jsonc.read_config
 
 
 def resolve_plan_ref(ref: str) -> Path:
@@ -56,27 +56,3 @@ def run_gates(chunk_path: Path | None) -> tuple[str, str]:
             if verdict == "block":
                 return ("block", message)
     return ("pass", "")
-
-
-def _load_jsonc(path: Path) -> dict:
-    text = "\n".join(line for line in path.read_text().splitlines() if not line.lstrip().startswith("//"))
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        return {}
-
-
-def _repo_config_path() -> Path | None:
-    r = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
-    if r.returncode != 0:
-        return None
-    return Path(r.stdout.strip()) / ".mentat" / "config.jsonc"
-
-
-def read_config() -> dict:
-    global_path = Path.home() / ".mentat" / "config.jsonc"
-    global_cfg = _load_jsonc(global_path) if global_path.exists() else {}
-    repo_path = _repo_config_path()
-    if repo_path is None or not repo_path.exists():
-        return global_cfg
-    return {**global_cfg, **_load_jsonc(repo_path)}
