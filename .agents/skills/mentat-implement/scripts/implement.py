@@ -265,6 +265,15 @@ def _strip_frontmatter(text: str) -> str:
     return text[end + 4 :].lstrip("\n")
 
 
+_AFK_COMMIT_CONTRACT = (
+    "Contract: after implementing each slice, stage the slice's "
+    "files and run `git commit -m '<type>(<scope>): <one-line "
+    "summary>'`. One commit per slice. Do not squash. Do not skip "
+    "hooks. If pre-commit hooks fail, fix the issue and create a "
+    "new commit — never `--no-verify`."
+)
+
+
 def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None = None) -> int:
     if not harness:
         harness = _utils.default_harness()
@@ -308,7 +317,8 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
         cwd_agents = str(Path.cwd()) + "/.agents/"
         if home_agents != cwd_agents:
             plan_body = plan_body.replace(home_agents, cwd_agents)
-    result = _invoke_harness(harness, plan_body, afk=afk, model=model)
+    prompt = f"{_AFK_COMMIT_CONTRACT}\n\n{plan_body}"
+    result = _invoke_harness(harness, prompt, afk=afk, model=model)
 
     if result.returncode != 0:
         _emit_event(
