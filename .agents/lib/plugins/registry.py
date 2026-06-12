@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import importlib.metadata
-import json
+import sys
 from pathlib import Path
 
 from . import DiffProvider, HarnessProvider, MentatPlugin
+
+_LIB_ROOT = Path(__file__).resolve().parents[1]
+if str(_LIB_ROOT.parent) not in sys.path:
+    sys.path.insert(0, str(_LIB_ROOT.parent))
+
+from lib.jsonc import load_jsonc  # noqa: E402
 
 
 def _load_config_order(config_path: Path) -> list[str]:
@@ -14,12 +20,15 @@ def _load_config_order(config_path: Path) -> list[str]:
     if not config_path.exists():
         return []
     try:
-        text = config_path.read_text()
-        # strip // line comments (JSONC)
-        lines = [ln for ln in text.splitlines() if not ln.strip().startswith("//")]
-        data = json.loads("\n".join(lines))
-        return list(data.get("plugins", {}).get("order", []))
-    except (json.JSONDecodeError, KeyError, TypeError):
+        data = load_jsonc(config_path)
+        plugins = data.get("plugins")
+        if not isinstance(plugins, dict):
+            return []
+        order = plugins.get("order")  # type: ignore[union-attr]
+        if not isinstance(order, list):
+            return []
+        return [str(x) for x in order]  # type: ignore[unknown]
+    except (KeyError, TypeError):
         return []
 
 
