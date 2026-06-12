@@ -83,7 +83,7 @@ def spawn_with_proc(plan, *, harness: str | None = None, model: str | None = Non
             "slug": plan.slug,
             "plan": str(plan.path),
             "harness": harness or "default",
-            "worktree": str(plan.path.parent),
+            "worktree": str(Path.cwd()),
         },
     )
     print(f"python3 ~/.agents/skills/mentat-session/scripts/session.py track {session_id}")
