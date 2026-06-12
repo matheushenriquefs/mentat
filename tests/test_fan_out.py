@@ -26,7 +26,7 @@ def load_module(name: str):
 def test_fan_out_spawns_worktree_and_subprocess(tmp_path):
     """spawn() calls _spawn_worktree_subprocess and returns the session id."""
     fan_out = load_module("fan_out")
-    routing = load_module("routing")
+    routing = load_module("scheduler")
     plan = routing.Plan(slug="my-plan", class_="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
 
     spawn_calls = []
@@ -45,7 +45,7 @@ def test_fan_out_spawns_worktree_and_subprocess(tmp_path):
 
 def test_fan_out_prints_track_command_immediately(tmp_path):
     fan_out = load_module("fan_out")
-    routing = load_module("routing")
+    routing = load_module("scheduler")
     plan = routing.Plan(slug="my-plan", class_="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
 
     fake_session_id = "session-123"
@@ -63,7 +63,7 @@ def test_fan_out_prints_track_command_immediately(tmp_path):
 
 def test_fan_out_emits_chunk_spawned(tmp_path):
     fan_out = load_module("fan_out")
-    routing = load_module("routing")
+    routing = load_module("scheduler")
     plan = routing.Plan(slug="my-plan", class_="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
 
     with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=("sess-1", _FakePopen())):
@@ -77,7 +77,7 @@ def test_fan_out_emits_chunk_spawned(tmp_path):
 def test_fan_out_stdout_emits_chunk_slugs_newline_delim(tmp_path):
     """fan-out debug subcommand prints one slug per line."""
     fan_out = load_module("fan_out")
-    routing = load_module("routing")
+    routing = load_module("scheduler")
     plans = [
         routing.Plan(slug=f"plan-{i}", class_="AFK", blocked_by=[], path=tmp_path / f"plan-{i}.md") for i in range(3)
     ]

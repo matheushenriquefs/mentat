@@ -7,9 +7,6 @@ Owns three pieces of plan-graph logic:
   - `_has_upstream_hitl` / `_has_downstream_hitl`: directional walks over the
     blocked_by graph used by the partition rule.
 
-`routing.py` is a thin re-export shim kept for backward-compat with existing
-`_load_sibling("routing")` callers.
-
 Partition rule (topological order):
 
     HITL                       → anchored

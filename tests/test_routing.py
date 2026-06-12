@@ -16,7 +16,7 @@ def load_module(name: str):
 
 
 def make_plan(slug: str, class_: str, blocked_by: list[str] | None = None):
-    routing = load_module("routing")
+    routing = load_module("scheduler")
     return routing.Plan(
         slug=slug,
         class_=class_,
@@ -26,7 +26,7 @@ def make_plan(slug: str, class_: str, blocked_by: list[str] | None = None):
 
 
 def test_routing_single_hitl_anchored():
-    routing = load_module("routing")
+    routing = load_module("scheduler")
     plans = [make_plan("p1", "HITL")]
     anchored, auto = routing.partition(plans)
     assert anchored == [plans[0]]
@@ -34,7 +34,7 @@ def test_routing_single_hitl_anchored():
 
 
 def test_routing_single_afk_auto_spawned():
-    routing = load_module("routing")
+    routing = load_module("scheduler")
     plans = [make_plan("p1", "AFK")]
     anchored, auto = routing.partition(plans)
     assert anchored == []
@@ -42,7 +42,7 @@ def test_routing_single_afk_auto_spawned():
 
 
 def test_routing_n_afk_all_spawned():
-    routing = load_module("routing")
+    routing = load_module("scheduler")
     plans = [make_plan(f"p{i}", "AFK") for i in range(3)]
     anchored, auto = routing.partition(plans)
     assert anchored == []
@@ -50,7 +50,7 @@ def test_routing_n_afk_all_spawned():
 
 
 def test_routing_hitl_plus_independent_afk_partitions_correctly():
-    routing = load_module("routing")
+    routing = load_module("scheduler")
     hitl = make_plan("hitl", "HITL")
     afk = make_plan("afk", "AFK")
     anchored, auto = routing.partition([hitl, afk])
@@ -60,7 +60,7 @@ def test_routing_hitl_plus_independent_afk_partitions_correctly():
 
 def test_routing_afk_blocking_hitl_anchors_afk():
     """AFK that a HITL plan depends on must anchor (same session)."""
-    routing = load_module("routing")
+    routing = load_module("scheduler")
     afk = make_plan("afk", "AFK")
     hitl = make_plan("hitl", "HITL", blocked_by=["afk"])
     anchored, auto = routing.partition([afk, hitl])
@@ -72,7 +72,7 @@ def test_routing_afk_blocking_hitl_anchors_afk():
 
 def test_routing_hitl_blocking_afk_anchors_dependent_afk():
     """AFK that directly blocks a HITL (HITL blocked_by AFK) → AFK anchors."""
-    routing = load_module("routing")
+    routing = load_module("scheduler")
     afk = make_plan("afk", "AFK")
     hitl = make_plan("hitl", "HITL", blocked_by=["afk"])
     anchored, auto = routing.partition([hitl, afk])
@@ -80,7 +80,7 @@ def test_routing_hitl_blocking_afk_anchors_dependent_afk():
 
 
 def test_routing_cycle_raises():
-    routing = load_module("routing")
+    routing = load_module("scheduler")
     p1 = make_plan("p1", "AFK", blocked_by=["p2"])
     p2 = make_plan("p2", "AFK", blocked_by=["p1"])
     with pytest.raises(ValueError, match="cycle"):

@@ -212,7 +212,7 @@ def test_concurrency_cap_rejects_bad_value(monkeypatch):
 def test_fan_out_plans_blocks_until_slot_free(monkeypatch, tmp_path):
     """With cap=2 and 4 plans, _fan_out_plans must NOT spawn plans 3+ while 2 are live."""
     orch = load_module("orchestrate")
-    routing = load_module("routing")
+    routing = load_module("scheduler")
 
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 2})
 
