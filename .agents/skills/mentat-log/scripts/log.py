@@ -22,6 +22,12 @@ EVENT_CATALOG: dict[str, list[str]] = {
     "review.submitted": ["reviewer", "score", "threshold", "verdict"],
     "batch.reviewed": ["session", "summary"],
     "chunk.teardown": ["slug", "ok"],
+    "task.created": ["id", "slug"],
+    "task.claimed": ["id", "agent", "expires_at"],
+    "task.released": ["id"],
+    "task.done": ["id"],
+    "task.wontfix": ["id"],
+    "session.prune": ["reclaimed_bytes"],
 }
 
 _VALID_REASONS_EJECTED = {

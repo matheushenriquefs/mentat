@@ -5,6 +5,7 @@ Date: 2026-06-06
 Amended: 2026-06-09 (v2 — past-tense verbs; `~/.mentat/logs`; `EVENT_CATALOG` in Python)
 Amended: 2026-06-10 (v3 — Stripe-style naming policy; reasons live in payload, not name)
 Amended: 2026-06-11 (v4 — chunk.teardown added, 10 events)
+Amended: 2026-06-12 (v5 — task.* + session.prune added, 16 events)
 
 ## Context
 
@@ -33,7 +34,7 @@ Envelope schema (JSONL, one row per event):
 **`EVENT_CATALOG`** lives in `.agents/skills/mentat-log/scripts/log.py` as
 `dict[str, list[str]]` (event name → required fields). Stdlib only, no pydantic, no jsonc.
 
-**10 canonical events:**
+**16 canonical events:**
 | Event | Required fields |
 |---|---|
 | `plan.started` | `path` |
@@ -46,6 +47,12 @@ Envelope schema (JSONL, one row per event):
 | `gate.evaluated` | `gate`, `verdict`, `severity`, `message` |
 | `review.submitted` | `reviewer`, `score`, `threshold`, `verdict` |
 | `batch.reviewed` | `session`, `summary` |
+| `task.created` | `id`, `slug` |
+| `task.claimed` | `id`, `agent`, `expires_at` |
+| `task.released` | `id` |
+| `task.done` | `id` |
+| `task.wontfix` | `id` |
+| `session.prune` | `reclaimed_bytes` |
 
 `chunk.ejected.reason ∈ {implement-failed, gate-failed, rebase-conflicted, not-ff, hitl-required}`
 
@@ -62,7 +69,7 @@ Events follow Stripe webhook convention (https://docs.stripe.com/api/events/type
 
 Industry corroboration: Sentry fingerprinting consolidates sub-reasons rather than splitting names; Datadog facets/tags carry sub-reasons over stable log sources; New Relic custom attributes attach to existing events.
 
-Catalog at 10 events; future growth still prefers payload extension over new names (Stripe convention). Consumer skills extend via payload fields (e.g. `chunk.ejected.payload.logs_path` for doctor bundle), never via new event names.
+Catalog at 16 events; future growth still prefers payload extension over new names (Stripe convention). Consumer skills extend via payload fields (e.g. `chunk.ejected.payload.logs_path` for doctor bundle), never via new event names.
 
 ## Consequences
 
