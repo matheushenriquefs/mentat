@@ -19,11 +19,13 @@ def _load_sibling(name: str):
     return mod
 
 
-_utils = _load_sibling("utils")
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib.events import bind  # noqa: E402
 
-def _emit_event(event: str, payload: dict) -> None:
-    _utils.emit_event(event, payload)
+_emit_event = bind("mentat-orchestrate")
 
 
 def review(session_id: str) -> dict:

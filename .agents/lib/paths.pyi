@@ -1,0 +1,10 @@
+from pathlib import Path
+
+AGENTS_DIR: Path
+LIB_DIR: Path
+SKILLS_DIR: Path
+LOG_SCRIPT: Path
+CONTAINER_SCRIPT: Path
+GATES_CODE_DIR: Path
+PLANS_DIR: Path
+LOGS_DIR: Path

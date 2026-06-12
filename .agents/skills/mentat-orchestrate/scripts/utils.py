@@ -13,6 +13,9 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 from lib import paths  # noqa: E402
+from lib.events import bind  # noqa: E402
+
+emit_event = bind("mentat-orchestrate")
 
 
 def resolve_plan_ref(ref: str) -> Path:
@@ -37,22 +40,6 @@ def parse_frontmatter(plan_path: Path) -> dict[str, str]:
             if m:
                 fm[m.group(1)] = m.group(2).strip()
     return fm
-
-
-def emit_event(event: str, payload: dict) -> None:
-    """Fire-and-forget emit. Surfaces non-zero exit to stderr so failures aren't silent.
-
-    Caller is never aborted — events are advisory; the orchestrator must continue
-    even if the log script breaks. The stderr line lets operators notice.
-    """
-    r = subprocess.run(
-        ["python3", str(paths.LOG_SCRIPT), "emit", "mentat-orchestrate", event, json.dumps(payload)],
-        capture_output=True,
-        text=True,
-    )
-    if r.returncode != 0:
-        err = (r.stderr or "").strip().splitlines()[-1:] or ["(no stderr)"]
-        print(f"mentat-orchestrate: emit {event!r} failed rc={r.returncode}: {err[0]}", file=sys.stderr)
 
 
 def run_gates(chunk_path: Path | None) -> tuple[str, str]:
