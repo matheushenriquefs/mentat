@@ -45,7 +45,7 @@ def _session() -> str | None:
 
 
 def _agent_slug() -> str:
-    return os.environ.get("MENTAT_SLUG", f"manual-{os.getpid()}")
+    return os.environ.get("MENTAT_SLUG", f"mentat-manual-{os.getpid()}")
 
 
 def _session_dir(base: Path, repo: str, session: str) -> Path:
@@ -123,7 +123,7 @@ def cmd_emit(args: argparse.Namespace) -> int:
 
     base = _log_root()
     repo = _repo()
-    session = _session() or f"manual-{int(datetime.datetime.now(datetime.UTC).timestamp())}-{os.getpid()}"
+    session = _session() or f"mentat-manual-{int(datetime.datetime.now(datetime.UTC).timestamp())}-{os.getpid()}"
     slug = _agent_slug()
 
     _ensure_log_dir(base)

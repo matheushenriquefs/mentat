@@ -47,9 +47,9 @@ Subcommands: `emit`, `validate`, `query`, `prune`.
 | Variable | Default | Purpose |
 |---|---|---|
 | `MENTAT_LOG_PATH` | `~/.mentat/logs` | Root log directory |
-| `MENTAT_SESSION` | `manual-<ts>-<pid>` (loose) | Session ID |
+| `MENTAT_SESSION` | `mentat-manual-<ts>-<pid>` (loose) | Session ID |
 | `MENTAT_REPO` | `basename(cwd)` | Repo name for log path |
-| `MENTAT_SLUG` | `manual-<pid>` | Agent slug for log filename |
+| `MENTAT_SLUG` | `mentat-manual-<pid>` | Agent slug for log filename |
 
 Log dir created with `mode=0o700` on first write. Reject + sidecar on: unknown event, missing required field, non-JSON payload.
 
