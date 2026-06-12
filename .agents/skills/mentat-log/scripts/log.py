@@ -21,6 +21,7 @@ EVENT_CATALOG: dict[str, list[str]] = {
     "gate.evaluated": ["gate", "verdict", "severity", "message"],
     "review.submitted": ["reviewer", "score", "threshold", "verdict"],
     "batch.reviewed": ["session", "summary"],
+    "chunk.teardown": ["slug", "ok"],
 }
 
 _VALID_REASONS_EJECTED = {
