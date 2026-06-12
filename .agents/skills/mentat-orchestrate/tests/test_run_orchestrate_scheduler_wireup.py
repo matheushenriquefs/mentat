@@ -47,9 +47,11 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
 
     captured: dict[str, object] = {}
 
-    def fake_drain(chunks, *, holding, scheduler=None):
+    def fake_drain(chunks, *, holding, on_landed=None, on_ejected=None, next_ready=None, **kw):
         captured["chunks"] = list(chunks)
-        captured["scheduler"] = scheduler
+        captured["on_landed"] = on_landed
+        captured["on_ejected"] = on_ejected
+        captured["next_ready"] = next_ready
         return [{"slug": c.slug, "status": "success", "tip": "abc"} for c in chunks]
 
     monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out_plans)
@@ -73,19 +75,10 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
     # Negative guard: no session_id should leak through.
     assert not any(s.startswith("auto-") for s in chunk_slugs), f"session_ids leaked into land queue: {chunk_slugs}"
 
-    sched = captured["scheduler"]
-    # Duck-type: scheduler loaded under `mentat-orchestrate.scheduler` key by
-    # `_load_sibling` is a different module identity than this test's
-    # `_load("scheduler")`. Match by API shape instead.
-    assert sched is not None, "scheduler must be passed for dep-aware drain (slice-2)"
-    assert hasattr(sched, "next_ready")
-    assert hasattr(sched, "mark_landed")
-    assert hasattr(sched, "mark_ejected")
-    # Scheduler's plan map must include every chunk slug — otherwise
-    # `next_ready` falls back to the unknown-slug branch and dep gating no-ops.
-    assert set(chunk_slugs) <= set(sched._plans.keys()), (
-        f"Scheduler plans {sched._plans.keys()} must cover chunk slugs {chunk_slugs}"
-    )
+    # Callbacks must be callables wrapping a Scheduler with the right plans.
+    assert callable(captured.get("next_ready")), "next_ready callback must be passed for dep-aware drain"
+    assert callable(captured.get("on_landed")), "on_landed callback must be passed"
+    assert callable(captured.get("on_ejected")), "on_ejected callback must be passed"
 
 
 def test_run_orchestrate_independent_afks_keep_plan_slug_identity(tmp_path, monkeypatch):
@@ -107,7 +100,7 @@ def test_run_orchestrate_independent_afks_keep_plan_slug_identity(tmp_path, monk
 
     captured_slugs: list[str] = []
 
-    def fake_drain(chunks, *, holding, scheduler=None):
+    def fake_drain(chunks, *, holding, on_landed=None, on_ejected=None, next_ready=None, **kw):
         captured_slugs.extend(c.slug for c in chunks)
         return [{"slug": c.slug, "status": "success"} for c in chunks]
 

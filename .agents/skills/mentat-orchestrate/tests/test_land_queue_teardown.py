@@ -116,7 +116,13 @@ def test_drain_tears_down_cascaded_eject(tmp_path, monkeypatch) -> None:
     _install_stubs(monkeypatch, gate_block={"a"}, torn_down=torn_down)
 
     chunks = [_chunk("a", tmp_path), _chunk("b", tmp_path)]
-    land_queue.drain(chunks, holding="holding", scheduler=sched)
+    land_queue.drain(
+        chunks,
+        holding="holding",
+        on_landed=sched.mark_landed,
+        on_ejected=sched.mark_ejected,
+        next_ready=sched.next_ready,
+    )
 
     assert "a" in torn_down, f"ejected chunk a not torn down; torn_down={torn_down}"
     assert "b" in torn_down, f"cascaded chunk b not torn down; torn_down={torn_down}"

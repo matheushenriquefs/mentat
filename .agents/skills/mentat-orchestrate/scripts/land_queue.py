@@ -172,19 +172,26 @@ def land(chunk: Chunk, *, holding: str) -> dict:
     }
 
 
-def drain(chunks: list[Chunk], *, holding: str, scheduler=None) -> list[dict]:
+def drain(
+    chunks: list[Chunk],
+    *,
+    holding: str,
+    on_landed=None,
+    on_ejected=None,
+    next_ready=None,
+) -> list[dict]:
     """Land all chunks serially.
 
-    Without `scheduler`: legacy behavior — iterate chunks in input order
-    and land each one. Independent AFK plans with no cross-deps stay on
-    this path (no scheduler passed) so the pre-slice-2 contract holds.
+    Without `next_ready`: iterate chunks in input order (legacy / no-dep path).
 
-    With `scheduler`: pull the next chunk whose plan deps are wholly
-    landed via `scheduler.next_ready`. Land it, mark landed/ejected,
-    repeat until pending is empty or no chunk is ready (cycle / missing
-    upstream → stalled verdict carries `pending` list).
+    With `next_ready`: pull the next chunk whose plan deps are wholly landed
+    via `next_ready(candidates)`. Land it, call on_landed / on_ejected,
+    repeat until pending empty or no chunk ready (stalled verdict).
     """
-    if scheduler is None:
+    _on_landed = on_landed or (lambda _: None)
+    _on_ejected = on_ejected or (lambda _: [])
+
+    if next_ready is None:
         results: list[dict] = []
         for chunk in chunks:
             verdict = land(chunk, holding=holding)
@@ -197,7 +204,7 @@ def drain(chunks: list[Chunk], *, holding: str, scheduler=None) -> list[dict]:
     results = []
 
     while pending:
-        ready = scheduler.next_ready(pending)
+        ready = next_ready(pending)
         if ready is None:
             results.append(
                 {
@@ -212,13 +219,13 @@ def drain(chunks: list[Chunk], *, holding: str, scheduler=None) -> list[dict]:
         _teardown_container(ready)
         pending.remove(ready)
         if verdict.get("status") == "success":
-            scheduler.mark_landed(ready)
+            _on_landed(ready)
             continue
 
         # Eject cascade: every chunk that transitively depends on `ready`
         # is preemptively ejected — no rebase, no gate, payload-only
         # extension to chunk.ejected (ADR-0007).
-        cascaded = scheduler.mark_ejected(ready)
+        cascaded = _on_ejected(ready)
         for downstream in cascaded:
             if downstream not in pending:
                 continue
