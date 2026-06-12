@@ -204,13 +204,17 @@ class TestEnsureDevcontainerJsonGitMount:
 
 class TestCmdDown:
     def test_down_removes_running_container(self, monkeypatch):
-        monkeypatch.setattr(utils, "container_id_for", lambda slug: "abc123")
         ran: list = []
 
         def fake_run(cmd, **kw):
             ran.append(cmd)
             r = MagicMock()
             r.returncode = 0
+            # docker ps (running lookup) → return container id
+            if len(cmd) > 1 and cmd[1] == "ps" and "status=exited" not in cmd:
+                r.stdout = "abc123\n"
+            else:
+                r.stdout = ""
             return r
 
         monkeypatch.setattr(container.subprocess, "run", fake_run)
