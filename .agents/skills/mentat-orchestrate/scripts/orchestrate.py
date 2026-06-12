@@ -17,7 +17,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 from lib.loader import load_sibling  # noqa: E402
 
 _utils = load_sibling(__file__, "utils")
-_routing = load_sibling(__file__, "routing")
+_scheduler = load_sibling(__file__, "scheduler")
 _fan_out = load_sibling(__file__, "fan_out")
 _land_queue = load_sibling(__file__, "land_queue")
 _batch_review = load_sibling(__file__, "batch_review")
@@ -27,8 +27,8 @@ def _resolve_plan_refs(refs: list[str]) -> list[Path]:
     return [_utils.resolve_plan_ref(r) for r in refs]
 
 
-def _load_plans(paths: list[Path]) -> list[_routing.Plan]:
-    plans: list[_routing.Plan] = []
+def _load_plans(paths: list[Path]) -> list[_scheduler.Plan]:
+    plans: list[_scheduler.Plan] = []
     for path in paths:
         fm = _utils.parse_frontmatter(path)
         blocked_by_raw = fm.get("blocked_by", "")
@@ -40,7 +40,7 @@ def _load_plans(paths: list[Path]) -> list[_routing.Plan]:
             parts = re.split(r"[,\s]+", blocked_by_raw)
             blocked_by = [s.strip().strip("[]\"'") for s in parts if s.strip().strip("[]\"'")]
         plans.append(
-            _routing.Plan(
+            _scheduler.Plan(
                 slug=fm.get("id", path.stem),
                 class_=fm.get("class", "HITL"),
                 blocked_by=blocked_by,
@@ -50,7 +50,7 @@ def _load_plans(paths: list[Path]) -> list[_routing.Plan]:
     return plans
 
 
-def _emit_anchored_chunks(plans: list[_routing.Plan], *, harness: str | None, model: str | None) -> list[str]:
+def _emit_anchored_chunks(plans: list[_scheduler.Plan], *, harness: str | None, model: str | None) -> list[str]:
     """Emit chunk.spawned{harness:hitl-in-session} per anchored plan, no subprocess.
 
     HITL plans run in the **calling Claude session** — never via subprocess —
@@ -93,7 +93,7 @@ def _concurrency_cap() -> int:
     return max(1, n)
 
 
-def _fan_out_plans(plans: list[_routing.Plan], *, harness: str | None, model: str | None) -> list[str]:
+def _fan_out_plans(plans: list[_scheduler.Plan], *, harness: str | None, model: str | None) -> list[str]:
     """Spawn AFK plans headless, capped at the configured concurrency.
 
     Blocks the loop when `cap` subprocesses are still alive — waits for one to
@@ -245,7 +245,7 @@ def run_orchestrate(
     session_id = os.environ.get("MENTAT_SESSION") or f"mentat-orchestrate-{os.getpid()}"
     os.environ["MENTAT_SESSION"] = session_id
     plans = _load_plans(plan_paths)
-    anchored, auto = _routing.partition(plans)
+    anchored, auto = _scheduler.partition(plans)
 
     if dry_run:
         print(f"[dry-run] would anchor: {[p.slug for p in anchored]}")
