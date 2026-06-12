@@ -42,9 +42,7 @@ def _install_stubs(
         return ("pass", "")
 
     def fake_ff(chunk, holding):
-        if ff_fail and chunk.slug in ff_fail:
-            return False
-        return True
+        return not (ff_fail and chunk.slug in ff_fail)
 
     def fake_teardown(slug: str) -> None:
         torn_down.append(slug)
@@ -125,6 +123,7 @@ def test_teardown_failure_swallowed(tmp_path, monkeypatch) -> None:
     def fake_run(cmd, **kw):
         class _R:
             returncode = 1
+
         return _R()
 
     monkeypatch.setattr(land_queue, "_rebase_chunk", lambda c, h: (f"sha-{c.slug}", None))
