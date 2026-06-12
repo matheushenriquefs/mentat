@@ -12,6 +12,8 @@ from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parent
 _SKILL_ROOT = _SCRIPTS.parents[2]
+if str(_SKILL_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SKILL_ROOT))
 
 import importlib.util as _ilu
 
@@ -127,31 +129,10 @@ def _fan_out_plans(plans: list[_routing.Plan], *, harness: str | None, model: st
 
 
 def _prune_stale_containers() -> None:
-    import re as _re
+    from lib import devcontainer
 
-    try:
-        result = subprocess.run(
-            [
-                "docker",
-                "container",
-                "prune",
-                "-f",
-                "--filter",
-                "label=mentat_slug",
-                "--filter",
-                "until=1h",
-            ],
-            capture_output=True,
-            text=True,
-        )
-    except FileNotFoundError:
-        result = None
-    reclaimed: int | None = None
-    if result and result.returncode == 0 and result.stdout:
-        m = _re.search(r"Total reclaimed space:\s+(\d+)", result.stdout)
-        if m:
-            reclaimed = int(m.group(1))
-    _utils.emit_event("session.prune", {"reclaimed_bytes": reclaimed})
+    result = devcontainer.prune()
+    _utils.emit_event("session.prune", {"reclaimed_bytes": result.reclaimed_bytes})
 
 
 def _worktree_for_slug(slug: str) -> Path:
