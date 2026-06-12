@@ -273,6 +273,40 @@ class TestCmdDown:
         assert git_root_called == [], "_git_root must not be called when slug given directly"
 
 
+class TestResolveWorkspaceFolder:
+    def test_main_repo_reads_devcontainer_json(self, tmp_path):
+        """Non-worktree: reads workspaceFolder from devcontainer.json."""
+        repo = tmp_path / "mentat"
+        repo.mkdir()
+        (repo / ".git").mkdir()  # real repo → .git is a directory
+        dcj = repo / ".devcontainer" / "devcontainer.json"
+        dcj.parent.mkdir()
+        dcj.write_text(json.dumps({"workspaceFolder": "/workspaces/mentat"}))
+
+        assert utils.resolve_workspace_folder(repo) == "/workspaces/mentat"
+
+    def test_worktree_uses_slug_regardless_of_devcontainer(self, tmp_path):
+        """Worktree: returns /workspaces/<slug> even if devcontainer.json says /workspaces/mentat."""
+        wt = tmp_path / "my-feature"
+        wt.mkdir()
+        # Simulate worktree: .git is a file pointer, not a directory
+        (wt / ".git").write_text("gitdir: /some/repo/.git/worktrees/my-feature\n")
+        dcj = wt / ".devcontainer" / "devcontainer.json"
+        dcj.parent.mkdir()
+        # Canonical (pre-patch) devcontainer.json — would give wrong answer if read blindly
+        dcj.write_text(json.dumps({"workspaceFolder": "/workspaces/mentat"}))
+
+        assert utils.resolve_workspace_folder(wt) == "/workspaces/my-feature"
+
+    def test_worktree_no_devcontainer_uses_slug(self, tmp_path):
+        """Worktree with no devcontainer.json: still returns /workspaces/<slug>."""
+        wt = tmp_path / "some-branch"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /some/repo/.git/worktrees/some-branch\n")
+
+        assert utils.resolve_workspace_folder(wt) == "/workspaces/some-branch"
+
+
 class TestPostCreateCommandLefthookInstall:
     def test_post_create_command_runs_lefthook_install(self, tmp_path):
         """Patched postCreateCommand must include lefthook install step."""
