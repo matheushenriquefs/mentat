@@ -8,7 +8,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-import worktree as wt
+import worktree as wt  # noqa: E402
+
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]  # .agents/
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
+import utils as _utils_mod  # noqa: E402
+from lib import devcontainer as _dc_mod  # noqa: E402
 
 
 def _cp(returncode: int, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess:
@@ -107,3 +113,38 @@ class TestCmdWorktreeCreate:
         with patch.object(wt, "_git", side_effect=fake):
             rc = wt.cmd_worktree_create("my-slug", base="main", parent=tmp_path)
         assert rc == 66
+
+
+# ── container_id_for_cwd ─────────────────────────────────────────────────────
+
+
+def test_container_id_for_cwd_delegates(monkeypatch):
+    monkeypatch.setattr(_dc_mod, "container_id_for_slug", lambda slug, **kw: "abc123")
+    result = _utils_mod.container_id_for_cwd()
+    assert result == "abc123"
+
+
+def test_mentat_git_does_not_call_docker_directly():
+    import ast
+
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    source = (scripts_dir / "utils.py").read_text()
+    tree = ast.parse(source)
+
+    docker_calls: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr in ("run", "Popen")):
+            continue
+        if not node.args:
+            continue
+        first_arg = node.args[0]
+        if not isinstance(first_arg, ast.List) or not first_arg.elts:
+            continue
+        first_elem = first_arg.elts[0]
+        if isinstance(first_elem, ast.Constant) and first_elem.value == "docker":
+            docker_calls.append(node.lineno)
+
+    assert not docker_calls, f"docker called directly via subprocess in utils.py at lines: {docker_calls}"
