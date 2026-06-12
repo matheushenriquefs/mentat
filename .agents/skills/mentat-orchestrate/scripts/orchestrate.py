@@ -21,6 +21,7 @@ _scheduler = load_sibling(__file__, "scheduler")
 _fan_out = load_sibling(__file__, "fan_out")
 _land_queue = load_sibling(__file__, "land_queue")
 _batch_review = load_sibling(__file__, "batch_review")
+_coordinator = load_sibling(__file__, "coordinator")
 
 
 def _resolve_plan_refs(refs: list[str]) -> list[Path]:
@@ -262,27 +263,31 @@ def run_orchestrate(
 
     _prune_stale_containers()
 
-    # Spawn AFK plans headless. session_ids are emitted by `_fan_out_plans` for
-    # tracking; the land queue is keyed by plan.slug so the Scheduler built from
-    # `auto` can resolve `blocked_by` (session_ids don't appear in any plan's
-    # blocked_by list).
-    if auto:
-        _fan_out_plans(auto, harness=harness, model=model)
-
     # Anchored (HITL) plans: emit chunk.spawned{harness:hitl-in-session} and return
     # control to caller. They do NOT land in this invocation — caller drives
     # /mentat-implement in-session, then re-invokes `orchestrate land-queue`.
     if anchored:
         _emit_anchored_chunks(anchored, harness=harness, model=model)
 
-    results = _land_all([p.slug for p in auto], holding=holding, plans=auto)
+    # AFK plans: delegate fan-out → drain → review to BatchCoordinator.
+    class _FanOutAdapter:
+        """Spawns AFK plans headless; returns land-queue Chunks keyed by plan slug."""
+
+        def run(self, plans):
+            _fan_out_plans(plans, harness=harness, model=model)
+            return [_land_queue.Chunk(slug=p.slug, worktree=_worktree_for_slug(p.slug)) for p in plans]
+
+    coord = _coordinator.BatchCoordinator(
+        scheduler=_scheduler.Scheduler(auto),
+        fan_out=_FanOutAdapter(),
+        land_queue=_land_queue,
+        batch_review=_batch_review,
+    )
+    result = coord.run(auto, session_id, holding=holding)
 
     _prune_stale_worktrees()
 
-    _batch_review.review(session_id)
-
-    any_ejected = any(r.get("status") == "eject" for r in results)
-    return 1 if any_ejected else 0
+    return 1 if result.ejected else 0
 
 
 def build_parser() -> argparse.ArgumentParser:

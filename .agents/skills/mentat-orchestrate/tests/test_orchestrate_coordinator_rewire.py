@@ -27,7 +27,6 @@ def _load(name: str):
 def test_orchestrate_main_constructs_coordinator(tmp_path, monkeypatch):
     """run_orchestrate must delegate the AFK batch to BatchCoordinator."""
     orchestrate = _load("orchestrate")
-    coordinator = _load("coordinator")
 
     a_path = tmp_path / "a.md"
     a_path.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
@@ -35,15 +34,18 @@ def test_orchestrate_main_constructs_coordinator(tmp_path, monkeypatch):
     constructed: list[dict] = []
     run_called: list[str] = []
 
+    # Patch the coordinator module that orchestrate.py has already bound (_coordinator).
+    coord_mod = orchestrate._coordinator
+
     class _FakeCoord:
         def __init__(self, **kw):
             constructed.append(kw)
 
         def run(self, plans, session_id, **kw):
             run_called.append(session_id)
-            return coordinator.BatchResult(session_id=session_id, landed=("a",), ejected=())
+            return coord_mod.BatchResult(session_id=session_id, landed=("a",), ejected=())
 
-    monkeypatch.setattr(coordinator, "BatchCoordinator", _FakeCoord)
+    monkeypatch.setattr(coord_mod, "BatchCoordinator", _FakeCoord)
     monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)
     monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda: None)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
@@ -64,7 +66,7 @@ def test_orchestrate_main_constructs_coordinator(tmp_path, monkeypatch):
 def test_orchestrate_exit_codes_unchanged(tmp_path, monkeypatch):
     """Ejection → exit 1; all landed → exit 0."""
     orchestrate = _load("orchestrate")
-    coordinator_mod = _load("coordinator")
+    coord_mod = orchestrate._coordinator
 
     a_path = tmp_path / "a.md"
     a_path.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
@@ -79,9 +81,9 @@ def test_orchestrate_exit_codes_unchanged(tmp_path, monkeypatch):
             pass
 
         def run(self, plans, session_id, **kw):
-            return coordinator_mod.BatchResult(session_id=session_id, landed=(), ejected=("a",))
+            return coord_mod.BatchResult(session_id=session_id, landed=(), ejected=("a",))
 
-    monkeypatch.setattr(coordinator_mod, "BatchCoordinator", _EjectCoord)
+    monkeypatch.setattr(coord_mod, "BatchCoordinator", _EjectCoord)
     rc_eject = orchestrate.run_orchestrate("holding", [a_path], harness=None, model=None, dry_run=False)
     assert rc_eject == 1, f"ejection → exit 1; got {rc_eject}"
 
@@ -91,8 +93,8 @@ def test_orchestrate_exit_codes_unchanged(tmp_path, monkeypatch):
             pass
 
         def run(self, plans, session_id, **kw):
-            return coordinator_mod.BatchResult(session_id=session_id, landed=("a",), ejected=())
+            return coord_mod.BatchResult(session_id=session_id, landed=("a",), ejected=())
 
-    monkeypatch.setattr(coordinator_mod, "BatchCoordinator", _SuccessCoord)
+    monkeypatch.setattr(coord_mod, "BatchCoordinator", _SuccessCoord)
     rc_ok = orchestrate.run_orchestrate("holding", [a_path], harness=None, model=None, dry_run=False)
     assert rc_ok == 0, f"all landed → exit 0; got {rc_ok}"

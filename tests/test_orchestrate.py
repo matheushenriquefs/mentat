@@ -23,37 +23,53 @@ def _make_plan_file(tmp_path: Path, slug: str, class_: str = "AFK") -> Path:
 
 def test_orchestrate_full_pipeline_exits_0_on_all_success(tmp_path):
     orch = load_module("orchestrate")
+    coord_mod = orch._coordinator
     plan = _make_plan_file(tmp_path, "plan-a", "AFK")
 
-    with patch.object(orch, "_fan_out_plans", return_value=["chunk-a"]):
-        with patch.object(orch, "_land_all", return_value=[{"status": "success", "slug": "chunk-a", "tip": "abc"}]):
-            with patch.object(orch, "_batch_review"):
-                rc = orch.run_orchestrate(
-                    holding="main",
-                    plan_paths=[plan],
-                    harness=None,
-                    model=None,
-                    dry_run=False,
-                )
+    class _FakeCoord:
+        def __init__(self, **kw):
+            pass
+
+        def run(self, plans, session_id, **kw):
+            return coord_mod.BatchResult(session_id=session_id, landed=("plan-a",), ejected=())
+
+    with patch.object(coord_mod, "BatchCoordinator", _FakeCoord):
+        with patch.object(orch, "_prune_stale_containers", lambda: None):
+            with patch.object(orch, "_prune_stale_worktrees", lambda: None):
+                with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
+                    rc = orch.run_orchestrate(
+                        holding="main",
+                        plan_paths=[plan],
+                        harness=None,
+                        model=None,
+                        dry_run=False,
+                    )
     assert rc == 0
 
 
 def test_orchestrate_exits_1_on_any_ejection(tmp_path):
     orch = load_module("orchestrate")
+    coord_mod = orch._coordinator
     plan = _make_plan_file(tmp_path, "plan-b", "AFK")
 
-    with patch.object(orch, "_fan_out_plans", return_value=["chunk-b"]):
-        with patch.object(
-            orch, "_land_all", return_value=[{"status": "eject", "slug": "chunk-b", "reason": "gate-fail"}]
-        ):
-            with patch.object(orch, "_batch_review"):
-                rc = orch.run_orchestrate(
-                    holding="main",
-                    plan_paths=[plan],
-                    harness=None,
-                    model=None,
-                    dry_run=False,
-                )
+    class _EjectCoord:
+        def __init__(self, **kw):
+            pass
+
+        def run(self, plans, session_id, **kw):
+            return coord_mod.BatchResult(session_id=session_id, landed=(), ejected=("plan-b",))
+
+    with patch.object(coord_mod, "BatchCoordinator", _EjectCoord):
+        with patch.object(orch, "_prune_stale_containers", lambda: None):
+            with patch.object(orch, "_prune_stale_worktrees", lambda: None):
+                with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
+                    rc = orch.run_orchestrate(
+                        holding="main",
+                        plan_paths=[plan],
+                        harness=None,
+                        model=None,
+                        dry_run=False,
+                    )
     assert rc == 1
 
 
