@@ -55,7 +55,11 @@ def _run_gates(chunk: Chunk) -> tuple[str, str]:
 
 
 def _ff_merge(chunk: Chunk, holding: str) -> bool:
-    """FF-merge chunk HEAD onto holding branch via update-ref."""
+    """FF-merge chunk HEAD onto holding branch via merge --ff-only in main worktree.
+
+    Advances both the branch pointer and the main worktree's working tree.
+    Returns False if the merge is not fast-forward or the main worktree is dirty.
+    """
     sha_r = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         capture_output=True,
@@ -66,19 +70,29 @@ def _ff_merge(chunk: Chunk, holding: str) -> bool:
         return False
     sha = sha_r.stdout.strip()
 
-    # Verify holding is an ancestor of sha (fast-forward is possible)
-    anc = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", holding, sha],
+    # Locate the main worktree — always the first entry in porcelain output
+    wt_list = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
         capture_output=True,
+        text=True,
         cwd=str(chunk.worktree),
     )
-    if anc.returncode != 0:
+    if wt_list.returncode != 0:
+        return False
+
+    main_wt: Path | None = None
+    for line in wt_list.stdout.splitlines():
+        if line.startswith("worktree "):
+            main_wt = Path(line[len("worktree ") :])
+            break
+
+    if main_wt is None:
         return False
 
     result = subprocess.run(
-        ["git", "update-ref", f"refs/heads/{holding}", sha],
+        ["git", "merge", "--ff-only", sha],
         capture_output=True,
-        cwd=str(chunk.worktree),
+        cwd=str(main_wt),
     )
     return result.returncode == 0
 
@@ -88,10 +102,13 @@ def _emit_event(event: str, payload: dict) -> None:
 
 
 def _teardown_container(slug: str) -> None:
-    ok = subprocess.run(
-        ["python3", str(_CONTAINER_PY), "down", "--slug", slug],
-        capture_output=True,
-    ).returncode == 0
+    ok = (
+        subprocess.run(
+            ["python3", str(_CONTAINER_PY), "down", "--slug", slug],
+            capture_output=True,
+        ).returncode
+        == 0
+    )
     _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
 
 

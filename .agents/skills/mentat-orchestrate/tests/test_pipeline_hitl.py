@@ -55,7 +55,7 @@ def test_pipeline_hitl_lands_chunk_without_claude_headless(tmp_path, monkeypatch
 
     repo = tmp_path / "repo"
     _init_repo(repo)
-    _git(repo, "branch", "holding")
+    _git(repo, "checkout", "-b", "holding")
     slug = "fix-hitl-pipe"
     wt = tmp_path / "wt-fix-hitl-pipe"
     _git(repo, "worktree", "add", "-b", slug, str(wt), "holding")
