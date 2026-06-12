@@ -123,6 +123,92 @@ def test_run_dispatches_docker_exec(monkeypatch):
     assert "echo hi" in exec_calls[0]
 
 
+# ── down ──────────────────────────────────────────────────────────────────────
+
+
+def test_down_removes_running_container(monkeypatch):
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kw):
+        calls.append(list(argv))
+        if argv[1] == "ps" and "--filter" in argv and "status=exited" not in argv:
+            return _cp(0, "cid-abc\n")
+        return _cp(0, "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = devcontainer.down("my-slug")
+
+    assert result is True
+    rm_calls = [c for c in calls if len(c) > 1 and c[1] == "rm"]
+    assert rm_calls, "docker rm not called"
+    assert "cid-abc" in rm_calls[0]
+
+
+def test_down_removes_stopped_container(monkeypatch):
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kw):
+        calls.append(list(argv))
+        if argv[1] == "ps" and "status=exited" in argv:
+            return _cp(0, "stopped-cid\n")
+        if argv[1] == "ps":
+            return _cp(0, "")  # nothing running
+        return _cp(0, "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = devcontainer.down("my-slug")
+
+    assert result is True
+    rm_calls = [c for c in calls if len(c) > 1 and c[1] == "rm"]
+    assert rm_calls, "docker rm not called for stopped container"
+
+
+def test_down_returns_true_when_not_running(monkeypatch):
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _cp(0, ""))
+    result = devcontainer.down("nonexistent-slug")
+    assert result is True
+
+
+# ── up ────────────────────────────────────────────────────────────────────────
+
+
+def test_up_restarts_stopped_container(monkeypatch, tmp_path):
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kw):
+        calls.append(list(argv))
+        if argv[1] == "ps" and "status=exited" in argv:
+            return _cp(0, "stopped-cid\n")
+        if argv[1] == "ps":
+            return _cp(0, "abc123\n")  # running after start
+        return _cp(0, "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = devcontainer.up("my-slug", tmp_path)
+
+    assert result is True
+    start_calls = [c for c in calls if len(c) > 1 and c[1] == "start"]
+    assert start_calls, "docker start not called"
+
+
+def test_up_cold_start_calls_devcontainer_cli(monkeypatch, tmp_path):
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kw):
+        calls.append(list(argv))
+        if argv[0] == "docker" and argv[1] == "ps":
+            return _cp(0, "")  # no running or stopped container
+        return _cp(0, "abc123\n")  # devcontainer up succeeds → container_id check returns a cid
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    devcontainer.up("my-slug", tmp_path)
+
+    devcontainer_calls = [c for c in calls if c[0] == "devcontainer"]
+    assert devcontainer_calls, "devcontainer CLI not called for cold start"
+    assert "up" in devcontainer_calls[0]
+    assert "--id-label" in devcontainer_calls[0]
+
+
 # ── stdlib check ──────────────────────────────────────────────────────────────
 
 

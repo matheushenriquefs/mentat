@@ -12,10 +12,13 @@ from pathlib import Path
 
 # Resolve peer scripts without package install
 _SCRIPTS = Path(__file__).resolve().parent
+_AGENTS_ROOT = _SCRIPTS.parents[2]  # .agents/
 sys.path.insert(0, str(_SCRIPTS))
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
 
-import compose_render
-import utils
+import compose_render  # noqa: E402
+import utils  # noqa: E402
 
 
 def _docker() -> str:
@@ -217,26 +220,9 @@ def cmd_run(wt: Path, command: str) -> int:
 
 
 def cmd_down(*, slug: str) -> int:
-    cid = utils.container_id_for(slug)
-    if cid:
-        result = subprocess.run([_docker(), "rm", "-f", cid], capture_output=True)
-        if result.returncode == 0:
-            print(cid)
-        return result.returncode
+    from lib import devcontainer
 
-    stopped = subprocess.run(
-        [_docker(), "ps", "-aq", "--filter", f"label=mentat_slug={slug}", "--filter", "status=exited"],
-        capture_output=True,
-        text=True,
-    )
-    if stopped.returncode == 0 and stopped.stdout.strip():
-        cid = stopped.stdout.strip()
-        result = subprocess.run([_docker(), "rm", "-f", cid], capture_output=True)
-        if result.returncode == 0:
-            print(cid)
-        return result.returncode
-
-    return 0
+    return 0 if devcontainer.down(slug) else 1
 
 
 def _col(label: str, value: str) -> str:

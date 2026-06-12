@@ -11,6 +11,11 @@ import compose_render  # noqa: E402
 import container  # noqa: E402
 import utils  # noqa: E402
 
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]  # .agents/
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
+from lib import devcontainer as _dc_mod  # noqa: E402
+
 # Mirrors the committed mentat devcontainer.json — what every new worktree inherits
 _MENTAT_DCJ = {
     "name": "mentat",
@@ -339,3 +344,13 @@ class TestPostCreateCommandLefthookInstall:
         cd_pos = cmd.index(f"cd /workspaces/{slug}")
         lefthook_pos = cmd.index("lefthook install")
         assert lefthook_pos > cd_pos, "lefthook install must run after cd into worktree dir"
+
+
+# ── module delegation ─────────────────────────────────────────────────────────
+
+
+def test_container_cmd_down_delegates_to_devcontainer(monkeypatch):
+    down_calls: list[str] = []
+    monkeypatch.setattr(_dc_mod, "down", lambda slug: down_calls.append(slug) or True)
+    container.cmd_down(slug="test-slug")
+    assert down_calls == ["test-slug"]
