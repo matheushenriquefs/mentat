@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import land_queue
 import scheduler
+
+# Bootstrap lib path (land_queue.py adds _AGENTS_ROOT to sys.path on import, but we
+# also need it before calling _teardown_container in these tests)
+_AGENTS_ROOT = Path(land_queue.__file__).resolve().parents[3]  # .agents/
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
+from lib import devcontainer as _dc_mod  # noqa: E402
 
 
 def _plan(slug: str, blocked_by: list[str] | None = None) -> scheduler.Plan:
@@ -139,3 +147,13 @@ def test_teardown_failure_swallowed(tmp_path, monkeypatch) -> None:
     teardown_events = [p for e, p in emitted if e == "chunk.teardown"]
     assert teardown_events, "chunk.teardown event must be emitted"
     assert teardown_events[0]["ok"] is False
+
+
+def test_teardown_delegates_to_devcontainer_down(monkeypatch):
+    down_calls: list[str] = []
+    monkeypatch.setattr(_dc_mod, "down", lambda slug: down_calls.append(slug) or True)
+    monkeypatch.setattr(land_queue, "_emit_event", lambda *a, **kw: None)
+
+    land_queue._teardown_container("my-chunk")
+
+    assert down_calls == ["my-chunk"]

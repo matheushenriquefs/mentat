@@ -23,7 +23,9 @@ def _load_sibling(name: str):
 
 _utils = _load_sibling("utils")
 
-_CONTAINER_PY = Path.home() / ".agents/skills/mentat-container/scripts/container.py"
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]  # .agents/
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
 
 
 class Chunk(NamedTuple):
@@ -102,13 +104,9 @@ def _emit_event(event: str, payload: dict) -> None:
 
 
 def _teardown_container(slug: str) -> None:
-    ok = (
-        subprocess.run(
-            ["python3", str(_CONTAINER_PY), "down", "--slug", slug],
-            capture_output=True,
-        ).returncode
-        == 0
-    )
+    from lib import devcontainer
+
+    ok = devcontainer.down(slug)
     _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
 
 
