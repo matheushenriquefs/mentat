@@ -9,9 +9,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-_SKILL_ROOT = Path(__file__).resolve().parents[3]
-_LOG_SCRIPT = _SKILL_ROOT / "skills/mentat-log/scripts/log.py"
-_GATES_CODE = _SKILL_ROOT / "lib/gates/code"
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
+from lib import paths  # noqa: E402
 
 
 def resolve_plan_ref(ref: str) -> Path:
@@ -45,7 +46,7 @@ def emit_event(event: str, payload: dict) -> None:
     even if the log script breaks. The stderr line lets operators notice.
     """
     r = subprocess.run(
-        ["python3", str(_LOG_SCRIPT), "emit", "mentat-orchestrate", event, json.dumps(payload)],
+        ["python3", str(paths.LOG_SCRIPT), "emit", "mentat-orchestrate", event, json.dumps(payload)],
         capture_output=True,
         text=True,
     )
@@ -55,9 +56,9 @@ def emit_event(event: str, payload: dict) -> None:
 
 
 def run_gates(chunk_path: Path | None) -> tuple[str, str]:
-    if not _GATES_CODE.exists():
+    if not paths.GATES_CODE_DIR.exists():
         return ("pass", "")
-    for gate_file in sorted(_GATES_CODE.glob("*.py")):
+    for gate_file in sorted(paths.GATES_CODE_DIR.glob("*.py")):
         if gate_file.stem == "__init__":
             continue
         spec = importlib.util.spec_from_file_location(gate_file.stem, gate_file)

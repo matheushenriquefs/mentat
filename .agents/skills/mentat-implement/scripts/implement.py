@@ -13,14 +13,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-_SCRIPTS = Path(__file__).resolve().parent
-_SKILLS_DIR = _SCRIPTS.parents[1]
-_AGENTS_DIR = _SCRIPTS.parents[2]
-_LOG_SCRIPT = _SKILLS_DIR / "mentat-log/scripts/log.py"
-_SESSION_SCRIPT = _SKILLS_DIR / "mentat-session/scripts/session.py"
-_GIT_SCRIPT = _SKILLS_DIR / "mentat-git/scripts/git.py"
-_GIT_WORKTREE_PY = _SKILLS_DIR / "mentat-git/scripts/worktree.py"
-_GATES_CODE = _AGENTS_DIR / "lib/gates/code"
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
+from lib import paths  # noqa: E402
+
+_SESSION_SCRIPT = paths.SKILLS_DIR / "mentat-session/scripts/session.py"
+_GIT_SCRIPT = paths.SKILLS_DIR / "mentat-git/scripts/git.py"
+_GIT_WORKTREE_PY = paths.SKILLS_DIR / "mentat-git/scripts/worktree.py"
 
 
 def _load_worktree_module():
@@ -124,7 +124,7 @@ def parse_frontmatter(plan_path: Path) -> dict[str, str]:
 def _emit_event(event: str, payload: dict) -> None:
     """Fire-and-forget emit. Surfaces non-zero exit to stderr so failures aren't silent."""
     r = subprocess.run(
-        ["python3", str(_LOG_SCRIPT), "emit", "mentat-implement", event, json.dumps(payload)],
+        ["python3", str(paths.LOG_SCRIPT), "emit", "mentat-implement", event, json.dumps(payload)],
         capture_output=True,
         text=True,
     )
@@ -216,7 +216,7 @@ def _run_and_doctor(plan_path: Path, *, harness: str | None = None, model: str |
 
 
 def _invoke_harness(harness: str, prompt: str, *, afk: bool, model: str | None = None) -> Any:
-    harness_dir = _SCRIPTS / "harness"
+    harness_dir = Path(__file__).resolve().parent / "harness"
     adapter_name = harness.replace("-", "_")
     adapter_path = harness_dir / f"{adapter_name}.py"
     if not adapter_path.exists():
@@ -236,9 +236,9 @@ def _detect_self_answer(result: Any) -> bool:
 
 def _run_gates(chunk_path: Path | None) -> tuple[str, str]:
     """Run deterministic code gates. Returns (verdict, message)."""
-    if not _GATES_CODE.exists():
+    if not paths.GATES_CODE_DIR.exists():
         return ("pass", "")
-    for gate_file in sorted(_GATES_CODE.glob("*.py")):
+    for gate_file in sorted(paths.GATES_CODE_DIR.glob("*.py")):
         if gate_file.stem == "__init__":
             continue
         spec = importlib.util.spec_from_file_location(gate_file.stem, gate_file)
