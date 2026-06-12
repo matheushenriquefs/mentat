@@ -86,7 +86,13 @@ def test_upstream_eject_cascades_downstream(tmp_path, monkeypatch) -> None:
         emitted=emitted,
     )
 
-    results = land_queue.drain(chunks, holding="holding", scheduler=sched)
+    results = land_queue.drain(
+        chunks,
+        holding="holding",
+        on_landed=sched.mark_landed,
+        on_ejected=sched.mark_ejected,
+        next_ready=sched.next_ready,
+    )
 
     assert ff_calls == [], f"no chunk should land; ff_calls={ff_calls}"
     assert rebase_calls == ["a"], f"only a should rebase; rebase_calls={rebase_calls}"
@@ -121,7 +127,13 @@ def test_sibling_eject_does_not_cascade(tmp_path, monkeypatch) -> None:
         emitted=emitted,
     )
 
-    land_queue.drain(chunks, holding="holding", scheduler=sched)
+    land_queue.drain(
+        chunks,
+        holding="holding",
+        on_landed=sched.mark_landed,
+        on_ejected=sched.mark_ejected,
+        next_ready=sched.next_ready,
+    )
 
     assert "b" in rebase_calls, "sibling b must still attempt rebase"
     assert "b" in gate_calls, "sibling b must still run gates"
@@ -156,7 +168,13 @@ def test_rebase_conflict_cascades(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(land_queue, "_emit_event", fake_emit)
     monkeypatch.setattr(land_queue, "_teardown_container", lambda slug: None)
 
-    land_queue.drain(chunks, holding="holding", scheduler=sched)
+    land_queue.drain(
+        chunks,
+        holding="holding",
+        on_landed=sched.mark_landed,
+        on_ejected=sched.mark_ejected,
+        next_ready=sched.next_ready,
+    )
 
     assert rebase_calls == ["a"], f"b must not rebase after a conflicts; rebase_calls={rebase_calls}"
     ejections = {p.get("slug"): p for e, p in emitted if e == "chunk.ejected"}
@@ -181,7 +199,13 @@ def test_eject_event_envelope_unchanged(tmp_path, monkeypatch) -> None:
         emitted=emitted,
     )
 
-    land_queue.drain(chunks, holding="holding", scheduler=sched)
+    land_queue.drain(
+        chunks,
+        holding="holding",
+        on_landed=sched.mark_landed,
+        on_ejected=sched.mark_ejected,
+        next_ready=sched.next_ready,
+    )
 
     event_names = {e for e, _ in emitted}
     assert event_names <= {"chunk.ejected", "chunk.teardown"}, f"unexpected events; got {event_names}"

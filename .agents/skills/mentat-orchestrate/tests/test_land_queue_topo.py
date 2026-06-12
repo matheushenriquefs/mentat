@@ -63,7 +63,13 @@ def test_chain_lands_in_topo_order(tmp_path, monkeypatch) -> None:
     ff_calls: list[str] = []
     _install_stubs(monkeypatch, ff_calls)
 
-    results = land_queue.drain([chunk_b, chunk_a], holding="holding", scheduler=sched)
+    results = land_queue.drain(
+        [chunk_b, chunk_a],
+        holding="holding",
+        on_landed=sched.mark_landed,
+        on_ejected=sched.mark_ejected,
+        next_ready=sched.next_ready,
+    )
 
     assert ff_calls == ["a", "b"], f"expected topo order [a,b], got {ff_calls}"
     assert {r["slug"] for r in results if r.get("status") == "success"} == {"a", "b"}
@@ -77,7 +83,13 @@ def test_independent_afks_keep_input_order(tmp_path, monkeypatch) -> None:
     ff_calls: list[str] = []
     _install_stubs(monkeypatch, ff_calls)
 
-    land_queue.drain(chunks, holding="holding", scheduler=sched)
+    land_queue.drain(
+        chunks,
+        holding="holding",
+        on_landed=sched.mark_landed,
+        on_ejected=sched.mark_ejected,
+        next_ready=sched.next_ready,
+    )
 
     assert ff_calls == ["a1", "a2"], f"expected input order, got {ff_calls}"
 
@@ -102,7 +114,13 @@ def test_stalled_dep_lists_pending(tmp_path, monkeypatch) -> None:
     ff_calls: list[str] = []
     _install_stubs(monkeypatch, ff_calls)
 
-    results = land_queue.drain(chunks, holding="holding", scheduler=sched)
+    results = land_queue.drain(
+        chunks,
+        holding="holding",
+        on_landed=sched.mark_landed,
+        on_ejected=sched.mark_ejected,
+        next_ready=sched.next_ready,
+    )
 
     assert ff_calls == [], f"x should not have landed, ff_calls={ff_calls}"
     stalled = [r for r in results if r.get("status") == "stalled"]
@@ -134,7 +152,13 @@ def test_blocked_chunk_waits_until_upstream_lands(tmp_path, monkeypatch) -> None
     monkeypatch.setattr(land_queue, "_teardown_container", lambda slug: None)
 
     chunk_b, chunk_a = _chunk("b", tmp_path), _chunk("a", tmp_path)
-    land_queue.drain([chunk_b, chunk_a], holding="holding", scheduler=sched)
+    land_queue.drain(
+        [chunk_b, chunk_a],
+        holding="holding",
+        on_landed=sched.mark_landed,
+        on_ejected=sched.mark_ejected,
+        next_ready=sched.next_ready,
+    )
 
     assert landed_seq[0] == "a", f"a must land before b; landed_seq={landed_seq}"
     assert landed_seq[1] == "b"
@@ -146,11 +170,11 @@ def test_scheduler_next_ready_unit() -> None:
     sched = scheduler.Scheduler([a, b, c])
 
     assert sched.next_ready(["b", "c", "a"]) == "a"  # only a has no deps
-    sched.landed.add("a")
+    sched.mark_landed("a")
     assert sched.next_ready(["c", "b"]) == "b"
-    sched.landed.add("b")
+    sched.mark_landed("b")
     assert sched.next_ready(["c"]) == "c"
-    sched.landed.add("c")
+    sched.mark_landed("c")
     assert sched.next_ready([]) is None
 
 

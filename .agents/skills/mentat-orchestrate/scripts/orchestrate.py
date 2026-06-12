@@ -229,9 +229,15 @@ def _land_all(chunk_slugs: list[str], *, holding: str, plans: list | None = None
     chunks = [_land_queue.Chunk(slug=s, worktree=_worktree_for_slug(s)) for s in chunk_slugs]
     if plans is None:
         return _land_queue.drain(chunks, holding=holding)
-    _scheduler = load_sibling(__file__, "scheduler")
-    sched = _scheduler.Scheduler(plans)
-    return _land_queue.drain(chunks, holding=holding, scheduler=sched)
+    _sched_mod = load_sibling(__file__, "scheduler")
+    sched = _sched_mod.Scheduler(plans)
+    return _land_queue.drain(
+        chunks,
+        holding=holding,
+        on_landed=sched.mark_landed,
+        on_ejected=sched.mark_ejected,
+        next_ready=sched.next_ready,
+    )
 
 
 def run_orchestrate(

@@ -124,28 +124,28 @@ class Scheduler:
 
     def __init__(self, plans: list[Plan]) -> None:
         self._plans: dict[str, Plan] = {p.slug: p for p in plans}
-        self.landed: set[str] = set()
-        self.ejected: set[str] = set()
+        self._landed: set[str] = set()
+        self._ejected: set[str] = set()
 
     def next_ready(self, candidates: list[str]) -> str | None:
         for slug in candidates:
-            if slug in self.landed or slug in self.ejected:
+            if slug in self._landed or slug in self._ejected:
                 continue
             plan = self._plans.get(slug)
             if plan is None:
                 return slug
             deps = set(plan.blocked_by)
-            if deps - self.landed:
+            if deps - self._landed:
                 continue
             return slug
         return None
 
     def mark_landed(self, slug: str) -> None:
-        self.landed.add(slug)
+        self._landed.add(slug)
 
     def mark_ejected(self, slug: str) -> list[str]:
         """Eject slug + cascade to every downstream slug. Return cascaded list (slice-3)."""
-        self.ejected.add(slug)
+        self._ejected.add(slug)
         cascaded: list[str] = []
         # Walk reverse-dep graph: any plan that lists an ejected slug in
         # blocked_by also gets ejected; repeat until fixed-point.
@@ -153,10 +153,10 @@ class Scheduler:
         while changed:
             changed = False
             for other_slug, other in self._plans.items():
-                if other_slug in self.ejected:
+                if other_slug in self._ejected:
                     continue
-                if any(dep in self.ejected for dep in other.blocked_by):
-                    self.ejected.add(other_slug)
+                if any(dep in self._ejected for dep in other.blocked_by):
+                    self._ejected.add(other_slug)
                     cascaded.append(other_slug)
                     changed = True
         return cascaded
