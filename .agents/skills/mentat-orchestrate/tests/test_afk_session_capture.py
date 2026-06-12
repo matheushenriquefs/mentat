@@ -93,6 +93,7 @@ def test_claude_code_adapter_passes_session_id_and_stream_json(tmp_path, monkeyp
     cmd = captured["cmd"]
     assert "--output-format" in cmd
     assert cmd[cmd.index("--output-format") + 1] == "stream-json"
+    assert "--verbose" in cmd, f"--verbose required by claude when --output-format stream-json: {cmd}"
     assert "--session-id" not in cmd, f"--session-id must not be in cmd (not a UUID): {cmd}"
 
     stdout = captured["stdout"]

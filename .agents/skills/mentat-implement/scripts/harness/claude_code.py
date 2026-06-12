@@ -31,7 +31,7 @@ def invoke(prompt: str, *, afk: bool, model: str | None) -> Result:
     if afk:
         cmd += ["--dangerously-skip-permissions", "--disallowedTools", "AskUserQuestion"]
     if session_log is not None:
-        cmd += ["--output-format", "stream-json"]
+        cmd += ["--output-format", "stream-json", "--verbose"]
     if model:
         cmd += ["--model", model]
 
