@@ -8,15 +8,15 @@ from pathlib import Path
 
 
 def latest_session(repo_dir: Path) -> str | None:
-    """Return the most recently modified session dir, excluding 'manual'."""
-    dirs = [d for d in repo_dir.iterdir() if d.is_dir() and d.name != "manual"]
+    """Return the most recently modified session dir, excluding ad-hoc `mentat-manual-*` runs."""
+    dirs = [d for d in repo_dir.iterdir() if d.is_dir() and not d.name.startswith("mentat-manual-")]
     if not dirs:
         return None
     return max(dirs, key=lambda d: d.stat().st_mtime).name
 
 
 def sessions_for_repo(repo_dir: Path) -> list[str]:
-    return [d.name for d in repo_dir.iterdir() if d.is_dir() and d.name != "manual"]
+    return [d.name for d in repo_dir.iterdir() if d.is_dir() and not d.name.startswith("mentat-manual-")]
 
 
 def chunks_in_session(session_dir: Path) -> list[Path]:
