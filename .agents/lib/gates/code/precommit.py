@@ -14,21 +14,18 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
-_SKIP_DIRS = {".git", "__pycache__", ".ruff_cache", ".pytest_cache", "node_modules", ".dmux", ".mentat", "context"}
+_WALK_DIR = Path(__file__).resolve().parents[1]
+_AGENTS_ROOT = _WALK_DIR.parents[1]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
+
+from lib.gates._walk import iter_files as _iter_files  # noqa: E402
 
 _LINK_RE = re.compile(r"\[.+?\]\(.+?\.md\)")
 _COMMENT_LINE_RE = re.compile(r"^\s*//")
-
-
-def _iter_files(root: Path):
-    for p in root.rglob("*"):
-        if not p.is_file():
-            continue
-        if any(part in _SKIP_DIRS for part in p.parts):
-            continue
-        yield p
 
 
 def _classify(path: Path) -> str | None:
@@ -158,3 +155,15 @@ def run(chunk_path: Path | None) -> tuple[str, str]:
     if advisories:
         return ("advise", "\n".join(advisories))
     return ("pass", "")
+
+
+class _PrecommitGate:
+    id = "precommit"
+    priority = 10
+
+    def run(self, ctx: object) -> tuple[str, str]:
+        chunk_path = getattr(ctx, "chunk_path", None)
+        return run(chunk_path)
+
+
+gate = _PrecommitGate()
