@@ -11,28 +11,14 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
-import importlib.util as _ilu
-
 from lib import paths  # noqa: E402
 from lib.events import bind  # noqa: E402
+from lib.loader import load_sibling  # noqa: E402
 
 _IMPLEMENT_SCRIPT = paths.SKILLS_DIR / "mentat-implement/scripts/implement.py"
 _CONTAINER_SCRIPT = paths.CONTAINER_SCRIPT
 
-
-def _load_sibling(name: str):
-    here = Path(__file__).parent
-    key = f"{here.parent.name}.{name}"
-    if key in sys.modules:
-        return sys.modules[key]
-    spec = _ilu.spec_from_file_location(key, here / f"{name}.py")
-    mod = _ilu.module_from_spec(spec)
-    sys.modules[key] = mod
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod
-
-
-_utils = _load_sibling("utils")
+_utils = load_sibling(__file__, "utils")
 
 
 def _log_dir_for(session_id: str) -> Path:
