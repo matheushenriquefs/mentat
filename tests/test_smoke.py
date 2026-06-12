@@ -105,10 +105,10 @@ def test_smoke_doctor_produces_clean_verdict(fixture_batch, tmp_path):
     assert "## Regression" in verdict
 
 
-# ── Smoke: all 9 event types are in EVENT_CATALOG ────────────────────────────
+# ── Smoke: all 16 event types are in EVENT_CATALOG ───────────────────────────
 
 
-def test_smoke_all_10_event_types_in_catalog():
+def test_smoke_all_16_event_types_in_catalog():
     log_mod = load_module_from(REPO_ROOT / ".agents/skills/mentat-log/scripts/log.py", "log")
     catalog = log_mod.EVENT_CATALOG
     expected = {
@@ -122,6 +122,12 @@ def test_smoke_all_10_event_types_in_catalog():
         "gate.evaluated",
         "review.submitted",
         "batch.reviewed",
+        "task.created",
+        "task.claimed",
+        "task.released",
+        "task.done",
+        "task.wontfix",
+        "session.prune",
     }
     assert set(catalog.keys()) == expected
 

@@ -125,7 +125,7 @@ def test_prune_drops_old_dirs(tmp_path):
 
 
 def test_event_catalog_matches_parent_plan():
-    """Pin: exactly 10 canonical events with exact names from plan §A."""
+    """Pin: exactly 16 canonical events with exact names from ADR-0007 v5."""
     from tests.conftest import load_script
 
     mod = load_script(LOG_SCRIPT, "log")
@@ -141,8 +141,14 @@ def test_event_catalog_matches_parent_plan():
         "gate.evaluated",
         "review.submitted",
         "batch.reviewed",
+        "task.created",
+        "task.claimed",
+        "task.released",
+        "task.done",
+        "task.wontfix",
+        "session.prune",
     }
     assert set(catalog.keys()) == expected, (
         f"catalog mismatch. extra={set(catalog) - expected} missing={expected - set(catalog)}"
     )
-    assert len(catalog) == 10
+    assert len(catalog) == 16
