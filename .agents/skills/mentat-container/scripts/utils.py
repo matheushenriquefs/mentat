@@ -37,6 +37,11 @@ def container_id_for(slug: str) -> str | None:
 
 
 def resolve_workspace_folder(cwd: Path) -> str:
+    # Worktrees have .git as a file pointer — always use slug-based path so
+    # container.py run uses the correct workdir regardless of what the
+    # canonical devcontainer.json says (which targets /workspaces/mentat).
+    if (cwd / ".git").is_file():
+        return f"/workspaces/{cwd.name}"
     dcj = cwd / ".devcontainer" / "devcontainer.json"
     if not dcj.exists():
         return f"/workspaces/{cwd.name}"
