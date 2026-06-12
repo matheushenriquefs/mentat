@@ -91,10 +91,9 @@ def test_claude_code_adapter_passes_session_id_and_stream_json(tmp_path, monkeyp
     result = adapter.invoke("hello", afk=True, model=None)
 
     cmd = captured["cmd"]
-    assert "--session-id" in cmd, f"missing --session-id: {cmd}"
-    assert cmd[cmd.index("--session-id") + 1] == "auto-test-123"
     assert "--output-format" in cmd
     assert cmd[cmd.index("--output-format") + 1] == "stream-json"
+    assert "--session-id" not in cmd, f"--session-id must not be in cmd (not a UUID): {cmd}"
 
     stdout = captured["stdout"]
     assert hasattr(stdout, "write"), f"stdout not a file handle: {stdout!r}"
