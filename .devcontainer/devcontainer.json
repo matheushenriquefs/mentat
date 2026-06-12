@@ -1,14 +1,17 @@
 {
-  "name": "mentat",
+  "name": "orchestrate-land-loop-fixes",
   "build": { "dockerfile": "Dockerfile" },
   "features": {
     "ghcr.io/devcontainers/features/node:1": { "version": "22" },
     "ghcr.io/devcontainers/features/python:1": { "version": "3.11" }
   },
   "onCreateCommand": "sudo apt-get update && sudo apt-get install -y jq shellcheck && curl -LsSf https://astral.sh/uv/install.sh | sh",
-  "postCreateCommand": "cd /workspaces/mentat && ~/.local/bin/uv sync --group dev && npm install -g promptfoo",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/mentat,type=bind,consistency=cached",
-  "workspaceFolder": "/workspaces/mentat",
+  "postCreateCommand": "cd /workspaces/orchestrate-land-loop-fixes && ~/.local/bin/uv sync --group dev && npm install -g promptfoo && lefthook install",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/orchestrate-land-loop-fixes,type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/orchestrate-land-loop-fixes",
   "runArgs": ["--init"],
-  "remoteUser": "vscode"
+  "remoteUser": "vscode",
+  "mounts": [
+    "source=/Users/matheushenrique/Workspace/personal/mentat/.git,target=/Users/matheushenrique/Workspace/personal/mentat/.git,type=bind"
+  ]
 }

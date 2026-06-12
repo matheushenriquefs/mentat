@@ -1,7 +1,7 @@
 import json
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -16,7 +16,7 @@ _MENTAT_DCJ = {
     "name": "mentat",
     "build": {"dockerfile": "Dockerfile"},
     "onCreateCommand": "sudo apt-get update",
-    "postCreateCommand": "cd /workspaces/mentat && uv sync",
+    "postCreateCommand": "cd /workspaces/mentat && uv sync && lefthook install",
     "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/mentat,type=bind,consistency=cached",
     "workspaceFolder": "/workspaces/mentat",
     "runArgs": ["--init"],
@@ -271,3 +271,37 @@ class TestCmdDown:
         monkeypatch.setattr(container.subprocess, "run", fake_run)
         container.cmd_down(slug="my-feature")
         assert git_root_called == [], "_git_root must not be called when slug given directly"
+
+
+class TestPostCreateCommandLefthookInstall:
+    def test_post_create_command_runs_lefthook_install(self, tmp_path):
+        """Patched postCreateCommand must include lefthook install step."""
+        wt = tmp_path / "my-feature"
+        wt.mkdir()
+        slug = wt.name
+        dcj = wt / ".devcontainer" / "devcontainer.json"
+        dcj.parent.mkdir()
+        dcj.write_text(json.dumps(_MENTAT_DCJ, indent=2))
+
+        container._ensure_devcontainer_json(wt, slug)
+
+        result = json.loads(dcj.read_text())
+        assert "lefthook install" in result["postCreateCommand"]
+
+    def test_lefthook_install_path_rewrite(self, tmp_path):
+        """lefthook install runs after cd /workspaces/<slug> so it picks up the worktree's lefthook.yml."""
+        wt = tmp_path / "my-feature"
+        wt.mkdir()
+        slug = wt.name
+        dcj = wt / ".devcontainer" / "devcontainer.json"
+        dcj.parent.mkdir()
+        dcj.write_text(json.dumps(_MENTAT_DCJ, indent=2))
+
+        container._ensure_devcontainer_json(wt, slug)
+
+        result = json.loads(dcj.read_text())
+        cmd = result["postCreateCommand"]
+        assert "lefthook install" in cmd
+        cd_pos = cmd.index(f"cd /workspaces/{slug}")
+        lefthook_pos = cmd.index("lefthook install")
+        assert lefthook_pos > cd_pos, "lefthook install must run after cd into worktree dir"
