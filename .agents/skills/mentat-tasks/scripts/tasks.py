@@ -103,6 +103,38 @@ def cmd_claim(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_list(args: argparse.Namespace) -> int:
+    import types
+
+    u = _utils
+    assert isinstance(u, types.ModuleType)
+    td: Path = u.tasks_dir()
+    if not td.exists():
+        return 0
+    status_filter: str | None = getattr(args, "status", None)
+    rows: list[tuple[str, str, str, str, str]] = []
+    for f in td.glob("T*-*.md"):
+        stem = f.name.split("-", 1)[0]
+        if not (stem.startswith("T") and stem[1:].isdigit()):
+            continue
+        fm, _ = frontmatter.parse(f.read_text())
+        if status_filter and fm.get("status") != status_filter:
+            continue
+        rows.append(
+            (
+                fm.get("id", stem),
+                fm.get("status", ""),
+                fm.get("class", ""),
+                fm.get("claimed_by", ""),
+                stem,
+            )
+        )
+    rows.sort(key=lambda r: r[4])  # sort by T### prefix
+    for row in rows:
+        print(f"{row[0]}\t{row[1]}\t{row[2]}\t{row[3]}")
+    return 0
+
+
 def _terminate(path: Path, *, status: str, event: str) -> int:
     lock = path.with_suffix(".md.lock")
     frontmatter.mutate(path, status=status, claimed_by="", claim_expires_at="")
@@ -175,6 +207,9 @@ def main(argv: list[str] | None = None) -> None:
     wontfix_p = sub.add_parser("wontfix")
     wontfix_p.add_argument("file")
 
+    list_p = sub.add_parser("list")
+    list_p.add_argument("--status", default=None)
+
     args = parser.parse_args(argv)
 
     if args.cmd == "next-id":
@@ -191,6 +226,8 @@ def main(argv: list[str] | None = None) -> None:
         rc = cmd_done(args)
     elif args.cmd == "wontfix":
         rc = cmd_wontfix(args)
+    elif args.cmd == "list":
+        rc = cmd_list(args)
     else:
         parser.print_help(sys.stderr)
         rc = 64
