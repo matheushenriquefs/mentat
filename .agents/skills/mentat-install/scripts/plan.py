@@ -14,6 +14,8 @@ _SKILL_NAMES = [
     "mentat-git",
     "mentat-session",
     "mentat-install",
+    "mentat-tasks",
+    "mentat-prd",
 ]
 
 _STALE_PATHS = [
@@ -34,19 +36,27 @@ _STALE_PATHS = [
     ".cursor/agents/mentat-plan-reviewer",
     ".cursor/agents/mentat-smell-reviewer",
     ".cursor/agents/mentat-test-reviewer",
+    # Pre-rehome: mentat-private dirs were under ~/.agents/ — now under ~/.mentat/.
+    ".agents/bin",
+    ".agents/lib",
+    ".agents/docs",
 ]
 
-# Rel-target under ~/.agents/ → rel-source under <clone>/.
-# Dir/file symlinks that mirror the harness tree wholesale.
-_BULK_SYMLINKS = {
-    "AGENTS.md": ".agents/AGENTS.md",
-    "agents": ".agents/agents",
-    "bin": ".agents/bin",
-    "lib": ".agents/lib",
-    "docs/PATHS.md": ".agents/docs/PATHS.md",
-    # ADRs ship from repo root, not from .agents/ — user-facing canonical location.
-    "docs/adr": "docs/adr",
-}
+
+# Absolute target → rel-source under <clone>/.
+# Maps the post-rehome layout:
+#   ~/.agents/  — harness/community surface (AGENTS.md, agents/)
+#   ~/.mentat/  — mentat-private surface (bin/, lib/, docs/)
+def _bulk_symlinks(home: Path) -> dict[Path, str]:
+    return {
+        home / ".agents" / "AGENTS.md": ".agents/AGENTS.md",
+        home / ".agents" / "agents": ".agents/agents",
+        home / ".mentat" / "bin": ".agents/bin",
+        home / ".mentat" / "lib": ".agents/lib",
+        home / ".mentat" / "docs" / "PATHS.md": ".agents/docs/PATHS.md",
+        # ADRs ship from repo root — user-facing canonical location.
+        home / ".mentat" / "docs" / "adr": "docs/adr",
+    }
 
 
 def _discover_reviewers(clone_root: Path | None) -> list[str]:
@@ -126,9 +136,10 @@ def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
     mentat_dir = home / ".mentat"
     if not mentat_dir.exists():
         add.append(Action("mkdir", None, mentat_dir))
-    logs_dir = mentat_dir / "logs"
-    if not logs_dir.exists():
-        add.append(Action("mkdir", None, logs_dir))
+    for sub in ("logs", "bin", "lib", "docs"):
+        sub_dir = mentat_dir / sub
+        if not sub_dir.exists():
+            add.append(Action("mkdir", None, sub_dir))
     config_file = mentat_dir / "config.jsonc"
     if not config_file.exists():
         add.append(Action("file-create", None, config_file))
@@ -143,10 +154,9 @@ def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
             if not target.exists():
                 add.append(Action("copy", None, target))
 
-    # 3. Bulk symlinks (.agents/AGENTS.md, agents/, bin/, lib/, docs/{PATHS.md,adr})
+    # 3. Bulk symlinks (harness surface + mentat-private surface)
     if clone_root is not None:
-        for rel_target, rel_source in _BULK_SYMLINKS.items():
-            target = home / ".agents" / rel_target
+        for target, rel_source in _bulk_symlinks(home).items():
             source = clone_root / rel_source
             _plan_symlink(source, target, add, update, conflicts)
 
