@@ -114,6 +114,38 @@ class TestCmdWorktreeCreate:
             rc = wt.cmd_worktree_create("my-slug", base="main", parent=tmp_path)
         assert rc == 66
 
+    def test_default_parent_is_mentat_worktrees(self, tmp_path):
+        """parent=None defaults to <main_root>/.mentat/worktrees/, not main_root.parent."""
+        created_targets: list[Path] = []
+
+        def fake(args: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess:
+            joined = " ".join(args)
+            if "--git-common-dir" in joined:
+                return _cp(0, str(tmp_path / ".git") + "\n")
+            if args[:2] == ["worktree", "list"]:
+                return _cp(0, f"worktree {tmp_path}\nHEAD abc1234\nbranch refs/heads/main\n\n")
+            if args[:2] == ["symbolic-ref", "--short"]:
+                return _cp(1)
+            if args[:2] == ["config", "--get"]:
+                return _cp(1)
+            if args[:3] == ["rev-parse", "--verify", "--quiet"]:
+                branch = args[3].replace("refs/heads/", "")
+                return _cp(0) if branch == "main" else _cp(1)
+            if args[:2] == ["worktree", "add"]:
+                created_targets.append(Path(args[3]))
+                return _cp(0)
+            return _cp(1)
+
+        with patch.object(wt, "_git", side_effect=fake):
+            rc = wt.cmd_worktree_create("my-slug", base=None, parent=None)
+
+        assert rc == 0
+        assert created_targets, "worktree add was not called"
+        target = created_targets[0]
+        assert ".mentat" in target.parts, f"expected .mentat/ in worktree path, got {target}"
+        assert "worktrees" in target.parts, f"expected worktrees/ in worktree path, got {target}"
+        assert target.parent.parent == tmp_path, f"expected <main_root>/.mentat/worktrees/<slug>, got {target}"
+
 
 # ── container_id_for_cwd ─────────────────────────────────────────────────────
 
