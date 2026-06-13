@@ -103,6 +103,21 @@ def cmd_claim(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_refresh(args: argparse.Namespace) -> int:
+    import types
+
+    u = _utils
+    assert isinstance(u, types.ModuleType)
+    path = Path(args.file)
+    lock = path.with_suffix(".md.lock")
+    if not lock.exists():
+        print(f"tasks: no active claim on {path.name}", file=sys.stderr)
+        return 1
+    ttl = int(args.ttl_seconds)
+    frontmatter.mutate(path, claim_expires_at=u.now_rfc3339(ttl))
+    return 0
+
+
 def cmd_release(args: argparse.Namespace) -> int:
     path = Path(args.file)
     lock = path.with_suffix(".md.lock")
@@ -132,6 +147,10 @@ def main(argv: list[str] | None = None) -> None:
     release_p = sub.add_parser("release")
     release_p.add_argument("file")
 
+    refresh_p = sub.add_parser("refresh")
+    refresh_p.add_argument("file")
+    refresh_p.add_argument("ttl_seconds")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "next-id":
@@ -142,6 +161,8 @@ def main(argv: list[str] | None = None) -> None:
         rc = cmd_claim(args)
     elif args.cmd == "release":
         rc = cmd_release(args)
+    elif args.cmd == "refresh":
+        rc = cmd_refresh(args)
     else:
         parser.print_help(sys.stderr)
         rc = 64
