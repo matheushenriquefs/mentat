@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -77,6 +78,43 @@ def cmd_create(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_claim(args: argparse.Namespace) -> int:
+    import types
+
+    u = _utils
+    assert isinstance(u, types.ModuleType)
+    path = Path(args.file)
+    lock = path.with_suffix(".md.lock")
+    try:
+        fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        os.close(fd)
+    except FileExistsError:
+        print(f"tasks: already claimed: {path.name}", file=sys.stderr)
+        return 1
+
+    agent: str = args.agent
+    ttl = int(args.ttl_seconds)
+    expires_at: str = u.now_rfc3339(ttl)
+    frontmatter.mutate(path, claimed_by=agent, status="in-progress", claim_expires_at=expires_at)
+
+    fm, _ = frontmatter.parse(path.read_text())
+    tid = fm.get("id", path.name.split("-", 1)[0])
+    emit("task.claimed", {"id": tid, "agent": agent, "expires_at": expires_at})
+    return 0
+
+
+def cmd_release(args: argparse.Namespace) -> int:
+    path = Path(args.file)
+    lock = path.with_suffix(".md.lock")
+    frontmatter.mutate(path, claimed_by="", claim_expires_at="", status="todo")
+    lock.unlink(missing_ok=True)
+
+    fm, _ = frontmatter.parse(path.read_text())
+    tid = fm.get("id", path.name.split("-", 1)[0])
+    emit("task.released", {"id": tid})
+    return 0
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="tasks")
     sub = parser.add_subparsers(dest="cmd")
@@ -86,12 +124,24 @@ def main(argv: list[str] | None = None) -> None:
     create_p = sub.add_parser("create")
     create_p.add_argument("slug")
 
+    claim_p = sub.add_parser("claim")
+    claim_p.add_argument("file")
+    claim_p.add_argument("agent")
+    claim_p.add_argument("ttl_seconds")
+
+    release_p = sub.add_parser("release")
+    release_p.add_argument("file")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "next-id":
         rc = cmd_next_id(args)
     elif args.cmd == "create":
         rc = cmd_create(args)
+    elif args.cmd == "claim":
+        rc = cmd_claim(args)
+    elif args.cmd == "release":
+        rc = cmd_release(args)
     else:
         parser.print_help(sys.stderr)
         rc = 64
