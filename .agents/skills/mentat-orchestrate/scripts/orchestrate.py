@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import time
@@ -28,26 +29,36 @@ def _resolve_plan_refs(refs: list[str]) -> list[Path]:
     return [_utils.resolve_plan_ref(r) for r in refs]
 
 
-def _load_plans(paths: list[Path]) -> list[_scheduler.Plan]:
+def _parse_list_field(raw: str) -> list[str]:
+    if not raw or raw in ("[]", ""):
+        return []
+    parts = re.split(r"[,\s]+", raw)
+    return [s.strip().strip("[]\"'") for s in parts if s.strip().strip("[]\"'")]
+
+
+def _load_plans(paths: list[Path], *, _expanding: bool = False) -> list[_scheduler.Plan]:
     plans: list[_scheduler.Plan] = []
     for path in paths:
         fm = _utils.parse_frontmatter(path)
-        blocked_by_raw = fm.get("blocked_by", "")
-        blocked_by: list[str] = []
-        if blocked_by_raw and blocked_by_raw not in ("[]", ""):
-            # parse "[a, b]" or "a, b"
-            import re
+        slug = fm.get("id", path.stem)
+        blocked_by = _parse_list_field(fm.get("blocked_by", ""))
+        siblings = _parse_list_field(fm.get("siblings", ""))
 
-            parts = re.split(r"[,\s]+", blocked_by_raw)
-            blocked_by = [s.strip().strip("[]\"'") for s in parts if s.strip().strip("[]\"'")]
-        plans.append(
-            _scheduler.Plan(
-                slug=fm.get("id", path.stem),
-                class_=fm.get("class", "HITL"),
-                blocked_by=blocked_by,
-                path=path,
+        if siblings:
+            if _expanding:
+                print(f"nested parent index: {slug}", file=sys.stderr)
+                raise SystemExit(65)
+            sibling_paths = [path.parent / f"{s}.md" for s in siblings]
+            plans.extend(_load_plans(sibling_paths, _expanding=True))
+        else:
+            plans.append(
+                _scheduler.Plan(
+                    slug=slug,
+                    class_=fm.get("class", "HITL"),
+                    blocked_by=blocked_by,
+                    path=path,
+                )
             )
-        )
     return plans
 
 
