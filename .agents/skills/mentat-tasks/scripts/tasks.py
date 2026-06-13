@@ -103,6 +103,24 @@ def cmd_claim(args: argparse.Namespace) -> int:
     return 0
 
 
+def _terminate(path: Path, *, status: str, event: str) -> int:
+    lock = path.with_suffix(".md.lock")
+    frontmatter.mutate(path, status=status, claimed_by="", claim_expires_at="")
+    lock.unlink(missing_ok=True)
+    fm, _ = frontmatter.parse(path.read_text())
+    tid = fm.get("id", path.name.split("-", 1)[0])
+    emit(event, {"id": tid})
+    return 0
+
+
+def cmd_done(args: argparse.Namespace) -> int:
+    return _terminate(Path(args.file), status="done", event="task.done")
+
+
+def cmd_wontfix(args: argparse.Namespace) -> int:
+    return _terminate(Path(args.file), status="wontfix", event="task.wontfix")
+
+
 def cmd_refresh(args: argparse.Namespace) -> int:
     import types
 
@@ -151,6 +169,12 @@ def main(argv: list[str] | None = None) -> None:
     refresh_p.add_argument("file")
     refresh_p.add_argument("ttl_seconds")
 
+    done_p = sub.add_parser("done")
+    done_p.add_argument("file")
+
+    wontfix_p = sub.add_parser("wontfix")
+    wontfix_p.add_argument("file")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "next-id":
@@ -163,6 +187,10 @@ def main(argv: list[str] | None = None) -> None:
         rc = cmd_release(args)
     elif args.cmd == "refresh":
         rc = cmd_refresh(args)
+    elif args.cmd == "done":
+        rc = cmd_done(args)
+    elif args.cmd == "wontfix":
+        rc = cmd_wontfix(args)
     else:
         parser.print_help(sys.stderr)
         rc = 64
