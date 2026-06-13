@@ -19,6 +19,11 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py batch-review 
 ## Routing algorithm
 
 ```
+0. Expand parent-index plans: any plan with siblings:[…] in frontmatter is a
+   parent index. It is replaced by its listed sibling plans before topo sort.
+   Parent index must have empty blocked_by (exit 65 otherwise). A sibling file
+   not found → exit 66. Nested parent indexes (sibling itself has siblings) →
+   exit 65. Plans without siblings: parse unchanged.
 1. Read frontmatter of each plan: id, class, blocked_by.
 2. Topological sort by blocked_by (raise on cycle).
 3. Partition in topo order (via `scheduler.partition`):
@@ -65,13 +70,18 @@ python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py batch-review 
 | 0 | All chunks landed |
 | 1 | ≥1 chunk ejected |
 | 64 | CLI arg parse error / missing plan ref |
-| 65 | Malformed plan frontmatter or cycle in blocked_by graph |
-| 66 | Plan slug not found |
+| 65 | Malformed plan frontmatter or cycle in blocked_by graph; parent index has non-empty blocked_by; plan blocks on a parent-index slug; nested parent index |
+| 66 | Plan slug not found; sibling plan file not found during parent-index expansion |
 | 69 | Container down when spawning a chunk |
 | 70 | Unhandled Python exception in stage module |
 
 ## Rules
 
+- **Parent indexes** (`siblings: [a, b]` in frontmatter) are expanded before
+  routing — passing the parent ref produces the same schedule as passing every
+  sibling ref directly. Parent indexes must have empty `blocked_by`; they never
+  participate in topo sort. No plan may reference a parent-index slug in its
+  own `blocked_by`; use sibling slugs directly.
 - Plans without `blocked_by` run in parallel with any other independent plan.
 - HITL plans always anchor in the calling session; AFK plans can auto-spawn.
 - AFK plan with a downstream HITL dep anchors in the calling session.
