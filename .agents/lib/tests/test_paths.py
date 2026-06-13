@@ -23,29 +23,60 @@ def _import_paths():
     return sys.modules[key]  # may be replaced by frozen dataclass
 
 
-def test_paths_constants_resolve_to_existing_dirs():
+def test_paths_mentat_dir_fields():
+    """New home-dir anchors for mentat-private surface (ADR-0008 revised)."""
     paths = _import_paths()
+
+    assert isinstance(paths.MENTAT_DIR, Path)
+    assert paths.MENTAT_DIR.name == ".mentat"
+    assert paths.MENTAT_DIR.parent == Path.home()
+
+    assert isinstance(paths.MENTAT_LIB_DIR, Path)
+    assert paths.MENTAT_LIB_DIR == paths.MENTAT_DIR / "lib"
+
+    assert isinstance(paths.MENTAT_BIN_DIR, Path)
+    assert paths.MENTAT_BIN_DIR == paths.MENTAT_DIR / "bin"
+
+    assert isinstance(paths.MENTAT_DOCS_DIR, Path)
+    assert paths.MENTAT_DOCS_DIR == paths.MENTAT_DIR / "docs"
+
+    assert isinstance(paths.MENTAT_WORKTREES_DIR, Path)
+    assert paths.MENTAT_WORKTREES_DIR == paths.MENTAT_DIR / "worktrees"
+
+
+def test_paths_agents_dir_home_based():
+    """AGENTS_DIR is now home-dir based, not file-relative (ADR-0008 revised)."""
+    paths = _import_paths()
+
     assert isinstance(paths.AGENTS_DIR, Path)
     assert paths.AGENTS_DIR.name == ".agents"
-    assert paths.AGENTS_DIR.exists()
-
-    assert isinstance(paths.LIB_DIR, Path)
-    assert paths.LIB_DIR.name == "lib"
-    assert paths.LIB_DIR.exists()
+    assert paths.AGENTS_DIR.parent == Path.home()
 
     assert isinstance(paths.SKILLS_DIR, Path)
-    assert paths.SKILLS_DIR.name == "skills"
-    assert paths.SKILLS_DIR.exists()
+    assert paths.SKILLS_DIR == paths.AGENTS_DIR / "skills"
+
+    assert isinstance(paths.PLANS_DIR, Path)
+    assert paths.PLANS_DIR == paths.AGENTS_DIR / "plans"
+
+
+def test_paths_derived_fields_structure():
+    """Derived paths have correct structure regardless of host install state."""
+    paths = _import_paths()
 
     assert isinstance(paths.LOG_SCRIPT, Path)
     assert paths.LOG_SCRIPT.parts[-1] == "log.py"
     assert "mentat-log" in str(paths.LOG_SCRIPT)
-    assert paths.LOG_SCRIPT.is_file()
+
+    assert isinstance(paths.CONTAINER_SCRIPT, Path)
+    assert paths.CONTAINER_SCRIPT.parts[-1] == "container.py"
+    assert "mentat-container" in str(paths.CONTAINER_SCRIPT)
 
     assert isinstance(paths.GATES_CODE_DIR, Path)
     assert paths.GATES_CODE_DIR.parts[-1] == "code"
     assert "gates" in str(paths.GATES_CODE_DIR)
-    assert paths.GATES_CODE_DIR.is_dir()
+
+    assert isinstance(paths.LOGS_DIR, Path)
+    assert paths.LOGS_DIR.parts[-1] == "logs"
 
 
 def test_paths_module_is_stdlib_only():
