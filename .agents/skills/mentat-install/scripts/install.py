@@ -35,6 +35,7 @@ _plan = _load_sibling("plan")
 _render = _load_sibling("render")
 _utils = _load_sibling("utils")
 _companions = _load_sibling("companions")
+_path_setup = _load_sibling("path_setup")
 
 
 def _emit_installed() -> None:
@@ -97,9 +98,10 @@ def do_install(
     _utils.safe_mkdir(mentat_dir)
     _utils.write_default_config(config_file)
 
+    _path_setup.setup_path(yes=yes)
+
     _emit_installed()
     print("mentat-install: done.")
-    print("  → add ~/.mentat/bin to your PATH")
     return 0
 
 
