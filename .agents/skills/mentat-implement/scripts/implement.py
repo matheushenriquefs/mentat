@@ -22,9 +22,6 @@ _SESSION_SCRIPT = paths.SKILLS_DIR / "mentat-session/scripts/session.py"
 _GIT_SCRIPT = paths.SKILLS_DIR / "mentat-git/scripts/git.py"
 _GIT_WORKTREE_PY = paths.SKILLS_DIR / "mentat-git/scripts/worktree.py"
 
-if str(_AGENTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_AGENTS_DIR))
-
 from lib import frontmatter as _frontmatter  # noqa: E402
 
 
