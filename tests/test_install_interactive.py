@@ -59,6 +59,14 @@ def test_spinner_context_manager_safe_in_non_tty(capsys: pytest.CaptureFixture[s
     # Non-TTY: spinner thread shouldn't have started → no spinner output to clear.
 
 
+class _FakeTTY:
+    def __init__(self, responses: list[str]) -> None:
+        self._responses = iter(responses)
+
+    def readline(self) -> str:
+        return next(self._responses, "") + "\n"
+
+
 def test_install_one_no_to_first_prompt_runs_command() -> None:
     companions = _load("companions")
     fake_companion = {
@@ -67,10 +75,10 @@ def test_install_one_no_to_first_prompt_runs_command() -> None:
         "install_cmd": ["echo", "hello"],
     }
     # User answers "no" to "have you installed?" (n), "" to edit-cmd (default), "y" to confirm-run
-    with patch.object(companions, "input", side_effect=["n", "", "y"]):
-        with patch.object(companions.subprocess, "run") as mock_run:
-            mock_run.return_value.returncode = 0
-            companions.install_one(fake_companion, yes=False)
+    tty = _FakeTTY(["n", "", "y"])
+    with patch.object(companions.subprocess, "run") as mock_run:
+        mock_run.return_value.returncode = 0
+        companions.install_one(fake_companion, yes=False, tty=tty)
     assert mock_run.call_count == 1
     args = mock_run.call_args
     assert args.args[0] == ["echo", "hello"]
@@ -83,7 +91,7 @@ def test_install_one_yes_to_first_prompt_skips_subprocess() -> None:
         "docs": "https://example.com",
         "install_cmd": ["echo", "hello"],
     }
-    with patch.object(companions, "input", return_value="y"):
-        with patch.object(companions.subprocess, "run") as mock_run:
-            companions.install_one(fake_companion, yes=False)
+    tty = _FakeTTY(["y"])
+    with patch.object(companions.subprocess, "run") as mock_run:
+        companions.install_one(fake_companion, yes=False, tty=tty)
     assert mock_run.call_count == 0
