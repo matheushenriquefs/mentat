@@ -38,6 +38,8 @@ def _parse_list_field(raw: str) -> list[str]:
 
 def _load_plans(paths: list[Path], *, _expanding: bool = False) -> list[_scheduler.Plan]:
     plans: list[_scheduler.Plan] = []
+    parent_slugs: set[str] = set()
+
     for path in paths:
         fm = _utils.parse_frontmatter(path)
         slug = fm.get("id", path.stem)
@@ -48,7 +50,17 @@ def _load_plans(paths: list[Path], *, _expanding: bool = False) -> list[_schedul
             if _expanding:
                 print(f"nested parent index: {slug}", file=sys.stderr)
                 raise SystemExit(65)
-            sibling_paths = [path.parent / f"{s}.md" for s in siblings]
+            if blocked_by:
+                print(f"parent index must have empty blocked_by: {slug}", file=sys.stderr)
+                raise SystemExit(65)
+            parent_slugs.add(slug)
+            sibling_paths: list[Path] = []
+            for s in siblings:
+                sibling_path = path.parent / f"{s}.md"
+                if not sibling_path.exists():
+                    print(f"sibling plan not found: {s}", file=sys.stderr)
+                    raise SystemExit(66)
+                sibling_paths.append(sibling_path)
             plans.extend(_load_plans(sibling_paths, _expanding=True))
         else:
             plans.append(
@@ -59,6 +71,14 @@ def _load_plans(paths: list[Path], *, _expanding: bool = False) -> list[_schedul
                     path=path,
                 )
             )
+
+    if not _expanding and parent_slugs:
+        for plan in plans:
+            for dep in plan.blocked_by:
+                if dep in parent_slugs:
+                    print(f"cannot block on parent index: {dep}", file=sys.stderr)
+                    raise SystemExit(65)
+
     return plans
 
 
