@@ -65,20 +65,34 @@ def _print_step(symbol: str, text: str, dim: bool = False) -> None:
     print(_color(_PIPE, _ANSI_DIM))
 
 
-def _prompt_yn(question: str, default: bool) -> bool:
+def _open_tty():
+    """Return a readable file for interactive input, even inside curl | bash."""
+    if sys.stdin.isatty():
+        return sys.stdin
+    try:
+        return open("/dev/tty")  # noqa: SIM115
+    except OSError:
+        return None
+
+
+def _prompt_yn(question: str, default: bool, *, tty) -> bool:
     suffix = "Y/n" if default else "y/N"
     print(f"{_color(_PROMPT_ASK, _ANSI_YELLOW)}  {question}")
-    raw = input(f"{_color(_PIPE, _ANSI_DIM)}  [{suffix}] ").strip().lower()
+    sys.stdout.write(f"{_color(_PIPE, _ANSI_DIM)}  [{suffix}] ")
+    sys.stdout.flush()
+    raw = tty.readline().strip().lower()
     print(_color(_PIPE, _ANSI_DIM))
     if not raw:
         return default
     return raw in ("y", "yes")
 
 
-def _prompt_text(question: str, default: str) -> str:
+def _prompt_text(question: str, default: str, *, tty) -> str:
     print(f"{_color(_PROMPT_ASK, _ANSI_YELLOW)}  {question}")
     print(f"{_color(_PIPE, _ANSI_DIM)}  default: {default}")
-    raw = input(f"{_color(_PIPE, _ANSI_DIM)}  > ").strip()
+    sys.stdout.write(f"{_color(_PIPE, _ANSI_DIM)}  > ")
+    sys.stdout.flush()
+    raw = tty.readline().strip()
     print(_color(_PIPE, _ANSI_DIM))
     return raw or default
 
@@ -114,19 +128,19 @@ class _Spinner:
             time.sleep(0.08)
 
 
-def install_one(companion: dict, *, yes: bool) -> None:
+def install_one(companion: dict, *, yes: bool, tty) -> None:
     name = companion["name"]
     docs = companion["docs"]
     cmd_list = companion["install_cmd"]
     cmd_str = " ".join(shlex.quote(c) for c in cmd_list)
 
-    if yes or _prompt_yn(f"Have you installed {name}?", default=True):
+    if yes or _prompt_yn(f"Have you installed {name}?", default=True, tty=tty):
         _print_step(_SKIP, f"{name} (skipped — already installed)", dim=True)
         return
 
     print(f"{_color(_PIPE, _ANSI_DIM)}  docs: {docs}")
-    edited_cmd = _prompt_text(f"Command to install {name}:", default=cmd_str)
-    if not _prompt_yn(f"Run `{edited_cmd}`?", default=True):
+    edited_cmd = _prompt_text(f"Command to install {name}:", default=cmd_str, tty=tty)
+    if not _prompt_yn(f"Run `{edited_cmd}`?", default=True, tty=tty):
         _print_step(_SKIP, f"{name} (skipped — user declined)", dim=True)
         return
 
@@ -139,9 +153,12 @@ def install_one(companion: dict, *, yes: bool) -> None:
 
 
 def install_all(*, yes: bool = False) -> int:
-    if not sys.stdin.isatty() and not yes:
+    if yes:
+        return 0
+    tty = _open_tty()
+    if tty is None:
         return 0
     _print_banner()
     for companion in COMPANIONS:
-        install_one(companion, yes=yes)
+        install_one(companion, yes=False, tty=tty)
     return 0
