@@ -6,6 +6,7 @@ import argparse
 import importlib.util
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parent
@@ -73,7 +74,15 @@ def cmd_create(args: argparse.Namespace) -> int:
         "claim_expires_at": "",
         "created_at": u.now_rfc3339(),
     }
-    target.write_text(frontmatter.encode(fm, body), encoding="utf-8")
+    content = frontmatter.encode(fm, body)
+    fh, tmp = tempfile.mkstemp(dir=td, prefix=f".{target.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fh, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, target)
+    except Exception:
+        Path(tmp).unlink(missing_ok=True)
+        raise
     emit("task.created", {"id": tid, "slug": slug})
     return 0
 
@@ -95,7 +104,11 @@ def cmd_claim(args: argparse.Namespace) -> int:
     agent: str = args.agent
     ttl = int(args.ttl_seconds)
     expires_at: str = u.now_rfc3339(ttl)
-    frontmatter.mutate(path, claimed_by=agent, status="in-progress", claim_expires_at=expires_at)
+    try:
+        frontmatter.mutate(path, claimed_by=agent, status="in-progress", claim_expires_at=expires_at)
+    except Exception:
+        lock.unlink(missing_ok=True)
+        raise
 
     fm, _ = frontmatter.parse(path.read_text())
     tid = fm.get("id", path.name.split("-", 1)[0])
