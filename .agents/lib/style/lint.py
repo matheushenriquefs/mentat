@@ -7,6 +7,12 @@ import re
 import sys
 from pathlib import Path
 
+_LIB = Path(__file__).resolve().parents[1]
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+
+from frontmatter import parse as _parse_frontmatter  # noqa: E402
+
 BANNED_RE = re.compile(
     r"\b(just|simply|really|basically|actually|obviously|certainly|moreover)\b"
     r"|sure[,!.]|of course|happy to|might want to|feel free to",
@@ -39,21 +45,6 @@ def _classify(path: Path) -> str | None:
     if ".agents/agents/" in str(path) and path.name.endswith(".md"):
         return "crew"
     return None
-
-
-def _parse_frontmatter(text: str) -> tuple[dict[str, str], int]:
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return {}, 0
-    end = 1
-    while end < len(lines) and lines[end].strip() != "---":
-        end += 1
-    fm: dict[str, str] = {}
-    for line in lines[1:end]:
-        if ":" in line and not line.startswith((" ", "\t")):
-            k, _, v = line.partition(":")
-            fm[k.strip()] = v.strip()
-    return fm, end + 1
 
 
 def _strip_fences(text: str) -> str:

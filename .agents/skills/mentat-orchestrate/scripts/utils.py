@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
 _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
+from lib import frontmatter as _frontmatter  # noqa: E402
 from lib import jsonc as _jsonc  # noqa: E402
 from lib import paths  # noqa: E402,F401  # type: ignore[reportUnusedImport]  # pyright: ignore[reportUnusedImport]
 from lib.events import bind  # noqa: E402
@@ -25,21 +25,7 @@ def resolve_plan_ref(ref: str) -> Path:
 
 
 def parse_frontmatter(plan_path: Path) -> dict[str, str]:
-    text = plan_path.read_text()
-    fm: dict[str, str] = {}
-    in_fm = False
-    for line in text.splitlines():
-        if line.strip() == "---":
-            if not in_fm:
-                in_fm = True
-                continue
-            else:
-                break
-        if in_fm:
-            m = re.match(r"^(\w+):\s*(.+)$", line)
-            if m:
-                fm[m.group(1)] = m.group(2).strip()
-    return fm
+    return _frontmatter.parse(plan_path.read_text())[0]
 
 
 def run_gates(chunk_path: Path | None) -> tuple[str, str]:

@@ -7,7 +7,6 @@ import argparse
 import importlib.util
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -22,6 +21,11 @@ from lib.gates import engine as _gate_engine  # noqa: E402
 _SESSION_SCRIPT = paths.SKILLS_DIR / "mentat-session/scripts/session.py"
 _GIT_SCRIPT = paths.SKILLS_DIR / "mentat-git/scripts/git.py"
 _GIT_WORKTREE_PY = paths.SKILLS_DIR / "mentat-git/scripts/worktree.py"
+
+if str(_AGENTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_DIR))
+
+from lib import frontmatter as _frontmatter  # noqa: E402
 
 
 def _load_worktree_module():
@@ -105,21 +109,7 @@ def resolve_plan_path(ref: str) -> Path:
 
 
 def parse_frontmatter(plan_path: Path) -> dict[str, str]:
-    text = plan_path.read_text()
-    fm: dict[str, str] = {}
-    in_fm = False
-    for line in text.splitlines():
-        if line.strip() == "---":
-            if not in_fm:
-                in_fm = True
-                continue
-            else:
-                break
-        if in_fm:
-            m = re.match(r"^(\w+):\s*(.+)$", line)
-            if m:
-                fm[m.group(1)] = m.group(2).strip()
-    return fm
+    return _frontmatter.parse(plan_path.read_text())[0]
 
 
 from lib.events import bind as _bind  # noqa: E402
