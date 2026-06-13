@@ -89,8 +89,15 @@ def test_bulk_symlinks_present(fake_clone: Path, fake_home: Path) -> None:
     plan = _load("plan")
     ip = plan.compute_plan(home=fake_home, clone_root=fake_clone)
     targets = {str(a.target) for a in ip.add}
-    for rel in ("AGENTS.md", "agents", "bin", "lib", "docs/PATHS.md", "docs/adr"):
-        assert str(fake_home / ".agents" / rel) in targets, f"missing bulk symlink: {rel}"
+    # Harness surface stays at ~/.agents/
+    for rel in ("AGENTS.md", "agents"):
+        assert str(fake_home / ".agents" / rel) in targets, f"missing ~/.agents/ symlink: {rel}"
+    # Mentat-private surface moves to ~/.mentat/
+    for rel in ("bin", "lib", "docs/PATHS.md", "docs/adr"):
+        assert str(fake_home / ".mentat" / rel) in targets, f"missing ~/.mentat/ symlink: {rel}"
+    # Must NOT be under ~/.agents/ anymore
+    for rel in ("bin", "lib"):
+        assert str(fake_home / ".agents" / rel) not in targets, "bin/lib must NOT be under ~/.agents/"
 
 
 def test_idempotent_second_run(fake_clone: Path, fake_home: Path) -> None:

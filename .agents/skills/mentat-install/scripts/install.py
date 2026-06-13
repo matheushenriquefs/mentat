@@ -99,6 +99,7 @@ def do_install(
 
     _emit_installed()
     print("mentat-install: done.")
+    print("  → add ~/.mentat/bin to your PATH")
     return 0
 
 
