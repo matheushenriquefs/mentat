@@ -102,7 +102,8 @@ def test_preflight_skips_inside_sibling_worktree(main_repo, monkeypatch):
 
 def test_preflight_returns_65_on_path_conflict(main_repo):
     impl = _load()
-    (main_repo.parent / "feat-conflict").mkdir()
+    conflict = main_repo / ".mentat" / "worktrees" / "feat-conflict"
+    conflict.mkdir(parents=True)
     rc, target = impl.preflight_worktree("feat-conflict")
     assert rc == 65
     assert target is None
@@ -141,7 +142,7 @@ def test_main_invokes_preflight_then_chdir(main_repo, tmp_path, monkeypatch):
 
     assert exc.value.code == 0
     assert mock_run.call_count == 1
-    expected = (main_repo.parent / "feat-cli").resolve()
+    expected = (main_repo / ".mentat" / "worktrees" / "feat-cli").resolve()
     assert expected.is_dir()
     # Verify os.chdir actually fired with the worktree path before run_plan was invoked.
     assert any(p.resolve() == expected for p in chdir_targets), (
@@ -155,7 +156,8 @@ def test_main_emits_eject_on_preflight_conflict(main_repo, tmp_path, monkeypatch
     plan_dir.mkdir()
     plan = plan_dir / "feat-conflict.md"
     plan.write_text("---\nid: feat-conflict\nclass: AFK\n---\n# x\n")
-    (main_repo.parent / "feat-conflict").mkdir()
+    conflict = main_repo / ".mentat" / "worktrees" / "feat-conflict"
+    conflict.mkdir(parents=True)
 
     emits = []
 

@@ -132,7 +132,8 @@ class TestCmdWorktreeCreate:
                 branch = args[3].replace("refs/heads/", "")
                 return _cp(0) if branch == "main" else _cp(1)
             if args[:2] == ["worktree", "add"]:
-                created_targets.append(Path(args[3]))
+                # ["worktree", "add", "-b", <branch>, <target-path>, <base>]
+                created_targets.append(Path(args[4]))
                 return _cp(0)
             return _cp(1)
 
@@ -144,7 +145,7 @@ class TestCmdWorktreeCreate:
         target = created_targets[0]
         assert ".mentat" in target.parts, f"expected .mentat/ in worktree path, got {target}"
         assert "worktrees" in target.parts, f"expected worktrees/ in worktree path, got {target}"
-        assert target.parent.parent == tmp_path, f"expected <main_root>/.mentat/worktrees/<slug>, got {target}"
+        assert target.parent.parent.parent == tmp_path, f"expected <main_root>/.mentat/worktrees/<slug>, got {target}"
 
 
 # ── container_id_for_cwd ─────────────────────────────────────────────────────

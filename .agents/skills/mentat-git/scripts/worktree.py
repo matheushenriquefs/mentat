@@ -96,7 +96,7 @@ def cmd_worktree_create(slug: str, *, base: str | None = None, parent: Path | No
         return 70
 
     if parent is None:
-        parent = main_root.parent
+        parent = main_root / ".mentat" / "worktrees"
     target = (parent / slug).resolve()
 
     if _existing_worktree(main_root, target):
