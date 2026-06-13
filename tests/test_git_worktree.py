@@ -29,7 +29,7 @@ def test_creates_sibling_worktree(repo, capsys):
     wt = _load_worktree()
     rc = wt.cmd_worktree_create("feat-x")
     assert rc == 0
-    target = repo.parent / "feat-x"
+    target = repo / ".mentat" / "worktrees" / "feat-x"
     assert target.is_dir()
     branches = subprocess.run(["git", "branch"], cwd=repo, capture_output=True, text=True).stdout
     assert "feat-x" in branches
@@ -57,7 +57,8 @@ def test_idempotent_when_worktree_already_exists(repo):
 
 def test_conflict_when_path_exists_unregistered(repo):
     wt = _load_worktree()
-    (repo.parent / "feat-conflict").mkdir()
+    conflict = repo / ".mentat" / "worktrees" / "feat-conflict"
+    conflict.mkdir(parents=True)
     rc = wt.cmd_worktree_create("feat-conflict")
     assert rc == 65
 
@@ -91,7 +92,7 @@ def test_cli_dispatch(repo):
         cwd=repo,
     )
     assert result.returncode == 0
-    target = repo.parent / "feat-cli"
+    target = repo / ".mentat" / "worktrees" / "feat-cli"
     assert target.is_dir()
     out_path = Path(result.stdout.strip().splitlines()[-1])
     assert out_path.resolve() == target.resolve()
@@ -115,7 +116,7 @@ def test_race_window_path_conflict_maps_to_65(repo, monkeypatch):
     """If another process creates the target between our pre-check and `git worktree add`,
     we should still return 65 (not 70) by reading git's stderr."""
     wt = _load_worktree()
-    target_parent = repo.parent
+    target_parent = repo / ".mentat" / "worktrees"
 
     real_existing = wt._existing_worktree
     real_target_exists_check = Path.exists
