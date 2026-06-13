@@ -43,10 +43,22 @@ def _print_step(symbol: str, text: str, dim: bool = False) -> None:
     print(_color(_PIPE, _ANSI_DIM))
 
 
-def _prompt_yn(question: str, default: bool) -> bool:
+def _open_tty():
+    """Return a readable file for interactive input, even inside curl | bash."""
+    if sys.stdin.isatty():
+        return sys.stdin
+    try:
+        return open("/dev/tty")  # noqa: SIM115
+    except OSError:
+        return None
+
+
+def _prompt_yn(question: str, default: bool, *, tty) -> bool:
     suffix = "Y/n" if default else "y/N"
     print(f"{_color(_PROMPT_ASK, _ANSI_YELLOW)}  {question}")
-    raw = input(f"{_color(_PIPE, _ANSI_DIM)}  [{suffix}] ").strip().lower()
+    sys.stdout.write(f"{_color(_PIPE, _ANSI_DIM)}  [{suffix}] ")
+    sys.stdout.flush()
+    raw = tty.readline().strip().lower()
     print(_color(_PIPE, _ANSI_DIM))
     if not raw:
         return default
@@ -81,11 +93,16 @@ def setup_path(*, yes: bool = False) -> None:
         _print_step(_SKIP, f"~/.mentat/bin already in {rc} — skipping", dim=True)
         return
 
-    if yes or not sys.stdin.isatty():
+    if yes:
         _print_step(_SKIP, f"~/.mentat/bin not in PATH — add manually to {rc}", dim=True)
         return
 
-    if not _prompt_yn(f"Add ~/.mentat/bin to PATH in {rc}?", default=True):
+    tty = _open_tty()
+    if tty is None:
+        _print_step(_SKIP, f"~/.mentat/bin not in PATH — add manually to {rc}", dim=True)
+        return
+
+    if not _prompt_yn(f"Add ~/.mentat/bin to PATH in {rc}?", default=True, tty=tty):
         _print_step(_SKIP, "PATH not updated — add manually", dim=True)
         return
 
