@@ -3,9 +3,6 @@ name: mentat-prd
 description: Turn the current conversation context into a PRD and publish it to the project issue tracker. Use when user wants to create a PRD from the current context.
 ---
 
-<!-- Forked from mattpocock/skills engineering/to-prd. Delta: steps 2/3 add "deep modules" seams-over-layers doctrine (lines 14-18 of original). -->
-
-
 This skill takes the current conversation context and codebase understanding and produces a PRD. Do NOT interview the user — synthesize what you already know.
 
 The issue tracker and triage label vocabulary should have been provided to you — run `/setup-matt-pocock-skills` if not.
