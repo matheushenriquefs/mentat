@@ -57,6 +57,26 @@ mentat-thing-ui.md        # sibling B: ui slices
 
 Otherwise emit one plan. The heuristic exists so `mentat-orchestrate` can fan groups in parallel without artificial barriers.
 
+### Parent-index frontmatter contract
+
+The parent index MUST declare its siblings with `siblings:` and MUST have empty `blocked_by`:
+
+```
+---
+id: mentat-thing
+status: ready
+class: AFK
+blocked_by: []          # MUST be empty — parent indexes do not participate in topo sort
+siblings: [mentat-thing-core, mentat-thing-ui]  # MUST list all sibling slugs (no .md suffix)
+created_at: 2026-06-13
+---
+```
+
+`mentat-orchestrate` reads `siblings:` and expands the parent into its sibling plans
+before routing. Passing the parent ref to `orchestrate run` produces the same schedule
+as passing every sibling ref directly. Any plan that depends on a sibling must list the
+sibling slug (not the parent slug) in its own `blocked_by`.
+
 ## Rules
 
 - Plan frontmatter requires `id`, `status`, `class`, `blocked_by`. Optional: `parent`, `supersedes`, `created_at`.
