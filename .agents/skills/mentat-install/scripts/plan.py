@@ -136,7 +136,8 @@ def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
     mentat_dir = home / ".mentat"
     if not mentat_dir.exists():
         add.append(Action("mkdir", None, mentat_dir))
-    for sub in ("logs", "bin", "lib", "docs"):
+    # bin and lib are bulk-symlink targets — don't mkdir them (would conflict).
+    for sub in ("logs", "docs"):
         sub_dir = mentat_dir / sub
         if not sub_dir.exists():
             add.append(Action("mkdir", None, sub_dir))
