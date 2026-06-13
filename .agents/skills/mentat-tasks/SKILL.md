@@ -2,16 +2,12 @@
 name: mentat-tasks
 description: Local md task store. Atomic claim, TTL refresh, vertical-slice + HITL/AFK doctrine.
 allowed-tools:
-  - Bash(ln *)
-  - Bash(mv *)
-  - Bash(yq *)
-  - Bash(grep *)
-  - Bash(rg *)
+  - Bash(python3 ~/.agents/skills/mentat-tasks/scripts/tasks.py *)
 ---
 
 # mentat-tasks
 
-Manage a local markdown task store backed by POSIX atomics. No server, no database, no binary. Each task is a file; each claim is a hardlink.
+Manage a local markdown task store backed by POSIX atomics. No server, no database, no binary. Each task is a file; each claim is a lock sentinel.
 
 ## Layout
 
@@ -32,59 +28,30 @@ created_at: 2026-06-06T00:00:00Z
 ---
 ```
 
-Body sections (matt-pocock to-issues template):
+Body sections:
 - **Parent** — plan or PRD link.
 - **What to build** — one paragraph.
 - **Acceptance criteria** — bulleted checklist.
-- **Blocked by** — prose, free-form. No machine graph.
+- **Blocked by** — prose, free-form.
 
-## Primitives
+## Invocation
 
-**next_id**: `ls .mentat/tasks/ | awk -F- '{print $1}' | sort -V | tail -1` + 1. No central index.
+All operations route through `scripts/tasks.py`. Set `MENTAT_TASKS_DIR` to override the default `.mentat/tasks/` dir.
 
-**create `<slug>`**
-```sh
-id=$(ls .mentat/tasks/ 2>/dev/null | awk -F- '{print $1}' | sort -V | tail -1); id=$((${id#T} + 1)); id="T$(printf '%03d' $id)"
-tmp=".mentat/tasks/$id-$slug.md.$$"
-cat > "$tmp"  # write content via stdin
-mv "$tmp" ".mentat/tasks/$id-$slug.md"
-```
+| Subcommand | Args | Description |
+|---|---|---|
+| `next-id` | — | Print next `T###` |
+| `create <slug>` | reads stdin | Create task file from stdin body |
+| `claim <file> <agent> <ttl_s>` | — | Atomic claim via O_EXCL lock sentinel |
+| `release <file>` | — | Release claim, restore `todo` |
+| `refresh <file> <ttl_s>` | — | Bump `claim_expires_at` |
+| `done <file>` | — | Terminal state: done |
+| `wontfix <file>` | — | Terminal state: wontfix |
+| `list [--status <s>]` | — | Enumerate tasks as TSV (id, status, class, claimed_by) |
 
-**claim `<file>` `<agent>` `<ttl_seconds>`**
-```sh
-f=".mentat/tasks/$file"
-lock="$f.lock"
-# Atomic O_EXCL create — POSIX atomic test-and-set. Lock sentinel is separate
-# from the content file so rename(2) on content never rebinds the guard inode.
-( set -C; : > "$lock" ) 2>/dev/null || { echo "already claimed"; exit 1; }
-expires=$(date -u -v+${ttl_seconds}S '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -d "+${ttl_seconds} seconds" '+%Y-%m-%dT%H:%M:%SZ')
-tmp="$f.$$.tmp"; cp "$f" "$tmp"
-yq -i ".claimed_by = \"$agent\" | .claim_expires_at = \"$expires\" | .status = \"in-progress\"" "$tmp"
-mv "$tmp" "$f"
-# lock remains until release
-```
+## Atomic-write invariant
 
-**release `<file>`**
-```sh
-f=".mentat/tasks/$file"
-tmp="$f.$$.tmp"; cp "$f" "$tmp"
-yq -i '.claimed_by = "" | .claim_expires_at = "" | .status = "todo"' "$tmp"
-mv "$tmp" "$f"; rm -f "$f.lock"
-```
-
-**refresh `<file>` `<ttl_seconds>`** — bump `claim_expires_at`:
-```sh
-expires=$(date -u -v+${ttl_seconds}S '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -d "+${ttl_seconds} seconds" '+%Y-%m-%dT%H:%M:%SZ')
-tmp="$f.$$.tmp"; cp "$f" "$tmp"
-yq -i ".claim_expires_at = \"$expires\"" "$tmp"; mv "$tmp" "$f"
-```
-
-**done / wontfix `<file>`**
-```sh
-tmp="$f.$$.tmp"; cp "$f" "$tmp"
-yq -i ".status = \"done\" | .claimed_by = \"\" | .claim_expires_at = \"\"" "$tmp"
-mv "$tmp" "$f"; rm -f "$f.lock"
-```
+All frontmatter mutations use `lib.frontmatter.mutate` — tmp+`os.replace` same-fs rename (POSIX `rename(2)`). Claims use `os.open(O_CREAT|O_EXCL)` for exclusive create — correct POSIX primitive for test-and-set. The lock sentinel (`.lock`) is separate from the content file so rename never rebinds the guard inode.
 
 ## Pick gate
 
@@ -93,21 +60,21 @@ Pick only if:
 2. `class` is set (`HITL` or `AFK`). Never pick untriaged.
 3. No `.lock` sentinel exists for a non-expired claim.
 
-## Atomic-write invariant
+## Events emitted
 
-All mutations use tmp+rename (POSIX `rename(2)`, same-fs):
-```sh
-umask 077; tmp="$f.$$.tmp"
-cp "$f" "$tmp" && yq -i "$patch" "$tmp" && mv "$tmp" "$f"
-```
-
-Skip `flock` — unreliable on macOS APFS. `set -C` noclobber (O_EXCL) + `rename(2)` is the correct POSIX primitive: noclobber for exclusive claim creation, rename for atomic content update. The lock sentinel (`.lock`) is separate from the content file so rename never rebinds the guard inode.
+| Event | Payload |
+|---|---|
+| `task.created` | `{id, slug}` |
+| `task.claimed` | `{id, agent, expires_at}` |
+| `task.released` | `{id}` |
+| `task.done` | `{id}` |
+| `task.wontfix` | `{id}` |
 
 ## Boundary with other skills
 
-`mentat-issues` (intake) → writes task via `mentat-tasks create`.  
-`triage` → mutates `class` + `status`.  
-`mentat-prd` → references task ids as `T###` in prose.  
+`mentat-issues` (intake) → writes task via `mentat-tasks create`.
+`triage` → mutates `class` + `status`.
+`mentat-prd` → references task ids as `T###` in prose.
 `mentat-tasks` owns schema + filesystem protocol only.
 
 ## Deferred
