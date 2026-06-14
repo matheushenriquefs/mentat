@@ -21,7 +21,6 @@ Idempotent install: creates `~/.mentat/` state dirs, symlinks (clone mode) or co
 | `--yes` / `-y` | Skip confirmation prompt (assumes Yes to "have you installed?" companion checks) |
 | `--no-color` | Disable ANSI color output |
 | `--skip-companions` | Skip 3rd-party companion install prompts entirely |
-| `--skip-path-setup` | Skip PATH setup prompt for `~/.mentat/bin` |
 | `--help` / `-h` | Show usage |
 
 ## Companion phase
