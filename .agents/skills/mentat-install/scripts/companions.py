@@ -13,20 +13,20 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
+
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
+
+from lib.tui import DONE, PIPE, SKIP, color, open_tty, print_step, prompt_text, prompt_yn  # noqa: E402
 
 _BANNER = "◆ mentat installer"
-_PIPE = "│"
-_PROMPT_OK = "◇"
-_PROMPT_ASK = "◆"
-_DONE = "✓"
-_SKIP = "○"
-
 _SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
 _ANSI_DIM = "\033[2m"
 _ANSI_GREEN = "\033[32m"
 _ANSI_YELLOW = "\033[33m"
-_ANSI_RESET = "\033[0m"
 
 
 COMPANIONS: list[dict] = [
@@ -47,54 +47,10 @@ COMPANIONS: list[dict] = [
 ]
 
 
-def _color(text: str, ansi: str) -> str:
-    if sys.stdout.isatty():
-        return f"{ansi}{text}{_ANSI_RESET}"
-    return text
-
-
 def _print_banner() -> None:
     print()
-    print(_color(_BANNER, _ANSI_GREEN))
-    print(_color(_PIPE, _ANSI_DIM))
-
-
-def _print_step(symbol: str, text: str, dim: bool = False) -> None:
-    sym = _color(symbol, _ANSI_DIM if dim else _ANSI_GREEN)
-    print(f"{sym}  {text}")
-    print(_color(_PIPE, _ANSI_DIM))
-
-
-def _open_tty():
-    """Return a readable file for interactive input, even inside curl | bash."""
-    if sys.stdin.isatty():
-        return sys.stdin
-    try:
-        return open("/dev/tty")  # noqa: SIM115
-    except OSError:
-        return None
-
-
-def _prompt_yn(question: str, default: bool, *, tty) -> bool:
-    suffix = "Y/n" if default else "y/N"
-    print(f"{_color(_PROMPT_ASK, _ANSI_YELLOW)}  {question}")
-    sys.stdout.write(f"{_color(_PIPE, _ANSI_DIM)}  [{suffix}] ")
-    sys.stdout.flush()
-    raw = tty.readline().strip().lower()
-    print(_color(_PIPE, _ANSI_DIM))
-    if not raw:
-        return default
-    return raw in ("y", "yes")
-
-
-def _prompt_text(question: str, default: str, *, tty) -> str:
-    print(f"{_color(_PROMPT_ASK, _ANSI_YELLOW)}  {question}")
-    print(f"{_color(_PIPE, _ANSI_DIM)}  default: {default}")
-    sys.stdout.write(f"{_color(_PIPE, _ANSI_DIM)}  > ")
-    sys.stdout.flush()
-    raw = tty.readline().strip()
-    print(_color(_PIPE, _ANSI_DIM))
-    return raw or default
+    print(color(_BANNER, _ANSI_GREEN))
+    print(color(PIPE, _ANSI_DIM))
 
 
 class _Spinner:
@@ -122,43 +78,43 @@ class _Spinner:
         i = 0
         while not self._stop.is_set():
             frame = _SPINNER_FRAMES[i % len(_SPINNER_FRAMES)]
-            sys.stdout.write(f"\r{_color(frame, _ANSI_YELLOW)}  {self._label}")
+            sys.stdout.write(f"\r{color(frame, _ANSI_YELLOW)}  {self._label}")
             sys.stdout.flush()
             i += 1
             time.sleep(0.08)
 
 
-def install_one(companion: dict, *, yes: bool, tty) -> None:
+def install_one(companion: dict, *, tty) -> None:
     name = companion["name"]
     docs = companion["docs"]
     cmd_list = companion["install_cmd"]
     cmd_str = " ".join(shlex.quote(c) for c in cmd_list)
 
-    if yes or _prompt_yn(f"Have you installed {name}?", default=True, tty=tty):
-        _print_step(_SKIP, f"{name} (skipped — already installed)", dim=True)
+    if prompt_yn(f"Have you installed {name}?", default=True, tty=tty):
+        print_step(SKIP, f"{name} (skipped — already installed)", dim=True)
         return
 
-    print(f"{_color(_PIPE, _ANSI_DIM)}  docs: {docs}")
-    edited_cmd = _prompt_text(f"Command to install {name}:", default=cmd_str, tty=tty)
-    if not _prompt_yn(f"Run `{edited_cmd}`?", default=True, tty=tty):
-        _print_step(_SKIP, f"{name} (skipped — user declined)", dim=True)
+    print(f"{color(PIPE, _ANSI_DIM)}  docs: {docs}")
+    edited_cmd = prompt_text(f"Command to install {name}:", default=cmd_str, tty=tty)
+    if not prompt_yn(f"Run `{edited_cmd}`?", default=True, tty=tty):
+        print_step(SKIP, f"{name} (skipped — user declined)", dim=True)
         return
 
     with _Spinner(f"installing {name}…"):
         result = subprocess.run(shlex.split(edited_cmd), check=False, capture_output=True, text=True)
     if result.returncode == 0:
-        _print_step(_DONE, f"{name} installed")
+        print_step(DONE, f"{name} installed")
     else:
-        _print_step(_SKIP, f"{name} failed (exit {result.returncode}) — re-run manually", dim=True)
+        print_step(SKIP, f"{name} failed (exit {result.returncode}) — re-run manually", dim=True)
 
 
 def install_all(*, yes: bool = False) -> int:
     if yes:
         return 0
-    tty = _open_tty()
-    if tty is None:
-        return 0
-    _print_banner()
-    for companion in COMPANIONS:
-        install_one(companion, yes=False, tty=tty)
+    with open_tty() as tty:
+        if tty is None:
+            return 0
+        _print_banner()
+        for companion in COMPANIONS:
+            install_one(companion, tty=tty)
     return 0
