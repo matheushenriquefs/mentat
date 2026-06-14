@@ -65,7 +65,6 @@ def do_install(
     dry_run: bool = False,
     color: bool | None = None,
     skip_companions: bool = False,
-    skip_path_setup: bool = False,
 ) -> int:
     if home is None:
         home = Path.home()
@@ -86,8 +85,7 @@ def do_install(
     if not skip_companions:
         _companions.install_all(yes=yes)
 
-    if not skip_path_setup:
-        _path_setup.setup_path(yes=yes)
+    _path_setup.setup_path(yes=yes)
 
     if not yes and sys.stdin.isatty():
         answer = input("Proceed? [y/N] ")
@@ -164,7 +162,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
     p.add_argument("--no-color", action="store_true", help="Disable ANSI output")
     p.add_argument("--skip-companions", action="store_true", help="Skip 3rd-party companion install prompts")
-    p.add_argument("--skip-path-setup", action="store_true", help="Skip PATH setup prompt for ~/.mentat/bin")
     p.add_argument(
         "--repo",
         metavar="PATH",
@@ -197,7 +194,6 @@ def main() -> None:
             color=color,
             clone_root=clone_root,
             skip_companions=args.skip_companions,
-            skip_path_setup=args.skip_path_setup,
         )
     )
 
