@@ -34,7 +34,14 @@ def test_yes_skips_all_companions_without_subprocess() -> None:
 
 def test_no_tty_auto_skips() -> None:
     companions = _load("companions")
-    with patch.object(companions.sys.stdin, "isatty", return_value=False):
+    # patch open_tty to yield None (simulates no /dev/tty available)
+    import contextlib
+
+    @contextlib.contextmanager
+    def _no_tty():
+        yield None
+
+    with patch.object(companions, "open_tty", _no_tty):
         with patch.object(companions.subprocess, "run") as mock_run:
             rc = companions.install_all(yes=False)
     assert rc == 0
@@ -78,7 +85,7 @@ def test_install_one_no_to_first_prompt_runs_command() -> None:
     tty = _FakeTTY(["n", "", "y"])
     with patch.object(companions.subprocess, "run") as mock_run:
         mock_run.return_value.returncode = 0
-        companions.install_one(fake_companion, yes=False, tty=tty)
+        companions.install_one(fake_companion, tty=tty)
     assert mock_run.call_count == 1
     args = mock_run.call_args
     assert args.args[0] == ["echo", "hello"]
@@ -93,5 +100,5 @@ def test_install_one_yes_to_first_prompt_skips_subprocess() -> None:
     }
     tty = _FakeTTY(["y"])
     with patch.object(companions.subprocess, "run") as mock_run:
-        companions.install_one(fake_companion, yes=False, tty=tty)
+        companions.install_one(fake_companion, tty=tty)
     assert mock_run.call_count == 0

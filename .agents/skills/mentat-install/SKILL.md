@@ -13,12 +13,6 @@ Idempotent install: creates `~/.mentat/` state dirs, symlinks (clone mode) or co
 .agents/bin/mentat-install [--dry-run] [--yes] [--no-color] [--help]
 ```
 
-or directly:
-
-```
-python3 ~/.agents/skills/mentat-install/scripts/install.py [--dry-run] [--yes] [--no-color] [--help]
-```
-
 ## Flags
 
 | Flag | Description |
@@ -27,12 +21,17 @@ python3 ~/.agents/skills/mentat-install/scripts/install.py [--dry-run] [--yes] [
 | `--yes` / `-y` | Skip confirmation prompt (assumes Yes to "have you installed?" companion checks) |
 | `--no-color` | Disable ANSI color output |
 | `--skip-companions` | Skip 3rd-party companion install prompts entirely |
+| `--skip-path-setup` | Skip PATH setup prompt for `~/.mentat/bin` |
 | `--help` / `-h` | Show usage |
 
 ## Companion phase
 
-Before symlink work, prompts for two 3rd-party suites (matt-pocock-skills, juliusbrussee-caveman) via a Clack-style stdlib TUI (banner + boxed prompts + ASCII spinner) modeled on `npx skills@latest add` ground truth. Per companion: `[Y/n] Have you installed <name>?` → Yes skips, No shows docs URL + editable command + spinner-wrapped `subprocess.run`. `check=False` — failures don't abort, surface as `○ failed (exit N) — re-run manually`. `--yes` / `--skip-companions` short-circuit. No TTY → auto-skip. See `scripts/companions.py` for the COMPANIONS list.
+Prompts for two 3rd-party suites (matt-pocock-skills, juliusbrussee-caveman) via Clack-style stdlib TUI. Per companion: `[Y/n] Have you installed <name>?` → Yes skips, No shows docs URL + editable command + spinner-wrapped `subprocess.run`. Failures surface as `○ failed (exit N)`. `--yes` / `--skip-companions` short-circuit. Uses `/dev/tty` so `curl | bash` is interactive; no TTY → auto-skip.
+
+## PATH setup phase
+
+Prompts to add `~/.mentat/bin` to the shell rc file (`~/.zshrc`, `~/.bashrc`, fish). Skipped if already in `$PATH` or rc. Uses `/dev/tty` for `curl | bash`. `--yes` / `--skip-path-setup` skip.
 
 ## Runtime deps
 
-Stdlib only at the bin layer (ADR-0008). No third-party dependencies — no `questionary`, no `rich`. Pure `input()` + ANSI escape sequences + threading for the spinner.
+Stdlib only (ADR-0008). Shared TUI helpers in `lib/tui.py`.
