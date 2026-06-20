@@ -22,6 +22,8 @@ SYSEXITS = {42, 64, 65, 66, 67, 68, 69, 70, 71, 73, 74, 75, 76, 77, 78}
 
 _CALL = re.compile(r"(?:sys\.exit|SystemExit)\(\s*(\d+)\s*\)")
 _RETURN = re.compile(r"^\s*return\s+(\d+)\s*$", re.M)
+# `rc = <int>` exit-code accumulator pattern (e.g. tasks.py dispatch).
+_RC_ASSIGN = re.compile(r"^\s*rc\s*=\s*(\d+)\s*$", re.M)
 
 # Files converted in S14 — must import the constants.
 CONVERTED = [
@@ -30,6 +32,7 @@ CONVERTED = [
     "mentat-implement/scripts/implement.py",
     "mentat-install/scripts/install.py",
     "mentat-orchestrate/scripts/orchestrate.py",
+    "mentat-tasks/scripts/tasks.py",
 ]
 
 
@@ -46,7 +49,7 @@ def test_no_bare_sysexits_literal_in_exit_or_return() -> None:
     offenders: list[str] = []
     for p in _core_scripts():
         text = p.read_text()
-        for rx in (_CALL, _RETURN):
+        for rx in (_CALL, _RETURN, _RC_ASSIGN):
             for m in rx.finditer(text):
                 if int(m.group(1)) in SYSEXITS:
                     line = text[: m.start()].count("\n") + 1

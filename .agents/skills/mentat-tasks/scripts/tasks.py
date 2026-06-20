@@ -16,6 +16,7 @@ if str(_AGENTS_DIR) not in sys.path:
 
 from lib import frontmatter  # noqa: E402
 from lib.events import bind  # noqa: E402
+from lib.exits import EX_USAGE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
 _utils = load_sibling(__file__, "utils")
@@ -230,7 +231,7 @@ def main(argv: list[str] | None = None) -> None:
         rc = cmd_list(args)
     else:
         parser.print_help(sys.stderr)
-        rc = 64
+        rc = EX_USAGE
     if rc != 0:
         sys.exit(rc)
 
