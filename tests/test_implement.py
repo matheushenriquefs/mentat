@@ -408,6 +408,22 @@ def test_implement_no_summary_on_failure(tmp_path):
     mock_sum.assert_not_called()
 
 
+def test_implement_no_summary_on_hitl_handoff(tmp_path):
+    """S8 drift fix: a HITL plan returns 0 by handing off to the calling session
+    (nothing implemented yet) — no premature 'completed' success summary. Summary
+    is for AFK runs that actually executed the plan to completion."""
+    impl = load_module("implement")
+    plan = _write_plan(tmp_path, "hitl-handoff", class_="HITL")
+
+    with patch.object(impl, "run_plan", return_value=0):
+        with patch.object(impl, "_auto_summary") as mock_sum:
+            with patch.object(impl, "_auto_doctor"):
+                rc = impl._run_and_doctor(plan, harness="fake")
+
+    assert rc == 0
+    mock_sum.assert_not_called()
+
+
 def test_auto_summary_invokes_session_report(tmp_path, monkeypatch):
     """S8: _auto_summary shells `session.py report [<id>]` to write summary.md
     (mirrors _auto_doctor's session.py doctor call)."""
