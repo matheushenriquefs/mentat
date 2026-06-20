@@ -190,8 +190,15 @@ def _in_shared_main_tree() -> bool:
     branch-leak the user hit. Separate worktrees each own their HEAD (git refuses
     cross-worktree branch sharing), so an own-worktree run is leak-proof.
 
-    Test isolation (``MENTAT_SKIP_PREFLIGHT``) and non-repo cwds have no shared
-    HEAD to leak, so they are never "shared main trees".
+    The one shared predicate for "is cwd the live main tree right now" — both the
+    S9 leak guard and ``preflight_worktree``'s create gate route through it, so
+    the skip→rev-parse→``_is_main_worktree`` triad lives in exactly one place.
+
+    ``MENTAT_SKIP_PREFLIGHT`` returns False by design: it is the test-isolation
+    escape hatch. A test that sets it and switches branches in a tmp main tree is
+    its own private repo with no concurrent sessions to leak into — the hatch
+    trades the (vacuous) leak risk for hermetic, worktree-free test runs.
+    Non-repo cwds likewise have no shared HEAD to leak.
     """
     if os.environ.get("MENTAT_SKIP_PREFLIGHT"):
         return False
@@ -222,16 +229,10 @@ def preflight_worktree(slug: str) -> tuple[int, Path | None]:
         return (0, None)
     if not _GIT_SCRIPT.exists():
         return (0, None)
-    cwd = Path.cwd()
-    in_repo = subprocess.run(
-        ["git", "rev-parse", "--is-inside-work-tree"],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-    )
-    if in_repo.returncode != 0:
-        return (0, None)
-    if not _is_main_worktree(cwd):
+    # Only the shared main tree needs a worktree carved out; a non-repo cwd or an
+    # already-isolated sibling worktree is left alone. Same predicate the S9 leak
+    # guard uses — one source of truth for "is this the live main tree".
+    if not _in_shared_main_tree():
         return (0, None)
 
     result = subprocess.run(
