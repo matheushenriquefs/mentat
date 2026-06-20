@@ -373,21 +373,42 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     return 0
 
 
-def main() -> None:
-    # Support both: `mentat-implement <plan>` and `mentat-implement run <plan>`
-    argv = sys.argv[1:]
-    if argv and argv[0] == "mark-test-writable":
-        if len(argv) < 3:
-            print("usage: mentat-implement mark-test-writable <slug> <path>", file=sys.stderr)
-            sys.exit(EX_USAGE)
-        mark_test_writable(slug=argv[1], path=argv[2])
-        sys.exit(EX_OK)
+_SUBCOMMANDS = frozenset({"run", "mark-test-writable"})
 
+
+def _build_parser() -> argparse.ArgumentParser:
+    """One argparse parser with subparsers for every entrypoint command, so
+    `implement` shares the dispatch style of every other skill (S10). The `run`
+    subcommand is the default — `mentat-implement <plan>` is sugar for
+    `mentat-implement run <plan>`."""
     parser = argparse.ArgumentParser(prog="mentat-implement", description="Atomic plan executor")
-    parser.add_argument("plan_refs", nargs="+", metavar="plan-ref")
-    parser.add_argument("--harness", default=None)
-    parser.add_argument("--model", default=None)
-    args = parser.parse_args(argv)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    run = sub.add_parser("run", help="Execute a plan (default)")
+    run.add_argument("plan_refs", nargs="+", metavar="plan-ref")
+    run.add_argument("--harness", default=None)
+    run.add_argument("--model", default=None)
+
+    mark = sub.add_parser("mark-test-writable", help="Flip a closed test path writable for the red step")
+    mark.add_argument("slug")
+    mark.add_argument("path")
+    return parser
+
+
+def main() -> None:
+    # Default to the `run` subcommand when the first token is not an explicit
+    # subcommand, so `mentat-implement <plan>` and `mentat-implement run <plan>`
+    # are equivalent. This is the canonical argparse idiom for an optional
+    # default command — argparse itself owns all arg validation past this point
+    # (no raw sys.argv parsing of any command's arguments).
+    argv = sys.argv[1:]
+    if not argv or argv[0] not in _SUBCOMMANDS:
+        argv = ["run", *argv]
+    args = _build_parser().parse_args(argv)
+
+    if args.command == "mark-test-writable":
+        mark_test_writable(slug=args.slug, path=args.path)
+        sys.exit(EX_OK)
 
     if len(args.plan_refs) > 1:
         print(

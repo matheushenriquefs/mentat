@@ -9,13 +9,16 @@ Atomic single-plan executor. ONE job: execute one plan in the calling session. N
 
 ## How to invoke
 
+Slash form (in-harness) leads; the `python3` line is the underlying call.
+
 ```
+/mentat-implement <plan-ref> [--harness <name>]
 python3 ~/.agents/skills/mentat-implement/scripts/implement.py <plan-ref> [--harness <name>]
 ```
 
-`plan-ref`: bare slug (`my-plan`) or path (`~/.agents/plans/my-plan.md` or `/abs/path/plan.md`).
+`plan-ref`: bare slug (`my-plan`) or path. Multi-slug → exit 1 (use mentat-orchestrate).
 
-Multi-slug → exit 1 with "use mentat-orchestrate for multi-plan".
+Argparse subcommands (peers): `run` (default), `mark-test-writable <slug> <path>`; `implement <plan>` == `implement run <plan>`. No branch param, does NOT land — the arg-order asymmetry with `orchestrate run <holding-branch> <plan-ref>+` (branch first) is by design, not an inconsistency.
 
 ## Preflight
 
@@ -63,9 +66,7 @@ mentat-implement <single-plan-slug>
 
 ## Decisions
 
-- One plan slug per invocation. Multi-plan → use `mentat-orchestrate`.
 - No `MENTAT_BATCH_CLASS` env var. Class lives in plan frontmatter (source of truth).
-- HITL exit code = `42` (sentinel; clear from 0 / 1 / signal codes).
 - Harness: default from `~/.mentat/config.jsonc` `harness:` key; override via `--harness`.
 - Gate runner: iterates `.agents/lib/gates/code/*.py` (`run(chunk_path)`); spawns reviewer subagents (`mentat-{plan,test,bug,smell}-reviewer`) via Agent tool; `score.py` aggregates.
 
@@ -107,14 +108,12 @@ When `~/.agents/plans/<slug>.tests.json` exists, `mentat-implement` reads it bef
 - `open` paths → writable (plan author declared intent to modify them).
 - Absent manifest → no extra mounts; ADR-0006 soft layer still applies.
 
-`mark-test-writable <path>` subcommand flips a closed path writable for the red-test
-step; reverts to `ro,bind` after red commits. Audited as `test.writable.requested`.
+`mark-test-writable <slug> <path>` subcommand (peer of `run` under argparse) flips a
+closed path writable for the red-test step; reverts to `ro,bind` after red commits.
+Audited as `test.writable.requested`.
 
 ## Constraints
 
 - HITL class: `AskUserQuestion` allowed at any phase.
 - AFK class: no interactive prompts. Ambiguity is ejection, not a question.
-- Harness selection from `~/.mentat/config.jsonc`; `--harness` flag overrides.
-- Plan class read from frontmatter only; no env var override.
-- Session id from `$MENTAT_SESSION` (`<epoch>-<pid>` format).
-- Gate pass required for each slice before proceeding to next.
+- Session id from `$MENTAT_SESSION` (`<role>-<slug>-<pid>` format).

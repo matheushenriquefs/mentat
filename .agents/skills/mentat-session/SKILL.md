@@ -9,10 +9,12 @@ Session inspection toolkit. `track` tails JSONL events live with color-coded out
 
 ## How to invoke
 
+Terminal tool — run on PATH (no slash form; this is not a harness slash command):
+
 ```
-python3 ~/.agents/skills/mentat-session/scripts/session.py track [<session>]
-python3 ~/.agents/skills/mentat-session/scripts/session.py doctor [<session>]
-python3 ~/.agents/skills/mentat-session/scripts/session.py diagnose
+mentat-session track [<session>]
+mentat-session doctor [<session>]
+mentat-session diagnose
 ```
 
 ## Doctor markdown structure

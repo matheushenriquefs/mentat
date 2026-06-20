@@ -9,6 +9,14 @@ Write structured plan files to `~/.agents/plans/` and resolve plan slug-or-path 
 
 ## How to invoke
 
+In-harness slash command (lead form):
+
+```
+/mentat-plan <subcommand> <args>
+```
+
+Underlying call (what the slash form runs):
+
 ```
 python3 ~/.agents/skills/mentat-plan/scripts/plan.py <subcommand> <args>
 ```

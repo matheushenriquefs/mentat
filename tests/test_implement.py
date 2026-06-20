@@ -7,6 +7,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from tests.conftest import load_script
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts"
@@ -303,6 +305,49 @@ def test_mark_test_writable_missing_path_warns(tmp_path, monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert "not in closed" in captured.err
+
+
+# ── S10: argparse subcommand uniformity ──────────────────────────────────────
+
+
+def test_main_mark_test_writable_via_subparser():
+    """mark-test-writable dispatches through an argparse subparser, not a raw
+    sys.argv pre-parse — slug/path arrive as parsed args."""
+    impl = load_module("implement")
+    with patch.object(impl, "mark_test_writable") as mock_mark:
+        with patch.object(impl.sys, "argv", ["implement.py", "mark-test-writable", "my-plan", "tests/test_foo.py"]):
+            with pytest.raises(SystemExit) as exc:
+                impl.main()
+    assert exc.value.code == impl.EX_OK
+    mock_mark.assert_called_once_with(slug="my-plan", path="tests/test_foo.py")
+
+
+def test_main_mark_test_writable_missing_path_argparse_errors():
+    """Missing positional is caught by argparse (exit 2), not a manual len() check."""
+    impl = load_module("implement")
+    with patch.object(impl.sys, "argv", ["implement.py", "mark-test-writable", "my-plan"]):
+        with pytest.raises(SystemExit) as exc:
+            impl.main()
+    assert exc.value.code == 2
+
+
+def test_main_run_subcommand_explicit(tmp_path, monkeypatch):
+    """`implement run <plan>` is accepted as an explicit subcommand and reaches
+    plan execution (parity with the bare `implement <plan>` form)."""
+    impl = load_module("implement")
+    monkeypatch.setenv("MENTAT_SKIP_PREFLIGHT", "1")
+    plan = _write_plan(tmp_path, "run-plan", class_="AFK")
+    with patch.object(impl, "ensure_session"):
+        with patch.object(impl, "_prune_worktrees_preflight"):
+            with patch.object(impl, "preflight_worktree", return_value=(0, None)):
+                with patch.object(impl, "_in_shared_main_tree", return_value=False):
+                    with patch.object(impl, "_run_and_doctor", return_value=0) as mock_run:
+                        with patch.object(impl, "resolve_plan_path", return_value=plan):
+                            with patch.object(impl.sys, "argv", ["implement.py", "run", "run-plan"]):
+                                with pytest.raises(SystemExit) as exc:
+                                    impl.main()
+    assert exc.value.code == 0
+    mock_run.assert_called_once()
 
 
 # ── D11: doctor auto-trigger + logs_path on chunk.ejected ────────────────────

@@ -10,8 +10,10 @@ Emit, validate, query, and prune structured JSONL audit entries under `~/.mentat
 
 ## How to invoke
 
+Terminal tool — run on PATH (no slash form; this is not a harness slash command):
+
 ```
-python3 ~/.agents/skills/mentat-log/scripts/log.py <subcommand> <args>
+mentat-log <subcommand> <args>
 ```
 
 Subcommands: `emit`, `validate`, `query`, `prune`.

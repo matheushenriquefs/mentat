@@ -9,6 +9,16 @@ SKILL.md lifecycle workflows: functional + cognitive eval against promptfoo, pro
 
 ## How to invoke
 
+In-harness slash command (lead form):
+
+```
+/mentat-skill eval [<skill-name>]
+/mentat-skill shrink [<skill-name>]
+/mentat-skill scaffold <new-skill-name>
+```
+
+Underlying call (what the slash form runs):
+
 ```
 python3 ~/.agents/skills/mentat-skill/scripts/skill.py eval [<skill-name>]
 python3 ~/.agents/skills/mentat-skill/scripts/skill.py shrink [<skill-name>]

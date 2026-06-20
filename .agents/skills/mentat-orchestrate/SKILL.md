@@ -9,12 +9,16 @@ Hybrid orchestrator: one bin, three stage modules (`fan_out`, `land_queue`, `bat
 
 ## How to invoke
 
+Slash form (in-harness) leads; each runs the `python3 .../orchestrate.py <sub> …` underlying call.
+
 ```
-python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py run [--harness <n>] [--model <s>] [--dry-run] <holding-branch> <plan-ref>+
-python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py fan-out <plan-ref>+
-python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py land-queue <holding-branch>
-python3 ~/.agents/skills/mentat-orchestrate/scripts/orchestrate.py batch-review <session>
+/mentat-orchestrate run [--harness <n>] [--model <s>] [--dry-run] <holding-branch> <plan-ref>+
+/mentat-orchestrate fan-out <plan-ref>+
+/mentat-orchestrate land-queue <holding-branch>
+/mentat-orchestrate batch-review <session>
 ```
+
+Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the holding branch FIRST, then plan refs — the inverse of `implement <plan-ref>` (no branch, does NOT land). The arg-order asymmetry is by design: orchestrate lands a batch onto a holding branch, implement runs one plan in-session with no branch. Not an inconsistency.
 
 ## Routing algorithm
 
