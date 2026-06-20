@@ -42,6 +42,14 @@ def write_plan(slug: str, body_path: Path, *, plans_dir: Path | None = None) -> 
     return dest
 
 
+def suggest_tasks(slug: str) -> str:
+    """Next-step hint shown after a plan is written: turn slices into tasks.
+
+    Closes the plan → tasks → track handoff so slices become trackable.
+    """
+    return f"Next: run `/mentat-tasks {slug}` to turn this plan's slices into trackable tasks."
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="mentat-plan", description="Plan file manager")
     sub = p.add_subparsers(dest="cmd")
@@ -62,6 +70,7 @@ def main() -> None:
 
     if args.cmd == "write":
         write_plan(args.slug, Path(args.body_path))
+        print(suggest_tasks(args.slug))
     elif args.cmd == "resolve-slug":
         print(resolve_plan(args.ref))
     else:

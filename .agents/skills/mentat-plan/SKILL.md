@@ -35,6 +35,10 @@ Slash or `.md` suffix → treated as a path (expanduser + resolve).
 4. Tag each slice **AFK** (gate clears unattended → eligible to auto-spawn) or **HITL** (needs an architectural call → anchors in calling session).
 5. Note `blocked_by` between slices for true dependencies; orchestrator topo-sorts.
 6. Write body to a temp file, then `plan.py write <slug> <temp-path>`.
+7. `write` ends by suggesting `/mentat-tasks <slug>` — run it to turn the plan's
+   slices into trackable tasks. The full handoff is **plan → tasks → track**:
+   author the plan here, materialize its slices as tasks with `/mentat-tasks`, then
+   watch progress with `mentat-session track`.
 
 ## Tracer-bullet slicing
 

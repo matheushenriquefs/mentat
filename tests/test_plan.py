@@ -106,3 +106,26 @@ def test_emits_plan_started_and_succeeded(tmp_path, monkeypatch):
 
     assert any("plan.started" in e for e in emitted)
     assert any("plan.succeeded" in e for e in emitted)
+
+
+# ── tasks handoff (S13) ───────────────────────────────────────────────────────
+
+
+def test_suggest_tasks_references_slug():
+    plan_mod = load_module("plan")
+    msg = plan_mod.suggest_tasks("my-slug")
+    assert "/mentat-tasks" in msg
+    assert "my-slug" in msg
+
+
+def test_write_cli_prints_tasks_suggestion(tmp_path):
+    """`plan.py write` output ends with a /mentat-tasks suggestion for the slug."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("# Test plan\n")
+    result = run_plan(
+        ["write", "handoff-slug", str(body_file)],
+        env={"HOME": str(tmp_path), "MENTAT_LOG_PATH": str(tmp_path / "logs")},
+    )
+    assert result.returncode == 0
+    assert "/mentat-tasks" in result.stdout
+    assert "handoff-slug" in result.stdout
