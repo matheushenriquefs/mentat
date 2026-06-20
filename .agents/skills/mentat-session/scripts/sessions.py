@@ -208,6 +208,37 @@ def list_sessions(repo_dir: Path, *, now: float | None = None, stale_secs: float
     return records
 
 
+def session_stream_tools(session_dir: Path, *, limit: int = 20) -> list[str]:
+    """The last `limit` harness tool-call names from a session's stream (S7 preview pane).
+
+    Reads the captured stream-json (session.jsonl). Audit rows yield nothing — only
+    assistant tool_use blocks count — so globbing every jsonl is safe. Order is the
+    file's append order (chronological for the stream). Race-safe via `_iter_rows`.
+    """
+    names: list[str] = []
+    for f in sorted(session_dir.glob("*.jsonl")):
+        for row in _iter_rows(f):
+            names.extend(harness_stream.tool_uses(row))
+    return names[-limit:]
+
+
+def session_worktree(session_dir: Path) -> str | None:
+    """The worktree path this session was spawned into (from its `chunk.spawned` audit), or None.
+
+    The S7 kill bind needs the worktree to tear down; the session log dir is not the
+    worktree. Returns the `worktree` field of the latest spawn event by ts.
+    """
+    worktree: str | None = None
+    for ev in all_events(session_dir):
+        if ev.get("event") == "chunk.spawned":
+            payload = ev.get("payload")
+            if isinstance(payload, dict):
+                wt = cast("dict[str, object]", payload).get("worktree")
+                if isinstance(wt, str):
+                    worktree = wt
+    return worktree
+
+
 def _build_record(sub: Path, clock: float, stale_secs: float) -> SessionRecord | None:
     """One session's status record, or None if it vanished mid-scan."""
     newest = newest_jsonl(sub)

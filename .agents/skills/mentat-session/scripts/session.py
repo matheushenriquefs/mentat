@@ -37,11 +37,9 @@ def _session_dir(repo: str, session_id: str) -> Path:
 def cmd_track(session_id: str | None) -> int:
     repo = _repo()
     repo_dir = _log_root() / repo
+    # No session id → live multi-AFK navigator over the whole repo registry (S7).
     if session_id is None:
-        session_id = _sessions.latest_session(repo_dir)
-    if session_id is None:
-        print("mentat-session: no sessions found", file=sys.stderr)
-        return 1
+        return _track.navigate(repo_dir, repo=repo)
     session_dir = _session_dir(repo, session_id)
     if not session_dir.exists():
         print(f"mentat-session: session dir not found: {session_dir}", file=sys.stderr)

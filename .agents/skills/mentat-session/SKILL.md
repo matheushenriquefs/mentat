@@ -60,7 +60,22 @@ Rows sort attention-to-top by `(rank, age)` — `waiting` (0) > `idle` (1) > `?`
 | `not-ff` | Non-fast-forward state. Holding moved while chunk worked. |
 | `hitl-required` | AFK ambiguity detected. Self-answered-question in session JSONL. |
 
-## Track colors
+## track (live multi-AFK navigator)
+
+`track` with **no session** opens the live navigator over the whole repo registry; `track <session>` tails one session's audit events (color-coded, below).
+
+The navigator timer-polls the registry (~1s, no daemon — there are no push hooks) so newly-spawned AFKs appear without restart. A **list pane** shows one row per session (status dot in the rank palette + name + last event); a **preview pane** tails the selected session's recent harness tool calls under a `│` gutter, each under a `── [session] ──` rule. ASCII/house glyphs only — no emoji.
+
+| Key | Action |
+|---|---|
+| `j` / `↓`, `k` / `↑` | Move the selection (clamped) |
+| `enter` | Toggle the focused single-session zoom (deeper tool tail); `enter`/`esc` returns |
+| `x` | Kill bind — tear down the session's worktree, re-emit the list |
+| `q` / `esc` | Quit |
+
+Glyphs (shared with `lib/tui.py`): tool calls `Read ·` `Edit ~` `Write +` `Bash $` `Grep //` `Task »`; lifecycle `spawned +` `landed ✓` `ejected ✗` `hitl ◆` `commit ●`. Status dots reuse the list palette — waiting yellow, idle green, working red, `?` dim. Non-tty stdin (CI / piped) → one-shot list print, no raw-tty.
+
+## Track colors (single-session tail)
 
 | Event pattern | Color |
 |---|---|
