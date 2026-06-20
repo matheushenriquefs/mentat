@@ -34,6 +34,7 @@ from lib.exits import (  # noqa: E402
     EX_USAGE,
 )
 from lib.loader import load_sibling  # noqa: E402
+from lib.session import ensure_session  # noqa: E402
 
 
 def _load_worktree_module():
@@ -360,6 +361,11 @@ def main() -> None:
         sys.exit(1)
 
     slug = plan_path.stem
+    # Mint + export MENTAT_SESSION before any emit (preflight can eject) and
+    # before the harness spawn — closes the standalone no-session gap and makes
+    # session.jsonl capture happen for standalone runs too. Computed while still
+    # in the main worktree so MENTAT_REPO resolves to the repo, not the slug dir.
+    ensure_session("implement", slug)
     pf_rc, target = preflight_worktree(slug)
     if pf_rc != 0:
         _emit_event(

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import subprocess
 import sys
@@ -17,6 +16,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib.exits import EX_DATAERR, EX_NOINPUT  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
+from lib.session import ensure_session  # noqa: E402
 
 _utils = load_sibling(__file__, "utils")
 _scheduler = load_sibling(__file__, "scheduler")
@@ -281,8 +281,7 @@ def run_orchestrate(
     model: str | None,
     dry_run: bool,
 ) -> int:
-    session_id = os.environ.get("MENTAT_SESSION") or f"mentat-orchestrate-{os.getpid()}"
-    os.environ["MENTAT_SESSION"] = session_id
+    session_id = ensure_session("orchestrate", holding)
     plans = _load_plans(plan_paths)
     anchored, auto = _scheduler.partition(plans)
 

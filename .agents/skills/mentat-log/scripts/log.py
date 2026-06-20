@@ -52,7 +52,7 @@ def _session() -> str | None:
 
 
 def _agent_slug() -> str:
-    return os.environ.get("MENTAT_SLUG", f"mentat-manual-{os.getpid()}")
+    return os.environ.get("MENTAT_SLUG", f"agent-{os.getpid()}")
 
 
 def _session_dir(base: Path, repo: str, session: str) -> Path:
@@ -130,7 +130,10 @@ def cmd_emit(args: argparse.Namespace) -> int:
 
     base = _log_root()
     repo = _repo()
-    session = _session() or f"mentat-manual-{int(datetime.datetime.now(datetime.UTC).timestamp())}-{os.getpid()}"
+    # Last-resort guard only: S1's ensure_session sets MENTAT_SESSION before any
+    # emit on both entrypoints. A surviving `orphan-` id flags an unkeyed
+    # emission (the exact bug S1 fixes) — greppable, no <epoch>/manual/auto lie.
+    session = _session() or f"orphan-session-{os.getpid()}"
     slug = _agent_slug()
 
     _ensure_log_dir(base)

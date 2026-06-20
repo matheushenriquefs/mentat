@@ -14,6 +14,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 from lib import paths  # noqa: E402
 from lib.events import bind  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
+from lib.session import mint_session  # noqa: E402
 
 _IMPLEMENT_SCRIPT = paths.SKILLS_DIR / "mentat-implement/scripts/implement.py"
 _CONTAINER_SCRIPT = paths.CONTAINER_SCRIPT
@@ -41,7 +42,9 @@ def _spawn_worktree_subprocess(
     Returns (session_id, Popen). The caller may use the Popen to throttle
     concurrent spawns via Popen.poll().
     """
-    session_id = f"auto-{plan_path.stem}-{os.getpid()}"
+    # The child is an implement run — mint a fresh implement session per child
+    # (overriding any inherited orchestrate id in the child env below).
+    session_id = mint_session("implement", plan_path.stem)
     log_dir = _log_dir_for(session_id)
     log_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(log_dir, 0o700)
