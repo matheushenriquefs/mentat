@@ -373,10 +373,55 @@ def test_implement_no_doctor_on_zero_exit(tmp_path):
 
     with patch.object(impl, "run_plan", return_value=0):
         with patch.object(impl, "_auto_doctor") as mock_doc:
-            rc = impl._run_and_doctor(plan, harness="fake")
+            with patch.object(impl, "_auto_summary"):
+                rc = impl._run_and_doctor(plan, harness="fake")
 
     assert rc == 0
     mock_doc.assert_not_called()
+
+
+def test_implement_auto_summary_on_success(tmp_path):
+    """S8: rc == 0 → success summary is written (the success-side twin of doctor)."""
+    impl = load_module("implement")
+    plan = _write_plan(tmp_path, "ok-plan", class_="AFK")
+
+    with patch.object(impl, "run_plan", return_value=0):
+        with patch.object(impl, "_auto_summary") as mock_sum:
+            with patch.object(impl, "_auto_doctor") as mock_doc:
+                rc = impl._run_and_doctor(plan, harness="fake")
+
+    assert rc == 0
+    mock_sum.assert_called_once()
+    mock_doc.assert_not_called()
+
+
+def test_implement_no_summary_on_failure(tmp_path):
+    """S8: a failing run gets a diagnosis, not a success summary."""
+    impl = load_module("implement")
+    plan = _write_plan(tmp_path, "fail-plan", class_="AFK")
+
+    with patch.object(impl, "run_plan", return_value=1):
+        with patch.object(impl, "_auto_summary") as mock_sum:
+            with patch.object(impl, "_auto_doctor"):
+                impl._run_and_doctor(plan, harness="fake")
+
+    mock_sum.assert_not_called()
+
+
+def test_auto_summary_invokes_session_report(tmp_path, monkeypatch):
+    """S8: _auto_summary shells `session.py report [<id>]` to write summary.md
+    (mirrors _auto_doctor's session.py doctor call)."""
+    impl = load_module("implement")
+    fake_script = tmp_path / "session.py"
+    fake_script.write_text("")
+    monkeypatch.setattr(impl, "_SESSION_SCRIPT", fake_script)
+    monkeypatch.setenv("MENTAT_SESSION", "implement-foo-99")
+
+    with patch.object(impl.subprocess, "run") as mock_run:
+        impl._auto_summary()
+
+    cmd = mock_run.call_args.args[0]
+    assert cmd == ["python3", str(fake_script), "report", "implement-foo-99"]
 
 
 def test_implement_no_doctor_on_signal_exit(tmp_path):

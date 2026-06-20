@@ -101,3 +101,41 @@ def write_diagnosis(session_dir: Path) -> Path:
     diagnosis = session_dir / "diagnosis.md"
     diagnosis.write_text(content)
     return diagnosis
+
+
+def build_summary(session_dir: Path) -> str:
+    """Success-side twin of build_verdict: a one-paragraph report of what the
+    session did, for `mentat-session report`. Landed → success line; ejected →
+    the failure reason (pointing at diagnosis.md); no terminal → completed in
+    session but not yet landed (implement runs the plan; landing is
+    orchestrate's job, so a standalone implement success has no chunk.landed)."""
+    events = _sessions.all_events(session_dir)
+
+    spawned = next((e for e in events if e.get("event") == "chunk.spawned"), None)
+    plan = spawned["payload"].get("plan", spawned["payload"].get("slug", "unknown")) if spawned else "unknown"
+
+    terminal: dict | None = None
+    for ev in reversed(events):
+        if ev.get("event") in ("chunk.landed", "chunk.ejected"):
+            terminal = ev
+            break
+
+    if terminal and terminal.get("event") == "chunk.landed":
+        p = terminal["payload"]
+        outcome = (
+            f"Landed `{p.get('slug', 'unknown')}` at `{p.get('sha', 'unknown')}` onto `{p.get('holding', 'unknown')}`."
+        )
+    elif terminal and terminal.get("event") == "chunk.ejected":
+        p = terminal["payload"]
+        outcome = f"Ejected `{p.get('slug', 'unknown')}` — {p.get('reason', 'unknown')}. See diagnosis.md."
+    else:
+        outcome = "Completed in session; not yet landed (landing is orchestrate's job)."
+
+    return f"## Summary\n- Plan: {plan}\n- Outcome: {outcome}\n- Events recorded: {len(events)}\n"
+
+
+def write_summary(session_dir: Path) -> Path:
+    content = build_summary(session_dir)
+    summary = session_dir / "summary.md"
+    summary.write_text(content)
+    return summary

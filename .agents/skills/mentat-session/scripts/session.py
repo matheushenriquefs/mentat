@@ -67,6 +67,25 @@ def cmd_doctor(session_id: str | None) -> int:
     return 0
 
 
+def cmd_report(session_id: str | None) -> int:
+    """Render the success-side report-back summary (twin of doctor). Operator
+    sees what an AFK session implemented without asking the main harness."""
+    repo = _repo()
+    repo_dir = _log_root() / repo
+    if session_id is None:
+        session_id = _sessions.latest_session(repo_dir)
+    if session_id is None:
+        print("mentat-session: no sessions found", file=sys.stderr)
+        return 1
+    session_dir = _session_dir(repo, session_id)
+    if not session_dir.exists():
+        print(f"mentat-session: session dir not found: {session_dir}", file=sys.stderr)
+        return 1
+    summary = _doctor.write_summary(session_dir)
+    print(summary.read_text())
+    return 0
+
+
 def cmd_diagnose(session_id: str | None) -> int:
     repo = _repo()
     repo_dir = _log_root() / repo
@@ -90,6 +109,9 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_p = sub.add_parser("doctor", help="Build verdict markdown")
     doctor_p.add_argument("session", nargs="?", default=None)
 
+    report_p = sub.add_parser("report", help="Render the success-side report-back summary")
+    report_p.add_argument("session", nargs="?", default=None)
+
     diag_p = sub.add_parser("diagnose", help="Doctor-first diagnose loop")
     diag_p.add_argument("session", nargs="?", default=None)
 
@@ -104,6 +126,8 @@ def main() -> None:
         sys.exit(cmd_track(args.session))
     elif args.cmd == "doctor":
         sys.exit(cmd_doctor(args.session))
+    elif args.cmd == "report":
+        sys.exit(cmd_report(args.session))
     elif args.cmd == "diagnose":
         sys.exit(cmd_diagnose(getattr(args, "session", None)))
 

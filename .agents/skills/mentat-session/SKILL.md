@@ -5,7 +5,7 @@ description: >
   Use when you want to stream live chunk events, produce a verdict markdown, or kick off a bug-hunt loop.
 ---
 
-Session inspection toolkit. `track` tails JSONL events live with color-coded output. `doctor` derives a verdict markdown from log events and writes it to `~/.mentat/logs/<repo>/<session>/diagnosis.md`. `diagnose` invokes `doctor` for context then enters the `/diagnose` loop.
+Session inspection toolkit. `track` tails JSONL events live with color-coded output. `doctor` derives a verdict markdown from log events and writes it to `~/.mentat/logs/<repo>/<session>/diagnosis.md`. `report` is its success-side twin — a one-paragraph report-back of what the session implemented, written to `summary.md`. `diagnose` invokes `doctor` for context then enters the `/diagnose` loop.
 
 ## How to invoke
 
@@ -14,6 +14,7 @@ Terminal tool — run on PATH (no slash form; this is not a harness slash comman
 ```
 mentat-session track [<session>]
 mentat-session doctor [<session>]
+mentat-session report [<session>]
 mentat-session diagnose
 ```
 

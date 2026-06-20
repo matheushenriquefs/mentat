@@ -173,6 +173,21 @@ def _auto_doctor() -> None:
             subprocess.run([editor, str(diag)], check=False)
 
 
+def _auto_summary() -> None:
+    """On a clean finish, write the success-side report-back summary (S8) — the
+    twin of _auto_doctor's diagnosis. Shells `mentat-session report` so the
+    spawning operator can read what this AFK session implemented without asking
+    the main harness. The session id is appended only when set; session.py's
+    ``report`` falls back to the latest session for the repo otherwise."""
+    if not _SESSION_SCRIPT.exists():
+        return
+    cmd = ["python3", str(_SESSION_SCRIPT), "report"]
+    session_id = os.environ.get("MENTAT_SESSION")
+    if session_id:
+        cmd.append(session_id)
+    subprocess.run(cmd, capture_output=True, check=False)
+
+
 def _is_main_worktree(cwd: Path) -> bool:
     """True iff cwd is inside the main worktree.
 
@@ -251,6 +266,8 @@ def _run_and_doctor(plan_path: Path, *, harness: str | None = None, model: str |
     rc = run_plan(plan_path, harness=harness, model=model)
     if rc in _DOCTOR_EXIT_CODES:
         _auto_doctor()
+    elif rc == EX_OK:
+        _auto_summary()
     return rc
 
 

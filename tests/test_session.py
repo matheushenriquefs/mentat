@@ -129,6 +129,112 @@ def test_doctor_writes_diagnosis_in_session_dir(tmp_path):
     assert "## Verdict" in content
 
 
+# ── S8: success-side report-back summary ─────────────────────────────────────
+
+
+def test_summary_for_chunk_landed(tmp_path):
+    doctor_mod = load_module("doctor")
+    session_dir = tmp_path / "sess-1"
+    _write_log(
+        session_dir,
+        "mentat-orchestrate",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "event": "chunk.landed",
+                "payload": {"slug": "my-chunk", "sha": "abc123", "holding": "main"},
+            },
+        ],
+    )
+    summary = doctor_mod.build_summary(session_dir)
+    assert "my-chunk" in summary
+    assert "abc123" in summary
+
+
+def test_summary_for_chunk_ejected_carries_failure(tmp_path):
+    doctor_mod = load_module("doctor")
+    session_dir = tmp_path / "sess-1"
+    _write_log(
+        session_dir,
+        "mentat-implement",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "event": "chunk.ejected",
+                "payload": {"slug": "my-chunk", "reason": "gate-failed", "where": "/x"},
+            },
+        ],
+    )
+    summary = doctor_mod.build_summary(session_dir)
+    assert "gate-failed" in summary
+
+
+def test_write_summary_writes_summary_md(tmp_path):
+    doctor_mod = load_module("doctor")
+    session_dir = tmp_path / "sess-1"
+    _write_log(
+        session_dir,
+        "mentat-implement",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "event": "chunk.landed",
+                "payload": {"slug": "c", "sha": "deadbee", "holding": "main"},
+            },
+        ],
+    )
+    out = doctor_mod.write_summary(session_dir)
+    assert out == session_dir / "summary.md"
+    assert out.exists()
+    assert "deadbee" in out.read_text()
+
+
+def test_report_prints_success_summary(tmp_path, monkeypatch):
+    session_mod = load_module("session")
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "myrepo")
+    session_dir = tmp_path / "logs" / "myrepo" / "sess-1"
+    _write_log(
+        session_dir,
+        "mentat-implement",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "event": "chunk.landed",
+                "payload": {"slug": "c", "sha": "abc999", "holding": "main"},
+            },
+        ],
+    )
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = session_mod.cmd_report("sess-1")
+    assert rc == 0
+    assert "abc999" in buf.getvalue()
+
+
+def test_report_shows_failure_for_ejected(tmp_path, monkeypatch):
+    session_mod = load_module("session")
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "myrepo")
+    session_dir = tmp_path / "logs" / "myrepo" / "sess-1"
+    _write_log(
+        session_dir,
+        "mentat-implement",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "event": "chunk.ejected",
+                "payload": {"slug": "c", "reason": "gate-failed", "where": "/x"},
+            },
+        ],
+    )
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = session_mod.cmd_report("sess-1")
+    assert rc == 0
+    assert "gate-failed" in buf.getvalue()
+
+
 def test_expected_vs_actual_derived(tmp_path):
     doctor_mod = load_module("doctor")
     session_dir = tmp_path / "sess-1"
