@@ -151,15 +151,21 @@ def _teardown_worktree(target: Path) -> None:
 
 
 def _auto_doctor() -> None:
-    """Spawn mentat-session doctor. Honor $EDITOR for the diagnosis if set."""
-    session_id = os.environ.get("MENTAT_SESSION")
-    if not _SESSION_SCRIPT.exists() or not session_id:
+    """Spawn mentat-session doctor on death. Honor $EDITOR for the diagnosis if set.
+
+    S1 guarantees MENTAT_SESSION is set on every path, so the doctor always fires
+    on a diagnosable death — there is no session-unset early-return to silently
+    skip it (the root cause of killed standalone AFK sessions going undiagnosed).
+    When the id is somehow absent, session.py's ``doctor`` falls back to the
+    latest session for the repo, so the arg is appended only when set.
+    """
+    if not _SESSION_SCRIPT.exists():
         return
-    subprocess.run(
-        ["python3", str(_SESSION_SCRIPT), "doctor", session_id],
-        capture_output=True,
-        check=False,
-    )
+    cmd = ["python3", str(_SESSION_SCRIPT), "doctor"]
+    session_id = os.environ.get("MENTAT_SESSION")
+    if session_id:
+        cmd.append(session_id)
+    subprocess.run(cmd, capture_output=True, check=False)
     editor = os.environ.get("EDITOR")
     if editor:
         diag = Path(_logs_path()) / "diagnosis.md"

@@ -347,6 +347,42 @@ def test_implement_no_doctor_on_signal_exit(tmp_path):
         mock_doc.assert_not_called()
 
 
+def test_auto_doctor_fires_when_session_unset(tmp_path, monkeypatch):
+    """S2: the MENTAT_SESSION-unset early-return is gone — doctor always fires on
+    death. Previously an unset session silently skipped doctor, the root cause of
+    silently-killed standalone AFK sessions going undiagnosed."""
+    impl = load_module("implement")
+    fake_script = tmp_path / "session.py"
+    fake_script.write_text("")
+    monkeypatch.setattr(impl, "_SESSION_SCRIPT", fake_script)
+    monkeypatch.delenv("MENTAT_SESSION", raising=False)
+    monkeypatch.delenv("EDITOR", raising=False)
+
+    with patch.object(impl.subprocess, "run") as mock_run:
+        impl._auto_doctor()
+
+    mock_run.assert_called_once()
+    cmd = mock_run.call_args.args[0]
+    # session.py's cmd_doctor falls back to latest_session when no arg is given.
+    assert cmd[:3] == ["python3", str(fake_script), "doctor"]
+
+
+def test_auto_doctor_passes_session_id_when_set(tmp_path, monkeypatch):
+    """When the session id is set, it is passed through to the doctor."""
+    impl = load_module("implement")
+    fake_script = tmp_path / "session.py"
+    fake_script.write_text("")
+    monkeypatch.setattr(impl, "_SESSION_SCRIPT", fake_script)
+    monkeypatch.setenv("MENTAT_SESSION", "implement-foo-99")
+    monkeypatch.delenv("EDITOR", raising=False)
+
+    with patch.object(impl.subprocess, "run") as mock_run:
+        impl._auto_doctor()
+
+    cmd = mock_run.call_args.args[0]
+    assert cmd == ["python3", str(fake_script), "doctor", "implement-foo-99"]
+
+
 def test_implement_chunk_ejected_includes_logs_path(tmp_path, monkeypatch):
     """Every chunk.ejected emit carries a logs_path field per ADR-0007 payload-extension rule."""
     impl = load_module("implement")
