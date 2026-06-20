@@ -28,7 +28,7 @@ def load_jsonc(path: Path) -> dict[str, object]:
     """Parse a JSONC file (e.g. .devcontainer/devcontainer.json). {} on read/parse error."""
     try:
         return json.loads(_strip_comments(path.read_text()))  # type: ignore[no-any-return]
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
         return {}
 
 
@@ -36,7 +36,7 @@ def _load_toml(path: Path) -> dict[str, object]:
     try:
         with path.open("rb") as fh:
             return tomllib.load(fh)
-    except (tomllib.TOMLDecodeError, OSError):
+    except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError):
         return {}
 
 
@@ -87,14 +87,14 @@ def config_status(mentat_dir: Path) -> tuple[str, str | None]:
             with toml_path.open("rb") as fh:
                 tomllib.load(fh)
             return ("valid", None)
-        except (tomllib.TOMLDecodeError, OSError):
+        except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError):
             return ("invalid — parse error", f"{_CONFIG_NAME} parse error")
     legacy = mentat_dir / _LEGACY_NAME
     if legacy.exists():
         try:
             json.loads(_strip_comments(legacy.read_text()))
             return (f"legacy {_LEGACY_NAME} — rename to {_CONFIG_NAME}", None)
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             return ("invalid — parse error", f"{_LEGACY_NAME} parse error")
     return ("absent", None)
 

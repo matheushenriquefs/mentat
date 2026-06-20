@@ -141,6 +141,34 @@ def test_config_status_legacy_jsonc_trailing_comment_is_valid(tmp_path):
     assert warn is None
 
 
+def test_load_jsonc_returns_empty_on_non_utf8(tmp_path):
+    f = tmp_path / "devcontainer.json"
+    f.write_bytes(b'{"a": "\xff\xfe not utf-8"}')
+    assert config.load_jsonc(f) == {}
+
+
+def test_load_config_file_toml_non_utf8_returns_empty(tmp_path):
+    f = tmp_path / "config.toml"
+    f.write_bytes(b'harness = "\xff\xfe"\n')
+    assert config.load_config_file(f) == {}
+
+
+def test_config_status_non_utf8_toml_is_invalid_not_crash(tmp_path):
+    """Regression: a non-UTF-8 config file must report 'invalid', never raise
+    UnicodeDecodeError (a ValueError subclass, not caught by the OSError arm)."""
+    (tmp_path / "config.toml").write_bytes(b'harness = "\xff\xfe"\n')
+    status, warn = config.config_status(tmp_path)
+    assert "invalid" in status
+    assert warn is not None
+
+
+def test_config_status_non_utf8_legacy_is_invalid_not_crash(tmp_path):
+    (tmp_path / "config.jsonc").write_bytes(b'{"harness": "\xff\xfe"}')
+    status, warn = config.config_status(tmp_path)
+    assert "invalid" in status
+    assert warn is not None
+
+
 def test_config_status_absent(tmp_path):
     status, warn = config.config_status(tmp_path)
     assert status == "absent"
