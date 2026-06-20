@@ -11,6 +11,7 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib.exits import EX_UNAVAILABLE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
 utils = load_sibling(__file__, "utils")
@@ -49,7 +50,7 @@ def cmd_commit(git_args: list[str]) -> int:
                 "mentat-git: failed to bring up devcontainer for cwd (ADR-0004)",
                 file=sys.stderr,
             )
-            return 69
+            return EX_UNAVAILABLE
     docker = os.environ.get("MENTAT_DOCKER", "docker")
     wt_result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],

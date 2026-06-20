@@ -13,6 +13,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
+
+from lib.exits import EX_DATAERR, EX_NOINPUT, EX_SOFTWARE  # noqa: E402
+
 
 def _git(args: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -93,7 +99,7 @@ def cmd_worktree_create(slug: str, *, base: str | None = None, parent: Path | No
     main_root = _main_repo_root(cwd)
     if main_root is None:
         print("mentat-git: not inside a git repo", file=sys.stderr)
-        return 70
+        return EX_SOFTWARE
 
     if parent is None:
         parent = main_root / ".mentat" / "worktrees"
@@ -111,11 +117,11 @@ def cmd_worktree_create(slug: str, *, base: str | None = None, parent: Path | No
             f"mentat-git: path {target} exists but is not a registered worktree",
             file=sys.stderr,
         )
-        return 65
+        return EX_DATAERR
 
     if not _branch_exists(main_root, base):
         print(f"mentat-git: base branch {base!r} does not exist", file=sys.stderr)
-        return 66
+        return EX_NOINPUT
 
     parent.mkdir(parents=True, exist_ok=True)
 
@@ -131,16 +137,16 @@ def cmd_worktree_create(slug: str, *, base: str | None = None, parent: Path | No
         stderr_lower = (r.stderr or "").lower()
         if "already exists" in stderr_lower or "not an empty directory" in stderr_lower:
             print(f"mentat-git: path {target} exists but is not a registered worktree", file=sys.stderr)
-            return 65
+            return EX_DATAERR
         if (
             "invalid reference" in stderr_lower
             or "unknown revision" in stderr_lower
             or "not a valid object name" in stderr_lower
         ):
             print(f"mentat-git: base branch {base!r} does not exist", file=sys.stderr)
-            return 66
+            return EX_NOINPUT
         print(f"mentat-git: worktree add failed:\n{r.stderr}", file=sys.stderr)
-        return r.returncode or 70
+        return r.returncode or EX_SOFTWARE
 
     print(str(target))
     return 0

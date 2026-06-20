@@ -23,6 +23,16 @@ _GIT_SCRIPT = paths.SKILLS_DIR / "mentat-git/scripts/git.py"
 _GIT_WORKTREE_PY = paths.SKILLS_DIR / "mentat-git/scripts/worktree.py"
 
 from lib import frontmatter as _frontmatter  # noqa: E402
+from lib.exits import (  # noqa: E402
+    EX_CONFIG,
+    EX_DATAERR,
+    EX_HITL_REQUIRED,
+    EX_NOINPUT,
+    EX_OK,
+    EX_SOFTWARE,
+    EX_UNAVAILABLE,
+    EX_USAGE,
+)
 from lib.loader import load_sibling  # noqa: E402
 
 
@@ -41,7 +51,9 @@ def _load_worktree_module():
 
 # Exit codes that trigger auto-doctor: TDD/gate fail, HITL ambiguity, CLI/plan errors,
 # container down, unhandled exceptions, missing config. Signal exits (130/143) skipped.
-_DOCTOR_EXIT_CODES = frozenset({1, 42, 64, 65, 66, 69, 70, 78})
+_DOCTOR_EXIT_CODES = frozenset(
+    {1, EX_HITL_REQUIRED, EX_USAGE, EX_DATAERR, EX_NOINPUT, EX_UNAVAILABLE, EX_SOFTWARE, EX_CONFIG}
+)
 
 
 _utils = load_sibling(__file__, "utils")
@@ -301,7 +313,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
                 "logs_path": _logs_path(),
             },
         )
-        return 42
+        return EX_HITL_REQUIRED
 
     verdict, message = _run_gates(None)
     if verdict == "block":
@@ -325,9 +337,9 @@ def main() -> None:
     if argv and argv[0] == "mark-test-writable":
         if len(argv) < 3:
             print("usage: mentat-implement mark-test-writable <slug> <path>", file=sys.stderr)
-            sys.exit(64)
+            sys.exit(EX_USAGE)
         mark_test_writable(slug=argv[1], path=argv[2])
-        sys.exit(0)
+        sys.exit(EX_OK)
 
     parser = argparse.ArgumentParser(prog="mentat-implement", description="Atomic plan executor")
     parser.add_argument("plan_refs", nargs="+", metavar="plan-ref")

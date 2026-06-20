@@ -13,6 +13,7 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib.events import bind  # noqa: E402
+from lib.exits import EX_DATAERR  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
 _emit_installed_fn = bind("mentat-install")
@@ -66,7 +67,7 @@ def do_install(
     if ip.conflicts:
         print("Aborted: real file/dir at one or more symlink targets (D13).", file=sys.stderr)
         print("Resolve manually and re-run.", file=sys.stderr)
-        return 65
+        return EX_DATAERR
 
     if not skip_companions:
         _companions.install_all(yes=yes)

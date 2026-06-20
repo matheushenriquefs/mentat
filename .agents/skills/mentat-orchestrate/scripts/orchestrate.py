@@ -15,6 +15,7 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib.exits import EX_DATAERR, EX_NOINPUT  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
 _utils = load_sibling(__file__, "utils")
@@ -49,17 +50,17 @@ def _load_plans(paths: list[Path], *, _expanding: bool = False) -> list[_schedul
         if siblings:
             if _expanding:
                 print(f"nested parent index: {slug}", file=sys.stderr)
-                raise SystemExit(65)
+                raise SystemExit(EX_DATAERR)
             if blocked_by:
                 print(f"parent index must have empty blocked_by: {slug}", file=sys.stderr)
-                raise SystemExit(65)
+                raise SystemExit(EX_DATAERR)
             parent_slugs.add(slug)
             sibling_paths: list[Path] = []
             for s in siblings:
                 sibling_path = path.parent / f"{s}.md"
                 if not sibling_path.exists():
                     print(f"sibling plan not found: {s}", file=sys.stderr)
-                    raise SystemExit(66)
+                    raise SystemExit(EX_NOINPUT)
                 sibling_paths.append(sibling_path)
             plans.extend(_load_plans(sibling_paths, _expanding=True))
         else:
@@ -77,7 +78,7 @@ def _load_plans(paths: list[Path], *, _expanding: bool = False) -> list[_schedul
             for dep in plan.blocked_by:
                 if dep in parent_slugs:
                     print(f"cannot block on parent index: {dep}", file=sys.stderr)
-                    raise SystemExit(65)
+                    raise SystemExit(EX_DATAERR)
 
     return plans
 
