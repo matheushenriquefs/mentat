@@ -19,7 +19,7 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]  # .agents/
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
-from lib.events import bind  # noqa: E402
+from lib.events import bind, ejected_payload  # noqa: E402
 
 _emit_event = bind("mentat-orchestrate")
 
@@ -108,11 +108,7 @@ def land(chunk: Chunk, *, holding: str) -> dict:
     if err:
         _emit_event(
             "chunk.ejected",
-            {
-                "slug": chunk.slug,
-                "reason": "rebase-conflicted",
-                "where": str(chunk.worktree),
-            },
+            ejected_payload(chunk.slug, "rebase-conflicted", str(chunk.worktree)),
         )
         return {
             "slug": chunk.slug,
@@ -126,11 +122,7 @@ def land(chunk: Chunk, *, holding: str) -> dict:
     if verdict == "block":
         _emit_event(
             "chunk.ejected",
-            {
-                "slug": chunk.slug,
-                "reason": "gate-failed",
-                "where": str(chunk.worktree),
-            },
+            ejected_payload(chunk.slug, "gate-failed", str(chunk.worktree)),
         )
         return {
             "slug": chunk.slug,
@@ -144,11 +136,7 @@ def land(chunk: Chunk, *, holding: str) -> dict:
     if not merged:
         _emit_event(
             "chunk.ejected",
-            {
-                "slug": chunk.slug,
-                "reason": "not-ff",
-                "where": str(chunk.worktree),
-            },
+            ejected_payload(chunk.slug, "not-ff", str(chunk.worktree)),
         )
         return {
             "slug": chunk.slug,
@@ -233,12 +221,7 @@ def drain(
             where = str(chunk.worktree) if chunk else ""
             _emit_event(
                 "chunk.ejected",
-                {
-                    "slug": downstream,
-                    "reason": "upstream_ejected",
-                    "upstream": ready,
-                    "where": where,
-                },
+                ejected_payload(downstream, "upstream_ejected", where, upstream=ready),
             )
             results.append(
                 {

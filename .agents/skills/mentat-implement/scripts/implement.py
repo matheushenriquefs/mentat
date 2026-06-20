@@ -112,6 +112,7 @@ def parse_frontmatter(plan_path: Path) -> dict[str, str]:
 
 
 from lib.events import bind as _bind  # noqa: E402
+from lib.events import ejected_payload  # noqa: E402
 
 _emit_event = _bind("mentat-implement")
 
@@ -320,24 +321,14 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     if result.returncode != 0:
         _emit_event(
             "chunk.ejected",
-            {
-                "slug": slug,
-                "reason": "implement-failed",
-                "where": str(plan_path.parent),
-                "logs_path": _logs_path(),
-            },
+            ejected_payload(slug, "implement-failed", str(plan_path.parent), logs_path=_logs_path()),
         )
         return 1
 
     if afk and _detect_self_answer(result):
         _emit_event(
             "chunk.ejected",
-            {
-                "slug": slug,
-                "reason": "hitl-required",
-                "where": str(plan_path.parent),
-                "logs_path": _logs_path(),
-            },
+            ejected_payload(slug, "hitl-required", str(plan_path.parent), logs_path=_logs_path()),
         )
         return EX_HITL_REQUIRED
 
@@ -345,12 +336,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     if verdict == "block":
         _emit_event(
             "chunk.ejected",
-            {
-                "slug": slug,
-                "reason": "gate-failed",
-                "where": str(plan_path.parent),
-                "logs_path": _logs_path(),
-            },
+            ejected_payload(slug, "gate-failed", str(plan_path.parent), logs_path=_logs_path()),
         )
         return 1
 
@@ -396,13 +382,13 @@ def main() -> None:
     if pf_rc != 0:
         _emit_event(
             "chunk.ejected",
-            {
-                "slug": slug,
-                "reason": "preflight-worktree-failed",
-                "where": str(plan_path.parent),
-                "logs_path": _logs_path(),
-                "preflight_exit": pf_rc,
-            },
+            ejected_payload(
+                slug,
+                "preflight-worktree-failed",
+                str(plan_path.parent),
+                logs_path=_logs_path(),
+                preflight_exit=pf_rc,
+            ),
         )
         print(
             f"mentat-implement: preflight worktree create failed (exit {pf_rc})",
