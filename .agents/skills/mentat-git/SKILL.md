@@ -14,6 +14,7 @@ python3 ~/.agents/skills/mentat-git/scripts/git.py commit [-- <git commit args>]
 python3 ~/.agents/skills/mentat-git/scripts/git.py rebase <holding-branch>
 python3 ~/.agents/skills/mentat-git/scripts/git.py diff [<base>]
 python3 ~/.agents/skills/mentat-git/scripts/git.py worktree create <slug> [--base <branch>] [--parent <dir>]
+python3 ~/.agents/skills/mentat-git/scripts/git.py worktree sweep [--force]
 ```
 
 ## Commit flow
@@ -48,13 +49,20 @@ rm .commit-msg
 ## Worktree create flow
 
 1. Resolve main repo root via `git rev-parse --git-common-dir`.
-2. Default parent dir = sibling of main repo root; override via `--parent`.
+2. Default parent dir = `<repo>/.mentat/worktrees/`; override via `--parent`.
 3. Target path = `<parent>/<slug>`. Branch name = `<slug>`. Base branch = `--base` (default `main`).
 4. Idempotent: target already a registered worktree → exit 0, print path.
 5. Path exists but unregistered → exit 65 (conflict; never overwrite).
 6. Base branch missing → exit 66.
 7. Else `git worktree add -b <slug> <target> <base>`; print resolved target path on success.
 8. Runs on host — `git worktree add` writes to main repo's `.git/worktrees/`, which is not bind-mounted into the new slug's container.
+
+## Worktree sweep flow
+
+1. List registered worktrees outside `<repo>/.mentat/worktrees/` (parent-folder strays) plus any `prunable` entries. The main worktree and live managed worktrees are never listed.
+2. Default is a dry-run: print the targets and exit. Does not auto-run — destructive removal is operator-confirmed.
+3. `--force` removes each (`git worktree remove --force`) then `git worktree prune`, leaving `git worktree list` clean.
+4. A target holding uncommitted work is preserved, never force-removed — same dirty-vs-clean safe default as managed teardown (`lib.worktrees`).
 
 ## Exit codes
 

@@ -18,6 +18,7 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib.exits import EX_DATAERR, EX_NOINPUT, EX_SOFTWARE  # noqa: E402
+from lib.worktrees import is_dirty, worktrees_root  # noqa: E402
 
 
 def _git(args: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -49,15 +50,8 @@ def is_main_worktree(cwd: Path) -> bool:
 
 def _existing_worktree(main_root: Path, target: Path) -> bool:
     """True iff `target` is a path registered in `git worktree list`."""
-    r = _git(["worktree", "list", "--porcelain"], cwd=main_root)
-    if r.returncode != 0:
-        return False
-    for line in r.stdout.splitlines():
-        if line.startswith("worktree "):
-            registered = Path(line[len("worktree ") :]).resolve()
-            if registered == target.resolve():
-                return True
-    return False
+    resolved = target.resolve()
+    return any(Path(e["worktree"]).resolve() == resolved for e in _list_worktrees(main_root))
 
 
 def _branch_exists(main_root: Path, branch: str) -> bool:
@@ -84,6 +78,102 @@ def _detect_default_branch(repo_root: Path) -> str:
         return r.stdout.strip()
 
     return "main"
+
+
+def _list_worktrees(main_root: Path) -> list[dict[str, str]]:
+    """Parse ``git worktree list --porcelain`` into one dict per worktree.
+
+    Each dict carries ``worktree`` (the path) and, when git flags it, ``prunable``
+    (its working dir is gone but the admin record lingers). Other porcelain lines
+    (HEAD/branch/bare/detached/locked) are ignored.
+    """
+    r = _git(["worktree", "list", "--porcelain"], cwd=main_root)
+    if r.returncode != 0:
+        return []
+    entries: list[dict[str, str]] = []
+    cur: dict[str, str] = {}
+    for line in r.stdout.splitlines():
+        if not line.strip():
+            if cur:
+                entries.append(cur)
+                cur = {}
+            continue
+        if line.startswith("worktree "):
+            cur = {"worktree": line[len("worktree ") :]}
+        elif line.startswith("prunable"):
+            cur["prunable"] = line[len("prunable") :].strip()
+    if cur:
+        entries.append(cur)
+    return entries
+
+
+def sweep_targets(main_root: Path) -> list[Path]:
+    """Worktrees eligible for sweep: registered ones living outside
+    ``<repo>/.mentat/worktrees/`` (parent-folder strays) plus any ``prunable``
+    entries (e.g. a nested worktree whose dir was deleted). The main worktree and
+    live managed worktrees are never returned.
+    """
+    managed = worktrees_root(main_root).resolve()
+    main = main_root.resolve()
+    targets: list[Path] = []
+    for e in _list_worktrees(main_root):
+        path = Path(e["worktree"]).resolve()
+        if path == main:
+            continue
+        if managed not in path.parents or "prunable" in e:
+            targets.append(path)
+    return targets
+
+
+def cmd_worktree_sweep(*, dry_run: bool = True) -> int:
+    """List (default) or remove stray/prunable worktrees. Never auto-runs.
+
+    Dry-run prints the targets and exits. A confirmed run (``dry_run=False``)
+    does ``git worktree remove --force`` on each, then ``git worktree prune`` to
+    clear the admin records of any whose dir was already gone, leaving
+    ``git worktree list`` clean.
+
+    A target holding uncommitted work is **preserved**, never force-removed —
+    the same dirty-vs-clean safe default ``lib.worktrees`` enforces for managed
+    teardown. ``--force`` is the operator's confirmation to remove, not a
+    licence to discard un-landed work.
+
+    Exit codes: 0 success / nothing to do; 70 not inside a git repo.
+    """
+    cwd = Path.cwd()
+    main_root = _main_repo_root(cwd)
+    if main_root is None:
+        print("mentat-git: not inside a git repo", file=sys.stderr)
+        return EX_SOFTWARE
+
+    targets = sweep_targets(main_root)
+    if not targets:
+        print("mentat-git: no stray or prunable worktrees")
+        return 0
+
+    if dry_run:
+        print("Would sweep (run with --force to remove):")
+        for path in targets:
+            mark = "  (dirty — will be preserved)" if is_dirty(path) else ""
+            print(f"  {path}{mark}")
+        return 0
+
+    preserved: list[Path] = []
+    attempted: list[Path] = []
+    for path in targets:
+        (preserved if is_dirty(path) else attempted).append(path)
+
+    for path in attempted:
+        _git(["worktree", "remove", "--force", str(path)], cwd=main_root)
+    _git(["worktree", "prune"], cwd=main_root)
+
+    # Count what is actually gone after remove + prune — a silently failed
+    # remove must not be reported as swept.
+    removed = sum(1 for path in attempted if not path.exists())
+    print(f"mentat-git: swept {removed} worktree(s)")
+    for path in preserved:
+        print(f"mentat-git: preserved {path} (uncommitted changes)", file=sys.stderr)
+    return 0
 
 
 def cmd_worktree_create(slug: str, *, base: str | None = None, parent: Path | None = None) -> int:

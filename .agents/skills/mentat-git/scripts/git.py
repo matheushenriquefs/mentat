@@ -24,6 +24,7 @@ cmd_commit = _commit.cmd_commit
 cmd_rebase = _rebase.cmd_rebase
 cmd_diff = _diff.cmd_diff
 cmd_worktree_create = _worktree.cmd_worktree_create
+cmd_worktree_sweep = _worktree.cmd_worktree_sweep
 is_main_worktree = _worktree.is_main_worktree
 
 
@@ -47,6 +48,13 @@ def build_parser() -> argparse.ArgumentParser:
     wt_create.add_argument("--base", default=None, help="Base branch (auto-detected when omitted)")
     wt_create.add_argument("--parent", default=None, help="Parent dir (default: <repo>/.mentat/worktrees/)")
 
+    wt_sweep = wt_sub.add_parser("sweep", help="List (default) or remove stray + prunable worktrees")
+    wt_sweep.add_argument(
+        "--force",
+        action="store_true",
+        help="Remove the listed worktrees (default is a dry-run that only lists them)",
+    )
+
     return p
 
 
@@ -63,6 +71,8 @@ def main() -> None:
     elif args.cmd == "worktree" and args.wt_cmd == "create":
         parent = Path(args.parent) if args.parent else None
         sys.exit(cmd_worktree_create(args.slug, base=args.base, parent=parent))
+    elif args.cmd == "worktree" and args.wt_cmd == "sweep":
+        sys.exit(cmd_worktree_sweep(dry_run=not args.force))
 
 
 if __name__ == "__main__":
