@@ -16,7 +16,7 @@ pick a convention, document it, move on.
 | `1` | — | Gate fail / TDD fail / generic mentat-domain failure |
 | `42` | — | HITL sentinel — AFK ambiguity detected (documented exception; outside sysexits range) |
 | `64` | `EX_USAGE` | CLI arg parse error / missing required flag / multi-slug input |
-| `65` | `EX_DATAERR` | Malformed plan frontmatter / bad `config.jsonc` / bad JSONL |
+| `65` | `EX_DATAERR` | Malformed plan frontmatter / bad `config.toml` / bad JSONL |
 | `66` | `EX_NOINPUT` | Input file missing (plan slug not found) |
 | `69` | `EX_UNAVAILABLE` | Container down, harness unreachable |
 | `70` | `EX_SOFTWARE` | Internal bug / unhandled Python exception |
@@ -24,7 +24,7 @@ pick a convention, document it, move on.
 | `75` | `EX_TEMPFAIL` | Transient — retry candidate (rate limit, transient network error) |
 | `76` | `EX_PROTOCOL` | Upstream API broke contract (model returns malformed response) |
 | `77` | `EX_NOPERM` | Permission denied (read-only test mount blocked write per ADR-0006) |
-| `78` | `EX_CONFIG` | `~/.mentat/config.jsonc` or `<repo>/.mentat/config.jsonc` missing or invalid |
+| `78` | `EX_CONFIG` | `~/.mentat/config.toml` or `<repo>/.mentat/config.toml` missing or invalid |
 | `128+N` | — | Signal-killed: `143` SIGTERM, `137` SIGKILL (POSIX) |
 
 ---

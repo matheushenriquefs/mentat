@@ -5,7 +5,7 @@ description: >
   Use to commit, fast-forward rebase onto the holding branch, or print a cumulative diff vs a base.
 ---
 
-Container-routing git wrapper. Container required (ADR-0004) — auto-ups via `mentat-container up` if missing; exit 69 if bring-up fails. Rebase is fast-forward-only — no replay across pre-commit. Diff honors `~/.mentat/config.jsonc` `diff_tool` if set.
+Container-routing git wrapper. Container required (ADR-0004) — auto-ups via `mentat-container up` if missing; exit 69 if bring-up fails. Rebase is fast-forward-only — no replay across pre-commit. Diff honors `~/.mentat/config.toml` `diff_tool` if set.
 
 ## How to invoke
 
@@ -43,7 +43,7 @@ rm .commit-msg
 
 1. Resolve base: arg → `main` (default).
 2. Compute base SHA via `git merge-base <base> HEAD`.
-3. Print stat + full diff `base..HEAD`. Honor `diff_tool` from `~/.mentat/config.jsonc` if set.
+3. Print stat + full diff `base..HEAD`. Honor `diff_tool` from `~/.mentat/config.toml` if set.
 
 ## Worktree create flow
 

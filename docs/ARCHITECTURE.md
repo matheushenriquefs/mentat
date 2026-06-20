@@ -14,7 +14,7 @@ The core property: **parallel-out, serial-in.** Implementation parallelism ampli
 
 ## Parallel fan-out, serial land
 
-Slices run as chunks: one worktree + one devcontainer + one branch off `main`, each running its own coding agent session. The orchestrator spawns chunks concurrently (default 3; tunable via `~/.mentat/config.jsonc` `concurrency` key). Once all gates clear inside a chunk, it queues for landing.
+Slices run as chunks: one worktree + one devcontainer + one branch off `main`, each running its own coding agent session. The orchestrator spawns chunks concurrently (default 3; tunable via `~/.mentat/config.toml` `concurrency` key). Once all gates clear inside a chunk, it queues for landing.
 
 Landing is single-threaded by construction: one ref can't move concurrently, and serial landing lets sibling divergence resolve by rebasing onto the tip the previous chunk left. See [ADR-0004](./adr/0004-parallel-orchestration.md).
 
@@ -78,8 +78,8 @@ Four extension surfaces, all swap-in / no-fork:
 
 - **Rubric slot** — drop a reviewer subagent body into `.agents/agents/<name>-reviewer.md`. Auto-discovered.
 - **Gate slot** — drop a Python module exposing `run(chunk_path) -> (verdict, message)` into `.agents/lib/gates/code/`. Auto-discovered.
-- **Diff provider** — implement `DiffProvider.render(base, head) -> str`. Built-in: `git`. Declare in `~/.mentat/config.jsonc` `diff_tool`.
-- **Harness adapter** — implement `HarnessProvider.spawn(prompt, **opts)`. Built-in: `claude-code`, `cursor`. Declare in `~/.mentat/config.jsonc` `harness`.
+- **Diff provider** — implement `DiffProvider.render(base, head) -> str`. Built-in: `git`. Declare in `~/.mentat/config.toml` `diff_tool`.
+- **Harness adapter** — implement `HarnessProvider.spawn(prompt, **opts)`. Built-in: `claude-code`, `cursor`. Declare in `~/.mentat/config.toml` `harness`.
 
 Mentat core stays minimal; project-specific concerns extend through slots without forking.
 
@@ -115,8 +115,8 @@ Config is resolved as a layered stack (highest precedence first):
 | Layer | Source | Precedence |
 |---|---|---|
 | CLI flag | `--harness <n>`, `--model <s>` | highest |
-| Repo overlay | `<repo-root>/.mentat/config.jsonc` | over global |
-| Global | `~/.mentat/config.jsonc` | base |
+| Repo overlay | `<repo-root>/.mentat/config.toml` | over global |
+| Global | `~/.mentat/config.toml` | base |
 
 Merge is shallow (`{**global, **repo}`); repo wins per top-level key. Plugin lists are NOT merged — a repo `plugins` key replaces the global list. Scaffold with `mentat-install --repo`.
 

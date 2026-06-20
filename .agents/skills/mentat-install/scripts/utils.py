@@ -40,11 +40,18 @@ def safe_mkdir(path: Path, *, dry_run: bool = False) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+_GLOBAL_CONFIG_TEMPLATE = """\
+# Global mentat config. Repo .mentat/config.toml overlays these (repo wins, shallow merge).
+harness = "claude-code"        # claude-code | cursor
+# model = "claude-opus-4-8"
+# concurrency = 3
+# runtime = "docker"           # docker | host
+"""
+
+
 def write_default_config(path: Path, *, dry_run: bool = False) -> None:
     if dry_run:
         return
-    import json
-
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
-        path.write_text(json.dumps({"harness": "claude-code", "diff_tool": None}, indent=2) + "\n")
+        path.write_text(_GLOBAL_CONFIG_TEMPLATE)

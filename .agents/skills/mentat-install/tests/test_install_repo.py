@@ -125,7 +125,7 @@ def test_manifest_audit_predicate():
 
 
 def test_repo_install_creates_config(tmp_path):
-    """--repo creates .mentat/config.jsonc template."""
+    """--repo creates .mentat/config.toml template."""
     repo = tmp_path / "myrepo"
     _init_git_repo(repo)
 
@@ -133,8 +133,8 @@ def test_repo_install_creates_config(tmp_path):
     rc = install.do_repo_install(repo_path=repo)
 
     assert rc == 0
-    cfg = repo / ".mentat" / "config.jsonc"
-    assert cfg.exists(), f"config.jsonc not created at {cfg}"
+    cfg = repo / ".mentat" / "config.toml"
+    assert cfg.exists(), f"config.toml not created at {cfg}"
     content = cfg.read_text()
     assert "harness" in content
 
@@ -167,15 +167,15 @@ def test_repo_install_gitignore_existing_not_duplicated(tmp_path):
 
 
 def test_repo_install_noop_if_config_exists(tmp_path):
-    """--repo is no-op if .mentat/config.jsonc already present."""
+    """--repo is no-op if .mentat/config.toml already present."""
     repo = tmp_path / "myrepo"
     _init_git_repo(repo)
-    cfg = repo / ".mentat" / "config.jsonc"
+    cfg = repo / ".mentat" / "config.toml"
     cfg.parent.mkdir(parents=True, exist_ok=True)
-    cfg.write_text('{"harness": "cursor"}')
+    cfg.write_text('harness = "cursor"\n')
 
     install = _load_install()
     rc = install.do_repo_install(repo_path=repo)
 
     assert rc == 0
-    assert cfg.read_text() == '{"harness": "cursor"}', "existing config must not be overwritten"
+    assert cfg.read_text() == 'harness = "cursor"\n', "existing config must not be overwritten"

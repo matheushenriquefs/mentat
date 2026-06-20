@@ -75,15 +75,13 @@ delta = "mentat_plugin_delta:plugin"
 
 ### 3. Declare in config
 
-```jsonc
-// ~/.mentat/config.jsonc
-{
-  "plugins": ["delta-diff"],   // ordered; first provider of each slot wins
-  "diff_tool": "delta"         // null = built-in git
-}
+```toml
+# ~/.mentat/config.toml
+plugins = ["delta-diff"]   # ordered; first provider of each slot wins
+diff_tool = "delta"        # omit = built-in git
 ```
 
-> **Note — layered config and plugin lists:** When a `<repo>/.mentat/config.jsonc`
+> **Note — layered config and plugin lists:** When a `<repo>/.mentat/config.toml`
 > overlay is present, its `plugins` list **replaces** (not extends) the global list.
 > Shallow merge means the entire `plugins` key from the repo wins. This avoids
 > globally-installed plugins activating silently in scoped repos. If you need both

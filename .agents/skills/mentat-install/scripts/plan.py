@@ -141,7 +141,7 @@ def compute_plan(home: Path, clone_root: Path | None) -> InstallPlan:
         sub_dir = mentat_dir / sub
         if not sub_dir.exists():
             add.append(Action("mkdir", None, sub_dir))
-    config_file = mentat_dir / "config.jsonc"
+    config_file = mentat_dir / "config.toml"
     if not config_file.exists():
         add.append(Action("file-create", None, config_file))
 

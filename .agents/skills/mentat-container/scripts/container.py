@@ -62,7 +62,7 @@ def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
         # Strip JSONC comments via the canonical string-preserving parser so
         # inline `//` inside quoted values (e.g. https:// URLs in postCreateCommand)
         # is not mistaken for a line comment. Returns {} on any read/parse error.
-        from lib.jsonc import load_jsonc
+        from lib.config import load_jsonc
 
         data = load_jsonc(dcj)
         ws_ok = data.get("workspaceFolder") == expected_ws
@@ -320,31 +320,19 @@ def cmd_doctor(wt: Path) -> int:  # noqa: C901
     # ── [mentat state] ──────────────────────────────────────────────────────
     print("[mentat state]")
     mentat_dir = Path.home() / ".mentat"
-    config = mentat_dir / "config.jsonc"
+    from lib.config import config_status
+
     print(_col("~/.mentat/", "present" if mentat_dir.exists() else "absent"))
-    if config.exists():
-        try:
-            lines = [ln for ln in config.read_text().splitlines() if not ln.strip().startswith("//")]
-            _json.loads("\n".join(lines))
-            print(_col("config.jsonc (global)", "valid"))
-        except Exception:
-            print(_col("config.jsonc (global)", "invalid — parse error"))
-            warnings.append("config.jsonc parse error")
-    else:
-        print(_col("config.jsonc (global)", "absent"))
+    g_status, g_warn = config_status(mentat_dir)
+    print(_col("config (global)", g_status))
+    if g_warn:
+        warnings.append(g_warn)
     _repo_root_r = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
     if _repo_root_r.returncode == 0:
-        repo_cfg = Path(_repo_root_r.stdout.strip()) / ".mentat" / "config.jsonc"
-        if repo_cfg.exists():
-            try:
-                lines = [ln for ln in repo_cfg.read_text().splitlines() if not ln.strip().startswith("//")]
-                _json.loads("\n".join(lines))
-                print(_col("config.jsonc (repo overlay)", "valid"))
-            except Exception:
-                print(_col("config.jsonc (repo overlay)", "invalid — parse error"))
-                warnings.append("repo config.jsonc parse error")
-        else:
-            print(_col("config.jsonc (repo overlay)", "absent"))
+        r_status, r_warn = config_status(Path(_repo_root_r.stdout.strip()) / ".mentat")
+        print(_col("config (repo)", r_status))
+        if r_warn:
+            warnings.append(f"repo {r_warn}")
     logs_dir = mentat_dir / "logs"
     if logs_dir.exists():
         session_n = sum(1 for _ in logs_dir.iterdir() if _.is_dir())

@@ -67,7 +67,7 @@ mentat-implement <single-plan-slug>
 ## Decisions
 
 - No `MENTAT_BATCH_CLASS` env var. Class lives in plan frontmatter (source of truth).
-- Harness: default from `~/.mentat/config.jsonc` `harness:` key; override via `--harness`.
+- Harness: default from `~/.mentat/config.toml` `harness` key; override via `--harness`.
 - Gate runner: iterates `.agents/lib/gates/code/*.py` (`run(chunk_path)`); spawns reviewer subagents (`mentat-{plan,test,bug,smell}-reviewer`) via Agent tool; `score.py` aggregates.
 
 ## Exit codes
@@ -82,7 +82,7 @@ mentat-implement <single-plan-slug>
 | 66 | Plan slug not found |
 | 69 | Container down at preflight |
 | 70 | Unhandled Python exception |
-| 78 | `~/.mentat/config.jsonc` missing or invalid |
+| 78 | `~/.mentat/config.toml` missing or invalid |
 
 ## Rules
 

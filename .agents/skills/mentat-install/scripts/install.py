@@ -83,7 +83,7 @@ def do_install(
     _execute_actions(ip, dry_run=False)
 
     mentat_dir = home / ".mentat"
-    config_file = mentat_dir / "config.jsonc"
+    config_file = mentat_dir / "config.toml"
     _utils.safe_mkdir(mentat_dir)
     _utils.write_default_config(config_file)
 
@@ -93,23 +93,21 @@ def do_install(
 
 
 _REPO_CONFIG_TEMPLATE = """\
-{
-  // Per-repo mentat config. Keys here overlay ~/.mentat/config.jsonc (repo wins, shallow merge).
-  // Uncomment and set values to override the global default.
-  //
-  // "harness": "cursor",        // claude-code | cursor
-  // "model": "claude-opus-4-7",
-  // "concurrency": 3,
-  // "plugins": []
-}
+# Per-repo mentat config. Keys here overlay ~/.mentat/config.toml (repo wins, shallow merge).
+# Uncomment and set values to override the global default.
+#
+# harness = "cursor"           # claude-code | cursor
+# model = "claude-opus-4-8"
+# concurrency = 3
+# runtime = "docker"           # docker | host
 """
 
 
 def do_repo_install(*, repo_path: Path | None = None) -> int:
-    """Scaffold .mentat/config.jsonc + .gitignore entry in a repo.
+    """Scaffold .mentat/config.toml + .gitignore entry in a repo.
 
     repo_path defaults to git rev-parse --show-toplevel. No-op if
-    .mentat/config.jsonc already exists (exits 0 without overwriting).
+    .mentat/config.toml already exists (exits 0 without overwriting).
     """
     if repo_path is None:
         r = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
@@ -118,7 +116,7 @@ def do_repo_install(*, repo_path: Path | None = None) -> int:
             return 1
         repo_path = Path(r.stdout.strip())
 
-    cfg = repo_path / ".mentat" / "config.jsonc"
+    cfg = repo_path / ".mentat" / "config.toml"
     if cfg.exists():
         print(f"mentat-install --repo: {cfg} already exists, skipping.")
         return 0
@@ -154,7 +152,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         nargs="?",
         const="",
-        help="Scaffold per-repo .mentat/config.jsonc (defaults to git repo root)",
+        help="Scaffold per-repo .mentat/config.toml (defaults to git repo root)",
     )
     return p
 

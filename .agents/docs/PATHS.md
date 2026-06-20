@@ -11,13 +11,17 @@ Single source of truth for every path mentat reads or writes.
 │   ├── <agent>-<slug>.stdout                      # raw harness output (opaque)
 │   ├── .stderr/<agent>-<slug>.stderr              # subprocess stderr sidecar
 │   └── diagnosis.md                               # per-session diagnosis (mentat-session doctor output)
-└── config.jsonc                                   # single flat config (user-edited)
+└── config.toml                                    # single flat config (user-edited, TOML)
 ```
 
-`config.jsonc` defaults:
-```json
-{"harness": "claude-code", "diff_tool": null}
+`config.toml` keys (layered: `~/.mentat` < repo `.mentat`, repo wins):
+```toml
+harness = "claude-code"   # claude-code | cursor
+# model = "claude-opus-4-8"
+# concurrency = 3
+# runtime = "docker"      # docker | host
 ```
+Legacy `config.jsonc` is read with a one-time deprecation warning until retired.
 
 ## Agent/harness-shared (`~/.agents/`)
 
@@ -90,6 +94,6 @@ These paths are stale and should not exist on current installs:
 | `~/.agents/bin/lib/harness-registry.jsonc` | adapters hard-coded as Python modules in `mentat-implement` |
 | `~/.agents/lib/gates/llm/` | LLM rubric files retired; rubric content moved into `.agents/agents/mentat-*-reviewer.md` subagent bodies (ADR-0003 v3) |
 | `~/.agents/bin/mentat-precommit` | replaced by lefthook snippet |
-| `~/.agents/bin/mentat-config` | user edits `~/.mentat/config.jsonc` directly |
+| `~/.agents/bin/mentat-config` | user edits `~/.mentat/config.toml` directly |
 | `~/.agents/bin/mentat-update` | vendir wrapper removed |
 | `~/.mentatrc.jsonc` | never canonical; some old plans referenced this by mistake |

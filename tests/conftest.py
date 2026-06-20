@@ -54,7 +54,7 @@ def mentat_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Set MENTAT_LOG_PATH and MENTAT_CONFIG to tmp dirs. Return the tmp root."""
     log_path = tmp_path / "logs"
     log_path.mkdir()
-    config_path = tmp_path / "config.jsonc"
+    config_path = tmp_path / "config.toml"
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_path))
     monkeypatch.setenv("MENTAT_CONFIG", str(config_path))
     return tmp_path

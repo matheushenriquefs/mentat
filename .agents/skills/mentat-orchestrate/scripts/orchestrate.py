@@ -119,7 +119,7 @@ def _concurrency_cap() -> int:
         n = int(raw)
     except (TypeError, ValueError):
         print(
-            f"mentat-orchestrate: config.jsonc `concurrency` not int ({raw!r}); defaulting to 3",
+            f"mentat-orchestrate: config.toml `concurrency` not int ({raw!r}); defaulting to 3",
             file=sys.stderr,
         )
         return 3
@@ -131,7 +131,7 @@ def _fan_out_plans(plans: list[_scheduler.Plan], *, harness: str | None, model: 
 
     Blocks the loop when `cap` subprocesses are still alive — waits for one to
     exit via Popen.poll() before spawning the next plan. The cap defaults to 3
-    (ADR-0004) and can be overridden via ~/.mentat/config.jsonc `concurrency`.
+    (ADR-0004) and can be overridden via ~/.mentat/config.toml `concurrency`.
     """
     cap = _concurrency_cap()
     chunks: list[str] = []

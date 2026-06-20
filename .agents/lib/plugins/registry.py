@@ -12,15 +12,15 @@ _LIB_ROOT = Path(__file__).resolve().parents[1]
 if str(_LIB_ROOT.parent) not in sys.path:
     sys.path.insert(0, str(_LIB_ROOT.parent))
 
-from lib.jsonc import load_jsonc  # noqa: E402
+from lib.config import load_config_file  # noqa: E402
 
 
 def _load_config_order(config_path: Path) -> list[str]:
-    """Read plugin order from ~/.mentat/config.jsonc. Returns [] if absent or malformed."""
+    """Read plugin order from ~/.mentat/config.toml. Returns [] if absent or malformed."""
     if not config_path.exists():
         return []
     try:
-        data = load_jsonc(config_path)
+        data = load_config_file(config_path)
         plugins = data.get("plugins")
         if not isinstance(plugins, dict):
             return []
@@ -79,7 +79,7 @@ def resolve_slots(
 def load(config_path: Path | None = None) -> list[MentatPlugin]:
     """Discover all installed plugins. Raises on load failure."""
     if config_path is None:
-        config_path = Path.home() / ".mentat" / "config.jsonc"
+        config_path = Path.home() / ".mentat" / "config.toml"
     plugins = _discover_plugins()
     order = _load_config_order(config_path)
     # Re-sort by config order if provided

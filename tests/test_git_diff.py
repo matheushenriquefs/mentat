@@ -17,9 +17,9 @@ def load_module(name: str):
 def test_diff_uses_config_tool_when_set(tmp_path, monkeypatch):
     diff_mod = load_module("diff")
     monkeypatch.setenv("HOME", str(tmp_path))
-    config_path = tmp_path / ".mentat" / "config.jsonc"
+    config_path = tmp_path / ".mentat" / "config.toml"
     config_path.parent.mkdir(parents=True)
-    config_path.write_text('{"diff_tool": "difftastic"}')
+    config_path.write_text('diff_tool = "difftastic"\n')
 
     calls = []
 

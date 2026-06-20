@@ -74,8 +74,9 @@ def test_install_writes_default_config(tmp_path, monkeypatch):
     home = _fake_home(tmp_path, monkeypatch)
     with patch.object(install_mod, "_execute_actions"), patch.object(install_mod, "_emit_installed"):
         install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
-    config = home / ".mentat" / "config.jsonc"
+    config = home / ".mentat" / "config.toml"
     assert config.exists()
+    assert "harness" in config.read_text()
 
 
 def test_install_no_symlink_farm_at_agents_bin(tmp_path, monkeypatch):
