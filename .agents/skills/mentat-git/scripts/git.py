@@ -42,7 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     wt_p = sub.add_parser("worktree", help="Worktree management")
     wt_sub = wt_p.add_subparsers(dest="wt_cmd", required=True)
-    wt_create = wt_sub.add_parser("create", help="Create a sibling worktree on a new branch")
+    wt_create = wt_sub.add_parser("create", help="Create a worktree under <repo>/.mentat/worktrees/ on a new branch")
     wt_create.add_argument("slug", help="Worktree dir name + new branch name")
     wt_create.add_argument("--base", default=None, help="Base branch (auto-detected when omitted)")
     wt_create.add_argument("--parent", default=None, help="Parent dir (default: <repo>/.mentat/worktrees/)")

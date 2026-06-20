@@ -46,7 +46,11 @@ def is_dirty(path: Path) -> bool:
         text=True,
     )
     if r.returncode != 0:
-        return False
+        # Fail-safe: a git error (stale index.lock, interrupted op, corrupt
+        # index) must never green-light removal of a tree that may hold
+        # un-landed work. The plan locks "preserve a dirty one" as the safe
+        # default — when we cannot prove clean, treat as dirty.
+        return True
     return bool(r.stdout.strip())
 
 

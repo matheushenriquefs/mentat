@@ -142,3 +142,19 @@ def test_is_dirty(tmp_path, monkeypatch) -> None:
     assert worktrees.is_dirty(wt) is True
     monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: _cp(0, ""))
     assert worktrees.is_dirty(wt) is False
+
+
+def test_is_dirty_fails_safe_on_git_error(tmp_path, monkeypatch) -> None:
+    """A git error must not green-light removal — treat as dirty (preserve)."""
+    wt = _make_wt(tmp_path / ".mentat" / "worktrees", "implement-p-8", age_secs=10)
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: _cp(128, ""))
+    assert worktrees.is_dirty(wt) is True
+
+
+def test_prune_preserves_on_git_error(tmp_path, monkeypatch) -> None:
+    """A stale worktree whose git status errors is preserved, not pruned."""
+    wt_root = tmp_path / ".mentat" / "worktrees"
+    wt = _make_wt(wt_root, "implement-p-9", age_secs=7200)
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: _cp(128, "fatal: bad index"))
+    assert worktrees.prune_stale(wt_root, active_slugs=set()) == 0
+    assert wt.exists()
