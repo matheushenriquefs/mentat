@@ -280,13 +280,15 @@ def test_prune_skips_active(tmp_path, monkeypatch):
     assert wt.exists(), "active worktree must not be pruned"
 
 
-def test_prune_skips_non_mentat(tmp_path, monkeypatch):
-    """mentat-manual-* worktrees are never auto-pruned."""
+def test_prune_is_path_based_not_name_based(tmp_path, monkeypatch):
+    """Identity is path, not name (S1 landmine fix): a clean stale worktree is
+    pruned regardless of its name — including one the legacy mentat-manual-*
+    name-exemption would have spared."""
     orchestrate = _load("orchestrate")
     monkeypatch.chdir(tmp_path)
 
     wt_root = tmp_path / ".mentat" / "worktrees"
-    wt = wt_root / "mentat-manual-my-task"
+    wt = wt_root / "mentat-manual-my-task"  # formerly exempt by name
     wt.mkdir(parents=True)
     (wt / ".git").write_text("gitdir: /fake\n")
     mtime = _time.time() - 7200
@@ -294,11 +296,20 @@ def test_prune_skips_non_mentat(tmp_path, monkeypatch):
 
     monkeypatch.setattr(_dc_mod, "list_active_slugs", lambda: set())
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _cp_proc(0, ""))
+
+    def fake_run(cmd, **kw):
+        if cmd[0] == "git" and "status" in cmd:
+            return _cp_proc(0, "")  # clean
+        if cmd[0] == "git" and "worktree" in cmd and "remove" in cmd:
+            shutil.rmtree(Path(cmd[-1]), ignore_errors=True)
+            return _cp_proc(0)
+        return _cp_proc(0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
     orchestrate._prune_stale_worktrees()
 
-    assert wt.exists(), "mentat-manual-* must not be auto-pruned"
+    assert not wt.exists(), "name-exemption is gone — clean stale pruned by path"
 
 
 def test_prune_falls_back_to_rmtree(tmp_path, monkeypatch):

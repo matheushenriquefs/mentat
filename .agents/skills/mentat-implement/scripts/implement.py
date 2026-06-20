@@ -124,6 +124,31 @@ def _logs_path() -> str:
     return str(base / repo / session)
 
 
+def _prune_worktrees_preflight() -> None:
+    """Sweep clean, inactive, stale worktrees before this run starts.
+
+    Implement owns its worktree lifecycle (ADR ownership split) — it no longer
+    waits for an orchestrate run to clean up. Silent (no session.prune emit): a
+    preflight housekeeping sweep, not a batch audit event.
+    """
+    from lib import devcontainer, worktrees
+
+    wt_root = Path.cwd() / ".mentat" / "worktrees"
+    worktrees.prune_stale(wt_root, active_slugs=set(devcontainer.list_active_slugs()))
+
+
+def _teardown_worktree(target: Path) -> None:
+    """On implement's own failure: drop a clean worktree + its container,
+    preserve a dirty one (it holds un-landed work the operator must finish)."""
+    from lib import devcontainer, worktrees
+
+    devcontainer.down(target.name)
+    if worktrees.teardown(target):
+        print(f"mentat-implement: removed clean worktree {target}", file=sys.stderr)
+    else:
+        print(f"mentat-implement: preserving dirty worktree {target}", file=sys.stderr)
+
+
 def _auto_doctor() -> None:
     """Spawn mentat-session doctor. Honor $EDITOR for the diagnosis if set."""
     session_id = os.environ.get("MENTAT_SESSION")
@@ -366,6 +391,7 @@ def main() -> None:
     # session.jsonl capture happen for standalone runs too. Computed while still
     # in the main worktree so MENTAT_REPO resolves to the repo, not the slug dir.
     ensure_session("implement", slug)
+    _prune_worktrees_preflight()
     pf_rc, target = preflight_worktree(slug)
     if pf_rc != 0:
         _emit_event(
@@ -386,7 +412,14 @@ def main() -> None:
     if target is not None:
         os.chdir(target)
 
-    sys.exit(_run_and_doctor(plan_path, harness=args.harness, model=args.model))
+    rc = _run_and_doctor(plan_path, harness=args.harness, model=args.model)
+    # Implement owns the worktree it created: on its own failure (not a signal
+    # exit) drop it if clean, preserve if dirty. Doctor already ran inside
+    # _run_and_doctor and writes to ~/.mentat/logs, so teardown loses nothing.
+    if rc != 0 and rc not in (130, 143) and target is not None:
+        os.chdir(target.parents[2])  # step out to repo root before removing
+        _teardown_worktree(target)
+    sys.exit(rc)
 
 
 if __name__ == "__main__":

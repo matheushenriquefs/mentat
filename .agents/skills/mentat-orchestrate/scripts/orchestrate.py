@@ -147,43 +147,13 @@ def _fan_out_plans(plans: list[_scheduler.Plan], *, harness: str | None, model: 
     return chunks
 
 
-def _worktree_is_dirty(path: Path) -> bool:
-    if not (path / ".git").exists():
-        return False
-    r = subprocess.run(
-        ["git", "-C", str(path), "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-    )
-    if r.returncode != 0:
-        return False
-    return bool(r.stdout.strip())
-
-
-def _dirty_stale_worktrees(wt_root: Path, cutoff: float) -> list[str]:
-    dirty: list[str] = []
-    if not wt_root.is_dir():
-        return dirty
-    for child in wt_root.iterdir():
-        if not child.is_dir() or not child.name.startswith("mentat-"):
-            continue
-        if child.name.startswith("mentat-manual-"):
-            continue
-        if child.stat().st_mtime > cutoff:
-            continue
-        if _worktree_is_dirty(child):
-            dirty.append(child.name)
-    return dirty
-
-
 def _prune_stale_containers() -> None:
-    import time as _time
-
-    from lib import devcontainer
+    """Prune stale labeled containers — unless a stale worktree is dirty (its
+    leftovers need a runnable container). Identity-by-path via lib.worktrees."""
+    from lib import devcontainer, worktrees
 
     wt_root = Path.cwd() / ".mentat" / "worktrees"
-    cutoff = _time.time() - 3600
-    dirty = _dirty_stale_worktrees(wt_root, cutoff)
+    dirty = worktrees.dirty_stale(wt_root)
     if dirty:
         for name in dirty:
             print(f"devcontainer: skipping prune — dirty worktree '{name}'", file=sys.stderr)
@@ -194,41 +164,12 @@ def _prune_stale_containers() -> None:
 
 
 def _prune_stale_worktrees() -> None:
-    import shutil
-    import time as _time
-
-    from lib import devcontainer
+    """End-of-batch sweep of clean, inactive, stale worktrees (shared lib)."""
+    from lib import devcontainer, worktrees
 
     wt_root = Path.cwd() / ".mentat" / "worktrees"
-    if not wt_root.is_dir():
-        _utils.emit_event("session.prune", {"reclaimed_bytes": None, "worktrees_removed": 0})
-        return
-
-    active = devcontainer.list_active_slugs()
-    cutoff = _time.time() - 3600
-    removed = 0
-
-    for child in wt_root.iterdir():
-        if not child.is_dir() or not child.name.startswith("mentat-"):
-            continue
-        if child.name.startswith("mentat-manual-"):
-            continue
-        if child.stat().st_mtime > cutoff:
-            continue
-        if child.name in active:
-            continue
-        if _worktree_is_dirty(child):
-            continue
-        rc = subprocess.run(
-            ["git", "worktree", "remove", "--force", str(child)],
-            capture_output=True,
-            text=True,
-        ).returncode
-        if rc != 0:
-            shutil.rmtree(child, ignore_errors=True)
-        if not child.exists():
-            removed += 1
-
+    active = set(devcontainer.list_active_slugs())
+    removed = worktrees.prune_stale(wt_root, active_slugs=active)
     _utils.emit_event("session.prune", {"reclaimed_bytes": None, "worktrees_removed": removed})
 
 
