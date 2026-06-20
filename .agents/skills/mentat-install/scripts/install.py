@@ -12,30 +12,16 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
-import importlib.util as _ilu
-
 from lib.events import bind  # noqa: E402
+from lib.loader import load_sibling  # noqa: E402
 
 _emit_installed_fn = bind("mentat-install")
 
-
-def _load_sibling(name: str):
-    here = Path(__file__).parent
-    key = f"{here.parent.name}.{name}"
-    if key in sys.modules:
-        return sys.modules[key]
-    spec = _ilu.spec_from_file_location(key, here / f"{name}.py")
-    mod = _ilu.module_from_spec(spec)
-    sys.modules[key] = mod
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod
-
-
-_plan = _load_sibling("plan")
-_render = _load_sibling("render")
-_utils = _load_sibling("utils")
-_companions = _load_sibling("companions")
-_path_setup = _load_sibling("path_setup")
+_plan = load_sibling(__file__, "plan")
+_render = load_sibling(__file__, "render")
+_utils = load_sibling(__file__, "utils")
+_companions = load_sibling(__file__, "companions")
+_path_setup = load_sibling(__file__, "path_setup")
 
 
 def _emit_installed() -> None:

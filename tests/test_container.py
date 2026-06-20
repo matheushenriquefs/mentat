@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,16 +13,6 @@ SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-container
 
 def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
-
-
-def run_container(args: list[str], env: dict | None = None):
-    full_env = {**os.environ, **(env or {})}
-    return subprocess.run(
-        ["python3", str(SCRIPTS / "container.py"), *args],
-        capture_output=True,
-        text=True,
-        env=full_env,
-    )
 
 
 # ── utils ───────────────────────────────────────────────────────────────────
@@ -88,16 +76,22 @@ def test_compose_render_no_side_effects(tmp_path):
 # ── container CLI ─────────────────────────────────────────────────────────
 
 
-def test_container_run_asserts_up(tmp_path, monkeypatch):
-    """run subcommand must fail with informative error when no container running."""
-    utils = load_module("utils")
+def test_container_run_asserts_up(tmp_path, capsys):
+    """run subcommand must fail with informative error when no container running.
 
-    # Patch container_id_for to return None (no container)
-    with patch.object(utils, "container_id_for", return_value=None):
-        with patch.dict(os.environ, {"MENTAT_DOCKER": "docker"}):
-            result = run_container(["run", "echo hi"])
-    assert result.returncode != 0
-    assert "not running" in result.stderr.lower() or "container" in result.stderr.lower()
+    Call cmd_run in-process so the no-container patch actually applies — a prior
+    subprocess form left the child reading ambient docker state, which made the
+    test pass/fail by environment (e.g. green except inside a live worktree
+    container, where the commit gate runs the suite).
+    """
+    container = load_module("container")
+
+    with patch.object(container.utils, "container_id_for", return_value=None):
+        rc = container.cmd_run(tmp_path, "echo hi")
+
+    captured = capsys.readouterr()
+    assert rc != 0
+    assert "not running" in captured.err.lower() or "container" in captured.err.lower()
 
 
 def test_doctor_names_missing_path(tmp_path, monkeypatch, capsys):

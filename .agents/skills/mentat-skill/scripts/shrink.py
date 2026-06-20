@@ -2,25 +2,17 @@
 
 from __future__ import annotations
 
-import importlib.util as _ilu
 import sys
 from pathlib import Path
 
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
 
-def _load_sibling(name: str):
-    here = Path(__file__).parent
-    key = f"{here.parent.name}.{name}"
-    if key in sys.modules:
-        return sys.modules[key]
-    spec = _ilu.spec_from_file_location(key, here / f"{name}.py")
-    mod = _ilu.module_from_spec(spec)
-    sys.modules[key] = mod
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod
+from lib.loader import load_sibling  # noqa: E402
 
-
-_utils = _load_sibling("utils")
-_eval = _load_sibling("eval")
+_utils = load_sibling(__file__, "utils")
+_eval = load_sibling(__file__, "eval")
 
 
 def _invoke_shrink_harness(skill_md_content: str) -> str:

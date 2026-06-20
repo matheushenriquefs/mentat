@@ -23,6 +23,7 @@ _GIT_SCRIPT = paths.SKILLS_DIR / "mentat-git/scripts/git.py"
 _GIT_WORKTREE_PY = paths.SKILLS_DIR / "mentat-git/scripts/worktree.py"
 
 from lib import frontmatter as _frontmatter  # noqa: E402
+from lib.loader import load_sibling  # noqa: E402
 
 
 def _load_worktree_module():
@@ -43,19 +44,7 @@ def _load_worktree_module():
 _DOCTOR_EXIT_CODES = frozenset({1, 42, 64, 65, 66, 69, 70, 78})
 
 
-def _load_sibling(name: str):
-    here = Path(__file__).parent
-    key = f"{here.parent.name}.{name}"
-    if key in sys.modules:
-        return sys.modules[key]
-    spec = importlib.util.spec_from_file_location(key, here / f"{name}.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[key] = mod
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod
-
-
-_utils = _load_sibling("utils")
+_utils = load_sibling(__file__, "utils")
 
 
 # ── public helpers (patchable in tests) ─────────────────────────────────────

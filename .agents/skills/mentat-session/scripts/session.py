@@ -10,25 +10,16 @@ from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parent
 
-import importlib.util as _ilu
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib.loader import load_sibling  # noqa: E402
 
-def _load_sibling(name: str):
-    here = Path(__file__).parent
-    key = f"{here.parent.name}.{name}"
-    if key in sys.modules:
-        return sys.modules[key]
-    spec = _ilu.spec_from_file_location(key, here / f"{name}.py")
-    mod = _ilu.module_from_spec(spec)
-    sys.modules[key] = mod
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod
-
-
-_sessions = _load_sibling("sessions")
-_doctor = _load_sibling("doctor")
-_track = _load_sibling("track")
-_diagnose = _load_sibling("diagnose")
+_sessions = load_sibling(__file__, "sessions")
+_doctor = load_sibling(__file__, "doctor")
+_track = load_sibling(__file__, "track")
+_diagnose = load_sibling(__file__, "diagnose")
 
 
 def _log_root() -> Path:

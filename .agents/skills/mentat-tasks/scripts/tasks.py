@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import os
 import sys
 import tempfile
@@ -17,21 +16,9 @@ if str(_AGENTS_DIR) not in sys.path:
 
 from lib import frontmatter  # noqa: E402
 from lib.events import bind  # noqa: E402
+from lib.loader import load_sibling  # noqa: E402
 
-
-def _load_sibling(name: str) -> object:
-    key = f"mentat_tasks_{name}"
-    if key in sys.modules:
-        return sys.modules[key]
-    spec = importlib.util.spec_from_file_location(key, _SCRIPTS / f"{name}.py")
-    assert spec is not None and spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[key] = mod
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod
-
-
-_utils = _load_sibling("utils")
+_utils = load_sibling(__file__, "utils")
 
 emit = bind("mentat-tasks")
 
