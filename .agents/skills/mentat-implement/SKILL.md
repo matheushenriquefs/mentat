@@ -51,14 +51,14 @@ mentat-implement <single-plan-slug>
 
 1. Read plan frontmatter: id, class.
 2. If class == AFK:
-     harness adapter invoked with --disallowedTools AskUserQuestion
-     + system clause forbidding self-answer.
-3. If class == HITL:
-     harness adapter invoked normally (AskUserQuestion allowed).
-4. TDD loop over plan slices via /tdd:
-     red test → impl → gate → commit per slice.
-5. On AFK ambiguity (self-answered-question detected in session JSONL):
-     emit chunk.ejected{reason: hitl-required} + exit 42.
+     adapter invoked --disallowedTools AskUserQuestion (no prompt-hang) +
+     ambiguity contract: unresolvable design call → write blocker to
+     <worktree>/summary.md (frontmatter status: blocked), stop; never guess.
+3. If class == HITL: adapter invoked normally (AskUserQuestion allowed).
+4. TDD loop over plan slices via /tdd: red test → impl → gate → commit per slice.
+5. On AFK ambiguity (worktree summary.md{status: blocked}, or defensively a
+     self-answered AskUserQuestion): emit
+     chunk.ejected{reason: hitl-required, summary} + exit 42, worktree preserved.
 6. On success → exit 0.
 7. On TDD/gate failure → exit 1.
 8. On signals → standard signal exit codes.
@@ -88,7 +88,7 @@ mentat-implement <single-plan-slug>
 
 - One plan slug per invocation. Refuse multi-slug input with exit 64.
 - Container required (ADR-0004). Exit 69 if container down at preflight.
-- AFK class forbids `AskUserQuestion`; ambiguity → emit `chunk.ejected`, exit 42.
+- AFK class disallows `AskUserQuestion` (can't hang); ambiguity → agent writes `summary.md{status: blocked}` → emit `chunk.ejected{hitl-required}`, exit 42, preserve worktree.
 - Rename/delete: `git mv`/`git rm` first in own commit; post-commit `git ls-files | grep <old>` must be empty.
 - Stale-ref sweep: after any rename/delete, run the plan's `rg` lines; non-zero hits → abort the slice.
 - One commit per slice via `/mentat-commit`. No squash.

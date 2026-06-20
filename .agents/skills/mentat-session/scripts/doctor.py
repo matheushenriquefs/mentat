@@ -9,16 +9,20 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib.events import SUMMARY_FILE, EjectReason  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
 _sessions = load_sibling(__file__, "sessions")
 
 _SUSPECT_MAP = {
-    "implement-failed": "TDD/gate fail mid-implementation. Check `<chunk>.stdout` for harness output.",
-    "gate-failed": "Code/LLM gate returned `block`. See payload `message:` field.",
-    "rebase-conflicted": "Conflict against holding tip. Worktree preserved at `<where>`.",
-    "not-ff": "Non-fast-forward state. Holding moved while this chunk worked.",
-    "hitl-required": "AFK ambiguity detected. Self-answered-question pattern in session JSONL.",
+    EjectReason.IMPLEMENT_FAILED: "TDD/gate fail mid-implementation. Check `<chunk>.stdout` for harness output.",
+    EjectReason.GATE_FAILED: "Code/LLM gate returned `block`. See payload `message:` field.",
+    EjectReason.REBASE_CONFLICTED: "Conflict against holding tip. Worktree preserved at `<where>`.",
+    EjectReason.NOT_FF: "Non-fast-forward state. Holding moved while this chunk worked.",
+    EjectReason.HITL_REQUIRED: (
+        "AFK hit a decision the plan did not resolve and wrote a blocker to "
+        "summary.md instead of guessing. See the blocker below / payload `summary`."
+    ),
 }
 
 
@@ -53,6 +57,9 @@ def build_verdict(session_dir: Path) -> str:
         suspect_template = _SUSPECT_MAP.get(reason, f"Unknown reason: {reason}")
         where = terminal["payload"].get("where", "")
         suspect = suspect_template.replace("<where>", where)
+        blocker = terminal["payload"].get("summary")
+        if reason == EjectReason.HITL_REQUIRED and blocker:
+            suspect = f"{suspect} Blocker: {blocker}"
     else:
         reason = "unknown"
         suspect = "No terminal event found."
@@ -127,7 +134,13 @@ def build_summary(session_dir: Path) -> str:
         )
     elif terminal and terminal.get("event") == "chunk.ejected":
         p = terminal["payload"]
-        outcome = f"Ejected `{p.get('slug', 'unknown')}` — {p.get('reason', 'unknown')}. See diagnosis.md."
+        reason = p.get("reason", "unknown")
+        outcome = f"Ejected `{p.get('slug', 'unknown')}` — {reason}."
+        blocker = p.get("summary")
+        if reason == EjectReason.HITL_REQUIRED and blocker:
+            outcome += f" Blocker: {blocker}"
+        else:
+            outcome += " See diagnosis.md."
     else:
         outcome = "Completed in session; not yet landed (landing is orchestrate's job)."
 
@@ -136,6 +149,6 @@ def build_summary(session_dir: Path) -> str:
 
 def write_summary(session_dir: Path) -> Path:
     content = build_summary(session_dir)
-    summary = session_dir / "summary.md"
+    summary = session_dir / SUMMARY_FILE
     summary.write_text(content)
     return summary

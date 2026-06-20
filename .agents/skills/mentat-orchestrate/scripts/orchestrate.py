@@ -14,7 +14,9 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
-from lib.exits import EX_DATAERR, EX_NOINPUT  # noqa: E402
+from lib.events import HITL_IN_SESSION, EjectReason, ejected_payload, spawned_payload  # noqa: E402
+from lib.events import bind as _bind  # noqa: E402
+from lib.exits import EX_DATAERR, EX_HITL_REQUIRED, EX_NOINPUT  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 from lib.session import ensure_session  # noqa: E402
 
@@ -100,12 +102,7 @@ def _emit_anchored_chunks(plans: list[_scheduler.Plan], *, harness: str | None, 
     for plan in plans:
         _utils.emit_event(
             "chunk.spawned",
-            {
-                "slug": plan.slug,
-                "plan": str(plan.path),
-                "harness": "hitl-in-session",
-                "worktree": str(Path.cwd()),
-            },
+            spawned_payload(plan.slug, str(plan.path), harness=HITL_IN_SESSION, worktree=str(Path.cwd())),
         )
         chunks.append(plan.slug)
     return chunks
@@ -126,25 +123,59 @@ def _concurrency_cap() -> int:
     return max(1, n)
 
 
-def _fan_out_plans(plans: list[_scheduler.Plan], *, harness: str | None, model: str | None) -> list[str]:
+_emit_event = _bind("mentat-orchestrate")
+
+
+def _fan_out_plans(
+    plans: list[_scheduler.Plan], *, harness: str | None, model: str | None
+) -> list[tuple[_scheduler.Plan, int]]:
     """Spawn AFK plans headless, capped at the configured concurrency.
 
     Blocks the loop when `cap` subprocesses are still alive — waits for one to
     exit via Popen.poll() before spawning the next plan. The cap defaults to 3
     (ADR-0004) and can be overridden via ~/.mentat/config.toml `concurrency`.
+
+    Returns each plan paired with its child exit code, so the caller can route a
+    ``EX_HITL_REQUIRED`` (42) child away from landing (S5) — a wedged AFK self-
+    ejected and left its worktree for the operator; landing it would false-merge
+    empty or partial work.
     """
     cap = _concurrency_cap()
-    chunks: list[str] = []
-    live: list[subprocess.Popen] = []
+    live: list[tuple[_scheduler.Plan, subprocess.Popen]] = []
     for plan in plans:
-        while sum(1 for p in live if p.poll() is None) >= cap:
+        while sum(1 for _, p in live if p.poll() is None) >= cap:
             time.sleep(0.1)
-        session_id, proc = _fan_out.spawn_with_proc(plan, harness=harness, model=model)
-        live.append(proc)
-        chunks.append(session_id)
-    for p in live:
+        _session_id, proc = _fan_out.spawn_with_proc(plan, harness=harness, model=model)
+        live.append((plan, proc))
+    results: list[tuple[_scheduler.Plan, int]] = []
+    for plan, p in live:
         p.wait()
-    return chunks
+        results.append((plan, p.returncode))
+    return results
+
+
+def _partition_fanout(results, *, emit, mark_ejected, worktree_for):
+    """Split fan-out (plan, returncode) results into (landable_chunks, hitl_slugs).
+
+    A child that exited ``EX_HITL_REQUIRED`` is a wedge: it self-ejected and
+    preserved its worktree for the operator. We mirror that as an orchestrate-
+    session ``chunk.ejected{reason: hitl-required}`` (so the orchestrate operator
+    sees it without reading the child's log), cascade it through the scheduler so
+    blocked downstream chunks are skipped not stalled, and keep its slug out of
+    the land queue. Every other child becomes a landable Chunk. Pure but for the
+    injected ``emit`` / ``mark_ejected`` / ``worktree_for`` collaborators.
+    """
+    chunks = []
+    hitl: set[str] = set()
+    for plan, rc in results:
+        worktree = worktree_for(plan.slug)
+        if rc == EX_HITL_REQUIRED:
+            hitl.add(plan.slug)
+            emit("chunk.ejected", ejected_payload(plan.slug, EjectReason.HITL_REQUIRED, str(worktree)))
+            mark_ejected(plan.slug)
+        else:
+            chunks.append(_land_queue.Chunk(slug=plan.slug, worktree=worktree))
+    return chunks, hitl
 
 
 def _prune_stale_containers() -> None:
@@ -163,12 +194,17 @@ def _prune_stale_containers() -> None:
     _utils.emit_event("session.prune", {"reclaimed_bytes": result.reclaimed_bytes})
 
 
-def _prune_stale_worktrees() -> None:
-    """End-of-batch sweep of clean, inactive, stale worktrees (shared lib)."""
+def _prune_stale_worktrees(preserve: set[str] | None = None) -> None:
+    """End-of-batch sweep of clean, inactive, stale worktrees (shared lib).
+
+    ``preserve`` slugs are held back from the sweep — a wedged (hitl-required)
+    chunk's worktree must survive for the operator even when it is clean and
+    inactive (S5). They are folded into the active set the prune treats as live.
+    """
     from lib import devcontainer, worktrees
 
     wt_root = Path.cwd() / ".mentat" / "worktrees"
-    active = set(devcontainer.list_active_slugs())
+    active = set(devcontainer.list_active_slugs()) | (preserve or set())
     removed = worktrees.prune_stale(wt_root, active_slugs=active)
     _utils.emit_event("session.prune", {"reclaimed_bytes": None, "worktrees_removed": removed})
 
@@ -241,25 +277,40 @@ def run_orchestrate(
     if anchored:
         _emit_anchored_chunks(anchored, harness=harness, model=model)
 
-    # AFK plans: delegate fan-out → drain → review to BatchCoordinator.
+    # AFK plans: delegate fan-out → drain → review to BatchCoordinator. The
+    # scheduler is shared with the fan-out adapter so a hitl-required child can
+    # cascade-eject its downstream chunks before the drain pulls them (S5).
+    sched = _scheduler.Scheduler(auto)
+    hitl_slugs: set[str] = set()
+
     class _FanOutAdapter:
-        """Spawns AFK plans headless; returns land-queue Chunks keyed by plan slug."""
+        """Spawns AFK plans headless; returns landable Chunks. A child that exited
+        EX_HITL_REQUIRED is routed away from landing, its worktree preserved."""
 
         def run(self, plans):
-            _fan_out_plans(plans, harness=harness, model=model)
-            return [_land_queue.Chunk(slug=p.slug, worktree=_worktree_for_slug(p.slug)) for p in plans]
+            results = _fan_out_plans(plans, harness=harness, model=model)
+            chunks, hitl = _partition_fanout(
+                results,
+                emit=_emit_event,
+                mark_ejected=sched.mark_ejected,
+                worktree_for=_worktree_for_slug,
+            )
+            hitl_slugs.update(hitl)
+            return chunks
 
     coord = _coordinator.BatchCoordinator(
-        scheduler=_scheduler.Scheduler(auto),
+        scheduler=sched,
         fan_out=_FanOutAdapter(),
         land_queue=_land_queue,
         batch_review=_batch_review,
     )
     result = coord.run(auto, session_id, holding=holding)
 
-    _prune_stale_worktrees()
+    # Preserve wedged worktrees from the end-of-batch sweep so the operator can
+    # resume them after making the design call.
+    _prune_stale_worktrees(preserve=hitl_slugs)
 
-    return 1 if result.ejected else 0
+    return 1 if result.ejected or hitl_slugs else 0
 
 
 def build_parser() -> argparse.ArgumentParser:

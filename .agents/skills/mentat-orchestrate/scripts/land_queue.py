@@ -19,7 +19,7 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]  # .agents/
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
-from lib.events import bind, ejected_payload  # noqa: E402
+from lib.events import EjectReason, bind, ejected_payload  # noqa: E402
 
 _emit_event = bind("mentat-orchestrate")
 
@@ -108,12 +108,12 @@ def land(chunk: Chunk, *, holding: str) -> dict:
     if err:
         _emit_event(
             "chunk.ejected",
-            ejected_payload(chunk.slug, "rebase-conflicted", str(chunk.worktree)),
+            ejected_payload(chunk.slug, EjectReason.REBASE_CONFLICTED, str(chunk.worktree)),
         )
         return {
             "slug": chunk.slug,
             "status": "eject",
-            "reason": "rebase-conflicted",
+            "reason": EjectReason.REBASE_CONFLICTED,
             "tip": None,
             "conflicted_files": [],
         }
@@ -122,12 +122,12 @@ def land(chunk: Chunk, *, holding: str) -> dict:
     if verdict == "block":
         _emit_event(
             "chunk.ejected",
-            ejected_payload(chunk.slug, "gate-failed", str(chunk.worktree)),
+            ejected_payload(chunk.slug, EjectReason.GATE_FAILED, str(chunk.worktree)),
         )
         return {
             "slug": chunk.slug,
             "status": "eject",
-            "reason": "gate-failed",
+            "reason": EjectReason.GATE_FAILED,
             "tip": tip,
             "findings": [message],
         }
@@ -136,12 +136,12 @@ def land(chunk: Chunk, *, holding: str) -> dict:
     if not merged:
         _emit_event(
             "chunk.ejected",
-            ejected_payload(chunk.slug, "not-ff", str(chunk.worktree)),
+            ejected_payload(chunk.slug, EjectReason.NOT_FF, str(chunk.worktree)),
         )
         return {
             "slug": chunk.slug,
             "status": "eject",
-            "reason": "not-ff",
+            "reason": EjectReason.NOT_FF,
             "tip": tip,
         }
 
@@ -221,13 +221,13 @@ def drain(
             where = str(chunk.worktree) if chunk else ""
             _emit_event(
                 "chunk.ejected",
-                ejected_payload(downstream, "upstream_ejected", where, upstream=ready),
+                ejected_payload(downstream, EjectReason.UPSTREAM_EJECTED, where, upstream=ready),
             )
             results.append(
                 {
                     "slug": downstream,
                     "status": "eject",
-                    "reason": "upstream_ejected",
+                    "reason": EjectReason.UPSTREAM_EJECTED,
                     "upstream": ready,
                 }
             )

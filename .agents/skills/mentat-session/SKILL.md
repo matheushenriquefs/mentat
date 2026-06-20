@@ -25,7 +25,7 @@ The filesystem *is* the registry — each subdir of `~/.mentat/logs/<repo>/` is 
 
 | Status | Marker | Meaning |
 |---|---|---|
-| `waiting` | `◆` | Needs the operator — `chunk.ejected{reason: hitl-required}`, or a live `AskUserQuestion` in the harness stream. |
+| `waiting` | `◆` | Needs the operator — `chunk.ejected{reason: hitl-required}` (AFK wrote `summary.md{status: blocked}`), or a live `AskUserQuestion` in the harness stream. |
 | `idle` | `✓` | Terminal event (landed / succeeded / failed / teardown). Done. |
 | `?` | `?` | Non-terminal tail but stale `st_mtime` (no activity > 300s) — crashed silently. |
 | `working` | `•` | Non-terminal tail, recently active. |
@@ -58,7 +58,7 @@ Rows sort attention-to-top by `(rank, age)` — `waiting` (0) > `idle` (1) > `?`
 | `gate-failed` | Code/LLM gate `<gate>` returned `block`. See payload `message:`. |
 | `rebase-conflicted` | Conflict against holding tip. Worktree preserved at `<where>`. |
 | `not-ff` | Non-fast-forward state. Holding moved while chunk worked. |
-| `hitl-required` | AFK ambiguity detected. Self-answered-question in session JSONL. |
+| `hitl-required` | AFK hit a design call the plan didn't resolve; wrote a blocker to `summary.md` instead of guessing. Payload `summary` carries it; worktree preserved. |
 
 ## track (live multi-AFK navigator)
 

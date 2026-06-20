@@ -12,7 +12,7 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import paths  # noqa: E402
-from lib.events import bind  # noqa: E402
+from lib.events import bind, spawned_payload  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 from lib.session import mint_session  # noqa: E402
 
@@ -72,12 +72,7 @@ def spawn_with_proc(plan, *, harness: str | None = None, model: str | None = Non
     session_id, proc = _spawn_worktree_subprocess(plan.path, harness=harness, model=model)
     _emit_event(
         "chunk.spawned",
-        {
-            "slug": plan.slug,
-            "plan": str(plan.path),
-            "harness": harness or "default",
-            "worktree": str(Path.cwd()),
-        },
+        spawned_payload(plan.slug, str(plan.path), harness=harness or "default", worktree=str(Path.cwd())),
     )
     print(f"python3 ~/.agents/skills/mentat-session/scripts/session.py track {session_id}")
     print(session_id)

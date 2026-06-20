@@ -35,7 +35,7 @@ def test_orchestrate_full_pipeline_exits_0_on_all_success(tmp_path):
 
     with patch.object(coord_mod, "BatchCoordinator", _FakeCoord):
         with patch.object(orch, "_prune_stale_containers", lambda: None):
-            with patch.object(orch, "_prune_stale_worktrees", lambda: None):
+            with patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None):
                 with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
                     rc = orch.run_orchestrate(
                         holding="main",
@@ -61,7 +61,7 @@ def test_orchestrate_exits_1_on_any_ejection(tmp_path):
 
     with patch.object(coord_mod, "BatchCoordinator", _EjectCoord):
         with patch.object(orch, "_prune_stale_containers", lambda: None):
-            with patch.object(orch, "_prune_stale_worktrees", lambda: None):
+            with patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None):
                 with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
                     rc = orch.run_orchestrate(
                         holding="main",
@@ -140,17 +140,19 @@ def test_orchestrate_auto_spawn_runs_headless(tmp_path):
     orch = load_module("orchestrate")
     afk = _make_plan_file(tmp_path, "afk-plan", "AFK")
 
-    with patch.object(orch, "_fan_out_plans") as mock_fan:
-        mock_fan.return_value = ["chunk-afk"]
-        with patch.object(orch, "_land_all", return_value=[{"status": "success", "slug": "chunk-afk", "tip": "abc"}]):
-            with patch.object(orch, "_batch_review"):
-                orch.run_orchestrate(
-                    holding="main",
-                    plan_paths=[afk],
-                    harness=None,
-                    model=None,
-                    dry_run=False,
-                )
+    with (
+        patch.object(orch, "_fan_out_plans", return_value=[]) as mock_fan,
+        patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
+        patch.object(orch, "_land_all", return_value=[{"status": "success", "slug": "chunk-afk", "tip": "abc"}]),
+        patch.object(orch, "_batch_review"),
+    ):
+        orch.run_orchestrate(
+            holding="main",
+            plan_paths=[afk],
+            harness=None,
+            model=None,
+            dry_run=False,
+        )
 
     mock_fan.assert_called_once()
 
@@ -187,6 +189,7 @@ class _ScriptedPopen:
 
     def __init__(self, live_ticks: int) -> None:
         self._remaining = live_ticks
+        self.returncode = 0
 
     def poll(self):
         if self._remaining > 0:
@@ -196,6 +199,7 @@ class _ScriptedPopen:
 
     def wait(self):
         self._remaining = 0
+        self.returncode = 0
         return 0
 
 
@@ -250,6 +254,7 @@ def test_fan_out_plans_blocks_until_slot_free(monkeypatch, tmp_path):
     # Avoid sleeping 100ms × N — patch time.sleep to no-op.
     monkeypatch.setattr(orch.time, "sleep", lambda _s: None)
 
-    chunks = orch._fan_out_plans(plans, harness=None, model=None)
-    assert chunks == ["sess-p0", "sess-p1", "sess-p2", "sess-p3"]
+    results = orch._fan_out_plans(plans, harness=None, model=None)
+    assert [p.slug for p, _rc in results] == ["p0", "p1", "p2", "p3"]
+    assert all(rc == 0 for _p, rc in results)
     assert high_watermark["n"] <= 2, f"cap=2 was breached; saw {high_watermark['n']} concurrent live subprocesses"

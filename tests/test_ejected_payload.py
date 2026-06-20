@@ -18,7 +18,7 @@ sys.path.insert(0, str(REPO_ROOT / ".agents"))
 from lib import events  # noqa: E402
 
 _BASE = {"slug", "reason", "where"}
-_DECLARED_OPTIONAL = {"logs_path", "preflight_exit", "upstream"}
+_DECLARED_OPTIONAL = {"logs_path", "preflight_exit", "upstream", "summary"}
 
 
 def test_builder_base_shape() -> None:
@@ -39,8 +39,14 @@ def test_builder_includes_optionals_only_when_set() -> None:
 
 
 def test_builder_emits_no_undeclared_keys() -> None:
-    p = events.ejected_payload("s", "r", "/w", logs_path="/l", preflight_exit=1, upstream="u")
+    p = events.ejected_payload("s", "r", "/w", logs_path="/l", preflight_exit=1, upstream="u", summary="blocked")
     assert set(p) <= (_BASE | _DECLARED_OPTIONAL)
+
+
+def test_builder_includes_summary_only_when_set() -> None:
+    assert "summary" not in events.ejected_payload("s", "gate-failed", "/w")
+    p = events.ejected_payload("s", "hitl-required", "/w", summary="OAuth or SAML?")
+    assert p["summary"] == "OAuth or SAML?"
 
 
 def test_catalog_declares_optional_fields() -> None:

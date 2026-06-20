@@ -34,15 +34,7 @@ EVENT_CATALOG: dict[str, list[str]] = {
 # above. Declared (documented), not rejected: emitters may add these without a
 # new event type. chunk.ejected carries them via lib.events.ejected_payload.
 EVENT_OPTIONAL_FIELDS: dict[str, list[str]] = {
-    "chunk.ejected": ["logs_path", "preflight_exit", "upstream"],
-}
-
-_VALID_REASONS_EJECTED = {
-    "implement-failed",
-    "gate-failed",
-    "rebase-conflicted",
-    "not-ff",
-    "hitl-required",
+    "chunk.ejected": ["logs_path", "preflight_exit", "upstream", "summary"],
 }
 
 

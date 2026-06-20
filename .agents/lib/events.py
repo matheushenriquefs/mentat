@@ -28,6 +28,50 @@ def bind(skill: str) -> Callable[[str, dict[str, object]], None]:
     return emit
 
 
+class EjectReason:
+    """Canonical ``chunk.ejected`` reasons — one definition imported by every
+    emitter (implement, orchestrate, land_queue) and reader (doctor, sessions,
+    log) so a rename can't desync them. Values are the wire strings."""
+
+    IMPLEMENT_FAILED = "implement-failed"
+    GATE_FAILED = "gate-failed"
+    REBASE_CONFLICTED = "rebase-conflicted"
+    NOT_FF = "not-ff"
+    HITL_REQUIRED = "hitl-required"
+    PREFLIGHT_WORKTREE_FAILED = "preflight-worktree-failed"
+    MAIN_TREE_REFUSED = "main-tree-refused"
+    UPSTREAM_EJECTED = "upstream_ejected"
+
+
+EJECT_REASONS: frozenset[str] = frozenset(
+    {
+        EjectReason.IMPLEMENT_FAILED,
+        EjectReason.GATE_FAILED,
+        EjectReason.REBASE_CONFLICTED,
+        EjectReason.NOT_FF,
+        EjectReason.HITL_REQUIRED,
+        EjectReason.PREFLIGHT_WORKTREE_FAILED,
+        EjectReason.MAIN_TREE_REFUSED,
+        EjectReason.UPSTREAM_EJECTED,
+    }
+)
+
+# The one report-back filename: implement reads it as the AFK wedge marker, the
+# AFK prompt tells the agent to write it, doctor writes the success summary to
+# it. Shared so the cross-skill contract has a single source.
+SUMMARY_FILE = "summary.md"
+
+# Harness sentinel for a HITL chunk that runs in the calling session rather than
+# a spawned headless sub-claude.
+HITL_IN_SESSION = "hitl-in-session"
+
+
+def spawned_payload(slug: str, plan: str, *, harness: str, worktree: str) -> dict[str, object]:
+    """The one canonical ``chunk.spawned`` payload — shared by fan_out (headless
+    AFK spawn) and the in-session HITL emitters in implement/orchestrate."""
+    return {"slug": slug, "plan": plan, "harness": harness, "worktree": worktree}
+
+
 def ejected_payload(
     slug: str,
     reason: str,
@@ -36,14 +80,16 @@ def ejected_payload(
     logs_path: str | None = None,
     preflight_exit: int | None = None,
     upstream: str | None = None,
+    summary: str | None = None,
 ) -> dict[str, object]:
     """Build the one canonical ``chunk.ejected`` payload.
 
     Base shape ``{slug, reason, where}`` for every ejection regardless of caller;
-    the optional fields (``logs_path``, ``preflight_exit``, ``upstream``) are
-    included only when set. These optionals are declared in mentat-log's
-    ``EVENT_OPTIONAL_FIELDS`` — a payload extension, not a new event type (the
-    9-event catalog is unchanged).
+    the optional fields (``logs_path``, ``preflight_exit``, ``upstream``,
+    ``summary``) are included only when set. ``summary`` carries the operator-
+    facing blocker text on a ``hitl-required`` ejection (S5). These optionals are
+    declared in mentat-log's ``EVENT_OPTIONAL_FIELDS`` — a payload extension, not
+    a new event type (the 9-event catalog is unchanged).
     """
     payload: dict[str, object] = {"slug": slug, "reason": reason, "where": where}
     if logs_path is not None:
@@ -52,4 +98,6 @@ def ejected_payload(
         payload["preflight_exit"] = preflight_exit
     if upstream is not None:
         payload["upstream"] = upstream
+    if summary is not None:
+        payload["summary"] = summary
     return payload

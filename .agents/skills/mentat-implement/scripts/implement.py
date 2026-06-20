@@ -56,6 +56,22 @@ _DOCTOR_EXIT_CODES = frozenset(
     {1, EX_HITL_REQUIRED, EX_USAGE, EX_DATAERR, EX_NOINPUT, EX_UNAVAILABLE, EX_SOFTWARE, EX_CONFIG}
 )
 
+# Exit codes whose worktree implement must NOT tear down: the two signal exits
+# (interrupted mid-work) and EX_HITL_REQUIRED — a wedged AFK left its worktree
+# for the operator to resolve the design call and resume (S5).
+_PRESERVE_WORKTREE_EXITS = frozenset({130, 143, EX_HITL_REQUIRED})
+
+# ── S5 — AFK ambiguity wedge channel ─────────────────────────────────────────
+# An AFK agent has no human to ask (AskUserQuestion stays disallowed so it cannot
+# hang on a prompt). When it hits a decision the plan does not resolve it writes
+# the blocker to <worktree>/summary.md with frontmatter `status: blocked` and
+# stops, rather than guessing. summary.md (not a bespoke marker) keeps one
+# report-back file shared with the success path (S8); `status:` distinguishes a
+# clean finish from a blocker, and the agent's cwd (the worktree) is a distinct
+# location from the success summary's log dir, so the two never collide. The
+# filename is the shared lib.events.SUMMARY_FILE — one cross-skill contract.
+_BLOCKED_STATUS = "blocked"
+
 
 _utils = load_sibling(__file__, "utils")
 
@@ -111,8 +127,8 @@ def parse_frontmatter(plan_path: Path) -> dict[str, str]:
     return _frontmatter.parse(plan_path.read_text())[0]
 
 
+from lib.events import HITL_IN_SESSION, SUMMARY_FILE, EjectReason, ejected_payload, spawned_payload  # noqa: E402
 from lib.events import bind as _bind  # noqa: E402
-from lib.events import ejected_payload  # noqa: E402
 
 _emit_event = _bind("mentat-implement")
 
@@ -293,6 +309,39 @@ def _detect_self_answer(result: Any) -> bool:
     return _utils.detect_self_answer(Path(session_log))
 
 
+def _read_blocked_summary(worktree: Path) -> str | None:
+    """The agent's blocker body if it wedged, else None (S5).
+
+    A wedge = ``<worktree>/summary.md`` whose frontmatter ``status`` is
+    ``blocked``. Returns the body (frontmatter stripped). A missing file, a read
+    error, or a summary without the blocked status is not a wedge → None.
+    """
+    path = worktree / SUMMARY_FILE
+    if not path.exists():
+        return None
+    try:
+        text = path.read_text()
+    except OSError:
+        return None
+    fm, body_start = _frontmatter.parse(text)
+    if str(fm.get("status", "")).strip().lower() != _BLOCKED_STATUS:
+        return None
+    return "\n".join(text.splitlines()[body_start:]).strip()
+
+
+def _promote_blocked_summary(body: str) -> None:
+    """Mirror the agent's blocker body into the session log dir's summary.md so
+    ``mentat-session report`` surfaces it. The success path writes the same file
+    from audit events; on a wedge we have the body directly. Best-effort — a
+    write failure must not mask the hitl-required ejection."""
+    log_dir = Path(_logs_path())
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        (log_dir / SUMMARY_FILE).write_text(body + "\n")
+    except OSError:
+        pass
+
+
 def _run_gates(chunk_path: Path | None) -> tuple[str, str]:
     if chunk_path is None:
         return ("pass", "")
@@ -321,6 +370,16 @@ _AFK_COMMIT_CONTRACT = (
     "new commit — never `--no-verify`."
 )
 
+_AFK_AMBIGUITY_CONTRACT = (
+    "AFK contract: no human is available to answer questions. If you hit a "
+    "decision the plan does not resolve and cannot resolve it safely yourself, "
+    "do NOT guess or fabricate. Write the blocker — the question plus the "
+    "options you see — to `summary.md` in the worktree root with YAML "
+    "frontmatter `---` then `status: blocked` then `---`, and stop immediately. "
+    "That file hands the slice back to the operator cleanly; guessing produces "
+    "wrong work that looks finished."
+)
+
 
 def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None = None) -> int:
     if not harness:
@@ -340,12 +399,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     if not afk:
         _emit_event(
             "chunk.spawned",
-            {
-                "slug": slug,
-                "plan": str(plan_path),
-                "harness": "hitl-in-session",
-                "worktree": str(Path.cwd()),
-            },
+            spawned_payload(slug, str(plan_path), harness=HITL_IN_SESSION, worktree=str(Path.cwd())),
         )
         print(
             f"mentat-implement: {slug} is class:HITL — drive in calling Claude session.\nPlan: {plan_path}",
@@ -365,28 +419,40 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
         cwd_agents = str(Path.cwd()) + "/.agents/"
         if home_agents != cwd_agents:
             plan_body = plan_body.replace(home_agents, cwd_agents)
-    prompt = f"{_AFK_COMMIT_CONTRACT}\n\n{plan_body}"
+    prompt = f"{_AFK_COMMIT_CONTRACT}\n\n{_AFK_AMBIGUITY_CONTRACT}\n\n{plan_body}"
     result = _invoke_harness(harness, prompt, afk=afk, model=model)
+
+    # S5 — AFK wedge: the agent hit an unresolvable design call and signaled via
+    # summary.md{status: blocked} (preferred, hang-proof) or — defensively — a
+    # self-answered AskUserQuestion in the captured stream. Eject hitl-required
+    # and preserve the worktree for the operator. Checked before the generic
+    # nonzero-exit branch so a wedge is never misreported as implement-failed
+    # (the root cause of silent AFK kills reading as plain failures).
+    if afk:
+        blocker = _read_blocked_summary(Path.cwd())
+        if blocker is not None or _detect_self_answer(result):
+            summary = blocker or "AFK ambiguity — self-answer detected in the session stream."
+            _promote_blocked_summary(summary)
+            _emit_event(
+                "chunk.ejected",
+                ejected_payload(
+                    slug, EjectReason.HITL_REQUIRED, str(plan_path.parent), logs_path=_logs_path(), summary=summary
+                ),
+            )
+            return EX_HITL_REQUIRED
 
     if result.returncode != 0:
         _emit_event(
             "chunk.ejected",
-            ejected_payload(slug, "implement-failed", str(plan_path.parent), logs_path=_logs_path()),
+            ejected_payload(slug, EjectReason.IMPLEMENT_FAILED, str(plan_path.parent), logs_path=_logs_path()),
         )
         return 1
-
-    if afk and _detect_self_answer(result):
-        _emit_event(
-            "chunk.ejected",
-            ejected_payload(slug, "hitl-required", str(plan_path.parent), logs_path=_logs_path()),
-        )
-        return EX_HITL_REQUIRED
 
     verdict, message = _run_gates(None)
     if verdict == "block":
         _emit_event(
             "chunk.ejected",
-            ejected_payload(slug, "gate-failed", str(plan_path.parent), logs_path=_logs_path()),
+            ejected_payload(slug, EjectReason.GATE_FAILED, str(plan_path.parent), logs_path=_logs_path()),
         )
         return 1
 
@@ -455,7 +521,7 @@ def main() -> None:
             "chunk.ejected",
             ejected_payload(
                 slug,
-                "preflight-worktree-failed",
+                EjectReason.PREFLIGHT_WORKTREE_FAILED,
                 str(plan_path.parent),
                 logs_path=_logs_path(),
                 preflight_exit=pf_rc,
@@ -475,7 +541,7 @@ def main() -> None:
     if _in_shared_main_tree():
         _emit_event(
             "chunk.ejected",
-            ejected_payload(slug, "main-tree-refused", str(Path.cwd()), logs_path=_logs_path()),
+            ejected_payload(slug, EjectReason.MAIN_TREE_REFUSED, str(Path.cwd()), logs_path=_logs_path()),
         )
         print(
             "mentat-implement: refusing to run in the shared main worktree — a branch "
@@ -486,10 +552,12 @@ def main() -> None:
         sys.exit(EX_USAGE)
 
     rc = _run_and_doctor(plan_path, harness=args.harness, model=args.model)
-    # Implement owns the worktree it created: on its own failure (not a signal
-    # exit) drop it if clean, preserve if dirty. Doctor already ran inside
+    # Implement owns the worktree it created: on its own failure drop it if
+    # clean, preserve if dirty. Signal exits and a hitl-required wedge are
+    # preserved unconditionally — the wedge worktree holds work the operator
+    # must resume once the design call is made. Doctor already ran inside
     # _run_and_doctor and writes to ~/.mentat/logs, so teardown loses nothing.
-    if rc != 0 and rc not in (130, 143) and target is not None:
+    if rc != 0 and rc not in _PRESERVE_WORKTREE_EXITS and target is not None:
         os.chdir(target.parents[2])  # step out to repo root before removing
         _teardown_worktree(target)
     sys.exit(rc)

@@ -48,6 +48,13 @@ def ensure_session(role: str, slug: str) -> str:
     if not session_id:
         session_id = mint_session(role, slug)
         os.environ["MENTAT_SESSION"] = session_id
+    # Freeze the repo name now, while cwd is still the repo. implement chdir's
+    # into its worktree before it emits / doctors / promotes a summary; a bare
+    # cwd().name there resolves to the slug worktree dir, splitting those outputs
+    # from session.jsonl (frozen to the repo dir here). Exporting it once keeps
+    # every later MENTAT_REPO reader pointed at one log dir.
+    if not os.environ.get("MENTAT_REPO"):
+        os.environ["MENTAT_REPO"] = Path.cwd().name
     if not os.environ.get("MENTAT_SESSION_LOG"):
         log = session_log_path(session_id)
         log.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

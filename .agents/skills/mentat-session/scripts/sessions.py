@@ -24,11 +24,12 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import harness_stream  # noqa: E402
+from lib.events import EjectReason  # noqa: E402
 
 # Terminal audit events — a session whose newest tail is one of these is done, not crashed.
 TERMINAL_EVENTS = frozenset({"chunk.landed", "plan.succeeded", "plan.failed", "chunk.teardown", "batch.reviewed"})
 # chunk.ejected is terminal too, but a hitl-required eject needs an operator → waiting.
-_WAITING_EJECT_REASONS = frozenset({"hitl-required"})
+_WAITING_EJECT_REASONS = frozenset({EjectReason.HITL_REQUIRED})
 
 # No activity for this long with a non-terminal tail = the session crashed silently.
 STALE_SECS = 300
