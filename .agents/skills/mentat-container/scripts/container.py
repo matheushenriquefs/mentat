@@ -59,10 +59,12 @@ def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
     git_mount = _git_mount_for_worktree(wt)
 
     if dcj.exists():
-        try:
-            data = _json.loads(dcj.read_text())
-        except Exception:
-            data = {}
+        # Strip JSONC comments via the canonical string-preserving parser so
+        # inline `//` inside quoted values (e.g. https:// URLs in postCreateCommand)
+        # is not mistaken for a line comment. Returns {} on any read/parse error.
+        from lib.jsonc import load_jsonc
+
+        data = load_jsonc(dcj)
         ws_ok = data.get("workspaceFolder") == expected_ws
         mount_ok = git_mount is None or git_mount in data.get("mounts", [])
         if ws_ok and mount_ok:

@@ -12,7 +12,7 @@
     }
   },
   "onCreateCommand": "sudo apt-get update && sudo apt-get install -y jq shellcheck && curl -LsSf https://astral.sh/uv/install.sh | sh",
-  "postCreateCommand": "cd /workspaces/mentat && ~/.local/bin/uv sync --group dev && npm install -g promptfoo && lefthook install && python3 .agents/skills/mentat-install/scripts/install.py",
+  "postCreateCommand": "cd /workspaces/mentat && ~/.local/bin/uv sync --group dev && npm install -g promptfoo lefthook && (lefthook install --force || true) && python3 .agents/skills/mentat-install/scripts/install.py",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/mentat,type=bind,consistency=cached",
   "workspaceFolder": "/workspaces/mentat",
   "runArgs": [
