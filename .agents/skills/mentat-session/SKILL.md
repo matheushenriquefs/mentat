@@ -5,18 +5,32 @@ description: >
   Use when you want to stream live chunk events, produce a verdict markdown, or kick off a bug-hunt loop.
 ---
 
-Session inspection toolkit. `track` tails JSONL events live with color-coded output. `doctor` derives a verdict markdown from log events and writes it to `~/.mentat/logs/<repo>/<session>/diagnosis.md`. `report` is its success-side twin — a one-paragraph report-back of what the session implemented, written to `summary.md`. `diagnose` invokes `doctor` for context then enters the `/diagnose` loop.
+Session inspection toolkit. `list` shows the repo-wide registry — every session under `~/.mentat/logs/<repo>/`, attention-needing ones on top. `track` tails JSONL events live with color-coded output. `doctor` derives a verdict markdown from log events and writes it to `~/.mentat/logs/<repo>/<session>/diagnosis.md`. `report` is its success-side twin — a one-paragraph report-back of what the session implemented, written to `summary.md`. `diagnose` invokes `doctor` for context then enters the `/diagnose` loop.
 
 ## How to invoke
 
 Terminal tool — run on PATH (no slash form; this is not a harness slash command):
 
 ```
+mentat-session list
 mentat-session track [<session>]
 mentat-session doctor [<session>]
 mentat-session report [<session>]
 mentat-session diagnose
 ```
+
+## list (repo-wide registry)
+
+The filesystem *is* the registry — each subdir of `~/.mentat/logs/<repo>/` is one session. There are no push hooks, so status is **pulled**: read the tail row of the session's newest jsonl and classify it against the file's `st_mtime`.
+
+| Status | Marker | Meaning |
+|---|---|---|
+| `waiting` | `◆` | Needs the operator — `chunk.ejected{reason: hitl-required}`, or a live `AskUserQuestion` in the harness stream. |
+| `idle` | `✓` | Terminal event (landed / succeeded / failed / teardown). Done. |
+| `?` | `?` | Non-terminal tail but stale `st_mtime` (no activity > 300s) — crashed silently. |
+| `working` | `•` | Non-terminal tail, recently active. |
+
+Rows sort attention-to-top by `(rank, age)` — `waiting` (0) > `idle` (1) > `?` (2) > `working` (3). `st_mtime` of the newest file is the free "last-active" timestamp.
 
 ## Doctor markdown structure
 

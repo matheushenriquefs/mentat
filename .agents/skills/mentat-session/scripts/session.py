@@ -86,6 +86,38 @@ def cmd_report(session_id: str | None) -> int:
     return 0
 
 
+def _humanize_age(age_secs: float) -> str:
+    secs = int(age_secs)
+    if secs < 60:
+        return f"{secs}s ago"
+    if secs < 3600:
+        return f"{secs // 60}m ago"
+    if secs < 86400:
+        return f"{secs // 3600}h ago"
+    return f"{secs // 86400}d ago"
+
+
+# ASCII status markers (no emoji — shares the tui.py vocabulary).
+_STATUS_MARK = {"waiting": "◆", "idle": "✓", "?": "?", "working": "•"}
+
+
+def cmd_list() -> int:
+    """Repo-wide session registry: scan ~/.mentat/logs/<repo>/*, status pulled from
+    each session's newest jsonl tail, attention-needing sessions on top."""
+    repo = _repo()
+    repo_dir = _log_root() / repo
+    rows = _sessions.list_sessions(repo_dir)  # returns [] when the dir is absent
+    if not rows:
+        print(f"mentat-session: no sessions for {repo}")
+        return 0
+    width = max(len(r["session"]) for r in rows)
+    for r in rows:
+        mark = _STATUS_MARK.get(r["status"], "?")
+        last = r["last_event"] or "-"
+        print(f"{mark} {r['status']:<8} {r['session']:<{width}}  {_humanize_age(r['age']):>9}  {last}")
+    return 0
+
+
 def cmd_diagnose(session_id: str | None) -> int:
     repo = _repo()
     repo_dir = _log_root() / repo
@@ -102,6 +134,8 @@ def cmd_diagnose(session_id: str | None) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="mentat-session")
     sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("list", help="Repo-wide session registry (attention-ordered)")
 
     track_p = sub.add_parser("track", help="Stream live events")
     track_p.add_argument("session", nargs="?", default=None)
@@ -122,7 +156,9 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    if args.cmd == "track":
+    if args.cmd == "list":
+        sys.exit(cmd_list())
+    elif args.cmd == "track":
         sys.exit(cmd_track(args.session))
     elif args.cmd == "doctor":
         sys.exit(cmd_doctor(args.session))

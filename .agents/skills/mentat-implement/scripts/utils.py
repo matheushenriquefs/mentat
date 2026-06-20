@@ -10,21 +10,21 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib import harness_stream  # noqa: E402
 from lib.config import read_config  # noqa: E402
 
 
 def default_harness() -> str:
-    return read_config().get("harness", "claude-code")
+    harness = read_config().get("harness", "claude-code")
+    return harness if isinstance(harness, str) else "claude-code"
 
 
 def detect_self_answer(session_log_path: Path | str | None) -> bool:
     """Return True if any assistant turn invoked AskUserQuestion.
 
-    Parses the stream-json schema written by harness adapters (claude_code /
-    cursor) when MENTAT_SESSION_LOG is set: NDJSON rows where
-    `type == "assistant"` carry `message.content[*]` blocks; a `tool_use`
-    block with `name == "AskUserQuestion"` is the self-answer signal for AFK
-    plans (AFK ejects with exit 42 when seen).
+    The AskUserQuestion stream-json shape is owned by `lib.harness_stream`; this
+    scans the captured session log (written when MENTAT_SESSION_LOG is set) for
+    any such row — the self-answer signal for AFK plans (eject with exit 42).
     """
     if not session_log_path:
         return False
@@ -39,13 +39,6 @@ def detect_self_answer(session_log_path: Path | str | None) -> bool:
             row = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if not isinstance(row, dict) or row.get("type") != "assistant":
-            continue
-        message = row.get("message") or {}
-        content = message.get("content") if isinstance(message, dict) else None
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "AskUserQuestion":
-                return True
+        if harness_stream.is_ask_user_question(row):
+            return True
     return False
