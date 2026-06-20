@@ -184,6 +184,29 @@ def _is_main_worktree(cwd: Path) -> bool:
     return bool(mod.is_main_worktree(cwd))
 
 
+def _in_shared_main_tree() -> bool:
+    """S9: True iff running in the shared main worktree, where a ``git checkout``
+    flips HEAD for every concurrent session sharing that working tree — the
+    branch-leak the user hit. Separate worktrees each own their HEAD (git refuses
+    cross-worktree branch sharing), so an own-worktree run is leak-proof.
+
+    Test isolation (``MENTAT_SKIP_PREFLIGHT``) and non-repo cwds have no shared
+    HEAD to leak, so they are never "shared main trees".
+    """
+    if os.environ.get("MENTAT_SKIP_PREFLIGHT"):
+        return False
+    cwd = Path.cwd()
+    in_repo = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+    if in_repo.returncode != 0:
+        return False
+    return _is_main_worktree(cwd)
+
+
 def preflight_worktree(slug: str) -> tuple[int, Path | None]:
     """Auto-create a worktree for slug if cwd is the main worktree.
 
@@ -403,6 +426,22 @@ def main() -> None:
         sys.exit(pf_rc)
     if target is not None:
         os.chdir(target)
+
+    # Fail closed if preflight did not isolate us into our own worktree (S9). A
+    # run in the shared main tree leaks branch switches across every concurrent
+    # session — refuse rather than risk the leak.
+    if _in_shared_main_tree():
+        _emit_event(
+            "chunk.ejected",
+            ejected_payload(slug, "main-tree-refused", str(Path.cwd()), logs_path=_logs_path()),
+        )
+        print(
+            "mentat-implement: refusing to run in the shared main worktree — a branch "
+            "switch there flips HEAD for every concurrent session. Run inside a "
+            ".mentat/worktrees/ worktree (preflight normally creates one).",
+            file=sys.stderr,
+        )
+        sys.exit(EX_USAGE)
 
     rc = _run_and_doctor(plan_path, harness=args.harness, model=args.model)
     # Implement owns the worktree it created: on its own failure (not a signal

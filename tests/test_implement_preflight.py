@@ -150,6 +150,68 @@ def test_main_invokes_preflight_then_chdir(main_repo, tmp_path, monkeypatch):
     )
 
 
+# ── S9: own-worktree isolation (branch-leak fix) ─────────────────────────────
+
+
+def test_in_shared_main_tree_true_in_main(main_repo):
+    """In the main worktree of a real repo (no skip), running there is unsafe —
+    a branch switch flips HEAD for every concurrent session sharing the tree."""
+    impl = _load()
+    assert impl._in_shared_main_tree() is True
+
+
+def test_in_shared_main_tree_false_when_skip_preflight(main_repo, monkeypatch):
+    impl = _load()
+    monkeypatch.setenv("MENTAT_SKIP_PREFLIGHT", "1")
+    assert impl._in_shared_main_tree() is False
+
+
+def test_in_shared_main_tree_false_outside_repo(tmp_path, monkeypatch):
+    impl = _load()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MENTAT_SKIP_PREFLIGHT", raising=False)
+    assert impl._in_shared_main_tree() is False
+
+
+def test_in_shared_main_tree_false_in_sibling(main_repo, monkeypatch):
+    impl = _load()
+    sibling = main_repo.parent / "feat-a"
+    subprocess.run(
+        ["git", "worktree", "add", "-b", "feat-a", str(sibling), "main"],
+        cwd=main_repo,
+        check=True,
+        capture_output=True,
+    )
+    monkeypatch.chdir(sibling)
+    assert impl._in_shared_main_tree() is False
+
+
+def test_main_refuses_when_left_in_main_tree(main_repo, tmp_path, monkeypatch):
+    """Fail closed: if preflight does not isolate (returns no worktree) and cwd is
+    still the shared main tree, refuse rather than risk the branch leak."""
+    impl = _load()
+    plan_dir = tmp_path / "plans"
+    plan_dir.mkdir()
+    plan = plan_dir / "feat-leak.md"
+    plan.write_text("---\nid: feat-leak\nclass: AFK\n---\n# x\n")
+
+    emits = []
+
+    def fake_emit(event, payload):
+        emits.append((event, payload))
+
+    with patch.object(impl, "preflight_worktree", return_value=(0, None)):
+        with patch.object(impl, "_emit_event", side_effect=fake_emit):
+            with patch.object(impl, "_run_and_doctor", return_value=0) as mock_run:
+                with patch.object(impl.sys, "argv", ["implement.py", str(plan)]):
+                    with pytest.raises(SystemExit) as exc:
+                        impl.main()
+
+    assert exc.value.code == impl.EX_USAGE
+    mock_run.assert_not_called()  # refused before any plan execution
+    assert any(event == "chunk.ejected" and payload.get("reason") == "main-tree-refused" for event, payload in emits)
+
+
 def test_main_emits_eject_on_preflight_conflict(main_repo, tmp_path, monkeypatch):
     impl = _load()
     plan_dir = tmp_path / "plans"
