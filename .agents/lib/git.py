@@ -89,11 +89,13 @@ def rebase_ff_only(cwd: Path, onto: str) -> tuple[str | None, str | None]:
     return sha_r.stdout.strip(), None
 
 
-def ff_merge(cwd: Path) -> bool:
-    """FF-merge cwd HEAD onto the main (first) worktree's current branch.
+def ff_merge(cwd: Path, holding: str) -> bool:
+    """FF-merge cwd HEAD onto the explicit ``holding`` branch.
 
-    Reads HEAD from cwd, locates the main worktree via worktree_list, and runs
-    ``git merge --ff-only`` there. Returns False on any failure.
+    When the main worktree is already on ``holding``, uses ``merge --ff-only``
+    (updates ref + working tree). Otherwise advances the ``holding`` ref directly
+    via ``git fetch . <sha>:refs/heads/<holding>`` without touching the checked-out
+    branch. Returns False if the merge is not fast-forward or git reports an error.
     """
     sha_r = _run(["rev-parse", "HEAD"], cwd=cwd)
     if sha_r.returncode != 0:
@@ -103,5 +105,12 @@ def ff_merge(cwd: Path) -> bool:
     if not entries:
         return False
     main_wt = Path(entries[0]["worktree"])
-    r = _run(["merge", "--ff-only", sha], cwd=main_wt)
+    branch_r = _run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=main_wt)
+    if branch_r.returncode != 0:
+        return False
+    current = branch_r.stdout.strip()
+    if current == holding:
+        r = _run(["merge", "--ff-only", sha], cwd=main_wt)
+        return r.returncode == 0
+    r = _run(["fetch", ".", f"{sha}:refs/heads/{holding}"], cwd=main_wt)
     return r.returncode == 0

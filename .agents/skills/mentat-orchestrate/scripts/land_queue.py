@@ -35,12 +35,12 @@ def _run_gates(chunk: Chunk) -> tuple[str, str]:
 
 
 def _ff_merge(chunk: Chunk, holding: str) -> bool:
-    """FF-merge chunk HEAD onto main worktree via merge --ff-only.
+    """FF-merge chunk HEAD onto the explicit holding branch.
 
-    Advances both the branch pointer and the main worktree's working tree.
-    Returns False if the merge is not fast-forward or git reports an error.
+    Advances the holding branch ref (and the working tree if holding is currently
+    checked out). Returns False if the merge is not fast-forward or git reports an error.
     """
-    return _git.ff_merge(chunk.worktree)
+    return _git.ff_merge(chunk.worktree, holding)
 
 
 def _teardown_container(slug: str) -> None:
