@@ -63,5 +63,8 @@ Three overlapping ADRs → one. Old 0007 and 0008 archived. Gate runner iterates
 `gates/code/*.py` (deterministic), then spawns reviewer subagents (`mentat-plan-reviewer`,
 `mentat-test-reviewer`, `mentat-bug-reviewer`, `mentat-smell-reviewer`) via Agent tool;
 `score.py` aggregates verdicts per ADR-0003 formula. New subagent reviewer: add file to
-`.agents/agents/`, run `mentat-install` for harness symlinks. Old LLM rubric content
+`.agents/agents/`, run `mentat-install` for harness symlinks (idempotent; `--dry-run`
+shows pending agent symlinks). Missing a veto reviewer's symlink is caught at gate time
+by `preflight_veto_reviewers` in `mentat-implement` — the gate emits a loud warning and
+exits non-zero rather than silently passing (VG1 guard, 2026-06-21). Old LLM rubric content
 moved into subagent bodies; retired directory cleaned up by `mentat-install` (ADR-0003 v3).

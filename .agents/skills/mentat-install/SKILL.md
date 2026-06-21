@@ -5,7 +5,7 @@ description: >
   Use when setting up mentat on a new machine or after pulling updates.
 ---
 
-Idempotent install: creates `~/.mentat/` state dirs, symlinks (clone mode) or copies (user-install mode) skill dirs to `~/.agents/skills/`, creates per-harness symlinks for detected harnesses (`~/.claude/`, `~/.cursor/`), ships ADRs via `~/.mentat/docs/adr` symlink, reports stale paths. Interactively prompts for 3rd-party companions (matt-pocock-skills, caveman) — see `scripts/companions.py`.
+Idempotent install: creates `~/.mentat/` state dirs, symlinks (clone mode) or copies (user-install mode) skill dirs to `~/.agents/skills/`, creates per-harness symlinks for detected harnesses (`~/.claude/`, `~/.cursor/`), ships ADRs via `~/.mentat/docs/adr` symlink, reports stale paths. Interactively prompts for 3rd-party companions (matt-pocock-skills, caveman) — see `scripts/companions.py`. **Re-run after adding or renaming any `.agents/agents/` file** — install is idempotent, `--dry-run` previews pending symlinks; veto reviewers missing from the harness registry are caught at gate time by `preflight_veto_reviewers` (ADR-0003).
 
 ## How to invoke
 
