@@ -32,17 +32,20 @@ See [ADR-0004](./adr/0004-parallel-orchestration.md).
 
 ## Scored review gate
 
-Five reviewer subagents live in `.agents/agents/`:
+Six reviewer subagents live in `.agents/agents/`:
 
-- `mentat-plan-reviewer` — does the diff cover the plan?
-- `mentat-test-reviewer` — does the implementation earn its green tests, or game them?
-- `mentat-bug-reviewer` — does the diff introduce new bugs?
-- `mentat-smell-reviewer` — Fowler smells, advisory.
-- `mentat-context-reviewer` — does the prose stay self-contained (no plan/slice/round refs)?
+- `mentat-plan-reviewer` — does the diff cover the plan? *Threshold.*
+- `mentat-test-reviewer` — does the implementation earn its green tests, or game them? *Threshold.*
+- `mentat-bug-reviewer` — does the diff introduce new bugs, and does the trajectory hit the anti-cheat blacklist? *Veto.*
+- `mentat-rules-reviewer` — does the code follow the rules layer? *Veto.*
+- `mentat-context-reviewer` — does the prose stay self-contained (no plan/slice/round refs)? *Veto.*
+- `mentat-smell-reviewer` — Fowler smells. *Advisory.*
 
-Each emits a JSON verdict over the chunk; `score.py` aggregates per ADR-0003 rules: never average, veto-on-blacklist-hit > threshold. LLM never self-promotes. The reviewer pass runs once at end-of-queue over the final landed tip (advisory — inspect-after — until each reviewer earns a false-pass record).
+Each emits a JSON verdict over the chunk; `score.py` aggregates per ADR-0003 rules: never average, veto > threshold. A single veto blocks; threshold reviewers must each clear their bar; the advisory smell pass never blocks. The LLM never self-promotes.
 
-See [ADR-0003](./adr/0003-scored-review-gate.md).
+This is the per-chunk gate that runs at implement and land time. Separately, `mentat-orchestrate` runs an end-of-queue batch review over the final landed tip — an advisory, inspect-after pass, distinct from the per-chunk gate.
+
+See [ADR-0003](./adr/0003-scored-review-gate.md) and [ADR-0012](./adr/0012-code-rules-layer.md).
 
 ## Deterministic gating + anti-cheat
 
@@ -74,14 +77,22 @@ See [ADR-0007](./adr/0007-audit-envelope.md).
 
 ## Plugin API
 
-Four extension surfaces, all swap-in / no-fork:
+The formal plugin surface is one slot: **harness**. A plugin package registers
+through a `mentat-plugin` entry point and fills the `harness` slot with a
+`HarnessProvider`; resolution is first-wins, with the built-in adapters as the
+last-resort fallback. Declare the active harness via `~/.mentat/config.toml`
+`harness`. Built-in: `claude-code`, `cursor`.
 
-- **Rubric slot** — drop a reviewer subagent body into `.agents/agents/<name>-reviewer.md`. Auto-discovered.
-- **Gate slot** — drop a Python module exposing `run(chunk_path) -> (verdict, message)` into `.agents/lib/gates/code/`. Auto-discovered.
-- **Diff provider** — implement `DiffProvider.render(base, head) -> str`. Built-in: `git`. Declare in `~/.mentat/config.toml` `diff_tool`.
-- **Harness adapter** — implement `HarnessProvider.spawn(prompt, **opts)`. Built-in: `claude-code`, `cursor`. Declare in `~/.mentat/config.toml` `harness`.
+Two more surfaces extend by filesystem convention rather than the plugin registry:
 
-Mentat core stays minimal; project-specific concerns extend through slots without forking.
+- **Reviewers** — drop a reviewer subagent body into `.agents/agents/<name>-reviewer.md`.
+- **Code gates** — drop a Python module exposing `run(chunk_path) -> (verdict, message)` into `.agents/lib/gates/code/`.
+
+Diff rendering is not a slot: set `diff_tool` in `~/.mentat/config.toml` and Mentat
+prints that command as the review suggestion at run end.
+
+Mentat core stays minimal; project-specific concerns extend through these surfaces
+without forking.
 
 See [ADR-0009](./adr/0009-plugin-api.md) and [docs/PLUGINS.md](./PLUGINS.md).
 
