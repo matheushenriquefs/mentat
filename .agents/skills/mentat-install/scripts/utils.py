@@ -45,7 +45,7 @@ _GLOBAL_CONFIG_TEMPLATE = """\
 harness = "claude-code"        # claude-code | cursor
 # model = "claude-opus-4-8"
 # concurrency = 3
-# runtime = "docker"           # docker | host
+# runtime = "docker"           # docker (containerized, default) | host (unsafe — ADR-0004 forfeit)
 """
 
 

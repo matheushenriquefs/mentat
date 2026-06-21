@@ -25,6 +25,48 @@ def _docker() -> str:
     return os.environ.get("MENTAT_DOCKER", "docker")
 
 
+def _host_runtime() -> bool:
+    """True iff config opts out of containerization with ``runtime = "host"``.
+
+    Default (key unset, ``"docker"``, or ``"container"``) → containerized. Only the
+    explicit ``"host"`` value forfeits ADR-0004 isolation. Reads through the live
+    config reader, so it works against either ``config.toml`` or legacy
+    ``config.jsonc``.
+    """
+    from lib.config import read_config
+
+    return str(read_config().get("runtime", "")).strip().lower() == "host"
+
+
+def _warn_host_runtime_once(slug: str) -> None:
+    """Print the isolation-forfeit warning, at most once per slug.
+
+    A marker under ``~/.mentat`` suppresses repeats so every ``run`` does not spam
+    it — the warning is loud the first time and silent after.
+    """
+    marker_dir = Path.home() / ".mentat" / ".host-runtime-warned"
+    marker = marker_dir / slug
+    if marker.exists():
+        return
+    print(
+        'mentat-container: runtime = "host" — ADR-0004 container isolation is FORFEITED.\n'
+        "  Project tools run directly on the host; the host toolchain may be unset or\n"
+        "  mismatched and the worktree is not sandboxed (pollution possible). This is an\n"
+        '  explicit opt-out — unset `runtime` (or set it to "docker") to restore isolation.',
+        file=sys.stderr,
+    )
+    try:
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    except OSError:
+        pass  # best-effort suppression; a missing marker only costs an extra warning
+
+
+def _run_on_host(command: str, cwd: Path) -> int:
+    """Execute a command on the host (runtime=host opt-out). No container."""
+    return subprocess.run(["bash", "-lc", command], cwd=str(cwd)).returncode
+
+
 def _git_root() -> Path:
     result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
@@ -117,6 +159,9 @@ def _ensure_safe_directory(wt: Path, ws: str, slug: str, cid: str) -> None:
 
 def cmd_up(wt: Path) -> int:
     slug = wt.name
+    if _host_runtime():
+        _warn_host_runtime_once(slug)
+        return 0  # nothing to bring up — tools run on the host
     cid = utils.container_id_for(slug)
     ws = utils.resolve_workspace_folder(wt)
 
@@ -196,6 +241,9 @@ def cmd_up(wt: Path) -> int:
 
 def cmd_run(wt: Path, command: str) -> int:
     slug = wt.name
+    if _host_runtime():
+        _warn_host_runtime_once(slug)
+        return _run_on_host(command, wt)
     cid = utils.container_id_for(slug)
     if not cid:
         print(
@@ -222,6 +270,8 @@ def cmd_run(wt: Path, command: str) -> int:
 
 
 def cmd_down(*, slug: str) -> int:
+    if _host_runtime():
+        return 0  # host mode brought nothing up — nothing to tear down
     from lib import devcontainer
 
     return 0 if devcontainer.down(slug) else 1

@@ -78,9 +78,22 @@ to the host: `platform.machine()` is mapped — `arm64`/`aarch64` → `linux/arm
 The `compose.yml.tmpl` branch substitutes the same arch value into the user template's `$arch`.
 Static `docker-compose.yml` is user-owned and untouched — pin `platform:` there yourself if needed.
 
+## Runtime: host opt-out (ADR-0004 forfeit)
+
+`runtime` in config (`~/.mentat/config.toml`, repo overlay wins) selects the execution
+target. Default (`docker`/`container`/unset) is the containerized path. Setting
+`runtime = "host"` is an explicit, unsafe opt-out for a repo that genuinely cannot
+containerize:
+
+- `up` brings nothing up (returns 0); `run '<cmd>'` executes `<cmd>` directly on the host.
+- The first such call per worktree prints one loud warning that ADR-0004 isolation is
+  forfeited (host toolchain may be unset/mismatched, worktree not sandboxed), then stays
+  silent. Opt-in only — never the default.
+
 ## Constraints
 
-- Container must be running before `run`. No auto-start inside `run`.
+- Container must be running before `run` (containerized runtime). No auto-start inside `run`.
+- `runtime = "host"` skips the container entirely; tools run on the host (ADR-0004 forfeit).
 - `MENTAT_DOCKER` env var overrides the `docker` binary path (test isolation only).
 - `MENTAT_PLATFORM` env var overrides host-arch detection for synth.
 - `devcontainer.json` written only when absent; never overwritten if present.

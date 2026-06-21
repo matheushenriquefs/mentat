@@ -19,9 +19,11 @@ Single source of truth for every path mentat reads or writes.
 harness = "claude-code"   # claude-code | cursor
 # model = "claude-opus-4-8"
 # concurrency = 3
-# runtime = "docker"      # docker | host
+# runtime = "docker"      # docker (containerized, default) | host (unsafe — ADR-0004 forfeit)
 ```
-Legacy `config.jsonc` is read with a one-time deprecation warning until retired.
+`runtime = "host"` makes `mentat-container` skip bring-up and run project tools on the
+host, after a one-time isolation-forfeit warning — the documented opt-out for repos that
+cannot containerize. Legacy `config.jsonc` is read with a one-time deprecation warning until retired.
 
 ## Agent/harness-shared (`~/.agents/`)
 
