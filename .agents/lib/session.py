@@ -41,7 +41,8 @@ def repo_name() -> str:
 
 def session_dir(session_id: str) -> Path:
     """Dir for all files belonging to session_id: log_root/repo/session_id."""
-    return log_root() / repo_name() / session_id
+    safe_id = session_id.replace("/", "-")
+    return log_root() / repo_name() / safe_id
 
 
 def summary_file(session_id: str) -> Path:

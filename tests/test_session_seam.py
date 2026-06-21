@@ -147,6 +147,18 @@ def test_all_callers_resolve_same_dir(tmp_path, monkeypatch):
     assert mss._session_dir(repo, sid) == expected, "mentat-session/session._session_dir diverges from seam"
 
 
+def test_session_dir_slash_is_flattened(tmp_path, monkeypatch):
+    """session_dir('a/b') must land in ONE flat dir (no nested subdir from the slash)."""
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "myrepo")
+    sys.modules.pop("lib.session", None)
+    session = _load_session()
+    result = session.session_dir("orchestrate-branch/guidelines-revamp-81212")
+    assert result.parent == tmp_path / "myrepo"
+    assert "/" not in result.name
+    assert "branch" in result.name and "guidelines" in result.name
+
+
 def test_implement_logs_path_matches_seam(tmp_path, monkeypatch):
     """implement._logs_path must equal seam.session_dir for the current MENTAT_SESSION."""
     base = str(tmp_path)
