@@ -53,4 +53,5 @@ read on demand):
 - **0008** python runtime — stdlib-only bin layer; uv/ruff/pyright/pytest dev layer.
 - **0009** plugin API — Vite-derived 2-slot extension (rubric, gate).
 - **0010** read-only test mount — OCP manifest + container bind-mount.
+- **0011** compose-aware container — sidecar detection, dev-service layering (default), host opt-out (ADR-0004 forfeit).
 
