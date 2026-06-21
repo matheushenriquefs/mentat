@@ -5,12 +5,10 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-import sys
 import tomllib
 from pathlib import Path
 
 _CONFIG_NAME = "config.toml"
-_LEGACY_NAME = "config.jsonc"
 
 # Match // line-comments OR quoted strings (preserve strings, strip comments)
 _COMMENT_RE = re.compile(r'//[^\n]*|"(?:[^"\\]|\\.)*"')
@@ -40,46 +38,27 @@ def _load_toml(path: Path) -> dict[str, object]:
         return {}
 
 
-_shim_warned = False
-
-
-def _warn_legacy_once(path: Path) -> None:
-    global _shim_warned
-    if not _shim_warned:
-        print(f"mentat: {path} is deprecated — rename to {_CONFIG_NAME} (TOML).", file=sys.stderr)
-        _shim_warned = True
-
-
 def load_config_file(path: Path) -> dict[str, object]:
-    """Load one config file by suffix: .toml (preferred) or .jsonc (one-release shim). {} if missing/bad."""
+    """Load a config.toml file. {} if missing or malformed."""
     if not path.exists():
         return {}
-    if path.suffix == ".jsonc":
-        _warn_legacy_once(path)
-        return load_jsonc(path)
     return _load_toml(path)
 
 
 def _layer_path(mentat_dir: Path) -> Path | None:
-    """The config file to read for one .mentat dir: config.toml if present, else legacy config.jsonc."""
     toml_path = mentat_dir / _CONFIG_NAME
-    if toml_path.exists():
-        return toml_path
-    legacy = mentat_dir / _LEGACY_NAME
-    return legacy if legacy.exists() else None
+    return toml_path if toml_path.exists() else None
 
 
 def _load_layer(mentat_dir: Path) -> dict[str, object]:
-    """One config layer. Prefer config.toml; shim to config.jsonc (warn once) until it is retired."""
     path = _layer_path(mentat_dir)
     return load_config_file(path) if path is not None else {}
 
 
 def config_status(mentat_dir: Path) -> tuple[str, str | None]:
-    """Diagnostic validation of a .mentat dir's config. Prefer config.toml; accept legacy config.jsonc.
+    """Diagnostic validation of a .mentat dir's config.toml.
 
-    Returns (human status, warning-or-None). Uses the canonical parsers (string-preserving JSONC),
-    so a file that load_config_file would accept never reports 'invalid'.
+    Returns (human status, warning-or-None).
     """
     toml_path = mentat_dir / _CONFIG_NAME
     if toml_path.exists():
@@ -89,13 +68,6 @@ def config_status(mentat_dir: Path) -> tuple[str, str | None]:
             return ("valid", None)
         except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError):
             return ("invalid — parse error", f"{_CONFIG_NAME} parse error")
-    legacy = mentat_dir / _LEGACY_NAME
-    if legacy.exists():
-        try:
-            json.loads(_strip_comments(legacy.read_text()))
-            return (f"legacy {_LEGACY_NAME} — rename to {_CONFIG_NAME}", None)
-        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-            return ("invalid — parse error", f"{_LEGACY_NAME} parse error")
     return ("absent", None)
 
 

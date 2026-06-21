@@ -1,6 +1,4 @@
-"""S11 — lib/config.py: layered TOML read_config, jsonc one-release shim, devcontainer
-load_jsonc, and the canonical config_status diagnostic. This is the gate-run home for
-config coverage (testpaths = ["tests"])."""
+"""lib/config.py: layered TOML read_config, devcontainer load_jsonc, and config_status."""
 
 from __future__ import annotations
 
@@ -81,37 +79,13 @@ def test_read_config_malformed_repo_falls_back_to_global(tmp_path):
     assert result == {"harness": "claude-code"}
 
 
-def test_read_config_prefers_toml_over_jsonc(tmp_path):
-    (tmp_path / ".mentat").mkdir()
-    (tmp_path / ".mentat" / "config.toml").write_text('harness = "from-toml"\n')
-    (tmp_path / ".mentat" / "config.jsonc").write_text('{"harness": "from-jsonc"}')
-    with patch.object(config, "_repo_mentat_dir", return_value=None), patch("pathlib.Path.home", return_value=tmp_path):
-        result = config.read_config()
-    assert result.get("harness") == "from-toml"
+# ── load_config_file ──────────────────────────────────────────────────────────
 
 
-def test_read_config_jsonc_shim_warns_once(tmp_path, capsys):
-    config._shim_warned = False  # reset process-wide latch for deterministic test
-    (tmp_path / ".mentat").mkdir()
-    (tmp_path / ".mentat" / "config.jsonc").write_text('{"harness": "legacy"}')
-    with patch.object(config, "_repo_mentat_dir", return_value=None), patch("pathlib.Path.home", return_value=tmp_path):
-        first = config.read_config()
-        second = config.read_config()
-    assert first.get("harness") == "legacy"
-    assert second.get("harness") == "legacy"
-    assert capsys.readouterr().err.count("deprecated") == 1
-
-
-# ── load_config_file suffix dispatch ──────────────────────────────────────────
-
-
-def test_load_config_file_dispatches_by_suffix(tmp_path):
+def test_load_config_file_reads_toml(tmp_path):
     toml_f = tmp_path / "config.toml"
     toml_f.write_text("concurrency = 4\n")
     assert config.load_config_file(toml_f) == {"concurrency": 4}
-    jsonc_f = tmp_path / "config.jsonc"
-    jsonc_f.write_text('{"concurrency": 7}')
-    assert config.load_config_file(jsonc_f) == {"concurrency": 7}
     assert config.load_config_file(tmp_path / "absent.toml") == {}
 
 
@@ -132,15 +106,6 @@ def test_config_status_invalid_toml_warns(tmp_path):
     assert warn is not None
 
 
-def test_config_status_legacy_jsonc_trailing_comment_is_valid(tmp_path):
-    """Regression: diagnostics must use the canonical string-preserving parser, not a naive
-    line-strip that chokes on a trailing `//` comment after a value (devcontainer-style JSONC)."""
-    (tmp_path / "config.jsonc").write_text('{\n  "harness": "claude-code"  // trailing\n}\n')
-    status, warn = config.config_status(tmp_path)
-    assert "legacy" in status, f"canonical parser must accept trailing // comment, got {status!r}"
-    assert warn is None
-
-
 def test_load_jsonc_returns_empty_on_non_utf8(tmp_path):
     f = tmp_path / "devcontainer.json"
     f.write_bytes(b'{"a": "\xff\xfe not utf-8"}')
@@ -157,13 +122,6 @@ def test_config_status_non_utf8_toml_is_invalid_not_crash(tmp_path):
     """Regression: a non-UTF-8 config file must report 'invalid', never raise
     UnicodeDecodeError (a ValueError subclass, not caught by the OSError arm)."""
     (tmp_path / "config.toml").write_bytes(b'harness = "\xff\xfe"\n')
-    status, warn = config.config_status(tmp_path)
-    assert "invalid" in status
-    assert warn is not None
-
-
-def test_config_status_non_utf8_legacy_is_invalid_not_crash(tmp_path):
-    (tmp_path / "config.jsonc").write_bytes(b'{"harness": "\xff\xfe"}')
     status, warn = config.config_status(tmp_path)
     assert "invalid" in status
     assert warn is not None
