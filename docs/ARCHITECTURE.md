@@ -48,7 +48,7 @@ See [ADR-0003](./adr/0003-scored-review-gate.md).
 
 Two enforcement layers, both project-tool-agnostic:
 
-1. **Impl-only-after-red contract.** The coding agent writes implementation code only after a failing test exists in the commit log. The container test-mount enforces this softly: tests in the manifest's `closed` list are mounted read-only until the agent emits `mark-test-writable`, audited via `test.writable.requested`.
+1. **Impl-only-after-red contract.** The coding agent writes implementation code only after a failing test exists in the commit log. The container test-mount enforces this softly: tests in the manifest's `closed` list are mounted read-only until the agent emits `mark-test-writable`.
 2. **Trajectory blacklist** in `mentat-bug-reviewer`. Forbidden reward-hacking moves (runner redirection, test deletion, asserting the inverse) → hard 0.0 veto, no threshold mediation.
 
 See [ADR-0006](./adr/0006-soft-readonly-test-enforcement.md) and [ADR-0010](./adr/0010-readonly-test-mount.md).
@@ -66,7 +66,7 @@ See [ADR-0004](./adr/0004-parallel-orchestration.md).
 
 ## Audit envelope
 
-Every command emits start + complete events through `mentat-log emit`. Nine canonical event types — `plan.started`, `plan.succeeded`, `plan.failed`, `chunk.started`, `chunk.ejected`, `chunk.landed`, `batch.started`, `batch.succeeded`, `test.writable.requested` — written NDJSON to `~/.mentat/logs/<repo>/<session>/<agent>-<slug>.jsonl`. Raw harness stdout goes to a sibling `.stdout` file (opaque). Subprocess stderr goes to `.stderr/<...>.stderr`.
+Commands emit events through `mentat-log emit`. Nine canonical event types — `plan.started`, `plan.succeeded`, `plan.failed`, `chunk.spawned`, `chunk.landed`, `chunk.ejected`, `gate.evaluated`, `review.submitted`, `batch.reviewed` — written NDJSON to `~/.mentat/logs/<repo>/<session>/<agent>-<slug>.jsonl`. Raw harness stdout goes to a sibling `.stdout` file (opaque). Subprocess stderr goes to `.stderr/<...>.stderr`. The catalog is defined once in `mentat-log/scripts/log.py` as `EVENT_CATALOG`.
 
 `mentat-session track` watches the live JSONL. `mentat-session doctor` writes a per-session diagnosis markdown after the batch.
 
@@ -101,12 +101,12 @@ See [ADR-0001](./adr/0001-sub-agent-delegation.md).
 
 ## Harness-agnostic adapters
 
-Headless agent CLIs are pluggable. Current Python-era adapters:
+Headless agent CLIs are pluggable. Built-in adapters:
 
-| Harness | Module | Status |
-|---|---|---|
-| `claude-code` | `.agents/skills/mentat-implement/scripts/harness/claude_code.py` | landed |
-| `cursor` | `.agents/skills/mentat-implement/scripts/harness/cursor.py` | landed |
+| Harness | Module |
+|---|---|
+| `claude-code` | `.agents/skills/mentat-implement/scripts/harness/claude_code.py` |
+| `cursor` | `.agents/skills/mentat-implement/scripts/harness/cursor.py` |
 
 Adding a harness: drop a module exposing `cmd()`, `output_format()`, `normalize()` into the harness dir. The orchestrator auto-discovers and the implementation skill picks it up. No core changes needed.
 

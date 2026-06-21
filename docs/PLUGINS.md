@@ -135,6 +135,6 @@ PyPI package name: `mentat-plugin-<name>`.
 
 ## Future slots
 
-Ordering primitives (`enforce: 'pre'|'post'`, `apply: 'install'|'orchestrate'`) not
-in v1 — see ADR-0009. New slots added as optional `MentatPlugin` fields; existing
-plugins continue to work without changes.
+Ordering primitives (`enforce: 'pre'|'post'`, `apply: 'install'|'orchestrate'`) are
+not part of the current plugin API — see ADR-0009. New slots are added as optional
+`MentatPlugin` fields; existing plugins continue to work without changes.

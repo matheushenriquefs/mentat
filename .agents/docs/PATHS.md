@@ -46,7 +46,7 @@ Detected harnesses: `claude-code` (`~/.claude/`), `cursor` (`~/.cursor/`).
 
 ```
 <repo>/.agents/                                    # repo dev tree
-├── skills/mentat-<bin>/                           # dev tree of skills (where rewrite happens)
+├── skills/mentat-<bin>/                           # dev tree of skills (skill source)
 │   ├── SKILL.md                                   # skill manifest + invocation docs
 │   └── scripts/                                   # Python source (stdlib only, except tests/)
 ├── lib/gates/code/                                # deterministic Python gates
@@ -83,17 +83,17 @@ Detected harnesses: `claude-code` (`~/.claude/`), `cursor` (`~/.cursor/`).
 
 These paths are stale and should not exist on current installs:
 
-| Path | Reason stale |
+| Path | Canonical instead |
 |---|---|
-| `~/.agents/mentat/logs/` | OLD audit location — canonical is `~/.mentat/logs/` |
-| `~/.agents/bin/mentat-*` | OLD shell-era symlink farm (all except thin `mentat-install` wrapper) |
-| `~/.agents/skills/vendor/` | vendored skills removed (vendir dropped) |
-| `~/.claude/commands/mentat-*.md` | OLD shell-era slash command shims |
-| `~/.agents/bin/lib/audit.sh` | shell emitter replaced by `mentat-log emit` |
-| `~/.agents/bin/lib/audit-schema.jsonc` | schema moved into `mentat-log/scripts/log.py` as `EVENT_CATALOG` |
-| `~/.agents/bin/lib/harness-registry.jsonc` | adapters hard-coded as Python modules in `mentat-implement` |
-| `~/.agents/lib/gates/llm/` | LLM rubric files retired; rubric content moved into `.agents/agents/mentat-*-reviewer.md` subagent bodies (ADR-0003 v3) |
-| `~/.agents/bin/mentat-precommit` | replaced by lefthook snippet |
+| `~/.agents/mentat/logs/` | audit lives in `~/.mentat/logs/` |
+| `~/.agents/bin/mentat-*` | only the `mentat-install` wrapper belongs in `~/.agents/bin/` |
+| `~/.agents/skills/vendor/` | mentat does not vendor skills |
+| `~/.claude/commands/mentat-*.md` | mentat ships skills, not command shims |
+| `~/.agents/bin/lib/audit.sh` | audit emits via `mentat-log emit` |
+| `~/.agents/bin/lib/audit-schema.jsonc` | schema is `EVENT_CATALOG` in `mentat-log/scripts/log.py` |
+| `~/.agents/bin/lib/harness-registry.jsonc` | adapters are Python modules under `mentat-implement/scripts/harness/` |
+| `~/.agents/lib/gates/llm/` | rubric content lives in `.agents/agents/mentat-*-reviewer.md` bodies (ADR-0003) |
+| `~/.agents/bin/mentat-precommit` | pre-commit runs via lefthook |
 | `~/.agents/bin/mentat-config` | user edits `~/.mentat/config.toml` directly |
-| `~/.agents/bin/mentat-update` | vendir wrapper removed |
-| `~/.mentatrc.jsonc` | never canonical; some old plans referenced this by mistake |
+| `~/.agents/bin/mentat-update` | mentat has no update wrapper |
+| `~/.mentatrc.jsonc` | config is `~/.mentat/config.toml` |
