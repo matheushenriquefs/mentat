@@ -150,51 +150,47 @@ def _setup_ff_repo(tmp_path):
     return main_repo, chunk, lq, feature_sha
 
 
-def test_ff_merge_updates_main_worktree(tmp_path) -> None:
-    """After _ff_merge, main worktree HEAD and on-disk files reflect feature tip."""
+def test_ff_merge_advances_holding_ref(tmp_path) -> None:
+    """After _ff_merge, the holding branch ref advances to feature tip."""
     main_repo, chunk, lq, feature_sha = _setup_ff_repo(tmp_path)
 
     result = lq._ff_merge(chunk, "holding")
 
     assert result is True, "_ff_merge should return True on clean FF"
 
-    resolved = _subprocess.run(
-        ["git", "rev-parse", "HEAD"],
+    holding_sha = _subprocess.run(
+        ["git", "rev-parse", "refs/heads/holding"],
         cwd=main_repo,
         capture_output=True,
         text=True,
         check=True,
     ).stdout.strip()
-    assert resolved == feature_sha, f"main HEAD {resolved!r} != feature_sha {feature_sha!r}"
-
-    assert (main_repo / "README").read_text() == "feature\n", "README not updated in main worktree working tree"
+    assert holding_sha == feature_sha, f"holding ref {holding_sha!r} != feature_sha {feature_sha!r}"
 
 
-def test_ff_merge_refuses_dirty_main_worktree(tmp_path) -> None:
-    """Dirty main worktree: _ff_merge returns False, ref stays put, dirt survives."""
-    main_repo, chunk, lq, _ = _setup_ff_repo(tmp_path)
+def test_ff_merge_succeeds_with_dirty_main_worktree(tmp_path) -> None:
+    """_ff_merge must succeed and advance the ref even when main worktree has dirty files.
 
-    before_sha = _subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=main_repo,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
+    The fix uses git update-ref (checked-out branch) or git fetch (other branch)
+    instead of merge --ff-only, so a dirty working tree cannot block the land.
+    """
+    main_repo, chunk, lq, feature_sha = _setup_ff_repo(tmp_path)
 
+    # Dirty the main worktree (simulates an orphaned process leftover)
     (main_repo / "README").write_text("dirty\n")
 
     result = lq._ff_merge(chunk, "holding")
 
-    assert result is False, "_ff_merge must return False when main worktree is dirty"
+    assert result is True, "_ff_merge must succeed despite dirty main worktree"
 
-    after_sha = _subprocess.run(
-        ["git", "rev-parse", "HEAD"],
+    holding_sha = _subprocess.run(
+        ["git", "rev-parse", "refs/heads/holding"],
         cwd=main_repo,
         capture_output=True,
         text=True,
         check=True,
     ).stdout.strip()
-    assert after_sha == before_sha, "ref must not advance when main worktree is dirty"
+    assert holding_sha == feature_sha, "holding ref must advance to feature_sha"
 
+    # The dirty file must still be dirty (ff_merge must not touch the working tree)
     assert (main_repo / "README").read_text() == "dirty\n", "dirty state must be preserved"
