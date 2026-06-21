@@ -62,6 +62,13 @@ def teardown(path: Path) -> bool:
     return _remove(path)
 
 
+def _stale_children(wt_root: Path, cutoff_seconds: int) -> list[Path]:
+    if not wt_root.is_dir():
+        return []
+    cutoff = time.time() - cutoff_seconds
+    return [c for c in wt_root.iterdir() if c.is_dir() and c.stat().st_mtime <= cutoff]
+
+
 def prune_stale(
     wt_root: Path,
     *,
@@ -74,19 +81,10 @@ def prune_stale(
     A worktree is removed iff it is older than the cutoff AND not active AND
     not dirty. Dirty worktrees are always preserved.
     """
-    if not wt_root.is_dir():
-        return 0
     active = active_slugs or set()
-    cutoff = time.time() - cutoff_seconds
     removed = 0
-    for child in wt_root.iterdir():
-        if not child.is_dir():
-            continue
-        if child.stat().st_mtime > cutoff:
-            continue
-        if child.name in active:
-            continue
-        if is_dirty(child):
+    for child in _stale_children(wt_root, cutoff_seconds):
+        if child.name in active or is_dirty(child):
             continue
         if _remove(child):
             removed += 1
@@ -99,13 +97,4 @@ def dirty_stale(wt_root: Path, *, cutoff_seconds: int = DEFAULT_CUTOFF_SECONDS) 
     Used to gate container pruning: if any stale worktree is dirty, container
     prune is skipped so the operator's leftovers keep a runnable container.
     """
-    if not wt_root.is_dir():
-        return []
-    cutoff = time.time() - cutoff_seconds
-    out: list[str] = []
-    for child in wt_root.iterdir():
-        if not child.is_dir() or child.stat().st_mtime > cutoff:
-            continue
-        if is_dirty(child):
-            out.append(child.name)
-    return out
+    return [c.name for c in _stale_children(wt_root, cutoff_seconds) if is_dirty(c)]
