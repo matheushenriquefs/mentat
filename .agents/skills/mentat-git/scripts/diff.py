@@ -19,6 +19,6 @@ def cmd_diff(base: str) -> int:
     """Show cumulative diff vs base. Respects config diff_tool."""
     config = utils.read_config()
     diff_tool = config.get("diff_tool")
-
-    result = subprocess.run([diff_tool, base, "HEAD"]) if diff_tool else subprocess.run(["git", "diff", base, "HEAD"])
-    return result.returncode
+    if diff_tool:
+        return subprocess.run([diff_tool, base, "HEAD"]).returncode
+    return subprocess.run(["git", "diff", base, "HEAD"]).returncode
