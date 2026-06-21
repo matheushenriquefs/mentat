@@ -49,10 +49,14 @@ def score_plan(raw: dict[str, Any]) -> GateResult:
 
 
 def score_test(raw: dict[str, Any]) -> GateResult:
-    """Test faithfulness ≥ TEST_THRESHOLD → pass; deterministic veto overrides."""
-    veto = raw.get("veto", "clean")
-    if veto and veto != "clean":
-        return GateResult("block", 0.0, f"test veto: {veto}")
+    """Test faithfulness ≥ TEST_THRESHOLD → pass; deterministic veto overrides.
+
+    Veto is fail-closed: only an absent key or the exact string "clean" is safe.
+    Falsy values ("", 0, False) and any other value block.
+    """
+    veto = raw.get("veto")
+    if veto is not None and veto != "clean":
+        return GateResult("block", 0.0, f"test veto: {veto!r}")
     return _score_gate(float(raw.get("asserts_plan", 0.0)), TEST_THRESHOLD, "test alignment")
 
 

@@ -1,4 +1,8 @@
-"""score.py veto scorers + routing — rules- and context-reviewer (ADR-0012 v2)."""
+"""score.py veto scorers + routing — rules- and context-reviewer (ADR-0012 v2).
+
+Slice 1 (G3): score_test veto fail-closed — falsy veto must block.
+Slice 2 (G4): aggregate preserves all advisory reasons; clean pass has marker.
+"""
 
 from __future__ import annotations
 
@@ -92,3 +96,36 @@ def test_score_from_file_routes_context_reviewer(tmp_path: Path):
     p = tmp_path / "context.json"
     p.write_text(json.dumps({"reviewer": "mentat-context-reviewer", "findings": []}))
     assert score.score_from_file(p).verdict == "pass"
+
+
+# ── Slice 1 (G3): score_test veto fail-closed ────────────────────────────────
+
+
+def test_score_test_empty_string_veto_blocks():
+    score = _score_mod()
+    result = score.score_test({"veto": "", "asserts_plan": 0.99})
+    assert result.verdict == "block"
+
+
+def test_score_test_zero_veto_blocks():
+    score = _score_mod()
+    result = score.score_test({"veto": 0, "asserts_plan": 0.99})
+    assert result.verdict == "block"
+
+
+def test_score_test_false_veto_blocks():
+    score = _score_mod()
+    result = score.score_test({"veto": False, "asserts_plan": 0.99})
+    assert result.verdict == "block"
+
+
+def test_score_test_absent_veto_passes_on_high_score():
+    score = _score_mod()
+    result = score.score_test({"asserts_plan": 0.99})
+    assert result.verdict == "pass"
+
+
+def test_score_test_clean_veto_passes_on_high_score():
+    score = _score_mod()
+    result = score.score_test({"veto": "clean", "asserts_plan": 0.99})
+    assert result.verdict == "pass"
