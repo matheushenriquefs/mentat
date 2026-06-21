@@ -69,16 +69,16 @@ def do_install(
         print("Resolve manually and re-run.", file=sys.stderr)
         return EX_DATAERR
 
-    if not skip_companions:
-        _companions.install_all(yes=yes)
-
-    _path_setup.setup_path(yes=yes)
-
     if not yes and sys.stdin.isatty():
         answer = input("Proceed? [y/N] ")
         if answer.strip().lower() not in ("y", "yes"):
             print("Aborted.")
             return 1
+
+    if not skip_companions:
+        _companions.install_all(yes=yes)
+
+    _path_setup.setup_path(yes=yes)
 
     _execute_actions(ip, dry_run=False)
 
