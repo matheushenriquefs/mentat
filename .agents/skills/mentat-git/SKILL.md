@@ -2,17 +2,16 @@
 name: mentat-git
 description: >
   Git operations routed through the running devcontainer.
-  Use to commit, fast-forward rebase onto the holding branch, or print a cumulative diff vs a base.
+  Use to commit or fast-forward rebase onto the holding branch.
 ---
 
-Container-routing git wrapper. Container required (ADR-0004) — auto-ups via `mentat-container up` if missing; exit 69 if bring-up fails. Rebase is fast-forward-only — no replay across pre-commit. Diff honors `~/.mentat/config.toml` `diff_tool` if set.
+Container-routing git wrapper. Container required (ADR-0004) — auto-ups via `mentat-container up` if missing; exit 69 if bring-up fails. Rebase is fast-forward-only — no replay across pre-commit.
 
 ## How to invoke
 
 ```
 python3 ~/.agents/skills/mentat-git/scripts/git.py commit [-- <git commit args>]
 python3 ~/.agents/skills/mentat-git/scripts/git.py rebase <holding-branch>
-python3 ~/.agents/skills/mentat-git/scripts/git.py diff [<base>]
 python3 ~/.agents/skills/mentat-git/scripts/git.py worktree create <slug> [--base <branch>] [--parent <dir>]
 python3 ~/.agents/skills/mentat-git/scripts/git.py worktree sweep [--force]
 ```
@@ -39,12 +38,6 @@ rm .commit-msg
 2. Resolve the main repo root from the current worktree.
 3. Fast-forward the holding branch (checked out at the main root) to `HEAD`.
 4. Non-FF condition → non-zero exit. Caller treats as `chunk.ejected{reason: rebase-conflicted}` per ADR-0007.
-
-## Diff flow
-
-1. Resolve base: arg → `main` (default).
-2. Compute base SHA via `git merge-base <base> HEAD`.
-3. Print stat + full diff `base..HEAD`. Honor `diff_tool` from `~/.mentat/config.toml` if set.
 
 ## Worktree create flow
 
@@ -88,11 +81,9 @@ rm .commit-msg
 - Auto-up is opportunistic: invoked once, no retry loop.
 - Rebase is FF-only; non-FF → caller's eject path, not a force-push.
 - One commit per slice via this skill; squash forbidden.
-- Diff base defaults to `main`; override via positional arg.
 - Stdlib-only script body; no PyYAML or other PyPI deps.
 
 ## Constraints
 
 - Devcontainer must be reachable for the current worktree's git root.
 - Holding-branch checkout location resolved from main worktree, not the calling worktree (worktree dirs cannot share a branch).
-- `diff_tool` is optional; absent → vanilla `git diff`.

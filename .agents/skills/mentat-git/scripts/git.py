@@ -15,14 +15,12 @@ from lib.loader import load_sibling  # noqa: E402
 
 _commit = load_sibling(__file__, "commit")
 _rebase = load_sibling(__file__, "rebase")
-_diff = load_sibling(__file__, "diff")
 _worktree = load_sibling(__file__, "worktree")
 
 # Re-exports
 utils = _commit.utils
 cmd_commit = _commit.cmd_commit
 cmd_rebase = _rebase.cmd_rebase
-cmd_diff = _diff.cmd_diff
 cmd_worktree_create = _worktree.cmd_worktree_create
 cmd_worktree_sweep = _worktree.cmd_worktree_sweep
 is_main_worktree = _worktree.is_main_worktree
@@ -37,9 +35,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     rebase_p = sub.add_parser("rebase", help="Fast-forward-only rebase")
     rebase_p.add_argument("holding", help="Holding branch to rebase onto")
-
-    diff_p = sub.add_parser("diff", help="Cumulative diff vs base")
-    diff_p.add_argument("base", nargs="?", default="main", help="Base branch (default: main)")
 
     wt_p = sub.add_parser("worktree", help="Worktree management")
     wt_sub = wt_p.add_subparsers(dest="wt_cmd", required=True)
@@ -66,8 +61,6 @@ def main() -> None:
         sys.exit(cmd_commit(args.git_args))
     elif args.cmd == "rebase":
         sys.exit(cmd_rebase(args.holding))
-    elif args.cmd == "diff":
-        sys.exit(cmd_diff(args.base))
     elif args.cmd == "worktree" and args.wt_cmd == "create":
         parent = Path(args.parent) if args.parent else None
         sys.exit(cmd_worktree_create(args.slug, base=args.base, parent=parent))
