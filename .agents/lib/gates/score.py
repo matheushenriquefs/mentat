@@ -14,6 +14,9 @@ PLAN_THRESHOLD = 0.88
 TEST_THRESHOLD = 0.88
 SMELL_THRESHOLD = 0.85
 
+# An advisory verdict never gates, so its numeric score is informational only.
+ADVISORY_SCORE = 1.0
+
 
 @dataclass(frozen=True)
 class GateResult:
@@ -67,8 +70,8 @@ def score_rules(raw: dict[str, Any]) -> GateResult:
 
     Promoted to enforcing once the tree conforms; that change records the threshold.
     """
-    n = len(raw.get("violations", []))
-    return GateResult("advise", 1.0, f"{n} rule violation(s)" if n else "")
+    n = len(raw.get("violations") or [])
+    return GateResult("advise", ADVISORY_SCORE, f"{n} rule violation(s)" if n else "")
 
 
 def score_context(raw: dict[str, Any]) -> GateResult:
@@ -76,8 +79,8 @@ def score_context(raw: dict[str, Any]) -> GateResult:
 
     Promoted to enforcing once the tree conforms; that change records the threshold.
     """
-    n = len(raw.get("findings", []))
-    return GateResult("advise", 1.0, f"{n} residue finding(s)" if n else "")
+    n = len(raw.get("findings") or [])
+    return GateResult("advise", ADVISORY_SCORE, f"{n} residue finding(s)" if n else "")
 
 
 def aggregate(results: list[GateResult]) -> GateResult:

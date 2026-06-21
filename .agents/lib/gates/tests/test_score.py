@@ -56,6 +56,18 @@ def test_aggregate_block_still_wins_over_advisory():
     assert out.verdict == "block"
 
 
+def test_score_rules_handles_explicit_null_violations():
+    score = _score_mod()
+    result = score.score_rules({"reviewer": "mentat-rules-reviewer", "violations": None})
+    assert result.verdict == "advise"
+
+
+def test_score_context_handles_explicit_null_findings():
+    score = _score_mod()
+    result = score.score_context({"reviewer": "mentat-context-reviewer", "findings": None})
+    assert result.verdict == "advise"
+
+
 def test_score_from_file_routes_rules_reviewer(tmp_path: Path):
     score = _score_mod()
     p = tmp_path / "rules.json"
