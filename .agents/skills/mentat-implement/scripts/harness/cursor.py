@@ -5,19 +5,13 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
+
+from harness import Result
 
 _AFK_SYSTEM_CLAUSE = (
     "[AFK MODE: make autonomous decisions, do not ask the user questions, "
     "do not use interactive prompts, proceed without confirmation]"
 )
-
-
-class Result:
-    def __init__(self, returncode: int, session_log: Any = None, usage_tokens: int | None = None) -> None:
-        self.returncode = returncode
-        self.session_log = session_log
-        self.usage_tokens = usage_tokens
 
 
 def invoke(

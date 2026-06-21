@@ -6,14 +6,8 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
 
-
-class Result:
-    def __init__(self, returncode: int, session_log: Any = None, usage_tokens: int | None = None) -> None:
-        self.returncode = returncode
-        self.session_log = session_log
-        self.usage_tokens = usage_tokens
+from harness import Result
 
 
 def _parse_usage(log_path: Path) -> int | None:
