@@ -510,7 +510,7 @@ def test_implement_chunk_ejected_includes_logs_path(tmp_path, monkeypatch):
 
 
 def test_implement_logs_path_dir_holds_jsonl_and_diagnosis(tmp_path, monkeypatch):
-    """logs_path points to the dir containing the session JSONL + diagnosis.md bundle."""
+    """logs_path in chunk.ejected payloads points to the session dir (JSONL + diagnosis.md)."""
     impl = load_module("implement")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
@@ -521,7 +521,7 @@ def test_implement_logs_path_dir_holds_jsonl_and_diagnosis(tmp_path, monkeypatch
     (session_dir / "mentat-implement-impl.jsonl").write_text('{"event": "plan.started"}\n')
     (session_dir / "diagnosis.md").write_text("## Verdict\n- Reason: test\n")
 
-    logs_dir = Path(impl._logs_path())
+    logs_dir = impl._session_dir_fn(impl.os.environ.get("MENTAT_SESSION", "manual"))
     assert logs_dir == session_dir
     assert any(logs_dir.glob("*.jsonl"))
     assert (logs_dir / "diagnosis.md").exists()

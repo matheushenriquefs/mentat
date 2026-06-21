@@ -122,12 +122,6 @@ from lib.events import bind as _bind  # noqa: E402
 _emit_event = _bind("mentat-implement")
 
 
-def _logs_path() -> str:
-    """Dir holding session JSONL + diagnosis.md for the current session."""
-    session = os.environ.get("MENTAT_SESSION", "manual")
-    return str(_session_dir_fn(session))
-
-
 def _compaction_threshold() -> int | None:
     """Read compaction_threshold_tokens from config. Returns None if absent or unset."""
     from lib.config import load_config_file as _load_cfg
@@ -208,7 +202,7 @@ def _auto_doctor() -> None:
     _run_session_cmd("doctor")
     editor = os.environ.get("EDITOR")
     if editor:
-        diag = Path(_logs_path()) / "diagnosis.md"
+        diag = _session_dir_fn(os.environ.get("MENTAT_SESSION", "manual")) / "diagnosis.md"
         if diag.exists():
             subprocess.run([editor, str(diag)], check=False)
 
@@ -388,11 +382,11 @@ def _read_blocked_summary(worktree: Path) -> str | None:
 
 def _promote_blocked_summary(body: str) -> None:
     """Ensure the blocker body is in the session log dir's summary.md so
-    ``mentat-session report`` surfaces it. F1: agent already writes there;
-    this covers the self-answer case where the agent never wrote the file.
+    ``mentat-session report`` surfaces it. Agent already writes there on a wedge;
+    this covers the self-answer case where it never wrote the file.
     Best-effort — a write failure must not mask the hitl-required ejection."""
     seam = _blocked_summary_path()
-    target = seam if seam is not None else Path(_logs_path()) / SUMMARY_FILE
+    target = seam if seam is not None else _session_dir_fn(os.environ.get("MENTAT_SESSION", "manual")) / SUMMARY_FILE
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(body + "\n")
@@ -494,7 +488,11 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
             _emit_event(
                 "chunk.ejected",
                 ejected_payload(
-                    slug, EjectReason.HITL_REQUIRED, str(plan_path.parent), logs_path=_logs_path(), summary=summary
+                    slug,
+                    EjectReason.HITL_REQUIRED,
+                    str(plan_path.parent),
+                    logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
+                    summary=summary,
                 ),
             )
             return EX_HITL_REQUIRED
@@ -502,7 +500,12 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     if result.returncode != 0:
         _emit_event(
             "chunk.ejected",
-            ejected_payload(slug, EjectReason.IMPLEMENT_FAILED, str(plan_path.parent), logs_path=_logs_path()),
+            ejected_payload(
+                slug,
+                EjectReason.IMPLEMENT_FAILED,
+                str(plan_path.parent),
+                logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
+            ),
         )
         return 1
 
@@ -510,7 +513,12 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     if verdict == "block":
         _emit_event(
             "chunk.ejected",
-            ejected_payload(slug, EjectReason.GATE_FAILED, str(plan_path.parent), logs_path=_logs_path()),
+            ejected_payload(
+                slug,
+                EjectReason.GATE_FAILED,
+                str(plan_path.parent),
+                logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
+            ),
         )
         return 1
 
@@ -629,7 +637,7 @@ def main() -> None:
                 slug,
                 EjectReason.PREFLIGHT_WORKTREE_FAILED,
                 str(plan_path.parent),
-                logs_path=_logs_path(),
+                logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
                 preflight_exit=pf_rc,
             ),
         )
@@ -647,7 +655,12 @@ def main() -> None:
     if _in_shared_main_tree():
         _emit_event(
             "chunk.ejected",
-            ejected_payload(slug, EjectReason.MAIN_TREE_REFUSED, str(Path.cwd()), logs_path=_logs_path()),
+            ejected_payload(
+                slug,
+                EjectReason.MAIN_TREE_REFUSED,
+                str(Path.cwd()),
+                logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
+            ),
         )
         print(
             "mentat-implement: refusing to run in the shared main worktree — a branch "
