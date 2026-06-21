@@ -15,6 +15,7 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib.events import EJECT_REASONS as _EJECT_REASONS  # noqa: E402
 from lib.session import log_root as _log_root  # noqa: E402
 from lib.session import repo_name as _repo
 
@@ -141,6 +142,12 @@ def cmd_emit(args: argparse.Namespace) -> int:
     if missing:
         _reject(base, repo, session, agent, slug, event, f"missing-required:{','.join(missing)}")
         return 1
+
+    if event == "chunk.ejected":
+        reason = payload.get("reason", "")
+        if reason not in _EJECT_REASONS:
+            _reject(base, repo, session, agent, slug, event, f"invalid-reason:{reason!r}")
+            return 1
 
     row = {
         "ts": datetime.datetime.now(datetime.UTC).isoformat(),

@@ -321,6 +321,38 @@ def test_emit_session_prune_null_bytes_accepted(tmp_path, monkeypatch):
     assert log_mod.cmd_emit(args) == 0
 
 
+def test_emit_chunk_ejected_unknown_reason_rejected(tmp_path, monkeypatch):
+    import json as _json
+
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "test-repo")
+    monkeypatch.setenv("MENTAT_SESSION", "sess-lt1-bad")
+    monkeypatch.setenv("MENTAT_SLUG", "test-agent")
+    args = _make_emit_args(
+        "test-agent",
+        "chunk.ejected",
+        _json.dumps({"slug": "x", "reason": "not-a-real-reason", "where": "land"}),
+    )
+    rc = log_mod.cmd_emit(args)
+    assert rc == 1, "expected rejection for unknown eject reason"
+
+
+def test_emit_chunk_ejected_catalog_reason_accepted(tmp_path, monkeypatch):
+    import json as _json
+
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "test-repo")
+    monkeypatch.setenv("MENTAT_SESSION", "sess-lt1-good")
+    monkeypatch.setenv("MENTAT_SLUG", "test-agent")
+    args = _make_emit_args(
+        "test-agent",
+        "chunk.ejected",
+        _json.dumps({"slug": "x", "reason": "implement-failed", "where": "land"}),
+    )
+    rc = log_mod.cmd_emit(args)
+    assert rc == 0, "catalog reason must be accepted"
+
+
 def test_emit_missing_required_key_rejected(tmp_path, monkeypatch):
     import json as _json
 
