@@ -25,8 +25,6 @@ _utils = load_sibling(__file__, "utils")
 _scheduler = load_sibling(__file__, "scheduler")
 _fan_out = load_sibling(__file__, "fan_out")
 _land_queue = load_sibling(__file__, "land_queue")
-_batch_review = load_sibling(__file__, "batch_review")
-_coordinator = load_sibling(__file__, "coordinator")
 
 
 def _parse_list_field(raw: str) -> list[str]:
@@ -161,24 +159,21 @@ def _fan_out_plans(
     return results
 
 
-def _partition_fanout(results, *, emit, mark_ejected, worktree_for):
+def _partition_fanout(results, *, mark_ejected) -> tuple[list, set[str]]:
     """Split fan-out (plan, returncode) results into (landable_chunks, hitl_slugs).
 
-    A child that exited ``EX_HITL_REQUIRED`` is a wedge: it self-ejected and
-    preserved its worktree for the operator. We mirror that as an orchestrate-
-    session ``chunk.ejected{reason: hitl-required}`` (so the orchestrate operator
-    sees it without reading the child's log), cascade it through the scheduler so
-    blocked downstream chunks are skipped not stalled, and keep its slug out of
-    the land queue. Every other child becomes a landable Chunk. Pure but for the
-    injected ``emit`` / ``mark_ejected`` / ``worktree_for`` collaborators.
+    A child that exited EX_HITL_REQUIRED is a wedge: self-ejected, worktree
+    preserved. Mirrored as chunk.ejected{reason:hitl-required} so the operator
+    sees it without reading the child's log, cascaded through the scheduler so
+    blocked downstream chunks are skipped, kept out of the land queue.
     """
     chunks = []
     hitl: set[str] = set()
     for plan, rc in results:
-        worktree = worktree_for(plan.slug)
+        worktree = _worktree_for_slug(plan.slug)
         if rc == EX_HITL_REQUIRED:
             hitl.add(plan.slug)
-            emit("chunk.ejected", ejected_payload(plan.slug, EjectReason.HITL_REQUIRED, str(worktree)))
+            _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.HITL_REQUIRED, str(worktree)))
             mark_ejected(plan.slug)
         else:
             chunks.append(_land_queue.Chunk(slug=plan.slug, worktree=worktree))
@@ -222,20 +217,11 @@ def _worktree_for_slug(slug: str) -> Path:
 
 
 def _land_all(chunk_slugs: list[str], *, holding: str, plans: list | None = None) -> list[dict]:
-    """Land all chunks onto holding branch serially.
-
-    When `plans` is provided, build a `Scheduler` so drain pulls chunks in
-    topo order (blocked downstream chunks wait for upstreams to land).
-    Independent AFKs with empty `blocked_by` flow in input order — same
-    contract as before slice-2. `plans=None` keeps the legacy iter-only
-    path for callers that don't know about cross-chunk deps (e.g. the
-    debug `land-queue` subcommand reading slugs from stdin).
-    """
+    """Land chunks onto holding branch serially (debug land-queue subcommand + dry-run)."""
     chunks = [_land_queue.Chunk(slug=s, worktree=_worktree_for_slug(s)) for s in chunk_slugs]
     if plans is None:
         return _land_queue.drain(chunks, holding=holding)
-    _sched_mod = load_sibling(__file__, "scheduler")
-    sched = _sched_mod.Scheduler(plans)
+    sched = _scheduler.Scheduler(plans)
     return _land_queue.drain(
         chunks,
         holding=holding,
@@ -262,51 +248,39 @@ def run_orchestrate(
         print(f"[dry-run] would anchor: {[p.slug for p in anchored]}")
         print(f"[dry-run] would spawn: {[p.slug for p in auto]}")
         _land_all([], holding=holding)
-        _batch_review.review(session_id=session_id)
+        _utils.emit_event(
+            "batch.reviewed",
+            {"session": session_id, "summary": f"batch review for session {session_id} — advisory"},
+        )
         return 0
 
     _prune_stale_containers()
 
-    # Anchored (HITL) plans: emit chunk.spawned{harness:hitl-in-session} and return
-    # control to caller. They do NOT land in this invocation — caller drives
-    # /mentat-implement in-session, then re-invokes `orchestrate land-queue`.
     if anchored:
         _emit_anchored_chunks(anchored, harness=harness, model=model)
 
-    # AFK plans: delegate fan-out → drain → review to BatchCoordinator. The
-    # scheduler is shared with the fan-out adapter so a hitl-required child can
-    # cascade-eject its downstream chunks before the drain pulls them (S5).
     sched = _scheduler.Scheduler(auto)
     hitl_slugs: set[str] = set()
 
-    class _FanOutAdapter:
-        """Spawns AFK plans headless; returns landable Chunks. A child that exited
-        EX_HITL_REQUIRED is routed away from landing, its worktree preserved."""
+    results = _fan_out_plans(auto, harness=harness, model=model)
+    chunks, hitl = _partition_fanout(results, mark_ejected=sched.mark_ejected)
+    hitl_slugs.update(hitl)
 
-        def run(self, plans):
-            results = _fan_out_plans(plans, harness=harness, model=model)
-            chunks, hitl = _partition_fanout(
-                results,
-                emit=_emit_event,
-                mark_ejected=sched.mark_ejected,
-                worktree_for=_worktree_for_slug,
-            )
-            hitl_slugs.update(hitl)
-            return chunks
-
-    coord = _coordinator.BatchCoordinator(
-        scheduler=sched,
-        fan_out=_FanOutAdapter(),
-        land_queue=_land_queue,
-        batch_review=_batch_review,
+    _land_queue.drain(
+        chunks,
+        holding=holding,
+        on_landed=sched.mark_landed,
+        on_ejected=sched.mark_ejected,
+        next_ready=sched.next_ready,
     )
-    result = coord.run(auto, session_id, holding=holding)
+    _utils.emit_event(
+        "batch.reviewed",
+        {"session": session_id, "summary": f"batch review for session {session_id} — advisory"},
+    )
 
-    # Preserve wedged worktrees from the end-of-batch sweep so the operator can
-    # resume them after making the design call.
     _prune_stale_worktrees(preserve=hitl_slugs)
 
-    rc = 1 if result.ejected or hitl_slugs else 0
+    rc = 1 if sched._ejected or hitl_slugs else 0
     if rc == 0:
         from lib.config import load_config_file as _load_cfg
 
@@ -369,7 +343,10 @@ def main() -> None:
             print(json.dumps(r))
 
     elif args.cmd == "batch-review":
-        _batch_review.review(args.session)
+        _utils.emit_event(
+            "batch.reviewed",
+            {"session": args.session, "summary": f"batch review for session {args.session} — advisory"},
+        )
 
 
 if __name__ == "__main__":

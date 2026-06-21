@@ -40,6 +40,7 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
     a_path.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
     b_path.write_text("---\nid: b\nstatus: ready\nclass: AFK\nblocked_by: [a]\n---\n# b\n")
 
+    # Stub fan_out to return (plan, 0) tuples — proves plan slugs reach land queue.
     def fake_fan_out_plans(plans, *, harness=None, model=None):
         return [(p, 0) for p in plans]
 
@@ -54,7 +55,6 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
 
     monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out_plans)
     monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
-    monkeypatch.setattr(orchestrate._batch_review, "review", lambda *a, **k: None)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
     rc = orchestrate.run_orchestrate(
@@ -103,7 +103,6 @@ def test_run_orchestrate_independent_afks_keep_plan_slug_identity(tmp_path, monk
         return [{"slug": c.slug, "status": "success"} for c in chunks]
 
     monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
-    monkeypatch.setattr(orchestrate._batch_review, "review", lambda *a, **k: None)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
     orchestrate.run_orchestrate("holding", [a_path, b_path], harness=None, model=None, dry_run=False)

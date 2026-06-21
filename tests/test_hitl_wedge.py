@@ -196,12 +196,12 @@ def test_partition_fanout_excludes_hitl_children_from_landing():
     emitted: list[tuple[str, dict]] = []
     ejected_slugs: list[str] = []
 
-    chunks, hitl = orch._partition_fanout(
-        [(plan_a, 0), (plan_b, orch.EX_HITL_REQUIRED)],
-        emit=lambda e, p: emitted.append((e, p)),
-        mark_ejected=ejected_slugs.append,
-        worktree_for=lambda s: Path(f"/wt/{s}"),
-    )
+    with patch.object(orch, "_emit_event", side_effect=lambda e, p: emitted.append((e, p))):
+        with patch.object(orch, "_worktree_for_slug", side_effect=lambda s: Path(f"/wt/{s}")):
+            chunks, hitl = orch._partition_fanout(
+                [(plan_a, 0), (plan_b, orch.EX_HITL_REQUIRED)],
+                mark_ejected=ejected_slugs.append,
+            )
 
     landed_slugs = [c.slug for c in chunks]
     assert landed_slugs == ["a"], "hitl child must not be enqueued for landing"
@@ -215,12 +215,12 @@ def test_partition_fanout_all_clean_lands_all():
     orch = _orch()
     sched = _scheduler()
     plans = [sched.Plan(slug=s, class_="AFK", blocked_by=[], path=Path(f"/p/{s}.md")) for s in ("x", "y")]
-    chunks, hitl = orch._partition_fanout(
-        [(plans[0], 0), (plans[1], 0)],
-        emit=lambda e, p: None,
-        mark_ejected=lambda s: None,
-        worktree_for=lambda s: Path(f"/wt/{s}"),
-    )
+    with patch.object(orch, "_emit_event", lambda e, p: None):
+        with patch.object(orch, "_worktree_for_slug", side_effect=lambda s: Path(f"/wt/{s}")):
+            chunks, hitl = orch._partition_fanout(
+                [(plans[0], 0), (plans[1], 0)],
+                mark_ejected=lambda s: None,
+            )
     assert [c.slug for c in chunks] == ["x", "y"]
     assert hitl == set()
 

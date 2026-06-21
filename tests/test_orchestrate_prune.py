@@ -54,7 +54,6 @@ def test_run_orchestrate_prunes_before_fanout(tmp_path, monkeypatch):
         "drain",
         lambda chunks, **kw: [{"slug": c.slug, "status": "success"} for c in chunks],
     )
-    monkeypatch.setattr(orchestrate._batch_review, "review", lambda *a, **k: None)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
     orchestrate.run_orchestrate(
@@ -79,7 +78,6 @@ def test_dry_run_skips_prune(tmp_path, monkeypatch):
 
     monkeypatch.setattr(orchestrate, "_prune_stale_containers", fake_prune)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
-    monkeypatch.setattr(orchestrate._batch_review, "review", lambda *a, **k: None)
 
     orchestrate.run_orchestrate(
         "holding",
@@ -170,7 +168,6 @@ def test_prune_runs_at_session_end_not_start(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: call_order.append("worktrees"))
     monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [(p, 0) for p in plans])
     monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
-    monkeypatch.setattr(orchestrate._batch_review, "review", lambda *a, **k: None)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
     orchestrate.run_orchestrate(
@@ -415,7 +412,6 @@ def test_prune_failure_does_not_abort(tmp_path, monkeypatch):
         "drain",
         lambda chunks, **kw: [{"slug": c.slug, "status": "success"} for c in chunks],
     )
-    monkeypatch.setattr(orchestrate._batch_review, "review", lambda *a, **k: None)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
     rc = orchestrate.run_orchestrate(

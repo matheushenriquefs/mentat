@@ -1,4 +1,4 @@
-"""Tests for mentat-orchestrate batch_review module."""
+"""batch.reviewed event: run_orchestrate emits it after land, advisory."""
 
 from __future__ import annotations
 
@@ -14,11 +14,20 @@ def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
 
 
-def test_batch_review_advisory_emits_batch_reviewed():
-    fr = load_module("batch_review")
+def test_run_orchestrate_emits_batch_reviewed(tmp_path):
+    orch = load_module("orchestrate")
+    plan = tmp_path / "p.md"
+    plan.write_text("---\nid: p\nclass: AFK\nblocked_by: []\n---\n")
 
-    with patch.object(fr, "_emit_event") as mock_emit:
-        fr.review(session_id="sess-1")
+    emitted: list[str] = []
 
-    emitted = [c.args[0] for c in mock_emit.call_args_list]
+    with (
+        patch.object(orch, "_fan_out_plans", return_value=[]),
+        patch.object(orch._land_queue, "drain", return_value=[]),
+        patch.object(orch, "_prune_stale_containers", lambda: None),
+        patch.object(orch, "_prune_stale_worktrees", lambda **kw: None),
+        patch.object(orch._utils, "emit_event", side_effect=lambda e, p: emitted.append(e)),
+    ):
+        orch.run_orchestrate("main", [plan], harness=None, model=None, dry_run=False)
+
     assert any("batch.reviewed" in e for e in emitted)

@@ -89,7 +89,6 @@ def test_pipeline_hitl_lands_chunk_without_claude_headless(tmp_path, monkeypatch
         return real_run(cmd, *a, **kw)
 
     monkeypatch.setattr(subprocess, "run", recorder)
-    monkeypatch.setattr(orchestrate._batch_review, "review", lambda *a, **kw: None)
     monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [])
 
     # --- Phase 1: orchestrate emits chunk.spawned{hitl-in-session}, no land ---

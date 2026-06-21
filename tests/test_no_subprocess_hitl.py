@@ -44,16 +44,16 @@ def test_hitl_plan_does_not_subprocess_implement(tmp_path, monkeypatch):
 
     monkeypatch.setattr(orchestrate.subprocess, "run", recording_run)
     monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [(p, 0) for p in plans])
-    monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: None)
-
-    drained: list[list[str]] = []
+    landed: list[list[str]] = []
 
     def fake_drain(chunks, *, holding, **kw):
-        drained.append([c.slug for c in chunks])
-        return [{"slug": c.slug, "status": "success"} for c in chunks]
+        landed.append([c.slug for c in chunks])
+        return []
 
     monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
-    monkeypatch.setattr(orchestrate._batch_review, "review", lambda *a, **kw: None)
+    monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
+    monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)
+    monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: None)
 
     rc = orchestrate.run_orchestrate("holding", [hitl, afk], harness=None, model=None, dry_run=False)
 
@@ -61,8 +61,8 @@ def test_hitl_plan_does_not_subprocess_implement(tmp_path, monkeypatch):
     flat = [arg for call in calls for arg in call]
     bad = [a for a in flat if isinstance(a, str) and "implement.py" in a]
     assert bad == [], f"orchestrate subprocess-ran implement.py: {bad}"
-    assert drained, "land queue drain not invoked"
-    assert "fix-foo" not in drained[-1], f"HITL slug fix-foo landed in same invocation: {drained[-1]}"
+    assert landed, "land queue not invoked"
+    assert all("fix-foo" not in batch for batch in landed), f"HITL slug fix-foo landed in same invocation: {landed}"
 
 
 def test_hitl_emits_chunk_spawned_hitl_in_session(tmp_path, monkeypatch):
@@ -85,8 +85,9 @@ def test_hitl_emits_chunk_spawned_hitl_in_session(tmp_path, monkeypatch):
 
     monkeypatch.setattr(orchestrate.subprocess, "run", fake_emit)
     monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [])
-    monkeypatch.setattr(orchestrate, "_land_all", lambda slugs, *, holding: [])
-    monkeypatch.setattr(orchestrate._batch_review, "review", lambda *a, **kw: None)
+    monkeypatch.setattr(orchestrate._land_queue, "drain", lambda chunks, **kw: [])
+    monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)
+    monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: None)
 
     orchestrate.run_orchestrate("holding", [hitl], harness=None, model=None, dry_run=False)
 
