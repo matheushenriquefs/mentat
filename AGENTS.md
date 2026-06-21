@@ -45,7 +45,7 @@ Default: write no comments. Add one only when the *why* is non-obvious — a hid
 
 ## Style
 
-Writing rules for skills, agents, and commands: see [docs/STYLE.md](docs/STYLE.md).
+Prose rules (voice, words, structure) for skills, agents, and docs: see [docs/STYLE.md](docs/STYLE.md). Code rules (control flow, functions, immutability, module layout) for `.py` files: see [`.agents/rules/`](.agents/rules/) ([ADR-0012](docs/adr/0012-code-rules-layer.md)), enforced by `mentat-rules-reviewer`.
 
 Naming convention: kebab-case with `mentat-` prefix for skills and commands. ADRs: `NNNN-kebab.md`. Worktree slugs: `mentat-<epoch>-<pid>`.
 

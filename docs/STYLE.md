@@ -4,6 +4,11 @@ Writing rules for all files in `.agents/skills/`, `.agents/agents/`, and `docs/`
 Structural framing follows [Diátaxis](https://diataxis.fr/) — reference for spec files,
 how-to for workflow docs.
 
+This file is the **prose** authority — voice, words, structure. Code conventions
+(control flow, function shape, immutability, module layout) live in the **code**
+authority, `.agents/rules/` ([ADR-0012](adr/0012-code-rules-layer.md)), enforced by
+`mentat-rules-reviewer`.
+
 Enforced by: Tier 1 deterministic linter (`.agents/lib/style/lint.py`, lefthook pre-commit).
 Tier 2 semantic conformance: promptfoo eval (`task eval`).
 
@@ -140,16 +145,47 @@ Inline backticks for: paths, variables, symbols, command names.
 
 ---
 
-## Structural Framing (Diátaxis)
+## Canonical Prose
 
-`docs/` files follow [Diátaxis](https://diataxis.fr/): reference vs. explanation vs. how-to
-for contributor-facing docs. Skill and agent files follow their voice class above.
+Committed prose describes the system as it is now, for a reader arriving today with
+no memory of how it was built. Write the steady state, not the journey to it. This
+governs every committed file — docs, ADR bodies, skill and agent prompts, and code
+comments — not only agent prompts.
 
-Reference docs (this file, EXIT-CODES.md, PLUGINS.md): information-oriented, scan-friendly.
-Explanation docs (CONTEXT.md, ADRs): understanding-oriented, prose-heavy.
-How-to docs (skill SKILL.md files): task-oriented, step-by-step.
+- **No version or phase leak.** Do not narrate development history — no `v0`,
+  `Phase 2`, `the MVP`, `for now`, slice tags (`(S7)`, `step 3`), roadmap promises
+  (`will eventually`, `to be added later`), or change narration (`previously`,
+  `used to`, `we renamed`, `the old`). State the current shape; git holds the
+  history. When a limit is real, state it as a present-tense fact and say why, not
+  as a promise of future work.
+- **No external-project references.** Name only mentat's own concepts. Do not point
+  at sibling repositories or another project's conventions in committed prose. A
+  borrowed idea is described on its own terms here; the borrow is recorded once in
+  `CREDITS.md`.
 
----
+ADR bodies are the one exception to version leak: an ADR records a decision and may
+narrate the trade-off that produced it. Enforced by `mentat-context-reviewer`.
+
+## Comments in Code
+
+Write no comments by default. Add one only when the **why** is non-obvious — a
+hidden constraint, a subtle invariant, or a workaround for a specific bug. Never
+describe what the code does; well-named identifiers do that. If removing the
+comment would not confuse a future reader, do not write it. No commented-out code,
+no `TODO` comments.
+
+## Documentation LOC Budgets
+
+Hard caps on contributor-facing docs, enforced by review:
+
+| File | Limit |
+|------|-------|
+| `AGENTS.md` | 150 |
+| `CONTEXT.md` | 200 |
+| `docs/STYLE.md` | 200 |
+| `README.md` | 200 |
+
+Skill and agent file budgets live in the voice-mapping table above.
 
 ## Enforcement
 
