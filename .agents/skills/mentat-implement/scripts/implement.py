@@ -398,6 +398,32 @@ def _promote_blocked_summary(body: str) -> None:
         pass
 
 
+_HARNESS_AGENT_DIRS: dict[str, str] = {
+    "claude-code": ".claude",
+    "cursor": ".cursor",
+}
+
+
+def _veto_agents_dir(harness: str) -> Path:
+    dir_name = _HARNESS_AGENT_DIRS.get(harness, ".claude")
+    return Path.home() / dir_name / "agents"
+
+
+def preflight_veto_reviewers(harness: str) -> tuple[int, list[str]]:
+    """Check all veto-tier reviewers are registered in the harness agents dir.
+
+    Returns (0, []) when all present. Returns (1, [missing-names]) when any absent.
+    Skipped (0, []) when MENTAT_SKIP_PREFLIGHT is set.
+    """
+    if os.environ.get("MENTAT_SKIP_PREFLIGHT"):
+        return (0, [])
+    from lib.gates.score import missing_veto_reviewers as _missing
+
+    agents_dir = _veto_agents_dir(harness)
+    missing = _missing(agents_dir)
+    return (1, missing) if missing else (0, [])
+
+
 def _run_gates(chunk_path: Path | None) -> tuple[str, str]:
     return ("pass", "")
 
@@ -632,6 +658,17 @@ def main() -> None:
     session_id = os.environ.get("MENTAT_SESSION", slug)
     print(f"mentat-implement: track this run with `mentat-session track {session_id}`", file=sys.stderr)
     _prune_worktrees_preflight()
+    harness = _utils.default_harness()
+    pf_veto_rc, missing_reviewers = preflight_veto_reviewers(harness)
+    if pf_veto_rc != 0:
+        for name in missing_reviewers:
+            print(
+                f"mentat-implement: PREFLIGHT FAILED — veto reviewer {name!r} is not "
+                f"registered in the harness agents dir. Run `mentat-install` to "
+                f"(re)create harness symlinks.",
+                file=sys.stderr,
+            )
+        sys.exit(pf_veto_rc)
     pf_rc, target = preflight_worktree(slug)
     if pf_rc != 0:
         _emit_event(

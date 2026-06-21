@@ -139,11 +139,12 @@ def test_main_invokes_preflight_then_chdir(main_repo, tmp_path, monkeypatch):
         chdir_targets.append(Path(p))
         real_chdir(p)
 
-    with patch.object(impl.os, "chdir", side_effect=spy_chdir):
-        with patch.object(impl, "_run_and_doctor", return_value=0) as mock_run:
-            with patch.object(impl.sys, "argv", ["implement.py", str(plan)]):
-                with pytest.raises(SystemExit) as exc:
-                    impl.main()
+    with patch.object(impl, "preflight_veto_reviewers", return_value=(0, [])):
+        with patch.object(impl.os, "chdir", side_effect=spy_chdir):
+            with patch.object(impl, "_run_and_doctor", return_value=0) as mock_run:
+                with patch.object(impl.sys, "argv", ["implement.py", str(plan)]):
+                    with pytest.raises(SystemExit) as exc:
+                        impl.main()
 
     assert exc.value.code == 0
     assert mock_run.call_count == 1
@@ -205,12 +206,13 @@ def test_main_refuses_when_left_in_main_tree(main_repo, tmp_path, monkeypatch):
     def fake_emit(event, payload):
         emits.append((event, payload))
 
-    with patch.object(impl, "preflight_worktree", return_value=(0, None)):
-        with patch.object(impl, "_emit_event", side_effect=fake_emit):
-            with patch.object(impl, "_run_and_doctor", return_value=0) as mock_run:
-                with patch.object(impl.sys, "argv", ["implement.py", str(plan)]):
-                    with pytest.raises(SystemExit) as exc:
-                        impl.main()
+    with patch.object(impl, "preflight_veto_reviewers", return_value=(0, [])):
+        with patch.object(impl, "preflight_worktree", return_value=(0, None)):
+            with patch.object(impl, "_emit_event", side_effect=fake_emit):
+                with patch.object(impl, "_run_and_doctor", return_value=0) as mock_run:
+                    with patch.object(impl.sys, "argv", ["implement.py", str(plan)]):
+                        with pytest.raises(SystemExit) as exc:
+                            impl.main()
 
     assert exc.value.code == impl.EX_USAGE
     mock_run.assert_not_called()  # refused before any plan execution
@@ -231,10 +233,11 @@ def test_main_emits_eject_on_preflight_conflict(main_repo, tmp_path, monkeypatch
     def fake_emit(event, payload):
         emits.append((event, payload))
 
-    with patch.object(impl, "_emit_event", side_effect=fake_emit):
-        with patch.object(impl.sys, "argv", ["implement.py", str(plan)]):
-            with pytest.raises(SystemExit) as exc:
-                impl.main()
+    with patch.object(impl, "preflight_veto_reviewers", return_value=(0, [])):
+        with patch.object(impl, "_emit_event", side_effect=fake_emit):
+            with patch.object(impl.sys, "argv", ["implement.py", str(plan)]):
+                with pytest.raises(SystemExit) as exc:
+                    impl.main()
 
     assert exc.value.code == 65
     assert any(

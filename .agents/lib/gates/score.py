@@ -99,6 +99,26 @@ def aggregate(results: list[GateResult]) -> GateResult:
     return GateResult("pass", 1.0, "")
 
 
+# Routing keywords from score_from_file that map to blocking (veto) scorers.
+# "smell" is excluded — its scorer is advisory-only. Extend here when promoting a
+# new scorer to veto so preflight_veto_reviewers auto-extends the check.
+VETO_KEYWORDS: frozenset[str] = frozenset({"plan", "test", "bug", "rules", "context"})
+
+
+def missing_veto_reviewers(agents_dir: Path) -> list[str]:
+    """Return names of veto reviewers not registered as .md files in agents_dir.
+
+    Derives the required set from VETO_KEYWORDS, matching score_from_file's routing,
+    so adding a keyword to VETO_KEYWORDS auto-extends the check.
+    """
+    missing: list[str] = []
+    for kw in sorted(VETO_KEYWORDS):
+        name = f"mentat-{kw}-reviewer"
+        if not (agents_dir / f"{name}.md").exists():
+            missing.append(name)
+    return missing
+
+
 def score_from_file(path: Path) -> GateResult:
     """Load subagent JSON output file and route to the correct scorer."""
     raw = json.loads(path.read_text(encoding="utf-8"))
