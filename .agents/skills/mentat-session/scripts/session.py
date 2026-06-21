@@ -148,17 +148,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-
-    if args.cmd == "list":
-        sys.exit(cmd_list())
-    elif args.cmd == "track":
-        sys.exit(cmd_track(args.session))
-    elif args.cmd == "doctor":
-        sys.exit(cmd_doctor(args.session))
-    elif args.cmd == "report":
-        sys.exit(cmd_report(args.session))
-    elif args.cmd == "diagnose":
-        sys.exit(cmd_diagnose(getattr(args, "session", None)))
+    session = getattr(args, "session", None)
+    dispatch = {
+        "list": lambda: cmd_list(),
+        "track": lambda: cmd_track(session),
+        "doctor": lambda: cmd_doctor(session),
+        "report": lambda: cmd_report(session),
+        "diagnose": lambda: cmd_diagnose(session),
+    }
+    sys.exit(dispatch[args.cmd]())
 
 
 if __name__ == "__main__":
