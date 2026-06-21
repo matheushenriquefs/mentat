@@ -29,7 +29,8 @@ def _emit_installed() -> None:
     _emit_installed_fn("plan.started", {"path": "install"})
 
 
-def _execute_actions(ip: _plan.InstallPlan, *, dry_run: bool) -> None:
+def _execute_actions(ip: _plan.InstallPlan, *, dry_run: bool) -> bool:
+    ok = True
     for action in ip.add:
         if action.action_type == "mkdir":
             _utils.safe_mkdir(action.target, dry_run=dry_run)
@@ -37,11 +38,20 @@ def _execute_actions(ip: _plan.InstallPlan, *, dry_run: bool) -> None:
             _utils.write_default_config(action.target, dry_run=dry_run)
         elif action.action_type == "symlink" and action.source:
             _utils.safe_symlink(action.source, action.target, dry_run=dry_run)
-        elif action.action_type == "copy" and action.source:
-            _utils.safe_copy(action.source, action.target, dry_run=dry_run)
+        elif action.action_type == "copy":
+            if action.source is None:
+                print(
+                    f"warning: skipping copy to {action.target}"
+                    " — no source (clone-less install; skill files not installed)",
+                    file=sys.stderr,
+                )
+                ok = False
+            else:
+                _utils.safe_copy(action.source, action.target, dry_run=dry_run)
     for action in ip.update:
         if action.action_type == "symlink" and action.source:
             _utils.safe_symlink(action.source, action.target, dry_run=dry_run)
+    return ok
 
 
 def do_install(
@@ -80,7 +90,7 @@ def do_install(
 
     _path_setup.setup_path(yes=yes)
 
-    _execute_actions(ip, dry_run=False)
+    ok = _execute_actions(ip, dry_run=False)
 
     mentat_dir = home / ".mentat"
     config_file = mentat_dir / "config.toml"
@@ -88,6 +98,9 @@ def do_install(
     _utils.write_default_config(config_file)
 
     _emit_installed()
+    if not ok:
+        print("mentat-install: completed with warnings — skill files not installed.", file=sys.stderr)
+        return 1
     print("mentat-install: done.")
     return 0
 

@@ -30,8 +30,9 @@ def safe_copy(source: Path, target: Path, *, dry_run: bool = False) -> None:
     if dry_run:
         return
     target.parent.mkdir(parents=True, exist_ok=True)
-    if source.exists():
-        shutil.copytree(str(source), str(target), dirs_exist_ok=True)
+    if not source.exists():
+        raise FileNotFoundError(f"copy source not found: {source}")
+    shutil.copytree(str(source), str(target), dirs_exist_ok=True)
 
 
 def safe_mkdir(path: Path, *, dry_run: bool = False) -> None:
