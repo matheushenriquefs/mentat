@@ -362,6 +362,23 @@ def test_render_focus_audit_shows_events(tmp_path):
     assert "chunk.spawned" in body
 
 
+# ── S2: stream() dead-code removal ───────────────────────────────────────────
+
+
+def test_stream_symbol_absent():
+    """stream() had no caller and a broken 60s cap; it must be gone."""
+    track = load_module("track")
+    assert not hasattr(track, "stream"), "stream() is dead code and must be deleted"
+
+
+def test_module_imports_without_stream():
+    """Removing stream() must not break module load or any other export."""
+    track = load_module("track")
+    assert callable(track.handle_key)
+    assert callable(track.render_list)
+    assert callable(track.navigate)
+
+
 # ── V4: viewport bounding for the list pane ───────────────────────────────────
 
 

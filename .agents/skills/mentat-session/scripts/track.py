@@ -8,7 +8,6 @@ import os
 import select
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import cast
 
@@ -48,31 +47,6 @@ def _color_for_event(event: str) -> str:
 
 def _is_tty() -> bool:
     return sys.stdout.isatty()
-
-
-def stream(session_dir: Path, *, follow: bool = True, use_color: bool | None = None) -> None:
-    color = _is_tty() if use_color is None else use_color
-
-    seen_files: dict[Path, int] = {}
-    end_time = time.time() + (60 if follow else 0)
-
-    while True:
-        for log_file in sorted(session_dir.glob("*.jsonl")):
-            offset = seen_files.get(log_file, 0)
-            with log_file.open() as f:
-                f.seek(offset)
-                content = f.read()
-                seen_files[log_file] = f.tell()
-            for row in _sessions.iter_rows_from_text(content):
-                event = row.get("event", "")
-                c = _color_for_event(event) if color else ""
-                reset = _RESET if color else ""
-                payload = json.dumps(row.get("payload", {}))
-                print(f"{c}{row.get('ts', '')} [{row.get('agent', '')}] {event} {payload}{reset}")
-
-        if not follow or time.time() > end_time:
-            break
-        time.sleep(0.1)
 
 
 # ── dual-stream log renderer ─────────────────────────────────────────────────
