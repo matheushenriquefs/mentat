@@ -11,13 +11,14 @@ import pytest
 from tests.conftest import init_git_repo, load_script
 
 _SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts"
-_GIT_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-git/scripts"
+_GIT_SKILLS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-git/scripts"
 
 
 def _load():
     mod = load_script(_SCRIPTS / "implement.py", "implement_mod")
-    mod._GIT_WORKTREE_PY = _GIT_SCRIPTS / "worktree.py"
-    mod._GIT_SCRIPT = _GIT_SCRIPTS / "git.py"
+    # Override home-relative paths to use the repo-local skills dir in container.
+    mod._GIT_WORKTREE_PY = _GIT_SKILLS / "worktree.py"
+    mod._GIT_SCRIPT = _GIT_SKILLS / "git.py"
     return mod
 
 
