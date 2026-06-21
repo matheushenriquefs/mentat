@@ -1,0 +1,18 @@
+# bebop-shaped sidecar-only compose: no service wraps the app.
+# The app runs on the host and reaches these sidecars over the network.
+services:
+  nitter:
+    image: zedeus/nitter:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nitter.conf:/src/nitter.conf:Z,ro
+    depends_on:
+      - nitter-redis
+  nitter-redis:
+    image: redis:7-alpine
+    command: redis-server --save 60 1
+    volumes:
+      - nitter-redis:/data
+volumes:
+  nitter-redis:
