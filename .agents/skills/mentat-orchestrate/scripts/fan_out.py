@@ -29,13 +29,20 @@ def _log_dir_for(session_id: str) -> Path:
 
 
 def _spawn_worktree_subprocess(
-    plan_path: Path, *, harness: str | None = None, model: str | None = None
+    plan_path: Path,
+    *,
+    harness: str | None = None,
+    model: str | None = None,
+    seed_summary: str | None = None,
 ) -> tuple[str, subprocess.Popen]:
     """Spawn a headless mentat-implement in a new worktree.
 
     Generates a deterministic session id, creates ~/.mentat/logs/<repo>/<sid>/
     with mode 0o700, and exports MENTAT_SESSION + MENTAT_SESSION_LOG to the
     child so the harness adapter can redirect stream-json into the log file.
+
+    seed_summary — when set, injects MENTAT_SEED_SUMMARY into child env so the
+    harness adapter seeds the new session with prior context (F5 continuity).
 
     Returns (session_id, Popen). The caller may use the Popen to throttle
     concurrent spawns via Popen.poll().
@@ -58,6 +65,8 @@ def _spawn_worktree_subprocess(
         "MENTAT_SESSION": session_id,
         "MENTAT_SESSION_LOG": str(session_log),
     }
+    if seed_summary:
+        env["MENTAT_SEED_SUMMARY"] = seed_summary
     proc = subprocess.Popen(cmd, env=env)
     return session_id, proc
 

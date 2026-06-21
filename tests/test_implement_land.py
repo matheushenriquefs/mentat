@@ -11,8 +11,6 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from tests.conftest import load_script
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -68,34 +66,70 @@ def test_land_and_review_function_exists():
 
 
 def test_land_and_review_calls_land_queue_land(tmp_path):
-    """F2 tracer: _land_and_review must call land_queue.land for the chunk."""
+    """F2 tracer: _land_and_review must call _do_land for the chunk."""
     impl = _impl()
 
     land_calls: list[dict] = []
 
-    def fake_land(chunk, *, holding):
+    class FakeChunk:
+        def __init__(self, slug, worktree):
+            self.slug = slug
+            self.worktree = worktree
+
+    class FakeLandQueue:
+        Chunk = FakeChunk
+
+    def fake_do_land(chunk, *, holding, land_queue):
         land_calls.append({"slug": chunk.slug, "holding": holding})
         return {"slug": chunk.slug, "status": "success", "tip": "abc123"}
 
-    with patch.object(impl, "_do_land", fake_land, create=True):
-        pass  # ensure the patch target exists before calling
+    class FakeBatchReview:
+        @staticmethod
+        def review(session_id):
+            return {"verdicts": []}
 
-    # Direct test: _land_and_review must invoke land internally
-    with patch.object(impl, "_emit_event"):
+    with (
+        patch.object(impl, "_do_land", fake_do_land),
+        patch.object(
+            impl, "_load_mod", lambda key, path: FakeLandQueue() if "land_queue" in key else FakeBatchReview()
+        ),
+    ):
         result = impl._land_and_review("myplan", tmp_path, "main")
 
-    # landed + reviewer verdicts expected
+    assert land_calls, "_do_land was not called"
+    assert land_calls[0]["slug"] == "myplan"
+    assert land_calls[0]["holding"] == "main"
     assert result is not None, "_land_and_review returned None"
 
 
 def test_land_and_review_spawns_reviewer_verdicts(tmp_path):
-    """F2 tracer: after landing, _land_and_review must spawn advisory reviewers and return verdicts."""
+    """F2 tracer: after landing, _land_and_review must return a dict with status + verdicts."""
     impl = _impl()
 
-    with patch.object(impl, "_emit_event"):
-        try:
-            result = impl._land_and_review("myplan", tmp_path, "main")
-            # Must return a dict with at least status + verdicts fields
-            assert isinstance(result, dict), "_land_and_review must return a dict"
-        except (AttributeError, TypeError) as exc:
-            pytest.fail(f"_land_and_review raised {type(exc).__name__}: {exc}")
+    class FakeChunk:
+        def __init__(self, slug, worktree):
+            self.slug = slug
+            self.worktree = worktree
+
+    class FakeLandQueue:
+        Chunk = FakeChunk
+
+        def land(self, chunk, *, holding):
+            return {"slug": chunk.slug, "status": "success", "tip": "sha123"}
+
+    class FakeBatchReview:
+        @staticmethod
+        def review(session_id):
+            return {"verdicts": ["ok"]}
+
+    with (
+        patch.object(impl, "_do_land", lambda chunk, *, holding, land_queue: {"status": "success", "tip": "sha123"}),
+        patch.object(
+            impl, "_load_mod", lambda key, path: FakeLandQueue() if "land_queue" in key else FakeBatchReview()
+        ),
+    ):
+        result = impl._land_and_review("myplan", tmp_path, "main")
+
+    assert isinstance(result, dict), "_land_and_review must return a dict"
+    assert "status" in result, "result missing 'status' key"
+    assert "verdicts" in result, "result missing 'verdicts' key"

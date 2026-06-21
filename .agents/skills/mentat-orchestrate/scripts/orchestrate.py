@@ -311,7 +311,15 @@ def run_orchestrate(
     # resume them after making the design call.
     _prune_stale_worktrees(preserve=hitl_slugs)
 
-    return 1 if result.ejected or hitl_slugs else 0
+    rc = 1 if result.ejected or hitl_slugs else 0
+    if rc == 0:
+        from lib.config import load_config_file as _load_cfg
+
+        _cfg_path = Path.home() / ".mentat" / "config.toml"
+        _cfg = _load_cfg(_cfg_path) if _cfg_path.exists() else {}
+        diff_tool = _cfg.get("diff_tool") or "git diff"
+        print(f"mentat-orchestrate: review the diff with `{diff_tool}`", file=sys.stderr)
+    return rc
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -323,11 +323,16 @@ def _run_and_doctor(plan_path: Path, *, harness: str | None = None, model: str |
     return rc
 
 
-def _load_harness_module(key: str, path: Path) -> Any:
+def _load_mod(key: str, path: Path) -> Any:
+    """Load a .py script by path. Module-level so _land_and_review callers can patch it."""
     spec = importlib.util.spec_from_file_location(key, path)
     mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod
+
+
+def _load_harness_module(key: str, path: Path) -> Any:
+    return _load_mod(key, path)
 
 
 def _invoke_harness(
@@ -526,7 +531,13 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
         )
         return 1
 
+    _checkpoint_if_needed(result, slug=slug, threshold=_compaction_threshold())
     return 0
+
+
+def _do_land(chunk: Any, *, holding: str, land_queue: Any) -> dict:
+    """Thin wrapper around land_queue.land — exists so tests can patch it."""
+    return land_queue.land(chunk, holding=holding)
 
 
 def _land_and_review(slug: str, worktree: Path, holding: str) -> dict:
@@ -537,22 +548,14 @@ def _land_and_review(slug: str, worktree: Path, holding: str) -> dict:
     scheduler=None is equivalent). Spawns advisory batch review after landing.
     Returns a dict with status, landed tip sha, and reviewer summary.
     """
-    import importlib.util
-
     _land_script = paths.SKILLS_DIR / "mentat-orchestrate/scripts/land_queue.py"
     _batch_script = paths.SKILLS_DIR / "mentat-orchestrate/scripts/batch_review.py"
-
-    def _load_mod(key: str, path: Path):
-        spec = importlib.util.spec_from_file_location(key, path)
-        mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-        spec.loader.exec_module(mod)  # type: ignore[union-attr]
-        return mod
 
     land_queue = _load_mod("land_queue", _land_script)
     batch_review = _load_mod("batch_review", _batch_script)
 
     chunk = land_queue.Chunk(slug=slug, worktree=worktree)
-    verdict = land_queue.land(chunk, holding=holding)
+    verdict = _do_land(chunk, holding=holding, land_queue=land_queue)
 
     session_id = os.environ.get("MENTAT_SESSION", slug)
     review_result = batch_review.review(session_id)

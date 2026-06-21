@@ -126,3 +126,60 @@ def test_checkpoint_if_needed_noop_below_threshold(tmp_path: Path, monkeypatch: 
 
     path = summary_file("test-session-f5-below")
     assert not path.exists(), "summary.md written when below threshold — should be noop"
+
+
+# ── fan_out._spawn_worktree_subprocess MENTAT_SEED_SUMMARY ───────────────────
+
+
+def test_fan_out_spawn_injects_seed_summary_into_child_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F5 tracer: _spawn_worktree_subprocess must set MENTAT_SEED_SUMMARY in child env when provided."""
+    fan_out = _fan_out()
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "myrepo")
+
+    plan_path = tmp_path / "myplan.md"
+    plan_path.write_text("---\nid: myplan\n---\nbody\n")
+
+    captured_env: list[dict] = []
+
+    class FakeProc:
+        pass
+
+    def fake_popen(cmd, env=None, **kwargs):
+        captured_env.append(dict(env or {}))
+        return FakeProc()
+
+    with patch("subprocess.Popen", fake_popen):
+        sid, proc = fan_out._spawn_worktree_subprocess(plan_path, seed_summary="prior summary text")
+
+    assert captured_env, "Popen was not called"
+    assert "MENTAT_SEED_SUMMARY" in captured_env[0], "MENTAT_SEED_SUMMARY not injected into child env"
+    assert captured_env[0]["MENTAT_SEED_SUMMARY"] == "prior summary text"
+
+
+def test_fan_out_spawn_no_seed_summary_absent_from_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F5 tracer: _spawn_worktree_subprocess must NOT set MENTAT_SEED_SUMMARY when seed_summary is None."""
+    fan_out = _fan_out()
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "myrepo")
+    monkeypatch.delenv("MENTAT_SEED_SUMMARY", raising=False)
+
+    plan_path = tmp_path / "myplan.md"
+    plan_path.write_text("---\nid: myplan\n---\nbody\n")
+
+    captured_env: list[dict] = []
+
+    class FakeProc:
+        pass
+
+    def fake_popen(cmd, env=None, **kwargs):
+        captured_env.append(dict(env or {}))
+        return FakeProc()
+
+    with patch("subprocess.Popen", fake_popen):
+        sid, proc = fan_out._spawn_worktree_subprocess(plan_path, seed_summary=None)
+
+    assert captured_env, "Popen was not called"
+    assert "MENTAT_SEED_SUMMARY" not in captured_env[0], (
+        "MENTAT_SEED_SUMMARY unexpectedly present in child env when seed_summary=None"
+    )
