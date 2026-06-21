@@ -20,19 +20,54 @@ BANNED_RE = re.compile(
 )
 ARTICLE_RE = re.compile(r"(?<!\w)(a|an|the)\s", re.IGNORECASE)
 
-_THIN = {"mentat-install"}
-_FULL = {
-    "mentat-prd",
-    "mentat-tasks",
-    "mentat-implement",
-    "mentat-orchestrate",
-    "mentat-container",
-    "mentat-log",
-    "mentat-session",
-    "mentat-git",
-    "mentat-plan",
-    "mentat-skill",
-}
+_STYLE_MD = Path(__file__).resolve().parents[3] / "docs" / "STYLE.md"
+
+
+def _load_skill_voices(style_path: Path) -> tuple[set[str], set[str]]:
+    """Parse thin/full skill sets from the Voice-Mapping Table in docs/STYLE.md.
+
+    A new skill only needs an entry in STYLE.md — no edit to this file required.
+    """
+    thin: set[str] = set()
+    full: set[str] = set()
+    if not style_path.exists():
+        return thin, full
+    in_table = False
+    for line in style_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if "## Voice-Mapping Table" in line:
+            in_table = True
+            continue
+        if in_table:
+            if line.startswith("#"):
+                break
+            if not line.startswith("|") or "---" in line or "Path pattern" in line:
+                continue
+            cols = [c.strip() for c in line.strip("|").split("|")]
+            if len(cols) < 2:
+                continue
+            path_pat = cols[0].strip("`").strip()
+            voice_raw = cols[1].lower()
+            m = re.search(r"skills/([^/`]+)/SKILL", path_pat)
+            if not m:
+                continue
+            raw = m.group(1)
+            if "{" in raw:
+                bm = re.match(r"^([^{]*)\{([^}]+)\}(.*)$", raw)
+                if bm:
+                    prefix, choices, suffix = bm.group(1), bm.group(2), bm.group(3)
+                    names: list[str] = [prefix + c.strip() + suffix for c in choices.split(",")]
+                else:
+                    names = [raw]
+            else:
+                names = [raw]
+            if "thin" in voice_raw:
+                thin.update(names)
+            elif "full" in voice_raw:
+                full.update(names)
+    return thin, full
+
+
+_THIN, _FULL = _load_skill_voices(_STYLE_MD)
 
 
 def _classify(path: Path) -> str | None:
