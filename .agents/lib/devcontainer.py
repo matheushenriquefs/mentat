@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -149,3 +150,34 @@ def run(slug: str, cmd: str) -> subprocess.CompletedProcess[str] | None:
     if cid is None:
         return None
     return _run_docker(["docker", "exec", cid, "sh", "-c", cmd])
+
+
+def exec(  # noqa: A001
+    slug: str,
+    argv: list[str],
+    *,
+    workdir: str | None = None,
+    user: str | None = None,
+) -> subprocess.CompletedProcess[bytes] | None:
+    """Run a command inside the container for ``slug`` with live output.
+
+    Unlike ``run()``, this passes through stdin/stdout/stderr so streaming
+    and interactive output works. Returns None if the container is not running.
+    Respects ``MENTAT_DOCKER`` env var for the docker binary path.
+    """
+    cid = container_id_for_slug(slug)
+    if cid is None:
+        return None
+    docker = os.environ.get("MENTAT_DOCKER", "docker")
+    cmd = [docker, "exec"]
+    if workdir:
+        cmd += ["--workdir", workdir]
+    if user:
+        cmd += ["-u", user]
+    cmd.append(cid)
+    cmd.extend(argv)
+    try:
+        return subprocess.run(cmd)
+    except FileNotFoundError:
+        print("devcontainer: docker not on PATH", file=sys.stderr)
+        return None
