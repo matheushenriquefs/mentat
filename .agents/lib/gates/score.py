@@ -25,14 +25,27 @@ class GateResult:
     reason: str
 
 
+def _score_gate(
+    score: float,
+    threshold: float,
+    label: str,
+    *,
+    advisory: bool = False,
+) -> GateResult:
+    """Threshold check. advisory=True always returns 'advise'; False blocks below threshold."""
+    below = score < threshold
+    if advisory:
+        return GateResult("advise", score, f"{label} {score:.2f} < {threshold}" if below else "")
+    if below:
+        return GateResult("block", score, f"{label} {score:.2f} < {threshold}")
+    return GateResult("pass", score, "")
+
+
 def score_plan(raw: dict[str, Any]) -> GateResult:
     """Plan alignment ≥ PLAN_THRESHOLD → pass; must_not_exist veto overrides."""
     if raw.get("veto") == "must_not_exist":
         return GateResult("block", 0.0, raw.get("veto_detail", "must_not_exist veto"))
-    score = float(raw.get("score", 0.0))
-    if score >= PLAN_THRESHOLD:
-        return GateResult("pass", score, "")
-    return GateResult("block", score, f"plan alignment {score:.2f} < {PLAN_THRESHOLD}")
+    return _score_gate(float(raw.get("score", 0.0)), PLAN_THRESHOLD, "plan alignment")
 
 
 def score_test(raw: dict[str, Any]) -> GateResult:
@@ -40,10 +53,7 @@ def score_test(raw: dict[str, Any]) -> GateResult:
     veto = raw.get("veto", "clean")
     if veto and veto != "clean":
         return GateResult("block", 0.0, f"test veto: {veto}")
-    score = float(raw.get("asserts_plan", 0.0))
-    if score >= TEST_THRESHOLD:
-        return GateResult("pass", score, "")
-    return GateResult("block", score, f"test alignment {score:.2f} < {TEST_THRESHOLD}")
+    return _score_gate(float(raw.get("asserts_plan", 0.0)), TEST_THRESHOLD, "test alignment")
 
 
 def score_bug(raw: dict[str, Any]) -> GateResult:
@@ -59,10 +69,7 @@ def score_bug(raw: dict[str, Any]) -> GateResult:
 
 def score_smell(raw: dict[str, Any]) -> GateResult:
     """Smell review is advisory only — never blocks, never vetoes."""
-    score = float(raw.get("score", 1.0))
-    if score < SMELL_THRESHOLD:
-        return GateResult("advise", score, f"smell score {score:.2f} < {SMELL_THRESHOLD}")
-    return GateResult("advise", score, "")
+    return _score_gate(float(raw.get("score", 1.0)), SMELL_THRESHOLD, "smell score", advisory=True)
 
 
 def score_rules(raw: dict[str, Any]) -> GateResult:
