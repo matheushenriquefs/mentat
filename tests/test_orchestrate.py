@@ -243,7 +243,7 @@ def test_fan_out_plans_blocks_until_slot_free(monkeypatch, tmp_path):
     live: list = []
     high_watermark = {"n": 0}
 
-    def fake_spawn(plan, harness=None, model=None):
+    def fake_spawn(plan, harness=None, model=None, seed_summary=None):
         n_live = sum(1 for p in live if p._remaining > 0)
         high_watermark["n"] = max(high_watermark["n"], n_live + 1)
         proc = _ScriptedPopen(live_ticks=2)

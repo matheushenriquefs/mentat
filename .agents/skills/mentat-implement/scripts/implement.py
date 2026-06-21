@@ -326,7 +326,9 @@ def _run_and_doctor(plan_path: Path, *, harness: str | None = None, model: str |
 def _load_mod(key: str, path: Path) -> Any:
     """Load a .py script by path. Module-level so _land_and_review callers can patch it."""
     spec = importlib.util.spec_from_file_location(key, path)
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load module {key!r} from {path}")
+    mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod
 

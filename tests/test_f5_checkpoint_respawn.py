@@ -183,3 +183,73 @@ def test_fan_out_spawn_no_seed_summary_absent_from_env(tmp_path: Path, monkeypat
     assert "MENTAT_SEED_SUMMARY" not in captured_env[0], (
         "MENTAT_SEED_SUMMARY unexpectedly present in child env when seed_summary=None"
     )
+
+
+# ── orchestrate._fan_out_plans between-chunk seed forwarding ──────────────────
+
+ORCH_SCRIPT = REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts/orchestrate.py"
+
+
+def _orchestrate():
+    return load_script(ORCH_SCRIPT, "orch_f5")
+
+
+def test_fan_out_plans_seeds_next_chunk_from_completed_summary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F5 tracer: _fan_out_plans passes seed_summary from completed chunk's summary.md to next spawn."""
+    orch = _orchestrate()
+    scheduler = load_script(REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts/scheduler.py", "sched_f5")
+
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "myrepo")
+
+    plan_a_path = tmp_path / "plan-a.md"
+    plan_a_path.write_text("---\nid: plan-a\nclass: AFK\nblocked_by: []\n---\nbody\n")
+    plan_b_path = tmp_path / "plan-b.md"
+    plan_b_path.write_text("---\nid: plan-b\nclass: AFK\nblocked_by: []\n---\nbody\n")
+
+    plans = [
+        scheduler.Plan(slug="plan-a", class_="AFK", blocked_by=[], path=plan_a_path),
+        scheduler.Plan(slug="plan-b", class_="AFK", blocked_by=[], path=plan_b_path),
+    ]
+
+    spawn_calls: list[dict] = []
+    session_counter = [0]
+
+    class FakeProc:
+        returncode = 0
+
+        def __init__(self):
+            self._done = False
+
+        def poll(self):
+            return 0 if self._done else None
+
+        def wait(self):
+            self._done = True
+
+    def fake_spawn_with_proc(plan, *, harness=None, model=None, seed_summary=None):
+        session_counter[0] += 1
+        sid = f"implement-{plan.slug}-{session_counter[0]}"
+        spawn_calls.append({"slug": plan.slug, "seed_summary": seed_summary, "session_id": sid})
+        proc = FakeProc()
+        proc._done = True
+        return sid, proc
+
+    # Write a summary file for plan-a's session after plan-a "completes"
+    # We must know the session_id ahead of time to pre-write the file — use the first sid
+    first_sid = "implement-plan-a-1"
+    from lib.session import summary_file
+
+    sf = summary_file(first_sid)
+    sf.parent.mkdir(parents=True, exist_ok=True)
+    sf.write_text("---\nstatus: succeeded\n---\nCheckpoint summary from plan-a.\n")
+
+    with patch.object(orch._fan_out, "spawn_with_proc", fake_spawn_with_proc):
+        orch._fan_out_plans(plans, harness=None, model=None)
+
+    assert len(spawn_calls) == 2, f"Expected 2 spawns, got {len(spawn_calls)}"
+    assert spawn_calls[0]["slug"] == "plan-a"
+    assert spawn_calls[0]["seed_summary"] is None, "First chunk must not have a seed_summary"
+    assert spawn_calls[1]["slug"] == "plan-b"
+    assert spawn_calls[1]["seed_summary"] is not None, "Second chunk must receive seed_summary from plan-a's summary"
+    assert "plan-a" in spawn_calls[1]["seed_summary"] or "succeeded" in spawn_calls[1]["seed_summary"]

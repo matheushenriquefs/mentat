@@ -126,6 +126,14 @@ def _concurrency_cap() -> int:
 _emit_event = _bind("mentat-orchestrate")
 
 
+def _read_chunk_seed(session_id: str) -> str | None:
+    """Return summary.md content for session_id if it exists (F5 checkpoint)."""
+    from lib.session import summary_file as _summary_file
+
+    sf = _summary_file(session_id)
+    return sf.read_text() if sf.exists() else None
+
+
 def _fan_out_plans(
     plans: list[_scheduler.Plan], *, harness: str | None, model: str | None
 ) -> list[tuple[_scheduler.Plan, int]]:
@@ -139,16 +147,24 @@ def _fan_out_plans(
     ``EX_HITL_REQUIRED`` (42) child away from landing (S5) — a wedged AFK self-
     ejected and left its worktree for the operator; landing it would false-merge
     empty or partial work.
+
+    F5 checkpoint: after each chunk exits, reads its summary.md and seeds the next
+    spawn so context survives across chunk boundaries.
     """
     cap = _concurrency_cap()
-    live: list[tuple[_scheduler.Plan, subprocess.Popen]] = []
+    live: list[tuple[_scheduler.Plan, subprocess.Popen, str]] = []
+    seed_summary: str | None = None
     for plan in plans:
-        while sum(1 for _, p in live if p.poll() is None) >= cap:
+        while sum(1 for _, p, _ in live if p.poll() is None) >= cap:
             time.sleep(0.1)
-        _session_id, proc = _fan_out.spawn_with_proc(plan, harness=harness, model=model)
-        live.append((plan, proc))
+        # Harvest seeds from any chunks that finished while we waited (F5 checkpoint).
+        for _plan, p, sid in live:
+            if p.poll() is not None:
+                seed_summary = _read_chunk_seed(sid) or seed_summary
+        _session_id, proc = _fan_out.spawn_with_proc(plan, harness=harness, model=model, seed_summary=seed_summary)
+        live.append((plan, proc, _session_id))
     results: list[tuple[_scheduler.Plan, int]] = []
-    for plan, p in live:
+    for plan, p, _sid in live:
         p.wait()
         results.append((plan, p.returncode))
     return results

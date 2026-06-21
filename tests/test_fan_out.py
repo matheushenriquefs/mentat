@@ -31,7 +31,7 @@ def test_fan_out_spawns_worktree_and_subprocess(tmp_path):
 
     spawn_calls = []
 
-    def fake_spawn(p, harness=None, model=None):
+    def fake_spawn(p, harness=None, model=None, seed_summary=None):
         spawn_calls.append(p)
         return ("sess-abc", _FakePopen())
 

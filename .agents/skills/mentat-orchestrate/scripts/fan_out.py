@@ -52,7 +52,6 @@ def _spawn_worktree_subprocess(
     session_id = mint_session("implement", plan_path.stem)
     log_dir = _log_dir_for(session_id)
     log_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-    os.chmod(log_dir, 0o700)
     session_log = log_dir / "session.jsonl"
 
     cmd = ["python3", str(_IMPLEMENT_SCRIPT), str(plan_path)]
@@ -74,9 +73,11 @@ def _spawn_worktree_subprocess(
 _emit_event = bind("mentat-orchestrate")
 
 
-def spawn_with_proc(plan, *, harness: str | None = None, model: str | None = None) -> tuple[str, subprocess.Popen]:
+def spawn_with_proc(
+    plan, *, harness: str | None = None, model: str | None = None, seed_summary: str | None = None
+) -> tuple[str, subprocess.Popen]:
     """Spawn plan headless. Print track command immediately. Return (session_id, Popen)."""
-    session_id, proc = _spawn_worktree_subprocess(plan.path, harness=harness, model=model)
+    session_id, proc = _spawn_worktree_subprocess(plan.path, harness=harness, model=model, seed_summary=seed_summary)
     _emit_event(
         "chunk.spawned",
         spawned_payload(plan.slug, str(plan.path), harness=harness or "default", worktree=str(Path.cwd())),
@@ -86,7 +87,7 @@ def spawn_with_proc(plan, *, harness: str | None = None, model: str | None = Non
     return session_id, proc
 
 
-def spawn(plan, *, harness: str | None = None, model: str | None = None) -> str:
+def spawn(plan, *, harness: str | None = None, model: str | None = None, seed_summary: str | None = None) -> str:
     """Spawn plan headless. Discards Popen handle. Returns session ID."""
-    session_id, _proc = spawn_with_proc(plan, harness=harness, model=model)
+    session_id, _proc = spawn_with_proc(plan, harness=harness, model=model, seed_summary=seed_summary)
     return session_id
