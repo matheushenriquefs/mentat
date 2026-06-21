@@ -56,20 +56,14 @@ def stream(session_dir: Path, *, follow: bool = True, use_color: bool | None = N
             offset = seen_files.get(log_file, 0)
             with log_file.open() as f:
                 f.seek(offset)
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        row = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    event = row.get("event", "")
-                    c = _color_for_event(event) if color else ""
-                    reset = _RESET if color else ""
-                    payload = json.dumps(row.get("payload", {}))
-                    print(f"{c}{row.get('ts', '')} [{row.get('agent', '')}] {event} {payload}{reset}")
+                content = f.read()
                 seen_files[log_file] = f.tell()
+            for row in _sessions.iter_rows_from_text(content):
+                event = row.get("event", "")
+                c = _color_for_event(event) if color else ""
+                reset = _RESET if color else ""
+                payload = json.dumps(row.get("payload", {}))
+                print(f"{c}{row.get('ts', '')} [{row.get('agent', '')}] {event} {payload}{reset}")
 
         if not follow or time.time() > end_time:
             break

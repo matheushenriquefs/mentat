@@ -59,23 +59,28 @@ def slug_for_chunk(file: Path) -> str:
     return file.stem
 
 
-def _iter_rows(log_file: Path) -> Iterator[dict[str, object]]:
+def iter_rows_from_text(text: str) -> Iterator[dict[str, object]]:
+    """Yield parsed JSON object rows from jsonl text, skipping blanks/garbage."""
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        with contextlib.suppress(json.JSONDecodeError):
+            row = json.loads(line)
+            if isinstance(row, dict):
+                yield row
+
+
+def iter_rows(log_file: Path) -> Iterator[dict[str, object]]:
     """Yield parsed JSON object rows of a jsonl file, skipping blanks/garbage. Read-safe."""
     with contextlib.suppress(OSError, UnicodeDecodeError):
-        for line in log_file.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            with contextlib.suppress(json.JSONDecodeError):
-                row = json.loads(line)
-                if isinstance(row, dict):
-                    yield row
+        yield from iter_rows_from_text(log_file.read_text())
 
 
 def all_events(session_dir: Path) -> list[dict[str, object]]:
     events: list[dict[str, object]] = []
     for log_file in sorted(session_dir.glob("*.jsonl")):
-        events.extend(_iter_rows(log_file))
+        events.extend(iter_rows(log_file))
     return sorted(events, key=lambda e: str(e.get("ts", "")))
 
 
@@ -110,7 +115,7 @@ def newest_jsonl(session_dir: Path) -> Path | None:
 def _tail_row(log_file: Path) -> dict[str, object] | None:
     """Last non-blank JSON row of a jsonl file (None if unreadable/empty)."""
     last: dict[str, object] | None = None
-    for row in _iter_rows(log_file):
+    for row in iter_rows(log_file):
         last = row
     return last
 
@@ -131,7 +136,7 @@ def _audit_tail(session_dir: Path) -> dict[str, object] | None:
     best: dict[str, object] | None = None
     best_ts = ""
     for log_file in session_dir.glob("*.jsonl"):
-        for row in _iter_rows(log_file):
+        for row in iter_rows(log_file):
             ts = str(row.get("ts", ""))
             if "event" in row and ts >= best_ts:
                 best, best_ts = row, ts
@@ -214,11 +219,11 @@ def session_stream_tools(session_dir: Path, *, limit: int = 20) -> list[str]:
 
     Reads the captured stream-json (session.jsonl). Audit rows yield nothing — only
     assistant tool_use blocks count — so globbing every jsonl is safe. Order is the
-    file's append order (chronological for the stream). Race-safe via `_iter_rows`.
+    file's append order (chronological for the stream). Race-safe via `iter_rows`.
     """
     names: list[str] = []
     for f in sorted(session_dir.glob("*.jsonl")):
-        for row in _iter_rows(f):
+        for row in iter_rows(f):
             names.extend(harness_stream.tool_uses(row))
     return names[-limit:]
 
