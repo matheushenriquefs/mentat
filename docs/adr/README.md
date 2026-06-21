@@ -15,3 +15,4 @@ Architecture Decision Records for Mentat.
 | [0009](./0009-plugin-api.md) | Plugin API (Vite-derived, 2 slots) | Accepted |
 | [0010](./0010-readonly-test-mount.md) | Read-only test mount (OCP manifest + bind-mount) | Accepted |
 | [0011](./0011-compose-aware-container.md) | Compose-aware container bring-up (sidecar detection + dev-service layering + host opt-out) | Accepted |
+| [0013](./0013-session-continuity-over-compaction.md) | Session continuity over compaction — checkpoint + respawn, harness-agnostic | Proposed |
