@@ -26,28 +26,27 @@ from lib.gates._walk import iter_files as _iter_files  # noqa: E402
 
 _LINK_RE = re.compile(r"\[.+?\]\(.+?\.md\)")
 _COMMENT_LINE_RE = re.compile(r"^\s*//")
+_SUFFIX_CLASS: dict[str, str] = {".jsonc": "jsonc", ".sh": "shell", ".jq": "jq"}
 
 
 def _classify(path: Path) -> str | None:
     parts = path.parts
     name = path.name
+    suffix = path.suffix
 
-    if "docs" in parts and "adr" in parts and path.suffix == ".md" and name != "README.md":
-        return "adr"
-    if "skills" in parts and name == "SKILL.md":
-        return "skill"
-    if "agents" in parts and name != "AGENTS.md" and path.suffix == ".md":
-        return "skill"
-    if "commands" in parts and path.suffix == ".md":
-        return "command"
+    cls = _SUFFIX_CLASS.get(suffix)
+    if cls:
+        return cls
     if name == "CONTEXT.md":
         return "workflow"
-    if path.suffix == ".jsonc":
-        return "jsonc"
-    if path.suffix == ".sh":
-        return "shell"
-    if path.suffix == ".jq":
-        return "jq"
+    if "docs" in parts and "adr" in parts and suffix == ".md" and name != "README.md":
+        return "adr"
+    if "commands" in parts and suffix == ".md":
+        return "command"
+    if "skills" in parts and name == "SKILL.md":
+        return "skill"
+    if "agents" in parts and name != "AGENTS.md" and suffix == ".md":
+        return "skill"
     return None
 
 
