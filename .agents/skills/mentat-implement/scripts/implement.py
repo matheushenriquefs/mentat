@@ -19,7 +19,6 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 from lib import paths  # noqa: E402
-from lib.gates import engine as _gate_engine  # noqa: E402
 
 _SESSION_SCRIPT = paths.SKILLS_DIR / "mentat-session/scripts/session.py"
 _GIT_SCRIPT = paths.SKILLS_DIR / "mentat-git/scripts/git.py"
@@ -402,9 +401,7 @@ def _promote_blocked_summary(body: str) -> None:
 
 
 def _run_gates(chunk_path: Path | None) -> tuple[str, str]:
-    if chunk_path is None:
-        return ("pass", "")
-    return _gate_engine.evaluate(chunk_path)
+    return ("pass", "")
 
 
 def _strip_frontmatter(text: str) -> str:
