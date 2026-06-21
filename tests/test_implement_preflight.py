@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -243,3 +243,22 @@ def test_main_emits_eject_on_preflight_conflict(main_repo, tmp_path, monkeypatch
     assert any(
         event == "chunk.ejected" and payload.get("reason") == "preflight-worktree-failed" for event, payload in emits
     )
+
+
+# ── H3: preflight must not crash on garbage last stdout line ─────────────────
+
+
+def test_preflight_returns_clean_failure_on_garbage_stdout(main_repo):
+    """An extra/garbage line after the worktree path in cmd_worktree_create stdout
+    must return non-zero, not raise FileNotFoundError from os.chdir."""
+    impl = _load()
+    fake = MagicMock()
+    fake.returncode = 0
+    # Real path is NOT the last line — garbage appended so Path(line).is_dir() fails.
+    fake.stdout = "/some/valid/path\nextra garbage line\n"
+
+    with patch.object(impl.subprocess, "run", return_value=fake):
+        rc, target = impl.preflight_worktree("feat-garbage")
+
+    assert rc != 0, "must return non-zero when parsed path does not exist"
+    assert target is None

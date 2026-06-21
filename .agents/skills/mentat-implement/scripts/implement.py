@@ -290,7 +290,12 @@ def preflight_worktree(slug: str) -> tuple[int, Path | None]:
     if result.returncode != 0:
         return (result.returncode, None)
     line = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
-    return (0, Path(line) if line else None)
+    if not line:
+        return (0, None)
+    target = Path(line)
+    if not target.is_dir():
+        return (EX_SOFTWARE, None)
+    return (0, target)
 
 
 def _run_and_doctor(plan_path: Path, *, harness: str | None = None, model: str | None = None) -> int:
