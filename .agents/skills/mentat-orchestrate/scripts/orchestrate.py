@@ -17,8 +17,8 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib import devcontainer as _devcontainer  # noqa: E402
 from lib import git as _git  # noqa: E402
+from lib import paths  # noqa: E402
 from lib import worktrees as _worktrees  # noqa: E402
-from lib.config import load_config_file as _load_config_file  # noqa: E402
 from lib.events import HITL_IN_SESSION, EjectReason, ejected_payload, spawned_payload  # noqa: E402
 from lib.events import bind as _bind  # noqa: E402
 from lib.exits import EX_DATAERR, EX_HITL_REQUIRED, EX_NOINPUT  # noqa: E402
@@ -185,7 +185,12 @@ def _partition_fanout(
     hitl: set[str] = set()
     for plan, rc in results:
         worktree = _worktree_for_slug(plan.slug)
-        if rc == EX_HITL_REQUIRED:
+        if rc < 0 or rc >= 128:
+            # Signal kill (rc<0 from Popen) or shell-reported signal exit (128+signum).
+            # A dead worker produced no verdict — landing it would false-merge.
+            _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.WORKER_DIED, str(worktree)))
+            mark_ejected(plan.slug)
+        elif rc == EX_HITL_REQUIRED:
             hitl.add(plan.slug)
             _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.HITL_REQUIRED, str(worktree)))
             mark_ejected(plan.slug)
@@ -219,6 +224,21 @@ def _prune_stale_worktrees(preserve: set[str] | None = None) -> None:
     active = set(_devcontainer.list_active_slugs()) | (preserve or set())
     removed = _worktrees.prune_stale(wt_root, active_slugs=active)
     _utils.emit_event("session.prune", {"reclaimed_bytes": None, "worktrees_removed": removed})
+
+
+def _spawn_batch_doctor() -> None:
+    """Non-blocking doctor spawn after a failed batch. Swallows all errors."""
+    import contextlib
+
+    _session_script = paths.SKILLS_DIR / "mentat-session/scripts/session.py"
+    if not _session_script.exists():
+        return
+    with contextlib.suppress(OSError):
+        subprocess.Popen(
+            ["python3", str(_session_script), "doctor", "--reason=batch-failed"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
 
 def _worktree_for_slug(slug: str) -> Path:
@@ -301,11 +321,10 @@ def run_orchestrate(
     _prune_stale_worktrees(preserve=hitl_slugs)
 
     rc = 1 if sched.has_ejections() or hitl_slugs or stalled else 0
-    if rc == 0:
-        _cfg_path = Path.home() / ".mentat" / "config.toml"
-        _cfg = _load_config_file(_cfg_path) if _cfg_path.exists() else {}
-        diff_tool = _cfg.get("diff_tool") or "git diff"
-        print(f"mentat-orchestrate: review the diff with `{diff_tool}`", file=sys.stderr)
+    if rc != 0:
+        _spawn_batch_doctor()
+    else:
+        print(f"mentat-orchestrate: review the diff with `git diff {holding}..HEAD`", file=sys.stderr)
     return rc
 
 
