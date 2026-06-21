@@ -37,6 +37,7 @@ class EjectReason:
     GATE_FAILED = "gate-failed"
     REBASE_CONFLICTED = "rebase-conflicted"
     NOT_FF = "not-ff"
+    GIT_ERROR = "git-error"
     HITL_REQUIRED = "hitl-required"
     PREFLIGHT_WORKTREE_FAILED = "preflight-worktree-failed"
     MAIN_TREE_REFUSED = "main-tree-refused"
@@ -50,6 +51,7 @@ EJECT_REASONS: frozenset[str] = frozenset(
         EjectReason.GATE_FAILED,
         EjectReason.REBASE_CONFLICTED,
         EjectReason.NOT_FF,
+        EjectReason.GIT_ERROR,
         EjectReason.HITL_REQUIRED,
         EjectReason.PREFLIGHT_WORKTREE_FAILED,
         EjectReason.MAIN_TREE_REFUSED,

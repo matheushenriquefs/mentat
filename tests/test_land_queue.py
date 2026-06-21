@@ -25,7 +25,7 @@ def test_land_queue_emits_chunk_landed_on_success():
 
     with patch.object(lq, "_rebase_chunk", return_value=("abc123", None)):
         with patch.object(lq, "_run_gates", return_value=("pass", "")):
-            with patch.object(lq, "_ff_merge", return_value=True):
+            with patch.object(lq, "_ff_merge", return_value=None):
                 with patch.object(lq, "_emit_event") as mock_emit:
                     result = lq.land(chunk, holding="main")
 
@@ -80,7 +80,7 @@ def test_land_queue_rebases_each_chunk():
 
     with patch.object(lq, "_rebase_chunk", side_effect=fake_rebase):
         with patch.object(lq, "_run_gates", return_value=("pass", "")):
-            with patch.object(lq, "_ff_merge", return_value=True):
+            with patch.object(lq, "_ff_merge", return_value=None):
                 with patch.object(lq, "_emit_event"):
                     lq.land(chunk, holding="my-holding")
 
@@ -94,7 +94,7 @@ def test_land_queue_emits_canonical_verdict_jsonl_shape():
 
     with patch.object(lq, "_rebase_chunk", return_value=("sha1", None)):
         with patch.object(lq, "_run_gates", return_value=("pass", "")):
-            with patch.object(lq, "_ff_merge", return_value=True):
+            with patch.object(lq, "_ff_merge", return_value=None):
                 with patch.object(lq, "_emit_event"):
                     result = lq.land(chunk, holding="main")
 
@@ -156,7 +156,7 @@ def test_ff_merge_advances_holding_ref(tmp_path) -> None:
 
     result = lq._ff_merge(chunk, "holding")
 
-    assert result is True, "_ff_merge should return True on clean FF"
+    assert result is None, "_ff_merge should return None on clean FF"
 
     holding_sha = _subprocess.run(
         ["git", "rev-parse", "refs/heads/holding"],
@@ -181,7 +181,7 @@ def test_ff_merge_succeeds_with_dirty_main_worktree(tmp_path) -> None:
 
     result = lq._ff_merge(chunk, "holding")
 
-    assert result is True, "_ff_merge must succeed despite dirty main worktree"
+    assert result is None, "_ff_merge must succeed despite dirty main worktree"
 
     holding_sha = _subprocess.run(
         ["git", "rev-parse", "refs/heads/holding"],
@@ -194,3 +194,96 @@ def test_ff_merge_succeeds_with_dirty_main_worktree(tmp_path) -> None:
 
     # The dirty file must still be dirty (ff_merge must not touch the working tree)
     assert (main_repo / "README").read_text() == "dirty\n", "dirty state must be preserved"
+
+
+# ── Slice 2: ff_merge reason distinction ─────────────────────────────────────
+
+
+def _setup_divergent_repo(tmp_path):
+    """Fixture: holding has diverged from feature (non-ancestor).
+
+    History:
+      A (holding init)
+      ├── B (holding advances — diverges)
+      └── C (feature commit)
+    holding tip (B) is NOT an ancestor of feature HEAD (C).
+    """
+    lq = load_module("land_queue")
+    main_repo = tmp_path / "main"
+    main_repo.mkdir()
+
+    _git(["init", "-b", "holding", str(main_repo)], cwd=tmp_path)
+    for k, v in (("user.email", "t@t"), ("user.name", "T"), ("commit.gpgsign", "false")):
+        _git(["config", k, v], cwd=main_repo)
+
+    # Commit A on holding
+    (main_repo / "README").write_text("init\n")
+    _git(["add", "."], cwd=main_repo)
+    _git(["commit", "-m", "A"], cwd=main_repo)
+
+    # Branch feature at A, add commit C
+    _git(["checkout", "-b", "feature"], cwd=main_repo)
+    (main_repo / "feature.txt").write_text("feature\n")
+    _git(["add", "."], cwd=main_repo)
+    _git(["commit", "-m", "C"], cwd=main_repo)
+
+    # Advance holding to B (diverge)
+    _git(["checkout", "holding"], cwd=main_repo)
+    (main_repo / "other.txt").write_text("other\n")
+    _git(["add", "."], cwd=main_repo)
+    _git(["commit", "-m", "B"], cwd=main_repo)
+
+    chunk_wt = tmp_path / "chunk"
+    _git(["worktree", "add", str(chunk_wt), "feature"], cwd=main_repo)
+
+    chunk = lq.Chunk(slug="divergent-chunk", worktree=chunk_wt)
+    return main_repo, chunk, lq
+
+
+def test_ff_merge_non_ancestor_returns_not_ff(tmp_path) -> None:
+    """Non-ancestor SHA must return 'not-ff', not a generic error."""
+    _main_repo, chunk, lq = _setup_divergent_repo(tmp_path)
+    result = lq._ff_merge(chunk, "holding")
+    assert result == "not-ff", f"expected 'not-ff', got {result!r}"
+
+
+def test_ff_merge_non_git_dir_returns_git_error(tmp_path) -> None:
+    """Non-git worktree dir must return 'git-error', not 'not-ff'."""
+    lq = load_module("land_queue")
+    # tmp_path has no .git — rev-parse HEAD will fail
+    chunk = lq.Chunk(slug="err-chunk", worktree=tmp_path)
+    result = lq._ff_merge(chunk, "holding")
+    assert result == "git-error", f"expected 'git-error', got {result!r}"
+    assert result != "not-ff"
+
+
+def test_land_ejects_with_not_ff_reason_on_non_ancestor(tmp_path) -> None:
+    """land() must emit NOT_FF reason when merge is genuinely not fast-forward."""
+    lq = load_module("land_queue")
+    _main_repo, chunk, _lq = _setup_divergent_repo(tmp_path)
+
+    with patch.object(lq, "_rebase_chunk", return_value=("sha1", None)):
+        with patch.object(lq, "_run_gates", return_value=("pass", "")):
+            with patch.object(lq, "_emit_event") as mock_emit:
+                result = lq.land(chunk, holding="holding")
+
+    assert result["status"] == "eject"
+    assert result["reason"] == "not-ff"
+    emitted_reasons = [c.args[1].get("reason") for c in mock_emit.call_args_list if "reason" in c.args[1]]
+    assert any(r == "not-ff" for r in emitted_reasons)
+
+
+def test_land_ejects_with_git_error_reason_on_git_failure(tmp_path) -> None:
+    """land() must emit GIT_ERROR reason when git/setup fails, not NOT_FF."""
+    lq = load_module("land_queue")
+    chunk = lq.Chunk(slug="err-chunk", worktree=tmp_path)
+
+    with patch.object(lq, "_rebase_chunk", return_value=("sha1", None)):
+        with patch.object(lq, "_run_gates", return_value=("pass", "")):
+            with patch.object(lq, "_emit_event") as mock_emit:
+                result = lq.land(chunk, holding="holding")
+
+    assert result["status"] == "eject"
+    assert result["reason"] != "not-ff", "git-error must not be reported as not-ff"
+    emitted_reasons = [c.args[1].get("reason") for c in mock_emit.call_args_list if "reason" in c.args[1]]
+    assert not any(r == "not-ff" for r in emitted_reasons)

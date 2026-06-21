@@ -70,7 +70,7 @@ def test_smoke_land_queue_emits_all_event_types(fixture_batch):
     with patch.object(lq, "_emit_event", side_effect=fake_emit):
         with patch.object(lq, "_rebase_chunk", return_value=("sha-1", None)):
             with patch.object(lq, "_run_gates", return_value=("pass", "")):
-                with patch.object(lq, "_ff_merge", return_value=True):
+                with patch.object(lq, "_ff_merge", return_value=None):
                     chunk = lq.Chunk(slug="afk-slice", worktree=fixture_batch["afk_plan"].parent)
                     result = lq.land(chunk, holding="main")
 

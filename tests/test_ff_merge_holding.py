@@ -65,7 +65,7 @@ def test_ff_merge_advances_holding_when_main_on_other_branch(tmp_path: Path) -> 
 
     result = git_lib.ff_merge(chunk_wt, "holding")
 
-    assert result is True, "ff_merge must return True on clean FF"
+    assert result is None, "ff_merge must return None on clean FF"
 
     # holding ref must advance to feature_sha
     after_holding = _branch_sha(main_repo, "holding")
@@ -107,7 +107,7 @@ def test_ff_merge_returns_false_when_not_ff(tmp_path: Path) -> None:
 
     result = git_lib.ff_merge(chunk_wt, "holding")
 
-    assert result is False, "ff_merge must return False when not fast-forward"
+    assert result == "not-ff", "ff_merge must return 'not-ff' when not fast-forward"
 
     # holding ref must NOT advance
     after_sha = _branch_sha(main_repo, "holding")

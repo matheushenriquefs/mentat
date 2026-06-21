@@ -84,7 +84,7 @@ def test_ff_merge_succeeds_with_untracked_conflict_in_main(tmp_path: Path) -> No
 
     result = git_lib.ff_merge(chunk_wt, "holding")
 
-    assert result is True, "ff_merge must return True on a clean FF despite dirty main"
+    assert result is None, "ff_merge must return None on a clean FF despite dirty main"
 
     after_holding = _branch_sha(main_repo, "holding")
     assert after_holding == feature_sha, f"holding must advance to {feature_sha!r}, got {after_holding!r}"
@@ -134,6 +134,6 @@ def test_ff_merge_returns_false_for_non_ff(tmp_path: Path) -> None:
 
     result = git_lib.ff_merge(chunk_wt, "holding")
 
-    assert result is False, "ff_merge must return False when not fast-forward"
+    assert result == "not-ff", "ff_merge must return 'not-ff' when not fast-forward"
     after_sha = _branch_sha(main_repo, "holding")
     assert after_sha == holding_tip, f"holding must not change: {holding_tip!r} vs {after_sha!r}"

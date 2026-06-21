@@ -46,7 +46,7 @@ def _install_stubs(monkeypatch, ff_calls: list[str], gate_block: set[str] | None
 
     def fake_ff(chunk, holding):
         ff_calls.append(chunk.slug)
-        return True
+        return None
 
     monkeypatch.setattr(land_queue, "_rebase_chunk", fake_rebase)
     monkeypatch.setattr(land_queue, "_run_gates", fake_gates)
@@ -148,7 +148,7 @@ def test_blocked_chunk_waits_until_upstream_lands(tmp_path, monkeypatch) -> None
 
     def fake_ff(chunk, holding):
         landed_seq.append(chunk.slug)
-        return True
+        return None
 
     monkeypatch.setattr(land_queue, "_rebase_chunk", fake_rebase)
     monkeypatch.setattr(land_queue, "_run_gates", fake_gates)

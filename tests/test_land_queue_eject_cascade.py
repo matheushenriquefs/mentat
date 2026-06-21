@@ -55,7 +55,7 @@ def _install_stubs(
 
     def fake_ff(chunk, holding):
         ff_calls.append(chunk.slug)
-        return True
+        return None
 
     def fake_emit(event, payload):
         if emitted is not None:
@@ -164,7 +164,7 @@ def test_rebase_conflict_cascades(tmp_path, monkeypatch) -> None:
 
     monkeypatch.setattr(land_queue, "_rebase_chunk", fake_rebase)
     monkeypatch.setattr(land_queue, "_run_gates", lambda c: ("pass", ""))
-    monkeypatch.setattr(land_queue, "_ff_merge", lambda c, h: True)
+    monkeypatch.setattr(land_queue, "_ff_merge", lambda c, h: None)
     monkeypatch.setattr(land_queue, "_emit_event", fake_emit)
     monkeypatch.setattr(land_queue, "_teardown_container", lambda slug: None)
 

@@ -105,25 +105,25 @@ def rebase_ff_only(cwd: Path, onto: str) -> tuple[str | None, str | None]:
     return sha_r.stdout.strip(), None
 
 
-def ff_merge(cwd: Path, holding: str) -> bool:
+def ff_merge(cwd: Path, holding: str) -> str | None:
     """FF-merge cwd HEAD onto the explicit ``holding`` branch.
 
-    When the main worktree is already on ``holding``, uses ``merge --ff-only``
-    (updates ref + working tree). Otherwise advances the ``holding`` ref directly
-    via ``git fetch . <sha>:refs/heads/<holding>`` without touching the checked-out
-    branch. Returns False if the merge is not fast-forward or git reports an error.
+    Returns None on success.  Returns ``"not-ff"`` when the merge is genuinely
+    not fast-forward (holding tip is not an ancestor of cwd HEAD).  Returns
+    ``"git-error"`` for any git or setup failure (rev-parse, empty worktree
+    list, update-ref / fetch error) so callers can report the correct cause.
     """
     sha_r = _run(["rev-parse", "HEAD"], cwd=cwd)
     if sha_r.returncode != 0:
-        return False
+        return "git-error"
     sha = sha_r.stdout.strip()
     entries = worktree_list(cwd=cwd)
     if not entries:
-        return False
+        return "git-error"
     main_wt = Path(entries[0]["worktree"])
     branch_r = _run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=main_wt)
     if branch_r.returncode != 0:
-        return False
+        return "git-error"
     current = branch_r.stdout.strip()
     if current == holding:
         # Branch is currently checked out — git fetch refuses to update it.
@@ -131,12 +131,12 @@ def ff_merge(cwd: Path, holding: str) -> bool:
         # Verify ff first: holding tip must be an ancestor of sha.
         tip_r = _run(["rev-parse", f"refs/heads/{holding}"], cwd=main_wt)
         if tip_r.returncode != 0:
-            return False
+            return "git-error"
         anc = _run(["merge-base", "--is-ancestor", tip_r.stdout.strip(), sha], cwd=main_wt)
         if anc.returncode != 0:
-            return False
+            return "not-ff"
         r = _run(["update-ref", f"refs/heads/{holding}", sha], cwd=main_wt)
     else:
         # Branch is NOT checked out — git fetch . enforces ff automatically.
         r = _run(["fetch", ".", f"{sha}:refs/heads/{holding}"], cwd=main_wt)
-    return r.returncode == 0
+    return None if r.returncode == 0 else "git-error"

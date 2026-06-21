@@ -43,7 +43,9 @@ def _install_stubs(
         return ("pass", "")
 
     def fake_ff(chunk, holding):
-        return not (ff_fail and chunk.slug in ff_fail)
+        if ff_fail and chunk.slug in ff_fail:
+            return "not-ff"
+        return None
 
     def fake_teardown(slug: str) -> None:
         torn_down.append(slug)
@@ -135,7 +137,7 @@ def test_teardown_failure_swallowed(tmp_path, monkeypatch) -> None:
 
     monkeypatch.setattr(land_queue, "_rebase_chunk", lambda c, h: (f"sha-{c.slug}", None))
     monkeypatch.setattr(land_queue, "_run_gates", lambda c: ("pass", ""))
-    monkeypatch.setattr(land_queue, "_ff_merge", lambda c, h: True)
+    monkeypatch.setattr(land_queue, "_ff_merge", lambda c, h: None)
     monkeypatch.setattr(land_queue, "_emit_event", lambda e, p: emitted.append((e, p)))
     monkeypatch.setattr(_sp, "run", fake_run)
 

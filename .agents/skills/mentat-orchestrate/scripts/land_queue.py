@@ -37,11 +37,11 @@ def _run_gates(chunk: Chunk) -> tuple[str, str]:
     return _utils.run_gates(chunk.worktree)
 
 
-def _ff_merge(chunk: Chunk, holding: str) -> bool:
+def _ff_merge(chunk: Chunk, holding: str) -> str | None:
     """FF-merge chunk HEAD onto the explicit holding branch.
 
-    Advances the holding branch ref (and the working tree if holding is currently
-    checked out). Returns False if the merge is not fast-forward or git reports an error.
+    Returns None on success, ``"not-ff"`` when the merge is genuinely not
+    fast-forward, or ``"git-error"`` for any git/setup failure.
     """
     return _git.ff_merge(chunk.worktree, holding)
 
@@ -83,16 +83,17 @@ def land(chunk: Chunk, *, holding: str) -> dict[str, object]:
             "findings": [message],
         }
 
-    merged = _ff_merge(chunk, holding)
-    if not merged:
+    ff_err = _ff_merge(chunk, holding)
+    if ff_err is not None:
+        reason = EjectReason.NOT_FF if ff_err == "not-ff" else EjectReason.GIT_ERROR
         _emit_event(
             "chunk.ejected",
-            ejected_payload(chunk.slug, EjectReason.NOT_FF, str(chunk.worktree)),
+            ejected_payload(chunk.slug, reason, str(chunk.worktree)),
         )
         return {
             "slug": chunk.slug,
             "status": "eject",
-            "reason": EjectReason.NOT_FF,
+            "reason": reason,
             "tip": tip,
         }
 
