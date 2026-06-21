@@ -75,11 +75,15 @@ def _load_plans(paths: list[Path], *, _expanding: bool = False) -> list[_schedul
                 )
             )
 
-    if not _expanding and parent_slugs:
+    if not _expanding:
+        known_slugs = {p.slug for p in plans}
         for plan in plans:
             for dep in plan.blocked_by:
                 if dep in parent_slugs:
                     print(f"cannot block on parent index: {dep}", file=sys.stderr)
+                    raise SystemExit(EX_DATAERR)
+                if dep not in known_slugs:
+                    print(f"unknown blocked_by slug '{dep}' in plan '{plan.slug}' (not in batch)", file=sys.stderr)
                     raise SystemExit(EX_DATAERR)
 
     return plans
