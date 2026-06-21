@@ -48,10 +48,13 @@ def test_orchestrate_emit_event_silent_on_success(capsys):
 
 
 def test_implement_emit_event_surfaces_failure(capsys):
+    import pytest
+
     impl = _load(_IMPL / "implement.py", "impl_emit")
     fake = MagicMock(returncode=1, stderr="permission denied\n", stdout="")
     with patch.object(impl.subprocess, "run", return_value=fake):
-        impl._emit_event("chunk.ejected", {"slug": "y"})
+        with pytest.raises(RuntimeError, match="terminal emit"):
+            impl._emit_event("chunk.ejected", {"slug": "y"})
     err = capsys.readouterr().err
     assert "emit 'chunk.ejected' failed rc=1" in err
     assert "permission denied" in err

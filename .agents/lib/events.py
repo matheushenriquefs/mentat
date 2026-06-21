@@ -9,8 +9,12 @@ from collections.abc import Callable
 
 from lib import paths
 
+# Events where a failed emit must not be silently swallowed — the orchestration
+# state machine cannot proceed correctly without a confirmed log write.
+_TERMINAL_EVENTS: frozenset[str] = frozenset({"chunk.landed", "chunk.ejected"})
 
-def _spawn(skill: str, event: str, payload: dict[str, object]) -> None:
+
+def _spawn(skill: str, event: str, payload: dict[str, object]) -> bool:
     r = subprocess.run(
         ["python3", str(paths.LOG_SCRIPT), "emit", skill, event, json.dumps(payload)],
         capture_output=True,
@@ -19,11 +23,15 @@ def _spawn(skill: str, event: str, payload: dict[str, object]) -> None:
     if r.returncode != 0:
         tail = (r.stderr or "").strip().splitlines()[-1:] or ["(no stderr)"]
         print(f"{skill}: emit {event!r} failed rc={r.returncode}: {tail[0]}", file=sys.stderr)
+        return False
+    return True
 
 
 def bind(skill: str) -> Callable[[str, dict[str, object]], None]:
     def emit(event: str, payload: dict[str, object]) -> None:
-        _spawn(skill, event, payload)
+        ok = _spawn(skill, event, payload)
+        if not ok and event in _TERMINAL_EVENTS:
+            raise RuntimeError(f"{skill}: terminal emit {event!r} rejected; orchestration halted")
 
     return emit
 

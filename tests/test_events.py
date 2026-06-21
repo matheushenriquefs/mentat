@@ -61,6 +61,39 @@ def test_emit_failure_prints_to_stderr_nonblocking(capsys):
     assert "emit 'x' failed rc=2" in captured.err
 
 
+def test_terminal_emit_failure_raises():
+    """chunk.landed / chunk.ejected rejected by log → caller gets RuntimeError, not silent None."""
+    import subprocess
+
+    events = _import_events()
+
+    with patch.object(subprocess, "run") as mock_run:
+        mock_run.return_value.returncode = 1
+        mock_run.return_value.stderr = "validation failed\n"
+        emit = events.bind("mentat-orchestrate")
+        import pytest
+
+        with pytest.raises(RuntimeError, match="terminal emit"):
+            emit("chunk.landed", {"slug": "x"})
+
+
+def test_non_terminal_emit_failure_is_best_effort(capsys):
+    """Non-terminal events on failure print to stderr but do not raise."""
+    import subprocess
+
+    events = _import_events()
+
+    with patch.object(subprocess, "run") as mock_run:
+        mock_run.return_value.returncode = 1
+        mock_run.return_value.stderr = "oops\n"
+        emit = events.bind("mentat-orchestrate")
+        result = emit("chunk.spawned", {"slug": "x"})
+
+    assert result is None
+    captured = capsys.readouterr()
+    assert "failed" in captured.err
+
+
 def test_emit_is_stdlib_only():
     src = (Path(__file__).resolve().parents[1] / ".agents/lib/events.py").read_text()
     tree = ast.parse(src)

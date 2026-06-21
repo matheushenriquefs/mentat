@@ -54,13 +54,14 @@ def test_orchestrate_exits_1_on_any_ejection(tmp_path):
             with patch.object(orch, "_prune_stale_containers", lambda: None):
                 with patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None):
                     with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
-                        rc = orch.run_orchestrate(
-                            holding="main",
-                            plan_paths=[plan],
-                            harness=None,
-                            model=None,
-                            dry_run=False,
-                        )
+                        with patch.object(orch, "_emit_event", lambda *a, **k: None):
+                            rc = orch.run_orchestrate(
+                                holding="main",
+                                plan_paths=[plan],
+                                harness=None,
+                                model=None,
+                                dry_run=False,
+                            )
     assert rc == 1
 
 
@@ -276,6 +277,7 @@ def test_run_orchestrate_spawns_doctor_on_failure(tmp_path, monkeypatch):
         patch.object(orch, "_prune_stale_containers", lambda: None),
         patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
         patch.object(orch._utils, "emit_event", lambda *a, **k: None),
+        patch.object(orch, "_emit_event", lambda *a, **k: None),
         patch.object(orch, "_spawn_batch_doctor", side_effect=lambda: doctor_calls.append(True)),
     ):
         rc = orch.run_orchestrate(

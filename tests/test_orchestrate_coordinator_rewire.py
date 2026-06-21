@@ -34,6 +34,7 @@ def test_orchestrate_exit_codes_unchanged(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)
     monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: None)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
+    monkeypatch.setattr(orchestrate, "_emit_event", lambda *a, **k: None)
 
     plan_obj = sched_mod.Plan(slug="a", class_="AFK", blocked_by=[], path=a_path)
 
