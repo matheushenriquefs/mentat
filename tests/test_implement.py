@@ -597,3 +597,38 @@ def test_hitl_prompt_unchanged(tmp_path, monkeypatch):
 
     assert rc == 0, f"HITL run_plan should return 0, got {rc}"
     assert not captured["invoke_called"], "_invoke_harness must NOT be called for HITL plans"
+
+
+# ── B5: diff suggestion is raw git diff main..HEAD ────────────────────────────
+
+
+def test_implement_diff_suggestion_is_raw_git_diff(tmp_path, monkeypatch, capsys):
+    """On rc=0, implement must print `git diff main..HEAD`, never `diff_tool`."""
+    import sys
+
+    impl = load_script(SCRIPTS / "implement.py", "impl_b5")
+
+    # Minimal monkeypatches to make main() reach the diff suggestion print
+    plan_file = tmp_path / "b5-plan.md"
+    plan_file.write_text("---\nid: b5-plan\nclass: AFK\n---\nbody\n")
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(impl, "resolve_plan_path", lambda _: plan_file)
+    monkeypatch.setattr(impl, "ensure_session", lambda *a, **k: "sess-b5")
+    monkeypatch.setattr(impl, "_prune_worktrees_preflight", lambda: None)
+    monkeypatch.setattr(impl._utils, "default_harness", lambda: "default")
+    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda _h: (0, []))
+    monkeypatch.setattr(impl, "preflight_worktree", lambda _: (0, None))
+    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda: False)
+    monkeypatch.setattr(impl, "_run_and_doctor", lambda *a, **k: 0)
+    monkeypatch.setattr(impl, "_teardown_worktree", lambda _: None)
+    monkeypatch.setattr(sys, "exit", lambda c: None)
+
+    impl.main.__globals__["sys"] = sys  # ensure patched sys
+    # Call main with run subcommand
+    monkeypatch.setattr(sys, "argv", ["mentat-implement", "run", str(plan_file)])
+    impl.main()
+
+    captured = capsys.readouterr()
+    assert "git diff main..HEAD" in captured.err, f"raw git diff not in stderr: {captured.err!r}"
+    assert "diff_tool" not in captured.err, "diff_tool must not appear in suggestion"

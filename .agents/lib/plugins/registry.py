@@ -56,7 +56,7 @@ def resolve_slots(
     """Apply first-wins slot resolution with config ordering.
 
     Returns harness_provider. Built-in acts as last-resort fallback.
-    No diff slot — use the diff_tool config key for diff suggestions.
+    No diff slot — use raw `git diff <base>..HEAD` in your terminal.
     """
     ordered = sorted(plugins, key=lambda p: order.index(p.name) if p.name in order else len(order))
 
