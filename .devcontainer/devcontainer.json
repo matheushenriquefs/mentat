@@ -1,5 +1,5 @@
 {
-  "name": "mentat",
+  "name": "mentat-orchestrate-doctor-diff",
   "build": {
     "dockerfile": "Dockerfile"
   },
@@ -13,9 +13,9 @@
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
   },
   "onCreateCommand": "sudo apt-get update && sudo apt-get install -y jq shellcheck && curl -LsSf https://astral.sh/uv/install.sh | sh",
-  "postCreateCommand": "cd /workspaces/mentat && ~/.local/bin/uv sync --group dev && npm install -g promptfoo lefthook && (lefthook install --force || true) && python3 .agents/skills/mentat-install/scripts/install.py",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/mentat,type=bind,consistency=cached",
-  "workspaceFolder": "/workspaces/mentat",
+  "postCreateCommand": "cd /workspaces/mentat-orchestrate-doctor-diff && ~/.local/bin/uv sync --group dev && npm install -g promptfoo lefthook && (lefthook install --force || true) && python3 .agents/skills/mentat-install/scripts/install.py",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/mentat-orchestrate-doctor-diff,type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/mentat-orchestrate-doctor-diff",
   "runArgs": [
     "--init"
   ],
