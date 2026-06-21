@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -15,6 +14,9 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib.loader import load_sibling  # noqa: E402
+from lib.session import log_root as _log_root  # noqa: E402
+from lib.session import repo_name as _repo
+from lib.session import session_dir as _session_dir_fn
 
 _sessions = load_sibling(__file__, "sessions")
 _doctor = load_sibling(__file__, "doctor")
@@ -22,15 +24,8 @@ _track = load_sibling(__file__, "track")
 _diagnose = load_sibling(__file__, "diagnose")
 
 
-def _log_root() -> Path:
-    return Path(os.environ.get("MENTAT_LOG_PATH", Path.home() / ".mentat" / "logs"))
-
-
-def _repo() -> str:
-    return os.environ.get("MENTAT_REPO", Path.cwd().name)
-
-
 def _session_dir(repo: str, session_id: str) -> Path:
+    """Preserved for test assertions; delegates to the seam."""
     return _log_root() / repo / session_id
 
 
@@ -40,11 +35,11 @@ def cmd_track(session_id: str | None) -> int:
     # No session id → live multi-AFK navigator over the whole repo registry (S7).
     if session_id is None:
         return _track.navigate(repo_dir, repo=repo)
-    session_dir = _session_dir(repo, session_id)
-    if not session_dir.exists():
-        print(f"mentat-session: session dir not found: {session_dir}", file=sys.stderr)
+    sd = _session_dir_fn(session_id)
+    if not sd.exists():
+        print(f"mentat-session: session dir not found: {sd}", file=sys.stderr)
         return 1
-    _track.stream(session_dir)
+    _track.stream(sd)
     return 0
 
 
@@ -56,11 +51,11 @@ def cmd_doctor(session_id: str | None) -> int:
     if session_id is None:
         print("mentat-session: no sessions found", file=sys.stderr)
         return 1
-    session_dir = _session_dir(repo, session_id)
-    if not session_dir.exists():
-        print(f"mentat-session: session dir not found: {session_dir}", file=sys.stderr)
+    sd = _session_dir_fn(session_id)
+    if not sd.exists():
+        print(f"mentat-session: session dir not found: {sd}", file=sys.stderr)
         return 1
-    diag = _doctor.write_diagnosis(session_dir)
+    diag = _doctor.write_diagnosis(sd)
     print(diag.read_text())
     return 0
 
@@ -75,11 +70,11 @@ def cmd_report(session_id: str | None) -> int:
     if session_id is None:
         print("mentat-session: no sessions found", file=sys.stderr)
         return 1
-    session_dir = _session_dir(repo, session_id)
-    if not session_dir.exists():
-        print(f"mentat-session: session dir not found: {session_dir}", file=sys.stderr)
+    sd = _session_dir_fn(session_id)
+    if not sd.exists():
+        print(f"mentat-session: session dir not found: {sd}", file=sys.stderr)
         return 1
-    summary = _doctor.write_summary(session_dir)
+    summary = _doctor.write_summary(sd)
     print(summary.read_text())
     return 0
 
@@ -124,8 +119,8 @@ def cmd_diagnose(session_id: str | None) -> int:
     if session_id is None:
         print("mentat-session: no sessions found", file=sys.stderr)
         return 1
-    session_dir = _session_dir(repo, session_id)
-    _diagnose.run_diagnose(session_dir)
+    sd = _session_dir_fn(session_id)
+    _diagnose.run_diagnose(sd)
     return 0
 
 

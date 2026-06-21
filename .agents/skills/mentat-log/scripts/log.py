@@ -11,6 +11,13 @@ import os
 import sys
 from pathlib import Path
 
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
+
+from lib.session import log_root as _log_root  # noqa: E402
+from lib.session import repo_name as _repo
+
 EVENT_CATALOG: dict[str, list[str]] = {
     "plan.started": ["path"],
     "plan.succeeded": ["path"],
@@ -36,14 +43,6 @@ EVENT_CATALOG: dict[str, list[str]] = {
 EVENT_OPTIONAL_FIELDS: dict[str, list[str]] = {
     "chunk.ejected": ["logs_path", "preflight_exit", "upstream", "summary"],
 }
-
-
-def _log_root() -> Path:
-    return Path(os.environ.get("MENTAT_LOG_PATH", Path.home() / ".mentat" / "logs"))
-
-
-def _repo() -> str:
-    return os.environ.get("MENTAT_REPO", Path.cwd().name)
 
 
 def _session() -> str | None:

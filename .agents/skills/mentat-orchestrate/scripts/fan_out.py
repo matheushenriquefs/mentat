@@ -15,6 +15,7 @@ from lib import paths  # noqa: E402
 from lib.events import bind, spawned_payload  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 from lib.session import mint_session  # noqa: E402
+from lib.session import session_dir as _session_dir_fn
 
 _IMPLEMENT_SCRIPT = paths.SKILLS_DIR / "mentat-implement/scripts/implement.py"
 _CONTAINER_SCRIPT = paths.CONTAINER_SCRIPT
@@ -23,11 +24,8 @@ _utils = load_sibling(__file__, "utils")
 
 
 def _log_dir_for(session_id: str) -> Path:
-    """Per-session log dir. Honors MENTAT_LOG_PATH (default ~/.mentat/logs) and
-    MENTAT_REPO (default cwd basename)."""
-    base = Path(os.environ.get("MENTAT_LOG_PATH", str(Path.home() / ".mentat" / "logs")))
-    repo = os.environ.get("MENTAT_REPO", Path.cwd().name)
-    return base / repo / session_id
+    """Per-session log dir. Delegates to the lib.session seam (F0)."""
+    return _session_dir_fn(session_id)
 
 
 def _spawn_worktree_subprocess(

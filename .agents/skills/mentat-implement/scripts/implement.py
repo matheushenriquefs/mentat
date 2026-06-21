@@ -35,6 +35,7 @@ from lib.exits import (  # noqa: E402
 )
 from lib.loader import load_sibling  # noqa: E402
 from lib.session import ensure_session  # noqa: E402
+from lib.session import session_dir as _session_dir_fn
 
 
 def _load_worktree_module():
@@ -135,10 +136,8 @@ _emit_event = _bind("mentat-implement")
 
 def _logs_path() -> str:
     """Dir holding session JSONL + diagnosis.md for the current session."""
-    base = Path(os.environ.get("MENTAT_LOG_PATH", str(Path.home() / ".mentat" / "logs")))
-    repo = os.environ.get("MENTAT_REPO", Path.cwd().name)
     session = os.environ.get("MENTAT_SESSION", "manual")
-    return str(base / repo / session)
+    return str(_session_dir_fn(session))
 
 
 def _prune_worktrees_preflight() -> None:

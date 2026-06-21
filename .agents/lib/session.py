@@ -30,11 +30,39 @@ def mint_session(role: str, slug: str, *, pid: int | None = None) -> str:
     return f"{role}-{slug}-{pid}"
 
 
+# ── session-log-path seam (F0) ────────────────────────────────────────────────
+# One owner of base/repo/session path arithmetic. Seven formerly-independent
+# copies collapsed here; each caller delegates so divergence is impossible.
+
+
+def log_root() -> Path:
+    """Base log dir. Honors MENTAT_LOG_PATH (default ~/.mentat/logs)."""
+    return Path(os.environ.get("MENTAT_LOG_PATH", str(Path.home() / ".mentat" / "logs")))
+
+
+def repo_name() -> str:
+    """Repo name. Honors MENTAT_REPO (default cwd basename)."""
+    return os.environ.get("MENTAT_REPO", Path.cwd().name)
+
+
+def session_dir(session_id: str) -> Path:
+    """Dir for all files belonging to session_id: log_root/repo/session_id."""
+    return log_root() / repo_name() / session_id
+
+
+def summary_file(session_id: str) -> Path:
+    """Canonical summary.md path for session_id."""
+    return session_dir(session_id) / "summary.md"
+
+
+def diagnosis_file(session_id: str) -> Path:
+    """Canonical diagnosis.md path for session_id."""
+    return session_dir(session_id) / "diagnosis.md"
+
+
 def session_log_path(session_id: str) -> Path:
     """The session's ``session.jsonl`` path. Honors MENTAT_LOG_PATH + MENTAT_REPO."""
-    base = Path(os.environ.get("MENTAT_LOG_PATH", str(Path.home() / ".mentat" / "logs")))
-    repo = os.environ.get("MENTAT_REPO", Path.cwd().name)
-    return base / repo / session_id / "session.jsonl"
+    return session_dir(session_id) / "session.jsonl"
 
 
 def ensure_session(role: str, slug: str) -> str:
