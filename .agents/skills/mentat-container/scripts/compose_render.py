@@ -385,12 +385,3 @@ def synth_spec(worktree_path: Path) -> SynthResult:
         return _synth_from_compose(compose_yml, slug, worktree_path)
 
     return _synth_from_dockerfile(slug, worktree_path)
-
-
-def synth(worktree_path: Path) -> str:
-    """Return the devcontainer.json string for ``worktree_path``. Pure.
-
-    Thin wrapper over :func:`synth_spec` for callers that only need the
-    devcontainer.json and write no auxiliary compose files.
-    """
-    return synth_spec(worktree_path).devcontainer_json

@@ -56,12 +56,14 @@ def test_synth_spec_returns_json_and_extra_files(cr, tmp_path):
     json.loads(spec.devcontainer_json)  # valid JSON
 
 
-def test_synth_wrapper_matches_spec_json(cr, tmp_path):
-    """synth() stays backward-compatible: returns just the devcontainer.json string."""
+def test_synth_spec_json_is_valid(cr, tmp_path):
+    """synth_spec returns a SynthResult whose devcontainer_json is valid JSON."""
     (tmp_path / "docker-compose.yml").write_text(
         "services:\n  app:\n    build: .\n    volumes:\n      - ..:/workspaces/app\n"
     )
-    assert cr.synth(tmp_path) == cr.synth_spec(tmp_path).devcontainer_json
+    spec = cr.synth_spec(tmp_path)
+    assert isinstance(spec.devcontainer_json, str)
+    json.loads(spec.devcontainer_json)
 
 
 # ── sidecar-only → layered dev service ─────────────────────────────────────────

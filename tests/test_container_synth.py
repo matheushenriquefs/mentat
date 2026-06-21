@@ -62,7 +62,7 @@ def test_resolve_platform_unknown_returns_none(cr, clean_env):
 def test_synth_dockerfile_injects_runargs_arm64(cr, tmp_path, clean_env):
     (tmp_path / "Dockerfile").write_text("FROM python:3.11\nWORKDIR /app\n")
     with patch.object(cr.platform, "machine", return_value="arm64"):
-        out = json.loads(cr.synth(tmp_path))
+        out = json.loads(cr.synth_spec(tmp_path).devcontainer_json)
     assert out["runArgs"] == ["--platform", "linux/arm64"]
     assert out["workspaceFolder"] == "/app"
 
@@ -70,7 +70,7 @@ def test_synth_dockerfile_injects_runargs_arm64(cr, tmp_path, clean_env):
 def test_synth_dockerfile_injects_runargs_amd64(cr, tmp_path, clean_env):
     (tmp_path / "Dockerfile").write_text("FROM python:3.11\n")
     with patch.object(cr.platform, "machine", return_value="x86_64"):
-        out = json.loads(cr.synth(tmp_path))
+        out = json.loads(cr.synth_spec(tmp_path).devcontainer_json)
     assert out["runArgs"] == ["--platform", "linux/amd64"]
 
 
@@ -78,14 +78,14 @@ def test_synth_dockerfile_env_override_wins(cr, tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_PLATFORM", "linux/amd64")
     (tmp_path / "Dockerfile").write_text("FROM python:3.11\n")
     with patch.object(cr.platform, "machine", return_value="arm64"):
-        out = json.loads(cr.synth(tmp_path))
+        out = json.loads(cr.synth_spec(tmp_path).devcontainer_json)
     assert out["runArgs"] == ["--platform", "linux/amd64"]
 
 
 def test_synth_dockerfile_unknown_arch_omits_runargs(cr, tmp_path, clean_env):
     (tmp_path / "Dockerfile").write_text("FROM python:3.11\n")
     with patch.object(cr.platform, "machine", return_value="riscv64"):
-        out = json.loads(cr.synth(tmp_path))
+        out = json.loads(cr.synth_spec(tmp_path).devcontainer_json)
     assert "runArgs" not in out
 
 
@@ -95,5 +95,5 @@ def test_synth_static_compose_does_not_inject_runargs(cr, tmp_path, clean_env):
         "services:\n  app:\n    build: .\n    volumes:\n      - ./:/workspaces/foo\n"
     )
     with patch.object(cr.platform, "machine", return_value="arm64"):
-        out = json.loads(cr.synth(tmp_path))
+        out = json.loads(cr.synth_spec(tmp_path).devcontainer_json)
     assert "runArgs" not in out

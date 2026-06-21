@@ -62,7 +62,7 @@ def test_compose_render_pure_returns_string(tmp_path):
     cs = load_module("compose_render")
     compose_yml = tmp_path / "docker-compose.yml"
     compose_yml.write_text("services:\n  app:\n    build: .\n    volumes:\n      - ..:/workspaces/app\n")
-    result = cs.synth(tmp_path)
+    result = cs.synth_spec(tmp_path).devcontainer_json
     assert isinstance(result, str)
     data = json.loads(result)
     assert "workspaceFolder" in data
@@ -74,9 +74,9 @@ def test_compose_render_no_side_effects(tmp_path):
     compose_yml = tmp_path / "docker-compose.yml"
     compose_yml.write_text("services:\n  app:\n    build: .\n    volumes:\n      - ..:/workspaces/app\n")
     before = set(tmp_path.rglob("*"))
-    cs.synth(tmp_path)
+    cs.synth_spec(tmp_path)
     after = set(tmp_path.rglob("*"))
-    assert before == after, f"synth created files: {after - before}"
+    assert before == after, f"synth_spec created files: {after - before}"
 
 
 # ── container CLI ─────────────────────────────────────────────────────────
@@ -191,7 +191,7 @@ def test_render_template_deterministic(tmp_path):
 
 
 def test_synth_uses_compose_tmpl_when_present(tmp_path, monkeypatch):
-    """synth() picks template path and returns valid devcontainer.json."""
+    """synth_spec() picks template path and returns valid devcontainer.json."""
     import json as _json
 
     cr = load_module("compose_render")
@@ -205,7 +205,7 @@ def test_synth_uses_compose_tmpl_when_present(tmp_path, monkeypatch):
         return_value=__import__("unittest.mock", fromlist=["MagicMock"]).MagicMock(returncode=0, stdout="amd64\n"),
     ):
         monkeypatch.delenv("MENTAT_RO_MOUNTS", raising=False)
-        result = cr.synth(tmp_path)
+        result = cr.synth_spec(tmp_path).devcontainer_json
 
     data = _json.loads(result)
     assert data["name"] == tmp_path.name
