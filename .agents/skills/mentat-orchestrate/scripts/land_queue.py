@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
@@ -11,15 +12,10 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import git as _git  # noqa: E402
+from lib.events import EjectReason, bind, ejected_payload  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
 _utils = load_sibling(__file__, "plans")
-
-_AGENTS_ROOT = Path(__file__).resolve().parents[3]  # .agents/
-if str(_AGENTS_ROOT) not in sys.path:
-    sys.path.insert(0, str(_AGENTS_ROOT))
-
-from lib.events import EjectReason, bind, ejected_payload  # noqa: E402
 
 _emit_event = bind("mentat-orchestrate")
 
@@ -54,7 +50,7 @@ def _teardown_container(slug: str) -> None:
     _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
 
 
-def land(chunk: Chunk, *, holding: str) -> dict:
+def land(chunk: Chunk, *, holding: str) -> dict[str, object]:
     """Land one chunk. Returns verdict dict."""
     tip, err = _rebase_chunk(chunk, holding)
     if err:
@@ -116,13 +112,13 @@ def drain(
     chunks: list[Chunk],
     *,
     holding: str,
-    on_landed=None,
-    on_ejected=None,
-    next_ready=None,
-) -> list[dict]:
+    on_landed: Callable[[str], None] | None = None,
+    on_ejected: Callable[[str], list[str]] | None = None,
+    next_ready: Callable[[list[str]], str | None] | None = None,
+) -> list[dict[str, object]]:
     """Land all chunks serially.
 
-    Without `next_ready`: iterate chunks in input order (legacy / no-dep path).
+    Without `next_ready`: iterate chunks in input order (no-dep path).
 
     With `next_ready`: pull the next chunk whose plan deps are wholly landed
     via `next_ready(candidates)`. Land it, call on_landed / on_ejected,
@@ -132,7 +128,7 @@ def drain(
     _on_ejected = on_ejected or (lambda _: [])
 
     if next_ready is None:
-        results: list[dict] = []
+        results: list[dict[str, object]] = []
         for chunk in chunks:
             verdict = land(chunk, holding=holding)
             results.append(verdict)

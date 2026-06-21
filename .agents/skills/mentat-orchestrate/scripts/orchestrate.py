@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 _AGENTS_ROOT = Path(__file__).resolve().parents[3]
@@ -161,7 +162,11 @@ def _fan_out_plans(
     return results
 
 
-def _partition_fanout(results, *, mark_ejected) -> tuple[list, set[str]]:
+def _partition_fanout(
+    results: list[tuple[_scheduler.Plan, int]],
+    *,
+    mark_ejected: Callable[[str], list[str]],
+) -> tuple[list[_land_queue.Chunk], set[str]]:
     """Split fan-out (plan, returncode) results into (landable_chunks, hitl_slugs).
 
     A child that exited EX_HITL_REQUIRED is a wedge: self-ejected, worktree
@@ -214,7 +219,12 @@ def _worktree_for_slug(slug: str) -> Path:
     return _git.worktree_for_slug(slug)
 
 
-def _land_all(chunk_slugs: list[str], *, holding: str, plans: list | None = None) -> list[dict]:
+def _land_all(
+    chunk_slugs: list[str],
+    *,
+    holding: str,
+    plans: list[_scheduler.Plan] | None = None,
+) -> list[dict[str, object]]:
     """Land chunks onto holding branch serially (debug land-queue subcommand + dry-run)."""
     chunks = [_land_queue.Chunk(slug=s, worktree=_worktree_for_slug(s)) for s in chunk_slugs]
     if plans is None:
@@ -278,7 +288,7 @@ def run_orchestrate(
 
     _prune_stale_worktrees(preserve=hitl_slugs)
 
-    rc = 1 if sched._ejected or hitl_slugs else 0
+    rc = 1 if sched.has_ejections() or hitl_slugs else 0
     if rc == 0:
         _cfg_path = Path.home() / ".mentat" / "config.toml"
         _cfg = _load_config_file(_cfg_path) if _cfg_path.exists() else {}

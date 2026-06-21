@@ -10,7 +10,7 @@ Owns three pieces of plan-graph logic:
 Partition rule (topological order):
 
     HITL                       → anchored
-    AFK with downstream HITL   → anchored   (existing G2 rule)
+    AFK with downstream HITL   → anchored
     AFK with upstream HITL     → anchored
     AFK otherwise              → auto
 """
@@ -133,6 +133,10 @@ class Scheduler:
 
     def mark_landed(self, slug: str) -> None:
         self._landed.add(slug)
+
+    def has_ejections(self) -> bool:
+        """True if any slug has been ejected (includes cascade victims)."""
+        return bool(self._ejected)
 
     def mark_ejected(self, slug: str) -> list[str]:
         """Eject slug + cascade to every downstream slug. Return cascaded list."""
