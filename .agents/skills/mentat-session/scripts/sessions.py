@@ -186,7 +186,7 @@ class SessionStatus:
             if m is None:
                 continue
             last_row: dict[str, object] | None = None
-            for row in _iter_rows(f):
+            for row in iter_rows(f):
                 last_row = row
                 ts = str(row.get("ts", ""))
                 if "event" in row and ts >= best_audit_ts:

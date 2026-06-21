@@ -19,6 +19,7 @@ from lib.session import session_dir as _session_dir_fn
 
 _IMPLEMENT_SCRIPT = paths.SKILLS_DIR / "mentat-implement/scripts/implement.py"
 _CONTAINER_SCRIPT = paths.CONTAINER_SCRIPT
+_LOG_SCRIPT = paths.LOG_SCRIPT
 
 _utils = load_sibling(__file__, "utils")
 

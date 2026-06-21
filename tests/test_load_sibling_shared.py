@@ -21,7 +21,7 @@ LOADER = REPO_ROOT / ".agents/lib/loader.py"
 _DEF_LOAD_SIBLING = re.compile(r"^def load_sibling\b", re.M)
 _DEF_LOCAL = re.compile(r"^def _load_sibling\b", re.M)
 
-_PRUNE_DIRS = {"__pycache__", ".venv", ".git"}
+_PRUNE_DIRS = {"__pycache__", ".venv", ".git", ".mentat"}
 
 
 def _all_py_files(root: Path):

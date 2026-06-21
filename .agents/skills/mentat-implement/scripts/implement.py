@@ -39,6 +39,11 @@ from lib.loader import load_sibling  # noqa: E402
 from lib.session import ensure_session  # noqa: E402
 from lib.session import session_dir as _session_dir_fn
 
+
+def _logs_path() -> str:
+    return str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual")))
+
+
 # Exit codes that trigger auto-doctor: TDD/gate fail, HITL ambiguity, CLI/plan errors,
 # container down, unhandled exceptions, missing config. Signal exits (130/143) skipped.
 _DOCTOR_EXIT_CODES = frozenset(
