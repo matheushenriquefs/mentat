@@ -81,9 +81,14 @@ def remove_worktree(path: Path) -> bool:
 
 
 def rebase_ff_only(cwd: Path, onto: str) -> tuple[str | None, str | None]:
-    """Rebase ``cwd`` branch onto ``onto``. Returns (tip_sha, None) or (None, err_msg)."""
+    """Rebase ``cwd`` branch onto ``onto``. Returns (tip_sha, None) or (None, err_msg).
+
+    On failure, runs ``git rebase --abort`` (best-effort) so the worktree is not
+    left mid-rebase and subsequent git ops can proceed cleanly.
+    """
     r = _run(["rebase", onto], cwd=cwd)
     if r.returncode != 0:
+        _run(["rebase", "--abort"], cwd=cwd)
         return None, r.stderr.strip()
     sha_r = _run(["rev-parse", "HEAD"], cwd=cwd)
     return sha_r.stdout.strip(), None
