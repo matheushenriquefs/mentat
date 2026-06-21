@@ -91,7 +91,7 @@ def test_orchestrate_accepts_plan_slug_and_path_intermixed(tmp_path, monkeypatch
     abs_plan = tmp_path / "abs-plan.md"
     abs_plan.write_text("---\nid: abs-plan\nclass: AFK\n---\n")
 
-    paths = orch._resolve_plan_refs(["bare-slug", str(abs_plan)])
+    paths = [orch._utils.resolve_plan_ref(r) for r in ["bare-slug", str(abs_plan)]]
     assert len(paths) == 2
 
 

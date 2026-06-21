@@ -29,10 +29,6 @@ _batch_review = load_sibling(__file__, "batch_review")
 _coordinator = load_sibling(__file__, "coordinator")
 
 
-def _resolve_plan_refs(refs: list[str]) -> list[Path]:
-    return [_utils.resolve_plan_ref(r) for r in refs]
-
-
 def _parse_list_field(raw: str) -> list[str]:
     if not raw or raw in ("[]", ""):
         return []
@@ -355,11 +351,10 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.cmd == "run":
-        paths = _resolve_plan_refs(args.plan_refs)
         sys.exit(
             run_orchestrate(
                 args.holding,
-                paths,
+                [_utils.resolve_plan_ref(r) for r in args.plan_refs],
                 harness=args.harness,
                 model=args.model,
                 dry_run=args.dry_run,
@@ -367,8 +362,7 @@ def main() -> None:
         )
 
     elif args.cmd == "fan-out":
-        paths = _resolve_plan_refs(args.plan_refs)
-        plans = _load_plans(paths)
+        plans = _load_plans([_utils.resolve_plan_ref(r) for r in args.plan_refs])
         for plan in plans:
             _fan_out.spawn(plan)
 
