@@ -37,12 +37,7 @@ def encode(fm: dict[str, str], body: str) -> str:
     return "\n".join(lines) + "\n" + body
 
 
-def mutate(path: Path, **updates: str) -> None:
-    """Atomic in-place update of frontmatter fields. Body preserved."""
-    text = path.read_text(encoding="utf-8")
-    fm, body_start = parse(text)
-    fm.update({k: str(v) for k, v in updates.items()})
-    body = "\n".join(text.splitlines()[body_start:])
+def _write_atomic(path: Path, fm: dict[str, str], body: str) -> None:
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -51,3 +46,11 @@ def mutate(path: Path, **updates: str) -> None:
     except Exception:
         Path(tmp).unlink(missing_ok=True)
         raise
+
+
+def mutate(path: Path, **updates: str) -> None:
+    """Atomic in-place update of frontmatter fields. Body preserved."""
+    text = path.read_text(encoding="utf-8")
+    fm, body_start = parse(text)
+    fm.update({k: str(v) for k, v in updates.items()})
+    _write_atomic(path, fm, "\n".join(text.splitlines()[body_start:]))
