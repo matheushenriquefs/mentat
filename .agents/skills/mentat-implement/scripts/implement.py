@@ -47,15 +47,15 @@ _DOCTOR_EXIT_CODES = frozenset(
 
 # Exit codes whose worktree implement must NOT tear down: the two signal exits
 # (interrupted mid-work) and EX_HITL_REQUIRED — a wedged AFK left its worktree
-# for the operator to resolve the design call and resume (S5).
+# for the operator to resolve the design call and resume.
 _PRESERVE_WORKTREE_EXITS = frozenset({130, 143, EX_HITL_REQUIRED})
 
-# ── S5 — AFK ambiguity wedge channel ─────────────────────────────────────────
+# ── AFK ambiguity wedge channel ───────────────────────────────────────────────
 # An AFK agent has no human to ask (AskUserQuestion stays disallowed so it cannot
 # hang on a prompt). When it hits a decision the plan does not resolve it writes
 # the blocker to <worktree>/summary.md with frontmatter `status: blocked` and
 # stops, rather than guessing. summary.md (not a bespoke marker) keeps one
-# report-back file shared with the success path (S8); `status:` distinguishes a
+# report-back file shared with the success path; `status:` distinguishes a
 # clean finish from a blocker, and the agent's cwd (the worktree) is a distinct
 # location from the success summary's log dir, so the two never collide. The
 # filename is the shared lib.events.SUMMARY_FILE — one cross-skill contract.
@@ -227,13 +227,13 @@ def _is_main_worktree(cwd: Path) -> bool:
 
 
 def _in_shared_main_tree() -> bool:
-    """S9: True iff running in the shared main worktree, where a ``git checkout``
+    """True iff running in the shared main worktree, where a ``git checkout``
     flips HEAD for every concurrent session sharing that working tree — the
-    branch-leak the user hit. Separate worktrees each own their HEAD (git refuses
+    branch-leak risk. Separate worktrees each own their HEAD (git refuses
     cross-worktree branch sharing), so an own-worktree run is leak-proof.
 
     The one shared predicate for "is cwd the live main tree right now" — both the
-    S9 leak guard and ``preflight_worktree``'s create gate route through it, so
+    leak guard and ``preflight_worktree``'s create gate route through it, so
     the skip→rev-parse→``_is_main_worktree`` triad lives in exactly one place.
 
     ``MENTAT_SKIP_PREFLIGHT`` returns False by design: it is the test-isolation
@@ -272,7 +272,7 @@ def preflight_worktree(slug: str) -> tuple[int, Path | None]:
     if not _GIT_SCRIPT.exists():
         return (0, None)
     # Only the shared main tree needs a worktree carved out; a non-repo cwd or an
-    # already-isolated sibling worktree is left alone. Same predicate the S9 leak
+    # already-isolated sibling worktree is left alone. Same predicate the leak
     # guard uses — one source of truth for "is this the live main tree".
     if not _in_shared_main_tree():
         return (0, None)
@@ -364,19 +364,18 @@ def _read_summary_at(path: Path) -> str | None:
 
 
 def _read_blocked_summary(worktree: Path) -> str | None:
-    """The agent's blocker body if it wedged, else None (S5).
+    """The agent's blocker body if it wedged, else None.
 
-    F1: reads from the session log dir (lib.session.summary_file) — the one
+    Reads from the session log dir (lib.session.summary_file) — the one
     canonical location the AFK agent writes to via $MENTAT_SESSION_LOG.
-    Falls back to the worktree path for compatibility with tests that set up
-    the old location before F1 migration completes.
+    Falls back to the worktree path when $MENTAT_SESSION_LOG is unset.
     """
     seam = _blocked_summary_path()
     if seam is not None:
         result = _read_summary_at(seam)
         if result is not None:
             return result
-    # Legacy / worktree fallback (pre-F1 or MENTAT_SESSION unset)
+    # Worktree fallback (MENTAT_SESSION unset)
     return _read_summary_at(worktree / SUMMARY_FILE)
 
 
@@ -474,7 +473,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     prompt = f"{_AFK_COMMIT_CONTRACT}\n\n{_AFK_AMBIGUITY_CONTRACT}\n\n{plan_body}"
     result = _invoke_harness(harness, prompt, afk=afk, model=model)
 
-    # S5 — AFK wedge: the agent hit an unresolvable design call and signaled via
+    # AFK wedge: the agent hit an unresolvable design call and signaled via
     # summary.md{status: blocked} (preferred, hang-proof) or — defensively — a
     # self-answered AskUserQuestion in the captured stream. Eject hitl-required
     # and preserve the worktree for the operator. Checked before the generic
@@ -532,7 +531,7 @@ def _do_land(chunk: Any, *, holding: str, land_queue: Any) -> dict:
 
 
 def _land_and_review(slug: str, worktree: Path, holding: str) -> dict:
-    """Land one chunk and spawn advisory reviewers. F2: self-contained mode.
+    """Land one chunk and spawn advisory reviewers.
 
     Called after run_plan returns 0 when --land is set. Uses land_queue.land
     for the single-chunk case (no Scheduler needed — drain() with one chunk and
@@ -563,8 +562,7 @@ _SUBCOMMANDS = frozenset({"run", "mark-test-writable"})
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """One argparse parser with subparsers for every entrypoint command, so
-    `implement` shares the dispatch style of every other skill (S10). The `run`
+    """One argparse parser with subparsers for every entrypoint command. The `run`
     subcommand is the default — `mentat-implement <plan>` is sugar for
     `mentat-implement run <plan>`."""
     parser = argparse.ArgumentParser(prog="mentat-implement", description="Atomic plan executor")
@@ -649,8 +647,8 @@ def main() -> None:
     if target is not None:
         os.chdir(target)
 
-    # Fail closed if preflight did not isolate us into our own worktree (S9). A
-    # run in the shared main tree leaks branch switches across every concurrent
+    # Fail closed if preflight did not isolate us into our own worktree. A run
+    # in the shared main tree leaks branch switches across every concurrent
     # session — refuse rather than risk the leak.
     if _in_shared_main_tree():
         _emit_event(

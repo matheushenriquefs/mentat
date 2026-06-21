@@ -46,7 +46,7 @@ def invoke(
     path back so the self-answer detector and mentat-session track can read it.
 
     afk=True → --disallowedTools AskUserQuestion (AFK contract).
-    seed_summary → prepended to prompt for seeded fresh-session continuity (F4).
+    seed_summary → prepended to prompt for seeded fresh-session continuity.
     usage_tokens → parsed from stream-json log after run (input + output total).
     """
     session_log_env = os.environ.get("MENTAT_SESSION_LOG")

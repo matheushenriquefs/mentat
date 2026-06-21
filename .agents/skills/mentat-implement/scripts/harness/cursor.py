@@ -36,7 +36,7 @@ def invoke(
     carries the path back so the self-answer detector and mentat-session
     track can read it.
 
-    seed_summary → prepended to prompt for seeded fresh-session continuity (F4).
+    seed_summary → prepended to prompt for seeded fresh-session continuity.
     usage_tokens → always None for cursor (no CLI usage-reporting equivalent yet).
     """
     session_log_env = os.environ.get("MENTAT_SESSION_LOG")
