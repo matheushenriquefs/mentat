@@ -198,16 +198,27 @@ def cmd_worktree_create(slug: str, *, base: str | None = None, parent: Path | No
 
     parent.mkdir(parents=True, exist_ok=True)
 
-    r = _git(
-        ["worktree", "add", "-b", slug, str(target), base],
-        cwd=main_root,
-    )
+    # If the branch already exists (e.g. from a prior killed/failed run), attach
+    # the new worktree to it without -b rather than trying to create it again.
+    if _branch_exists(main_root, slug):
+        r = _git(["worktree", "add", str(target), slug], cwd=main_root)
+    else:
+        r = _git(
+            ["worktree", "add", "-b", slug, str(target), base],
+            cwd=main_root,
+        )
     if r.returncode != 0:
         # TOCTOU window: another process may have raced us between the
         # pre-checks above and `git worktree add`. Map git's stderr so the
         # caller still sees 65 (path conflict) / 66 (missing base) instead of
         # an opaque "unexpected git error".
         stderr_lower = (r.stderr or "").lower()
+        if "a branch named" in stderr_lower and "already exists" in stderr_lower:
+            # Branch appeared in TOCTOU window — retry without -b.
+            r = _git(["worktree", "add", str(target), slug], cwd=main_root)
+            if r.returncode == 0:
+                print(str(target))
+                return 0
         if "already exists" in stderr_lower or "not an empty directory" in stderr_lower:
             print(f"mentat-git: path {target} exists but is not a registered worktree", file=sys.stderr)
             return EX_DATAERR

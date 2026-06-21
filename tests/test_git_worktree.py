@@ -158,3 +158,74 @@ def test_race_window_missing_base_maps_to_66(repo, monkeypatch):
     monkeypatch.setattr(wt, "_branch_exists", lambda *a, **kw: True)
     rc = wt.cmd_worktree_create("feat-race-base", base="absolutely-not-a-branch")
     assert rc == 66, f"expected 66 (missing base via stderr map), got {rc}"
+
+
+# ── BUG3: branch exists but worktree does not ──────────────────────────────
+
+
+def test_create_worktree_when_branch_already_exists(repo, capsys):
+    """cmd_worktree_create must succeed when the branch exists but has no worktree.
+
+    RED: fails before fix because `git worktree add -b <slug>` is called even when
+    the branch already exists, and git refuses "A branch named '<slug>' already exists".
+    GREEN: passes after fix detects existing branch and uses `git worktree add <path> <branch>`
+    (no -b).
+    """
+    wt = _load_worktree()
+
+    # Create the branch manually (simulates a prior killed/failed implement run)
+    subprocess.run(
+        ["git", "branch", "feat-existing", "main"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+
+    rc = wt.cmd_worktree_create("feat-existing")
+
+    assert rc == 0, f"must succeed when branch exists but worktree does not, got rc={rc}"
+    target = repo / ".mentat" / "worktrees" / "feat-existing"
+    assert target.is_dir(), "worktree directory must be created"
+    out = capsys.readouterr().out.strip()
+    assert out.endswith("feat-existing"), f"must print target path, got: {out!r}"
+
+
+def test_create_worktree_existing_branch_is_idempotent(repo):
+    """Second call with branch+worktree already present must return 0 (existing idempotent path)."""
+    wt = _load_worktree()
+
+    # First call creates branch + worktree
+    assert wt.cmd_worktree_create("feat-idem") == 0
+    # Second call: branch exists AND worktree exists — idempotent
+    assert wt.cmd_worktree_create("feat-idem") == 0
+
+
+def test_create_worktree_branch_exists_toctou(repo, monkeypatch):
+    """TOCTOU: branch appears between pre-check and `git worktree add -b` — must not crash."""
+    wt = _load_worktree()
+
+    real_branch_exists = wt._branch_exists
+
+    # Return False only for the slug check (to force the -b path), not for the base check.
+    def fake_branch_exists(main_root, branch):
+        if branch == "feat-toctou-branch":
+            return False
+        return real_branch_exists(main_root, branch)
+
+    original_git = wt._git
+
+    def patched_git(args, *, cwd=None):
+        if args[:3] == ["worktree", "add", "-b"]:
+            # Create the branch mid-flight so git complains "branch already exists"
+            subprocess.run(
+                ["git", "branch", args[3], "main"],
+                cwd=repo,
+                capture_output=True,
+            )
+        return original_git(args, cwd=cwd)
+
+    monkeypatch.setattr(wt, "_branch_exists", fake_branch_exists)
+    monkeypatch.setattr(wt, "_git", patched_git)
+
+    rc = wt.cmd_worktree_create("feat-toctou-branch")
+    assert rc == 0, f"TOCTOU branch-exists must be handled gracefully, got rc={rc}"
