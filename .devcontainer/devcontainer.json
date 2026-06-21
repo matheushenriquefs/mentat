@@ -1,5 +1,5 @@
 {
-  "name": "mentat-orchestrate-doctor-diff",
+  "name": "mentat",
   "build": {
     "dockerfile": "Dockerfile"
   },
@@ -13,14 +13,11 @@
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
   },
   "onCreateCommand": "sudo apt-get update && sudo apt-get install -y jq shellcheck && curl -LsSf https://astral.sh/uv/install.sh | sh",
-  "postCreateCommand": "cd /workspaces/mentat-orchestrate-doctor-diff && ~/.local/bin/uv sync --group dev && npm install -g promptfoo lefthook && (lefthook install --force || true) && python3 .agents/skills/mentat-install/scripts/install.py",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/mentat-orchestrate-doctor-diff,type=bind,consistency=cached",
-  "workspaceFolder": "/workspaces/mentat-orchestrate-doctor-diff",
+  "postCreateCommand": "cd /workspaces/mentat && ~/.local/bin/uv sync --group dev && npm install -g promptfoo lefthook && (lefthook install --force || true) && python3 .agents/skills/mentat-install/scripts/install.py",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/mentat,type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/mentat",
   "runArgs": [
     "--init"
   ],
-  "remoteUser": "vscode",
-  "mounts": [
-    "source=/Users/matheushenrique/Workspace/personal/mentat/.git,target=/Users/matheushenrique/Workspace/personal/mentat/.git,type=bind"
-  ]
+  "remoteUser": "vscode"
 }
