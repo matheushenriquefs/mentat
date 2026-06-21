@@ -17,6 +17,7 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib import git as _git_lib  # noqa: E402
 from lib.exits import EX_DATAERR, EX_NOINPUT, EX_SOFTWARE  # noqa: E402
 from lib.worktrees import is_dirty, worktrees_root  # noqa: E402
 
@@ -84,27 +85,9 @@ def _list_worktrees(main_root: Path) -> list[dict[str, str]]:
     """Parse ``git worktree list --porcelain`` into one dict per worktree.
 
     Each dict carries ``worktree`` (the path) and, when git flags it, ``prunable``
-    (its working dir is gone but the admin record lingers). Other porcelain lines
-    (HEAD/branch/bare/detached/locked) are ignored.
+    (its working dir is gone but the admin record lingers).
     """
-    r = _git(["worktree", "list", "--porcelain"], cwd=main_root)
-    if r.returncode != 0:
-        return []
-    entries: list[dict[str, str]] = []
-    cur: dict[str, str] = {}
-    for line in r.stdout.splitlines():
-        if not line.strip():
-            if cur:
-                entries.append(cur)
-                cur = {}
-            continue
-        if line.startswith("worktree "):
-            cur = {"worktree": line[len("worktree ") :]}
-        elif line.startswith("prunable"):
-            cur["prunable"] = line[len("prunable") :].strip()
-    if cur:
-        entries.append(cur)
-    return entries
+    return _git_lib.worktree_list(cwd=main_root)
 
 
 def sweep_targets(main_root: Path) -> list[Path]:

@@ -14,7 +14,6 @@ sweep) both call it instead of re-implementing the loop.
 from __future__ import annotations
 
 import shutil
-import subprocess
 import time
 from pathlib import Path
 
@@ -38,30 +37,16 @@ def is_managed(path: Path, repo_root: Path) -> bool:
 
 def is_dirty(path: Path) -> bool:
     """True iff the worktree has uncommitted changes (holds un-landed work)."""
-    if not (path / ".git").exists():
-        return False
-    r = subprocess.run(
-        ["git", "-C", str(path), "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-    )
-    if r.returncode != 0:
-        # Fail-safe: a git error (stale index.lock, interrupted op, corrupt
-        # index) must never green-light removal of a tree that may hold
-        # un-landed work. The plan locks "preserve a dirty one" as the safe
-        # default — when we cannot prove clean, treat as dirty.
-        return True
-    return bool(r.stdout.strip())
+    from lib import git as _git
+
+    return _git.is_dirty(path)
 
 
 def _remove(path: Path) -> bool:
     """Remove a worktree; fall back to rmtree if ``git worktree remove`` fails."""
-    rc = subprocess.run(
-        ["git", "worktree", "remove", "--force", str(path)],
-        capture_output=True,
-        text=True,
-    ).returncode
-    if rc != 0:
+    from lib import git as _git
+
+    if not _git.remove_worktree(path):
         shutil.rmtree(path, ignore_errors=True)
     return not path.exists()
 

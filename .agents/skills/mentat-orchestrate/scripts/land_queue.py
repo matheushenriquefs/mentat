@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 from typing import NamedTuple
@@ -11,6 +10,7 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib import git as _git  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
 _utils = load_sibling(__file__, "utils")
@@ -31,21 +31,7 @@ class Chunk(NamedTuple):
 
 def _rebase_chunk(chunk: Chunk, holding: str) -> tuple[str | None, str | None]:
     """Rebase chunk onto holding. Returns (tip_sha, error_message)."""
-    result = subprocess.run(
-        ["git", "rebase", holding],
-        capture_output=True,
-        text=True,
-        cwd=str(chunk.worktree),
-    )
-    if result.returncode != 0:
-        return None, result.stderr.strip()
-    sha_result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        cwd=str(chunk.worktree),
-    )
-    return sha_result.stdout.strip(), None
+    return _git.rebase_ff_only(chunk.worktree, holding)
 
 
 def _run_gates(chunk: Chunk) -> tuple[str, str]:
@@ -53,46 +39,12 @@ def _run_gates(chunk: Chunk) -> tuple[str, str]:
 
 
 def _ff_merge(chunk: Chunk, holding: str) -> bool:
-    """FF-merge chunk HEAD onto holding branch via merge --ff-only in main worktree.
+    """FF-merge chunk HEAD onto main worktree via merge --ff-only.
 
     Advances both the branch pointer and the main worktree's working tree.
-    Returns False if the merge is not fast-forward or the main worktree is dirty.
+    Returns False if the merge is not fast-forward or git reports an error.
     """
-    sha_r = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        cwd=str(chunk.worktree),
-    )
-    if sha_r.returncode != 0:
-        return False
-    sha = sha_r.stdout.strip()
-
-    # Locate the main worktree — always the first entry in porcelain output
-    wt_list = subprocess.run(
-        ["git", "worktree", "list", "--porcelain"],
-        capture_output=True,
-        text=True,
-        cwd=str(chunk.worktree),
-    )
-    if wt_list.returncode != 0:
-        return False
-
-    main_wt: Path | None = None
-    for line in wt_list.stdout.splitlines():
-        if line.startswith("worktree "):
-            main_wt = Path(line[len("worktree ") :])
-            break
-
-    if main_wt is None:
-        return False
-
-    result = subprocess.run(
-        ["git", "merge", "--ff-only", sha],
-        capture_output=True,
-        cwd=str(main_wt),
-    )
-    return result.returncode == 0
+    return _git.ff_merge(chunk.worktree)
 
 
 def _teardown_container(slug: str) -> None:

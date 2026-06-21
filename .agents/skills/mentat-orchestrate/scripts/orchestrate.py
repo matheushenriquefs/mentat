@@ -14,6 +14,7 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib import git as _git  # noqa: E402
 from lib.events import HITL_IN_SESSION, EjectReason, ejected_payload, spawned_payload  # noqa: E402
 from lib.events import bind as _bind  # noqa: E402
 from lib.exits import EX_DATAERR, EX_HITL_REQUIRED, EX_NOINPUT  # noqa: E402
@@ -227,19 +228,7 @@ def _prune_stale_worktrees(preserve: set[str] | None = None) -> None:
 
 def _worktree_for_slug(slug: str) -> Path:
     """Find worktree path registered for branch <slug>. Falls back to cwd."""
-    r = subprocess.run(["git", "worktree", "list", "--porcelain"], capture_output=True, text=True)
-    if r.returncode == 0:
-        current: Path | None = None
-        for line in r.stdout.splitlines():
-            if line.startswith("worktree "):
-                current = Path(line[len("worktree ") :])
-            elif (
-                line.startswith("branch refs/heads/")
-                and current is not None
-                and line[len("branch refs/heads/") :] == slug
-            ):
-                return current
-    return Path.cwd()
+    return _git.worktree_for_slug(slug)
 
 
 def _land_all(chunk_slugs: list[str], *, holding: str, plans: list | None = None) -> list[dict]:
