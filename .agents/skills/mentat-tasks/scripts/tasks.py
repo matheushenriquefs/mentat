@@ -124,6 +124,12 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def _terminate(path: Path, *, status: str, event: str) -> int:
+    fm, _ = frontmatter.parse(path.read_text())
+    current = fm.get("status", "")
+    err = _utils.check_transition(current, status)
+    if err:
+        print(f"tasks: {err} for {path.name}", file=sys.stderr)
+        return 1
     lock = path.with_suffix(".md.lock")
     frontmatter.mutate(path, status=status, claimed_by="", claim_expires_at="")
     lock.unlink(missing_ok=True)

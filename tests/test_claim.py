@@ -151,3 +151,34 @@ def test_cmd_create_inherits_parent_session_unchanged(td: Path, monkeypatch: pyt
     with patch("lib.events._spawn"):
         t.main(["create", "test-task"])
     assert os.environ.get("MENTAT_SESSION") == "orchestrate-parent-999"
+
+
+# ── LT3: state machine guard tests ───────────────────────────────────────────
+
+
+def test_done_on_todo_task_errors(task_file: Path) -> None:
+    """done on a todo task must be rejected — task must be in-progress first."""
+    t = _reload("tasks")
+    with patch("lib.events._spawn"), pytest.raises(SystemExit) as exc_info:
+        t.main(["done", str(task_file)])
+    assert exc_info.value.code != 0
+
+
+def test_wontfix_on_todo_task_errors(task_file: Path) -> None:
+    """wontfix on a todo task must be rejected."""
+    t = _reload("tasks")
+    with patch("lib.events._spawn"), pytest.raises(SystemExit) as exc_info:
+        t.main(["wontfix", str(task_file)])
+    assert exc_info.value.code != 0
+
+
+def test_legal_path_todo_to_inprogress_to_done(task_file: Path) -> None:
+    """Legal path: claim (todo→in-progress) then done (in-progress→done)."""
+    t = _reload("tasks")
+    with patch("lib.events._spawn"):
+        t.main(["claim", str(task_file), "agent-a", "600"])
+        t.main(["done", str(task_file)])
+    from lib import frontmatter
+
+    fm, _ = frontmatter.parse(task_file.read_text())
+    assert fm["status"] == "done"

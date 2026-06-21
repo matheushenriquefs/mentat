@@ -1,10 +1,26 @@
-"""Task utilities: tasks_dir, now_rfc3339, next_id."""
+"""Task utilities: tasks_dir, now_rfc3339, next_id, transition guard."""
 
 from __future__ import annotations
 
 import datetime
 import os
 from pathlib import Path
+
+LEGAL_TRANSITIONS: dict[str, frozenset[str]] = {
+    "todo": frozenset({"in-progress"}),
+    "in-progress": frozenset({"done", "wontfix", "blocked"}),
+    "blocked": frozenset({"in-progress", "done", "wontfix"}),
+    "done": frozenset(),
+    "wontfix": frozenset(),
+}
+
+
+def check_transition(current: str, target: str) -> str | None:
+    """Return an error message if the transition is illegal, else None."""
+    legal = LEGAL_TRANSITIONS.get(current, frozenset())
+    if target not in legal:
+        return f"illegal transition {current!r} → {target!r}"
+    return None
 
 
 def tasks_dir() -> Path:
