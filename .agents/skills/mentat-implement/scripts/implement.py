@@ -37,20 +37,6 @@ from lib.loader import load_sibling  # noqa: E402
 from lib.session import ensure_session  # noqa: E402
 from lib.session import session_dir as _session_dir_fn
 
-
-def _load_worktree_module():
-    spec = importlib.util.spec_from_file_location("mentat_git_worktree", _GIT_WORKTREE_PY)
-    if spec is None or spec.loader is None:
-        return None
-    mod = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(mod)
-    except Exception as e:  # syntax/import error in worktree.py shouldn't crash preflight
-        print(f"mentat-implement: worktree.py load failed: {e}", file=sys.stderr)
-        return None
-    return mod
-
-
 # Exit codes that trigger auto-doctor: TDD/gate fail, HITL ambiguity, CLI/plan errors,
 # container down, unhandled exceptions, missing config. Signal exits (130/143) skipped.
 _DOCTOR_EXIT_CODES = frozenset(
@@ -238,12 +224,15 @@ def _auto_summary() -> None:
 
 
 def _is_main_worktree(cwd: Path) -> bool:
-    """True iff cwd is inside the main worktree.
-
-    Delegates to mentat-git/worktree.is_main_worktree to keep one source of truth.
-    """
-    mod = _load_worktree_module()
-    if mod is None:
+    """True iff cwd is inside the main worktree."""
+    spec = importlib.util.spec_from_file_location("mentat_git_worktree", _GIT_WORKTREE_PY)
+    if spec is None or spec.loader is None:
+        return False
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+    except Exception as e:  # syntax/import error in worktree.py must not crash preflight
+        print(f"mentat-implement: worktree.py load failed: {e}", file=sys.stderr)
         return False
     return bool(mod.is_main_worktree(cwd))
 
