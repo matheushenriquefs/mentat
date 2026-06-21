@@ -144,3 +144,38 @@ def test_two_workspace_candidates_still_ambiguous(cr):
     text = "services:\n  a:\n    build: .\n  b:\n    build: ./other\n"
     with pytest.raises(ValueError):
         cr._parse_compose_service(text)
+
+
+# ── CT3: environment block colons must not be inferred as workspace paths ───────
+
+
+def test_environment_colon_not_inferred_as_workspace(cr):
+    """A colon in an environment value must not be mistaken for a volume-mount target."""
+    text = (
+        "services:\n"
+        "  app:\n"
+        "    image: python:3.11\n"
+        "    environment:\n"
+        "      - PATH=/usr/local/bin:/usr/bin\n"
+        "    volumes:\n"
+        "      - .:/workspaces/app\n"
+    )
+    result = cr._infer_workspace_folder_from_compose(text, "app", "slug")
+    assert result == "/workspaces/app", (
+        f"Expected /workspaces/app, got {result!r} — environment colon must not be inferred as workspace path"
+    )
+
+
+def test_real_volume_mount_still_resolves_with_env_present(cr):
+    """When environment: and volumes: both exist, volumes target is used for workspace."""
+    text = (
+        "services:\n"
+        "  app:\n"
+        "    build: .\n"
+        "    environment:\n"
+        "      - DATABASE_URL=postgres://db:5432/app\n"
+        "    volumes:\n"
+        "      - ./:/workspace/app\n"
+    )
+    result = cr._infer_workspace_folder_from_compose(text, "app", "slug")
+    assert result == "/workspace/app"

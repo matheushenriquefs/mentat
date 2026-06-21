@@ -179,13 +179,34 @@ def _infer_workspace_folder_from_compose(compose_text: str, service: str, slug: 
     """Extract the workspace folder from the named service's volume mounts.
 
     Shares ``_iter_service_blocks`` with ``_parse_compose_service`` so both read
-    the same compose grammar. Returns the first ``:/abs/path`` target in the
-    service body, else the slug default.
+    the same compose grammar. Only scans within ``volumes:`` blocks so that colons
+    in ``environment:`` values (e.g. ``PATH=/a:/b``) are not mis-detected as mount
+    targets. Returns the first ``:/abs/path`` target from a volume entry, else the
+    slug default.
     """
     for name, body in _iter_service_blocks(compose_text):
         if name != service:
             continue
+        vol_indent: int | None = None
         for line in body:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            indent = len(line) - len(line.lstrip())
+            is_item = stripped.startswith("-")
+            key_m = None if is_item else re.match(r"([a-zA-Z0-9_-]+)\s*:\s*(.*)$", stripped)
+            key = key_m.group(1) if key_m else None
+
+            if vol_indent is not None and key is not None and indent <= vol_indent:
+                vol_indent = None  # sibling key closed the volumes block
+
+            if key == "volumes":
+                vol_indent = indent
+                continue
+
+            if vol_indent is None:
+                continue
+
             # Long-syntax: an explicit `target: /abs/path` key.
             m = re.match(r"\s*target\s*:\s*(/\S+)", line)
             if m:
