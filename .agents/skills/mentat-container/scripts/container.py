@@ -82,7 +82,10 @@ def _git_mount_for_worktree(wt: Path) -> str | None:
     git_path = wt / ".git"
     if not git_path.is_file():
         return None
-    content = git_path.read_text().strip()
+    try:
+        content = git_path.read_text().strip()
+    except (OSError, UnicodeDecodeError):
+        return None
     if not content.startswith("gitdir:"):
         return None
     gitdir = content.split(":", 1)[1].strip()
@@ -95,7 +98,10 @@ def _main_repo_root_for_wt(wt: Path) -> Path | None:
     git_path = wt / ".git"
     if not git_path.is_file():
         return None
-    content = git_path.read_text().strip()
+    try:
+        content = git_path.read_text().strip()
+    except (OSError, UnicodeDecodeError):
+        return None
     if not content.startswith("gitdir:"):
         return None
     gitdir = content.split(":", 1)[1].strip()

@@ -77,28 +77,27 @@ def container_id_for_slug(slug: str, label: str = DEFAULT_LABEL) -> str | None:
 
 
 def down(slug: str) -> bool:
-    """Remove container by slug. Returns True if removed or confirmed not running. False on docker error."""
-    cid = container_id_for_slug(slug)
-    if cid is None:
-        # Distinguish "not found" from "docker error" via stopped-container check
-        r = _run_docker(
-            [
-                "docker",
-                "ps",
-                "-aq",
-                "--filter",
-                f"label={DEFAULT_LABEL}={slug}",
-                "--filter",
-                "status=exited",
-            ]
-        )
-        if r is None or r.returncode != 0:
-            return False  # docker error — cannot confirm
-        if not r.stdout.strip():
-            return True  # confirmed not running
-        cid = r.stdout.strip().splitlines()[0]
-    r = _run_docker(["docker", "rm", "-f", cid])
-    return r is not None and r.returncode == 0
+    """Remove all containers with the slug label. Returns True on success or if none found."""
+    r = _run_docker(
+        [
+            "docker",
+            "ps",
+            "-aq",
+            "--filter",
+            f"label={DEFAULT_LABEL}={slug}",
+        ]
+    )
+    if r is None or r.returncode != 0:
+        return False
+    cids = [line.strip() for line in r.stdout.splitlines() if line.strip()]
+    if not cids:
+        return True
+    ok = True
+    for cid in cids:
+        rm = _run_docker(["docker", "rm", "-f", cid])
+        if rm is None or rm.returncode != 0:
+            ok = False
+    return ok
 
 
 def up(slug: str, wt: Path) -> bool:

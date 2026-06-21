@@ -148,10 +148,8 @@ def test_down_removes_stopped_container(monkeypatch):
 
     def fake_run(argv, **kw):
         calls.append(list(argv))
-        if argv[1] == "ps" and "status=exited" in argv:
+        if argv[1] == "ps" and "-aq" in argv:
             return _cp(0, "stopped-cid\n")
-        if argv[1] == "ps":
-            return _cp(0, "")  # nothing running
         return _cp(0, "")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -206,6 +204,32 @@ def test_up_cold_start_calls_devcontainer_cli(monkeypatch, tmp_path):
     assert devcontainer_calls, "devcontainer CLI not called for cold start"
     assert "up" in devcontainer_calls[0]
     assert "--id-label" in devcontainer_calls[0]
+
+
+# ── stdlib check ──────────────────────────────────────────────────────────────
+
+
+# ── CT4: down removes all matching containers ─────────────────────────────────
+
+
+def test_down_removes_all_matching_containers(monkeypatch):
+    """Two containers sharing the slug label must both be removed by down()."""
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kw):
+        calls.append(list(argv))
+        if argv[1] == "ps" and "-aq" in argv and "status=exited" not in argv:
+            return _cp(0, "cid1\ncid2\n")
+        return _cp(0, "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = devcontainer.down("my-slug")
+
+    assert result is True
+    rm_calls = [c for c in calls if len(c) > 1 and c[1] == "rm"]
+    removed = {item for rm in rm_calls for item in rm}
+    assert "cid1" in removed, "first container must be removed"
+    assert "cid2" in removed, "second container must be removed"
 
 
 # ── stdlib check ──────────────────────────────────────────────────────────────

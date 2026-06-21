@@ -436,14 +436,13 @@ class TestCmdDown:
         assert any("rm" in c and "-f" in c and "abc123" in c for c in ran)
 
     def test_down_removes_stopped_container(self, monkeypatch):
-        monkeypatch.setattr(utils, "container_id_for", lambda slug: None)
         ran: list = []
 
         def fake_run(cmd, **kw):
             ran.append(cmd)
             r = MagicMock()
             r.returncode = 0
-            if "status=exited" in " ".join(cmd):
+            if len(cmd) > 1 and cmd[1] == "ps" and "-aq" in cmd:
                 r.stdout = "stopped123\n"
             else:
                 r.stdout = ""
@@ -560,6 +559,31 @@ def test_container_cmd_down_delegates_to_devcontainer(monkeypatch):
     monkeypatch.setattr(_dc_mod, "down", lambda slug: down_calls.append(slug) or True)
     container.cmd_down(slug="test-slug")
     assert down_calls == ["test-slug"]
+
+
+# ── CT4: safe .git reads + all containers removed ────────────────────────────
+
+
+def test_git_mount_for_worktree_degrades_on_non_utf8_git_file(tmp_path):
+    """_git_mount_for_worktree must return None on non-UTF-8 .git content, not raise."""
+    container_mod = load_module("container")
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    (wt / ".git").write_bytes(b"\xff\xfe\x00")  # invalid UTF-8
+
+    result = container_mod._git_mount_for_worktree(wt)
+    assert result is None, "_git_mount_for_worktree must degrade to None on UnicodeDecodeError"
+
+
+def test_main_repo_root_for_wt_degrades_on_non_utf8_git_file(tmp_path):
+    """_main_repo_root_for_wt must return None on non-UTF-8 .git content, not raise."""
+    container_mod = load_module("container")
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    (wt / ".git").write_bytes(b"\xff\xfe\x00")  # invalid UTF-8
+
+    result = container_mod._main_repo_root_for_wt(wt)
+    assert result is None, "_main_repo_root_for_wt must degrade to None on UnicodeDecodeError"
 
 
 # ── CT2: docker start one ID per arg ─────────────────────────────────────────
