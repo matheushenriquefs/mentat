@@ -315,8 +315,11 @@ def _load_mod(key: str, path: Path) -> Any:
     return mod
 
 
-def _load_harness_module(key: str, path: Path) -> Any:
-    return _load_mod(key, path)
+_HARNESS_DIR = Path(__file__).resolve().parent / "harness"
+_HARNESS: dict[str, Path] = {
+    "claude-code": _HARNESS_DIR / "claude_code.py",
+    "cursor": _HARNESS_DIR / "cursor.py",
+}
 
 
 def _invoke_harness(
@@ -327,12 +330,8 @@ def _invoke_harness(
     model: str | None = None,
     seed_summary: str | None = None,
 ) -> Any:
-    harness_dir = Path(__file__).resolve().parent / "harness"
-    adapter_name = harness.replace("-", "_")
-    adapter_path = harness_dir / f"{adapter_name}.py"
-    if not adapter_path.exists():
-        adapter_path = harness_dir / "claude_code.py"
-    mod = _load_harness_module(adapter_name, adapter_path)
+    adapter_path = _HARNESS.get(harness) or _HARNESS["claude-code"]
+    mod = _load_mod(harness, adapter_path)
     env_seed = os.environ.get("MENTAT_SEED_SUMMARY") or seed_summary
     return mod.invoke(prompt, afk=afk, model=model, seed_summary=env_seed)
 

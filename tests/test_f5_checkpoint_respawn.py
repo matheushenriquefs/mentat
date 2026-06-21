@@ -72,7 +72,7 @@ def test_invoke_harness_passes_seed_summary_from_env(tmp_path: Path) -> None:
         return fake_mod
 
     with (
-        patch.object(impl, "_load_harness_module", fake_load, create=True),
+        patch.object(impl, "_load_mod", fake_load),
         patch.dict("os.environ", {"MENTAT_SEED_SUMMARY": "prior session context"}),
     ):
         impl._invoke_harness("claude-code", "do it", afk=False, model=None)
