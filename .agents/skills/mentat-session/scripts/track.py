@@ -211,7 +211,8 @@ def render_list(records: list[dict[str, object]], selected: int, *, viewport_hei
     window = all_lines[offset : offset + viewport_height]
     remaining = len(all_lines) - (offset + viewport_height)
     if remaining > 0:
-        window.append(f"  … {remaining} more")
+        # Replace the last row with the affordance so total stays within viewport_height.
+        window[-1] = f"  … {remaining + 1} more"
     return window
 
 
@@ -299,14 +300,17 @@ def _draw(entries: list[Entry], selected: int, repo: str, *, focused: bool, view
     records = [rec for rec, _ in entries]
     print(tui.section_rule(f"{repo} — {len(records)} session(s)"))
     h = _terminal_height()
-    list_viewport = max(5, h - PREVIEW_LINES - 5)
+    overhead = 5  # section_rule + blank + preview-section_rule + blank + hint
+    available = max(6, h - overhead)
+    preview_cap = min(PREVIEW_LINES, max(3, available // 2))
+    list_viewport = max(3, available - preview_cap)
     for line in render_list(records, selected, viewport_height=list_viewport):
         print(line)
     if entries:
         record, session_dir = _selected(entries, selected)
         print()
         print(tui.section_rule(str(record["session"])))
-        for line in render_preview(_tools(session_dir, limit=PREVIEW_LINES)):
+        for line in render_preview(_tools(session_dir, limit=preview_cap)):
             print(line)
     print()
     print(tui.color("j/k move · enter focus · x kill · q quit", tui.DIM))

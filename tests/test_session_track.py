@@ -391,7 +391,7 @@ def test_render_list_viewport_keeps_cursor_visible():
     assert "s-30" in body
     assert "s-00" not in body
     non_empty = [ln for ln in lines if ln.strip()]
-    assert len(non_empty) <= 11  # 10 records + optional "… N more"
+    assert len(non_empty) <= 10  # exactly viewport_height rows (affordance replaces last, not appended)
 
 
 def test_render_list_no_viewport_shows_all():
@@ -408,6 +408,36 @@ def test_render_list_affordance_when_truncated():
     lines = track.render_list(records, 0, viewport_height=5)
     body = "\n".join(lines)
     assert "more" in body
+
+
+# ── S3: viewport off-by-one + small-terminal budget ─────────────────────────
+
+
+def test_render_list_never_exceeds_viewport_height():
+    """render_list with affordance must stay within viewport_height, not exceed it."""
+    track = load_module("track")
+    records = [_rec(f"s-{i}", "working") for i in range(20)]
+    lines = track.render_list(records, selected=2, viewport_height=5)
+    assert len(lines) <= 5, f"expected ≤5 rows, got {len(lines)}"
+
+
+def test_render_list_cursor_on_screen_small_terminal():
+    """24-row terminal budget (list_viewport=5), >5 sessions → selected row in output."""
+    track = load_module("track")
+    records = [_rec(f"s-{i:02d}", "working") for i in range(10)]
+    lines = track.render_list(records, selected=7, viewport_height=5)
+    body = "\n".join(lines)
+    assert "s-07" in body, "selected row must be in the rendered window"
+    assert len(lines) <= 5
+
+
+def test_render_list_viewport_exact_budget():
+    """When viewport matches count, no affordance, stays exactly at budget."""
+    track = load_module("track")
+    records = [_rec(f"s-{i}", "working") for i in range(5)]
+    lines = track.render_list(records, 0, viewport_height=5)
+    assert len(lines) == 5
+    assert all("more" not in ln for ln in lines)
 
 
 # ── V5: fix _read_key escape-burst parsing over a real pty ───────────────────
