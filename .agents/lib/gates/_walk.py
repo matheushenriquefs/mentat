@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# Union of precommit._SKIP_DIRS and smells._SKIP_DIRS
 SKIP_DIRS = frozenset(
     {
         ".git",
