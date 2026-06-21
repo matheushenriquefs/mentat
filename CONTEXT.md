@@ -5,7 +5,7 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 ## Language
 
 **Multi-harness orchestrator**
-: Mentat's category label. Contrast with *meta-harness* (Lee et al. arxiv 2603.28052 — a different architecture) and *meta-skill* (revfactory/harness). Mentat orchestrates parallel coding agents across multiple headless agent CLIs (`cursor-agent`, `claude-code`). _Avoid_: "meta-harness", "the harness" as a self-description of Mentat.
+: Mentat's category label. Distinct from a *meta-harness* (outer-loop search over one agent's surrounding code — a different architecture) and a *meta-skill*. Mentat orchestrates parallel coding agents across multiple headless agent CLIs (`claude-code`, `cursor`). _Avoid_: "meta-harness", "the harness" as a self-description of Mentat.
 
 **Mentat (system)**
 : The harness itself — the `.agents/` tree, Python skills, and orchestration contracts. Not a person, not an agent. _Avoid_: "the Mentat", "the AI", "the bot".
@@ -47,7 +47,7 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 : The harness CLI — `cursor-agent` or `claude-code`. What `--harness=` selects; `/mentat-session track` watches it; each harness adapter module under `.agents/skills/mentat-implement/scripts/harness/` declares its `cmd` and `output_format`. _Avoid_: "build" (collides with Docker `build:` in `mentat-container-up`).
 
 **Reviewer gate**
-: The three ADR-0003 reviewers (`mentat-plan-reviewer`, `mentat-test-reviewer`, `mentat-bug-reviewer`) run once at end-of-queue over the final landed tip. Advisory (inspect-after) until they earn a false-pass record. _Avoid_: conflating this with the per-chunk land gate.
+: The six ADR-0003 reviewer subagents — `mentat-plan-reviewer`, `mentat-test-reviewer`, `mentat-bug-reviewer`, `mentat-rules-reviewer`, `mentat-context-reviewer`, `mentat-smell-reviewer`. Plan and test score against a threshold; bug, rules, and context veto; smell is advisory. They gate each chunk at implement and land time. `mentat-orchestrate` additionally runs them as an advisory end-of-queue batch review over the final tip. _Avoid_: conflating the per-chunk gate with the end-of-queue review.
 
 **Blacklist**
 : Set of forbidden reward-hacking moves in `mentat-bug-reviewer`. Any hit → 0.0 veto. Overrides all graded scores. _Avoid_: "denylist" (different mental model — this is a trajectory scan, not an access control).
@@ -88,6 +88,41 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 
 **"Mentat" — system vs. Dune character.** In code and docs, "Mentat" (capitalized) is the harness. The Dune origin is context for the name; it does not appear in technical prose.
 
+## Positioning
+
+Mentat is a barebones primitive, not a framework. It composes git worktrees, a
+container engine, and a chosen agent CLI, and adds one thing those do not provide on
+their own: a scored, serial land queue. It sits with the lean building blocks of
+software — the kind a larger system is assembled from, not the kind that dictates the
+system's shape. The test every change is held to: a change that exposes a primitive
+ships; a change that adds framework weight is refused.
+
+## Non-goals
+
+Deliberate refusals. A change adding any of these is closed as out of scope.
+
+- **No UI.** Command-line only. Graphical diff-review and session-steering belong to
+  desktop session managers, not Mentat.
+- **No multi-machine.** Single-host concurrency, tuned by the `concurrency` config
+  key. Higher counts raise rebase-collision odds at land time.
+- **No cloud.** No hosted agents, no platform, no daemon.
+- **No cross-repo state.** Compose at the shell level — run independent
+  orchestrations per repository; each writes its own namespaced audit log.
+
+## Known limitations
+
+Present-tense facts, not promises of future work.
+
+- **Reviewer thresholds are chosen, not measured.** The pass thresholds are set by
+  judgment — reasonable defaults, not values fit to a labeled corpus.
+- **Token-usage accounting is partial.** Adapters report usage only when the
+  underlying CLI emits it; where it emits nothing, Mentat records no usage rather
+  than inventing a number.
+- **A container engine is mandatory.** Every project-tool invocation runs in a
+  devcontainer ([ADR-0002](docs/adr/0002-holding-branch-over-merge.md),
+  [ADR-0004](docs/adr/0004-parallel-orchestration.md)). Hosts without one cannot run
+  Mentat — reproducibility traded for that hard dependency.
+
 ## ADRs
 
 | # | Title | Summary |
@@ -100,7 +135,9 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 | [0006](docs/adr/0006-soft-readonly-test-enforcement.md) | Soft read-only tests | No kernel mount. Impl-only-after-red contract + runner-redirection blacklist entry. Both agnostic. |
 | [0007](docs/adr/0007-audit-envelope.md) | Audit envelope | 9-event canonical catalog, NDJSON envelope, `~/.mentat/logs/<repo>/<session>/` layout. |
 | [0008](docs/adr/0008-python-runtime.md) | Python runtime | Stdlib-only at the bin layer; uv/ruff/pyright/pytest at the dev layer. Container-required Python 3.11+. |
-| [0009](docs/adr/0009-plugin-api.md) | Plugin API | Vite-derived 2-slot extension surface (rubric, gate). Mentat core stays minimal. |
+| [0009](docs/adr/0009-plugin-api.md) | Plugin API | Vite-derived, one slot (harness), entry-point discovery. Mentat core stays minimal. |
 | [0010](docs/adr/0010-readonly-test-mount.md) | Read-only test mount | OCP `<plan>.tests.json` manifest + container bind-mount with `readonly` flag. |
+| [0011](docs/adr/0011-compose-aware-container.md) | Compose-aware container | Sidecar detection + dev-service layering; host opt-out forfeits isolation. |
+| [0012](docs/adr/0012-code-rules-layer.md) | Code-rules layer | `.agents/rules/` code conventions, enforced by `mentat-rules-reviewer` (veto). |
 | [0013](docs/adr/0013-session-continuity-over-compaction.md) | Session continuity | Checkpoint at slice boundary, write summary, spawn fresh seeded session — harness-agnostic. |
 

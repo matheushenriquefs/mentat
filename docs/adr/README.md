@@ -12,7 +12,8 @@ Architecture Decision Records for Mentat.
 | [0006](./0006-soft-readonly-test-enforcement.md) | Soft read-only test enforcement | Accepted |
 | [0007](./0007-audit-envelope.md) | Audit envelope — 9-event catalog | Accepted |
 | [0008](./0008-python-runtime.md) | Python runtime | Accepted |
-| [0009](./0009-plugin-api.md) | Plugin API (Vite-derived, 2 slots) | Accepted |
+| [0009](./0009-plugin-api.md) | Plugin API (Vite-derived, one slot: harness) | Accepted |
 | [0010](./0010-readonly-test-mount.md) | Read-only test mount (OCP manifest + bind-mount) | Accepted |
 | [0011](./0011-compose-aware-container.md) | Compose-aware container bring-up (sidecar detection + dev-service layering + host opt-out) | Accepted |
+| [0012](./0012-code-rules-layer.md) | Code-rules layer | Accepted |
 | [0013](./0013-session-continuity-over-compaction.md) | Session continuity over compaction — checkpoint + respawn, harness-agnostic | Accepted |

@@ -1,6 +1,6 @@
 <h1 align="center">Mentat</h1>
 
-<h3 align="center">Parallel agents with vertical slices, devcontainers, and a serial merge queue</h3>
+<h3 align="center">Merge-queue for parallel coding agents — rebase, re-gate, score, land</h3>
 
 <p align="center">
   Fan out coding agents across isolated git worktrees + devcontainers.<br/>
@@ -23,6 +23,18 @@
 Long-running coding agents drift. Context compacts, hooks collide with sandboxed runs, and one wrong commit can poison the rest of a session. Sequential loops squander wall-clock time on work that does not need to be serial — but naive parallel fan-out produces merge conflicts, half-finished chunks, and review burden that scales linearly with the agent count.
 
 Mentat structures the work instead. Plans are split into vertical slices that can be implemented independently. Slices run in parallel, each in its own worktree and devcontainer so pre-commit hooks and project tooling stay isolated. A serial merge queue rebases and re-gates each chunk before it joins the holding branch, so failures eject one chunk at a time without blocking the rest.
+
+## When to use it
+
+Use Mentat when you want headless, scriptable parallel agents from the command line,
+a quality veto *before* work merges rather than review comments after, one consistent
+audit trail across whichever agent CLI you run, and you work on local hardware you
+trust with a devcontainer.
+
+Reach for something else when you want a graphical diff-review and session-steering
+interface, cloud-hosted agents on VMs, pull-request-comment review without merge
+gating, or you cannot run a container engine. See
+[why-mentat](./docs/explanation/why-mentat.md) for the full positioning.
 
 ## How it works
 
@@ -106,12 +118,12 @@ curl -fsSL https://raw.githubusercontent.com/matheushenriquefs/mentat/main/insta
 | **Vertical-slice plans** | Tracer-bullet `plan.md` files. Each slice independently landable. |
 | **Parallel fan-out** | Worktree + devcontainer + branch per chunk. Up to 3 concurrent. |
 | **Serial land queue** | Rebase onto holding tip in-container, re-gate, fast-forward. No merge commits, no host pre-commit collisions. |
-| **Scored review gate** | 5 reviewer subagents (plan / test / bug / smell / context) emit JSON verdicts. Never average — veto > threshold. |
+| **Scored review gate** | 6 reviewer subagents (plan / test / bug / smell / context / rules) emit JSON verdicts. Never average — veto > threshold. |
 | **Anti-cheat blacklist** | Trajectory scanner in `mentat-bug-reviewer` hard-vetoes forbidden moves (test-runner redirection, asserting the inverse). No threshold mediation. |
 | **AFK vs HITL** | Slice-level tags control whether agents stall for human review or proceed unattended. AFK depends on the scored gate. |
 | **Audit envelope** | Every command emits start + complete events. NDJSON to `~/.mentat/logs/<repo>/<session>/`. |
 | **Harness-agnostic** | Pluggable headless-agent CLIs (`claude-code`, `cursor` today). Drop a module to add another. |
-| **Plugin API** | Pluggable harness adapters and diff renderers without forking core. |
+| **Plugin API** | Pluggable harness adapters without forking core. One slot: harness. |
 | **Stdlib-only bin layer** | Installs without pip. Dev layer uses `uv` / `ruff` / `pyright` / `pytest`. |
 
 ## Development
@@ -138,12 +150,15 @@ task test      # pytest tests/
 
 | Doc | Contents |
 |---|---|
-| [Architecture](./docs/ARCHITECTURE.md) | Narrative overview, 15 sections, ADR pointers. |
+| [Getting started](./docs/tutorials/getting-started.md) | One end-to-end first run, plan to merge. |
+| [What / Why Mentat](./docs/explanation/what-is-mentat.md) | The model and the positioning thesis. |
+| [How-to guides](./docs/how-to/) | Worked workflows: implement, orchestrate, track, doctor, HITL handoff. |
+| [Architecture](./docs/ARCHITECTURE.md) | Narrative overview, ADR pointers. |
 | [Glossary](./CONTEXT.md) | Domain lexicon — slice / chunk / batch / land / eject / AFK / HITL. |
-| [ADRs](./docs/adr/README.md) | 10 architecture decision records, 0001–0010. |
+| [ADRs](./docs/adr/README.md) | 13 architecture decision records, 0001–0013. |
 | [Filesystem layout](./.agents/docs/PATHS.md) | Every path Mentat reads or writes. |
 | [Style guide](./docs/STYLE.md) | Voice classes, LOC budgets, banned words. |
-| [Plugin API](./docs/PLUGINS.md) | Rubric + gate extension slots. |
+| [Plugin API](./docs/PLUGINS.md) | The harness adapter slot. |
 | [Exit codes](./docs/EXIT-CODES.md) | BSD sysexits convention. |
 
 ## License
