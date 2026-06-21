@@ -104,40 +104,43 @@ def _gate_jq(path: Path) -> tuple[str | None, str | None]:
     return None, None
 
 
-def _check(path: Path, cls: str, blocks: list[str], advisories: list[str]) -> None:
+def _check(path: Path, cls: str) -> tuple[list[str], list[str]]:
+    blocks: list[str] = []
+    advisories: list[str] = []
     if cls in ("skill", "command"):
         msg = _gate_frontmatter(path)
         if msg:
             blocks.append(msg)
-        return
+        return blocks, advisories
     if cls == "adr":
         msg = _gate_adr(path)
         if msg:
             blocks.append(msg)
-        return
+        return blocks, advisories
     if cls == "workflow":
         msg = _gate_workflow(path)
         if msg:
             blocks.append(msg)
-        return
+        return blocks, advisories
     if cls == "jsonc":
         msg = _gate_jsonc(path)
         if msg:
             blocks.append(msg)
-        return
+        return blocks, advisories
     if cls == "shell":
         block, advise = _gate_shell(path)
         if block:
             blocks.append(block)
         if advise:
             advisories.append(advise)
-        return
+        return blocks, advisories
     if cls == "jq":
         block, advise = _gate_jq(path)
         if block:
             blocks.append(block)
         if advise:
             advisories.append(advise)
+    return blocks, advisories
 
 
 def run(chunk_path: Path | None) -> tuple[str, str]:
@@ -154,7 +157,9 @@ def run(chunk_path: Path | None) -> tuple[str, str]:
         if cls is None:
             continue
         try:
-            _check(path, cls, blocks, advisories)
+            new_blocks, new_advisories = _check(path, cls)
+            blocks.extend(new_blocks)
+            advisories.extend(new_advisories)
         except OSError as e:
             advisories.append(f"{path}: read error: {e}")
 

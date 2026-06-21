@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Protocol
 
 _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
@@ -22,6 +23,11 @@ _CONTAINER_SCRIPT = paths.CONTAINER_SCRIPT
 _LOG_SCRIPT = paths.LOG_SCRIPT
 
 _utils = load_sibling(__file__, "plans")
+
+
+class _PlanLike(Protocol):
+    slug: str
+    path: Path
 
 
 def _log_dir_for(session_id: str) -> Path:
@@ -75,7 +81,7 @@ _emit_event = bind("mentat-orchestrate")
 
 
 def spawn_with_proc(
-    plan, *, harness: str | None = None, model: str | None = None, seed_summary: str | None = None
+    plan: _PlanLike, *, harness: str | None = None, model: str | None = None, seed_summary: str | None = None
 ) -> tuple[str, subprocess.Popen]:
     """Spawn plan headless. Print track command immediately. Return (session_id, Popen)."""
     session_id, proc = _spawn_worktree_subprocess(plan.path, harness=harness, model=model, seed_summary=seed_summary)
@@ -83,12 +89,18 @@ def spawn_with_proc(
         "chunk.spawned",
         spawned_payload(plan.slug, str(plan.path), harness=harness or "default", worktree=str(Path.cwd())),
     )
-    print(f"python3 ~/.agents/skills/mentat-session/scripts/session.py track {session_id}")
+    print(f"mentat-session track {session_id}")
     print(session_id)
     return session_id, proc
 
 
-def spawn(plan, *, harness: str | None = None, model: str | None = None, seed_summary: str | None = None) -> str:
+def spawn(
+    plan: _PlanLike,
+    *,
+    harness: str | None = None,
+    model: str | None = None,
+    seed_summary: str | None = None,
+) -> str:
     """Spawn plan headless. Discards Popen handle. Returns session ID."""
     session_id, _proc = spawn_with_proc(plan, harness=harness, model=model, seed_summary=seed_summary)
     return session_id

@@ -19,7 +19,7 @@ def _field(obj: object, key: str) -> object:
 def tool_uses(row: object) -> list[str]:
     """Tool-call names invoked in one assistant stream row, in order (empty if none).
 
-    The S7 tracker renders these live; `is_ask_user_question` is the AskUserQuestion
+    The live tracker renders these; `is_ask_user_question` is the AskUserQuestion
     case of this — both read the same wire shape so the schema lives in one place.
     """
     if _field(row, "type") != "assistant":

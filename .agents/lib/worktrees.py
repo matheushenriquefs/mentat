@@ -1,10 +1,9 @@
 """Shared worktree lifecycle: identity-by-path prune + single-worktree teardown.
 
 A mentat worktree is one living under ``<repo>/.mentat/worktrees/`` — identity is
-PATH, never a session-id name prefix. The S1 session-id rename obsoletes every
-``startswith("mentat-"/"auto-"/"mentat-manual-")`` heuristic, which would
-otherwise silently match nothing and orphan worktrees again. Preserve-vs-remove
-is dirty-vs-clean (``git status``), not a name guess.
+PATH, never a session-id name prefix. Any ``startswith`` heuristic on the name
+would silently match nothing and orphan worktrees. Preserve-vs-remove is
+dirty-vs-clean (``git status``), not a name guess.
 
 Lifecycle code lives here once; ``mentat-implement`` (own-worktree teardown on
 its own failure + preflight sweep) and ``mentat-orchestrate`` (end-of-batch

@@ -87,7 +87,7 @@ def ejected_payload(
     Base shape ``{slug, reason, where}`` for every ejection regardless of caller;
     the optional fields (``logs_path``, ``preflight_exit``, ``upstream``,
     ``summary``) are included only when set. ``summary`` carries the operator-
-    facing blocker text on a ``hitl-required`` ejection (S5). These optionals are
+    facing blocker text on a ``hitl-required`` ejection. These optionals are
     declared in mentat-log's ``EVENT_OPTIONAL_FIELDS`` — a payload extension, not
     a new event type (the 9-event catalog is unchanged).
     """
