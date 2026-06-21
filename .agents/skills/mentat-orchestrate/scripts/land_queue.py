@@ -27,6 +27,9 @@ class Chunk(NamedTuple):
 
 def _rebase_chunk(chunk: Chunk, holding: str) -> tuple[str | None, str | None]:
     """Rebase chunk onto holding. Returns (tip_sha, error_message)."""
+    # mentat-container up modifies .devcontainer/ files in every worktree but
+    # never stages them; git rebase refuses "You have unstaged changes".
+    _git.discard_path(chunk.worktree, ".devcontainer/")
     return _git.rebase_ff_only(chunk.worktree, holding)
 
 

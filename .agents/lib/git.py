@@ -80,6 +80,17 @@ def remove_worktree(path: Path) -> bool:
     return r.returncode == 0 or not path.exists()
 
 
+def discard_path(cwd: Path, path: str) -> None:
+    """Discard tracked changes and remove untracked files under *path* in the worktree.
+
+    Best-effort — errors are silently ignored.  Used before rebase to remove
+    transient files (e.g. .devcontainer/ modified by mentat-container up) that
+    would cause git to refuse the rebase with "You have unstaged changes."
+    """
+    _run(["checkout", "--", path], cwd=cwd)
+    _run(["clean", "-fd", path], cwd=cwd)
+
+
 def rebase_ff_only(cwd: Path, onto: str) -> tuple[str | None, str | None]:
     """Rebase ``cwd`` branch onto ``onto``. Returns (tip_sha, None) or (None, err_msg).
 
@@ -115,7 +126,17 @@ def ff_merge(cwd: Path, holding: str) -> bool:
         return False
     current = branch_r.stdout.strip()
     if current == holding:
-        r = _run(["merge", "--ff-only", sha], cwd=main_wt)
-        return r.returncode == 0
-    r = _run(["fetch", ".", f"{sha}:refs/heads/{holding}"], cwd=main_wt)
+        # Branch is currently checked out — git fetch refuses to update it.
+        # Use git update-ref instead (no working-tree touch, works dirty).
+        # Verify ff first: holding tip must be an ancestor of sha.
+        tip_r = _run(["rev-parse", f"refs/heads/{holding}"], cwd=main_wt)
+        if tip_r.returncode != 0:
+            return False
+        anc = _run(["merge-base", "--is-ancestor", tip_r.stdout.strip(), sha], cwd=main_wt)
+        if anc.returncode != 0:
+            return False
+        r = _run(["update-ref", f"refs/heads/{holding}", sha], cwd=main_wt)
+    else:
+        # Branch is NOT checked out — git fetch . enforces ff automatically.
+        r = _run(["fetch", ".", f"{sha}:refs/heads/{holding}"], cwd=main_wt)
     return r.returncode == 0
