@@ -18,6 +18,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 import compose_render  # noqa: E402
 import container_ops as utils  # noqa: E402
+from lib.exits import EX_ARGPARSE, EX_FAILURE, EX_OK, EX_UNAVAILABLE  # noqa: E402
 
 _docker = utils._docker
 
@@ -27,8 +28,8 @@ def _host_runtime() -> bool:
 
     Default (key unset, ``"docker"``, or ``"container"``) → containerized. Only the
     explicit ``"host"`` value forfeits ADR-0004 isolation. Reads through the live
-    config reader, so it works against either ``config.toml`` or legacy
-    ``config.jsonc``.
+    config reader, so it works against ``config.toml`` (or the deprecated
+    ``config.jsonc`` overlay — migrate to ``config.toml``).
     """
     from lib.config import read_config
 
@@ -72,7 +73,7 @@ def _git_root() -> Path:
     )
     if result.returncode != 0:
         print("mentat-container: must run from inside a git worktree", file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(EX_ARGPARSE)
     return Path(result.stdout.strip())
 
 
@@ -243,7 +244,7 @@ def cmd_up(wt: Path) -> int:
     if result.returncode != 0:
         cid2 = utils.container_id_for(slug)
         if not cid2:
-            return 1
+            return EX_FAILURE
 
     final_cid = utils.container_id_for(slug)
     if final_cid:
@@ -262,7 +263,7 @@ def cmd_run(wt: Path, command: str) -> int:
             f"mentat-container: container not running for slug {slug} (run 'mentat-container up' first)",
             file=sys.stderr,
         )
-        return 69
+        return EX_UNAVAILABLE
     ws = utils.resolve_workspace_folder(wt)
     result = subprocess.run(
         [
@@ -286,34 +287,23 @@ def cmd_down(*, slug: str) -> int:
         return 0  # host mode brought nothing up — nothing to tear down
     from lib import devcontainer
 
-    return 0 if devcontainer.down(slug) else 1
+    return EX_OK if devcontainer.down(slug) else EX_FAILURE
 
 
 def _col(label: str, value: str) -> str:
     return f"  {label:<14}: {value}"
 
 
-def cmd_doctor(wt: Path) -> int:  # noqa: C901
-    import json as _json
-    import platform as _platform
-
-    warnings: list[str] = []
-    advisories: list[str] = []
-
-    print("\nmentat-container doctor\n")
-
-    # ── [host] ──────────────────────────────────────────────────────────────
-    try:
-        host_arch = subprocess.run(["uname", "-m"], capture_output=True, text=True).stdout.strip()
-    except FileNotFoundError:
-        host_arch = "unknown"
-    host_os = f"{_platform.system().lower()} {_platform.release()}"
+def _doctor_section_host(host_arch: str, host_os: str) -> tuple[list[str], list[str]]:
     print("[host]")
     print(_col("arch", host_arch))
     print(_col("os", host_os))
     print()
+    return [], []
 
-    # ── [container] ─────────────────────────────────────────────────────────
+
+def _doctor_section_container(wt: Path, host_arch: str) -> tuple[list[str], list[str]]:
+    warnings: list[str] = []
     slug = wt.name
     print("[container]")
     try:
@@ -334,7 +324,6 @@ def cmd_doctor(wt: Path) -> int:  # noqa: C901
             )
             img_platform = inspect.stdout.strip() if inspect.returncode == 0 else "unknown"
             print(_col("image platf", img_platform))
-            # arch mismatch
             if (host_arch == "arm64" and "amd64" in img_platform) or (
                 host_arch in ("x86_64", "amd64") and "arm64" in img_platform
             ):
@@ -349,8 +338,10 @@ def cmd_doctor(wt: Path) -> int:  # noqa: C901
             print(_col("state", f"no container for slug={slug}"))
             warnings.append(f"container not running (slug={slug})")
     print()
+    return warnings, []
 
-    # ── [harness] ───────────────────────────────────────────────────────────
+
+def _doctor_section_harness() -> tuple[list[str], list[str]]:
     print("[harness]")
     claude_dir = Path.home() / ".claude"
     cursor_dir = Path.home() / ".cursor"
@@ -368,8 +359,11 @@ def cmd_doctor(wt: Path) -> int:  # noqa: C901
     else:
         print(_col("cursor", "not detected"))
     print()
+    return [], []
 
-    # ── [companions] ────────────────────────────────────────────────────────
+
+def _doctor_section_companions() -> tuple[list[str], list[str]]:
+    advisories: list[str] = []
     print("[companions]")
     pocock = (Path.home() / ".claude/skills/diagnose/SKILL.md").exists()
     caveman = (Path.home() / ".claude/plugins/marketplaces/caveman").exists()
@@ -378,12 +372,15 @@ def cmd_doctor(wt: Path) -> int:  # noqa: C901
     if not pocock or not caveman:
         advisories.append("companion(s) missing")
     print()
+    return [], advisories
 
-    # ── [mentat state] ──────────────────────────────────────────────────────
-    print("[mentat state]")
-    mentat_dir = Path.home() / ".mentat"
+
+def _doctor_section_mentat_state(wt: Path) -> tuple[list[str], list[str]]:
     from lib.config import config_status
 
+    warnings: list[str] = []
+    print("[mentat state]")
+    mentat_dir = Path.home() / ".mentat"
     print(_col("~/.mentat/", "present" if mentat_dir.exists() else "absent"))
     g_status, g_warn = config_status(mentat_dir)
     print(_col("config (global)", g_status))
@@ -402,8 +399,12 @@ def cmd_doctor(wt: Path) -> int:  # noqa: C901
     else:
         print(_col("logs dir", "absent"))
     print()
+    return warnings, []
 
-    # ── [tests] ─────────────────────────────────────────────────────────────
+
+def _doctor_section_tests() -> tuple[list[str], list[str]]:
+    import json as _json
+
     print("[tests]")
     plans_dir = Path.home() / ".agents" / "plans"
     if plans_dir.exists():
@@ -423,13 +424,38 @@ def cmd_doctor(wt: Path) -> int:  # noqa: C901
     else:
         print("  no plans dir")
     print()
+    return [], []
 
-    # ── verdict ─────────────────────────────────────────────────────────────
-    warn_str = f"{len(warnings)} warning ({', '.join(warnings)})" if warnings else "0 warnings"
-    adv_str = f"{len(advisories)} advisory ({', '.join(advisories)})" if advisories else "0 advisories"
+
+def cmd_doctor(wt: Path) -> int:
+    import platform as _platform
+
+    try:
+        host_arch = subprocess.run(["uname", "-m"], capture_output=True, text=True).stdout.strip()
+    except FileNotFoundError:
+        host_arch = "unknown"
+    host_os = f"{_platform.system().lower()} {_platform.release()}"
+
+    print("\nmentat-container doctor\n")
+
+    all_warnings: list[str] = []
+    all_advisories: list[str] = []
+    for w, a in [
+        _doctor_section_host(host_arch, host_os),
+        _doctor_section_container(wt, host_arch),
+        _doctor_section_harness(),
+        _doctor_section_companions(),
+        _doctor_section_mentat_state(wt),
+        _doctor_section_tests(),
+    ]:
+        all_warnings.extend(w)
+        all_advisories.extend(a)
+
+    warn_str = f"{len(all_warnings)} warning ({', '.join(all_warnings)})" if all_warnings else "0 warnings"
+    adv_str = f"{len(all_advisories)} advisory ({', '.join(all_advisories)})" if all_advisories else "0 advisories"
     print(f"verdict: {warn_str}, {adv_str}")
 
-    return 1 if warnings else 0
+    return EX_FAILURE if all_warnings else EX_OK
 
 
 def build_parser() -> argparse.ArgumentParser:

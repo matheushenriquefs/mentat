@@ -255,7 +255,7 @@ class SynthResult(NamedTuple):
     extra_files: dict[str, str]
 
 
-def _dcj_json(fields: dict, mounts: list[str]) -> str:
+def _dcj_json(fields: dict[str, object], mounts: list[str]) -> str:
     """Serialize a devcontainer.json dict, appending non-empty ro-mounts last.
 
     Every synth branch builds its own field set but shares this tail (the
@@ -288,7 +288,7 @@ def _synth_from_tmpl(tmpl: Path, slug: str, worktree_path: Path) -> SynthResult:
 
 
 def _synth_sidecar_overlay(slug: str, worktree_path: Path) -> SynthResult:
-    """Layer a generated dev service onto a sidecar-only compose (C2 / ADR-0011).
+    """Layer a generated dev service onto a sidecar-only compose (ADR-0011).
 
     The devcontainer points at both the project compose and the generated overlay;
     the dev service is the workspace. The overlay is returned as an extra file for
