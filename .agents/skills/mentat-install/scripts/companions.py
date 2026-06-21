@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import IO
 
 _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
@@ -29,7 +30,7 @@ _ANSI_GREEN = "\033[32m"
 _ANSI_YELLOW = "\033[33m"
 
 
-COMPANIONS: list[dict] = [
+COMPANIONS: list[dict[str, object]] = [
     {
         "name": "matt-pocock-skills",
         "docs": "https://github.com/mattpocock/skills",
@@ -84,7 +85,7 @@ class _Spinner:
             time.sleep(0.08)
 
 
-def install_one(companion: dict, *, tty) -> None:
+def install_one(companion: dict[str, object], *, tty: IO[str]) -> None:
     name = companion["name"]
     docs = companion["docs"]
     cmd_list = companion["install_cmd"]

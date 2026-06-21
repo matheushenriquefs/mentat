@@ -6,7 +6,7 @@ import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .plan import InstallPlan
+    from plan import InstallPlan
 
 _GREEN = "\033[32m"
 _CYAN = "\033[36m"
@@ -35,7 +35,7 @@ def render(plan: InstallPlan, *, color: bool | None = None) -> str:
             lines.append(f"  {_c('~', _CYAN)} {a.target}")
 
     if plan.conflicts:
-        lines.append("Conflicts (real file/dir at target — D13 abort policy):")
+        lines.append("Conflicts (real file/dir at target — manual resolution required):")
         for p in plan.conflicts:
             lines.append(f"  {_c('✗', _RED)} {p}")
 

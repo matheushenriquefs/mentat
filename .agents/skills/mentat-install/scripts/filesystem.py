@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 class InstallConflict(RuntimeError):
-    """Raised when a non-symlink target blocks the install (D13 policy: no silent overwrite)."""
+    """Raised when a non-symlink target blocks the install (no silent overwrite)."""
 
 
 def safe_symlink(source: Path, target: Path, *, dry_run: bool = False) -> None:
@@ -18,7 +18,7 @@ def safe_symlink(source: Path, target: Path, *, dry_run: bool = False) -> None:
     if target.parent.is_symlink() and not target.parent.exists():
         target.parent.unlink()
     target.parent.mkdir(parents=True, exist_ok=True)
-    # D13 conflict policy: real file/dir at target → abort. Symlinks may be replaced.
+    # Real file/dir at target → abort. Symlinks may be replaced.
     if target.exists() and not target.is_symlink():
         raise InstallConflict(f"refusing to overwrite non-symlink at {target}")
     if target.exists() or target.is_symlink():

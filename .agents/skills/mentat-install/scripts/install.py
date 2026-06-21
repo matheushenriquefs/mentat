@@ -29,7 +29,7 @@ def _emit_installed() -> None:
     _emit_installed_fn("plan.started", {"path": "install"})
 
 
-def _execute_actions(ip, *, dry_run: bool) -> None:
+def _execute_actions(ip: _plan.InstallPlan, *, dry_run: bool) -> None:
     for action in ip.add:
         if action.action_type == "mkdir":
             _utils.safe_mkdir(action.target, dry_run=dry_run)
@@ -65,7 +65,7 @@ def do_install(
         return 0
 
     if ip.conflicts:
-        print("Aborted: real file/dir at one or more symlink targets (D13).", file=sys.stderr)
+        print("Aborted: real file/dir at one or more symlink targets.", file=sys.stderr)
         print("Resolve manually and re-run.", file=sys.stderr)
         return EX_DATAERR
 

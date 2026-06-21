@@ -27,7 +27,7 @@ _STALE_PATHS = [
     ".agents/bin/lib/audit-schema.jsonc",
     ".agents/bin/lib/harness-registry.jsonc",
     ".agents/lib/gates/llm",
-    # Pre-D13 broken symlinks (target file missing .md suffix). Re-install fixes.
+    # Stale broken symlinks (target file missing .md suffix). Re-install fixes.
     ".claude/agents/mentat-bug-reviewer",
     ".claude/agents/mentat-plan-reviewer",
     ".claude/agents/mentat-smell-reviewer",
@@ -118,7 +118,7 @@ def _plan_symlink(
         if target.resolve() != source.resolve():
             update.append(Action("symlink", source, target))
         return
-    # Exists as real file/dir — D13 policy: abort, no silent overwrite.
+    # Exists as real file/dir — abort, no silent overwrite.
     conflicts.append(target)
 
 
