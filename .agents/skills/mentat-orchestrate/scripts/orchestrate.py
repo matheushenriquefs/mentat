@@ -107,17 +107,11 @@ def _emit_anchored_chunks(plans: list[_scheduler.Plan], *, harness: str | None, 
 
 def _concurrency_cap() -> int:
     """Max parallel AFK chunk processes. Honors ADR-0004: default 3, tunable via config."""
-    cfg = _utils.read_config()
-    raw = cfg.get("concurrency", 3)
+    raw = _utils.read_config().get("concurrency", 3)
     try:
-        n = int(raw)
+        return max(1, int(raw))
     except (TypeError, ValueError):
-        print(
-            f"mentat-orchestrate: config.toml `concurrency` not int ({raw!r}); defaulting to 3",
-            file=sys.stderr,
-        )
         return 3
-    return max(1, n)
 
 
 _emit_event = _bind("mentat-orchestrate")
