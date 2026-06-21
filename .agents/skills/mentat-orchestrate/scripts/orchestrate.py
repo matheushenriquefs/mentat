@@ -14,12 +14,16 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib import devcontainer as _devcontainer  # noqa: E402
 from lib import git as _git  # noqa: E402
+from lib import worktrees as _worktrees  # noqa: E402
+from lib.config import load_config_file as _load_config_file  # noqa: E402
 from lib.events import HITL_IN_SESSION, EjectReason, ejected_payload, spawned_payload  # noqa: E402
 from lib.events import bind as _bind  # noqa: E402
 from lib.exits import EX_DATAERR, EX_HITL_REQUIRED, EX_NOINPUT  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 from lib.session import ensure_session  # noqa: E402
+from lib.session import summary_file as _summary_file
 
 _utils = load_sibling(__file__, "utils")
 _scheduler = load_sibling(__file__, "scheduler")
@@ -117,8 +121,6 @@ _emit_event = _bind("mentat-orchestrate")
 
 def _read_chunk_seed(session_id: str) -> str | None:
     """Return summary.md content for session_id if it exists (F5 checkpoint)."""
-    from lib.session import summary_file as _summary_file
-
     sf = _summary_file(session_id)
     return sf.read_text() if sf.exists() else None
 
@@ -183,16 +185,14 @@ def _partition_fanout(results, *, mark_ejected) -> tuple[list, set[str]]:
 def _prune_stale_containers() -> None:
     """Prune stale labeled containers — unless a stale worktree is dirty (its
     leftovers need a runnable container). Identity-by-path via lib.worktrees."""
-    from lib import devcontainer, worktrees
-
     wt_root = Path.cwd() / ".mentat" / "worktrees"
-    dirty = worktrees.dirty_stale(wt_root)
+    dirty = _worktrees.dirty_stale(wt_root)
     if dirty:
         for name in dirty:
             print(f"devcontainer: skipping prune — dirty worktree '{name}'", file=sys.stderr)
         return
 
-    result = devcontainer.prune()
+    result = _devcontainer.prune()
     _utils.emit_event("session.prune", {"reclaimed_bytes": result.reclaimed_bytes})
 
 
@@ -203,11 +203,9 @@ def _prune_stale_worktrees(preserve: set[str] | None = None) -> None:
     chunk's worktree must survive for the operator even when it is clean and
     inactive (S5). They are folded into the active set the prune treats as live.
     """
-    from lib import devcontainer, worktrees
-
     wt_root = Path.cwd() / ".mentat" / "worktrees"
-    active = set(devcontainer.list_active_slugs()) | (preserve or set())
-    removed = worktrees.prune_stale(wt_root, active_slugs=active)
+    active = set(_devcontainer.list_active_slugs()) | (preserve or set())
+    removed = _worktrees.prune_stale(wt_root, active_slugs=active)
     _utils.emit_event("session.prune", {"reclaimed_bytes": None, "worktrees_removed": removed})
 
 
@@ -282,10 +280,8 @@ def run_orchestrate(
 
     rc = 1 if sched._ejected or hitl_slugs else 0
     if rc == 0:
-        from lib.config import load_config_file as _load_cfg
-
         _cfg_path = Path.home() / ".mentat" / "config.toml"
-        _cfg = _load_cfg(_cfg_path) if _cfg_path.exists() else {}
+        _cfg = _load_config_file(_cfg_path) if _cfg_path.exists() else {}
         diff_tool = _cfg.get("diff_tool") or "git diff"
         print(f"mentat-orchestrate: review the diff with `{diff_tool}`", file=sys.stderr)
     return rc
