@@ -27,10 +27,10 @@ _SHELL_RC: dict[str, Path] = {
 _FISH_LINE = "fish_add_path $HOME/.mentat/bin"
 
 
-def _detect_shell() -> str:
+def _detect_shell() -> str | None:
     shell_bin = os.environ.get("SHELL", "")
     name = Path(shell_bin).name
-    return name if name in _SHELL_RC else "bash"
+    return name if name in _SHELL_RC else None
 
 
 def _already_in_path() -> bool:
@@ -49,6 +49,16 @@ def setup_path(*, yes: bool = False) -> None:
         return
 
     shell = _detect_shell()
+
+    if shell is None:
+        shell_bin = os.environ.get("SHELL", "(unknown)")
+        print_step(
+            SKIP,
+            f"unsupported shell {shell_bin!r} — add manually: {_EXPORT_LINE}",
+            dim=True,
+        )
+        return
+
     rc = _SHELL_RC[shell]
 
     if _rc_has_mentat(rc):
