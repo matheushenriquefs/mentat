@@ -339,13 +339,13 @@ def _draw(entries: list[Entry], selected: int, repo: str, *, focused: bool, view
     sys.stdout.flush()
 
 
-def navigate(repo_dir: Path, *, repo: str) -> int:
+def navigate(repo_dir: Path, *, repo: str, active_only: bool = True) -> int:
     """Live multi-AFK navigator: timer-poll the registry, raw-tty key handling.
 
     Thin I/O shell over the gate-tested pure parts. Falls back to a one-shot list
     print when stdin is not a tty (CI / piped).
     """
-    entries = _registry(repo_dir)
+    entries = _registry(repo_dir, active_only=active_only)
     if not sys.stdin.isatty():
         for line in render_list([rec for rec, _ in entries], 0):
             print(line)
@@ -372,7 +372,7 @@ def navigate(repo_dir: Path, *, repo: str) -> int:
                     view = toggle_view(view)
                 if action == "kill" and entries:
                     _kill(_selected(entries, selected)[1])
-            entries = _registry(repo_dir)
+            entries = _registry(repo_dir, active_only=active_only)
             selected = min(selected, max(len(entries) - 1, 0))
             if not entries:
                 focused = False
@@ -383,9 +383,9 @@ def navigate(repo_dir: Path, *, repo: str) -> int:
     return 0
 
 
-def _registry(repo_dir: Path) -> list[Entry]:
+def _registry(repo_dir: Path, *, active_only: bool = True) -> list[Entry]:
     """Registry status records paired with each session's absolute dir (for preview/kill)."""
-    rows = cast("list[dict[str, object]]", _sessions.list_sessions(repo_dir))
+    rows = cast("list[dict[str, object]]", _sessions.list_sessions(repo_dir, active_only=active_only))
     return [(r, repo_dir / str(r["session"])) for r in rows]
 
 

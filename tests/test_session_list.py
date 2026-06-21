@@ -179,7 +179,7 @@ def test_list_sessions_killed_shows_crashed(tmp_path):
         "mentat-implement",
         [_ev("chunk.spawned", slug="d", plan="p", harness="h", worktree="w")],
     )
-    rows = sessions.list_sessions(repo_dir, now=9_999_999_999.0)
+    rows = sessions.list_sessions(repo_dir, now=9_999_999_999.0, active_only=False)
     assert len(rows) == 1
     assert rows[0]["status"] == "?"
     assert rows[0]["session"] == "implement-dead-9"
@@ -239,3 +239,83 @@ def test_cmd_list_no_sessions(tmp_path):
         rc = session.cmd_list()
     assert rc == 0
     assert "no sessions" in buf.getvalue().lower()
+
+
+# ── V6: active_only filter + --all flag ──────────────────────────────────────
+
+
+def test_list_sessions_active_only_drops_old_idle(tmp_path):
+    """active_only=True keeps working/waiting + recent idle, drops old idle + old crashed."""
+    sessions = load_module("sessions")
+    repo_dir = tmp_path / "myrepo"
+    now = 1_000_000.0
+    recency = sessions._RECENCY_SECS
+
+    # working (fresh non-terminal) — keep
+    w = _write_log(repo_dir / "s-working", "a", [_ev("gate.evaluated", gate="g", verdict="p", severity="", message="")])
+    _set_mtime(w, now - 5)
+    # waiting (hitl eject) — keep regardless of age
+    wt = _write_log(repo_dir / "s-waiting", "a", [_ev("chunk.ejected", slug="x", reason="hitl-required", where="impl")])
+    _set_mtime(wt, now - (recency + 9999))
+    # idle, recent — keep
+    ir = _write_log(repo_dir / "s-idle-recent", "a", [_ev("chunk.landed", slug="x", sha="s", holding="h")])
+    _set_mtime(ir, now - (recency - 100))
+    # idle, old — drop
+    io_ = _write_log(repo_dir / "s-idle-old", "a", [_ev("chunk.landed", slug="x", sha="s", holding="h")])
+    _set_mtime(io_, now - (recency + 100))
+    # crashed, old — drop
+    co = _write_log(
+        repo_dir / "s-crashed-old", "a", [_ev("gate.evaluated", gate="g", verdict="p", severity="", message="")]
+    )
+    _set_mtime(co, now - (sessions.STALE_SECS + recency + 9999))
+
+    rows_active = sessions.list_sessions(repo_dir, now=now, active_only=True)
+    names_active = {r["session"] for r in rows_active}
+    assert "s-working" in names_active
+    assert "s-waiting" in names_active
+    assert "s-idle-recent" in names_active
+    assert "s-idle-old" not in names_active
+    assert "s-crashed-old" not in names_active
+
+    rows_all = sessions.list_sessions(repo_dir, now=now, active_only=False)
+    assert len(rows_all) == 5
+
+
+def test_cmd_list_all_flag(tmp_path):
+    """cmd_list(all_sessions=True) shows old sessions; False hides them."""
+    import time
+
+    session = load_module("session")
+    sessions = load_module("sessions")
+    repo_dir = tmp_path / "myrepo"
+    recency = sessions._RECENCY_SECS
+    env = {"MENTAT_LOG_PATH": str(tmp_path), "MENTAT_REPO": "myrepo"}
+
+    old = _write_log(repo_dir / "s-old-idle", "a", [_ev("chunk.landed", slug="x", sha="s", holding="h")])
+    # Set mtime to 25h ago so it's beyond the recency window
+    old_mtime = time.time() - (recency + 3600)
+    _set_mtime(old, old_mtime)
+
+    buf_active = io.StringIO()
+    buf_all = io.StringIO()
+    with patch.dict(os.environ, env, clear=False):
+        with redirect_stdout(buf_active):
+            session.cmd_list(all_sessions=False)
+        with redirect_stdout(buf_all):
+            session.cmd_list(all_sessions=True)
+    assert "s-old-idle" not in buf_active.getvalue()
+    assert "s-old-idle" in buf_all.getvalue()
+
+
+def test_build_parser_list_has_all_flag():
+    session = load_module("session")
+    p = session.build_parser()
+    args = p.parse_args(["list", "--all"])
+    assert args.all_sessions is True
+
+
+def test_build_parser_track_has_all_flag():
+    session = load_module("session")
+    p = session.build_parser()
+    args = p.parse_args(["track", "--all"])
+    assert args.all_sessions is True

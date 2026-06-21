@@ -34,6 +34,9 @@ _WAITING_EJECT_REASONS = frozenset({EjectReason.HITL_REQUIRED})
 # No activity for this long with a non-terminal tail = the session crashed silently.
 STALE_SECS = 300
 
+# Sessions idle/crashed for longer than this are hidden in the default active view.
+_RECENCY_SECS = 86400  # 24 hours
+
 # Attention-to-top: lower rank shown first.
 STATUS_RANK = {"waiting": 0, "idle": 1, "?": 2, "working": 3}
 
@@ -230,13 +233,23 @@ def _event_name(audit: dict[str, object] | None) -> str | None:
     return event if isinstance(event, str) else None
 
 
-def list_sessions(repo_dir: Path, *, now: float | None = None, stale_secs: float = STALE_SECS) -> list[SessionRecord]:
+def list_sessions(
+    repo_dir: Path,
+    *,
+    now: float | None = None,
+    stale_secs: float = STALE_SECS,
+    active_only: bool = True,
+) -> list[SessionRecord]:
     """Scan one repo's log dir into attention-ordered status records.
 
     Each record: {session, status, mtime, age, last_event}. Sorted by (rank, age)
     so attention-needing sessions (waiting > idle > ? > working) float to the top.
     Race-safe: a session dir/file removed mid-scan is skipped, never raised. Each
     session's logs are read once (audit tail + newest tail), not per-field.
+
+    When active_only=True (default), only working/waiting sessions and sessions
+    last active within _RECENCY_SECS are returned. Pass active_only=False for the
+    full history (--all flag).
     """
     if not repo_dir.is_dir():
         return []
@@ -245,6 +258,8 @@ def list_sessions(repo_dir: Path, *, now: float | None = None, stale_secs: float
     with contextlib.suppress(OSError):
         subs = [s for s in repo_dir.iterdir() if s.is_dir()]
     records: list[SessionRecord] = [r for sub in subs if (r := _build_record(sub, clock, stale_secs)) is not None]
+    if active_only:
+        records = [r for r in records if r["status"] in ("working", "waiting") or r["age"] <= _RECENCY_SECS]
     records.sort(key=lambda r: (STATUS_RANK.get(r["status"], 99), r["age"]))
     return records
 

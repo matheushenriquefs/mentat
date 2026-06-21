@@ -423,3 +423,6 @@ def test_read_key_over_pty():
             termios.tcsetattr(slave, termios.TCSADRAIN, old)
             os.close(master)
             os.close(slave)
+
+
+# ── V6: active_only filter + --all flag ───────────────────────────────────────

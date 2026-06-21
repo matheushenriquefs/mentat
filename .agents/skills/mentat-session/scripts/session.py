@@ -29,12 +29,12 @@ def _session_dir(repo: str, session_id: str) -> Path:
     return _log_root() / repo / session_id
 
 
-def cmd_track(session_id: str | None) -> int:
+def cmd_track(session_id: str | None, all_sessions: bool = False) -> int:
     repo = _repo()
     repo_dir = _log_root() / repo
     # No session id → live multi-AFK navigator over the whole repo registry.
     if session_id is None:
-        return _track.navigate(repo_dir, repo=repo)
+        return _track.navigate(repo_dir, repo=repo, active_only=not all_sessions)
     sd = _session_dir_fn(session_id)
     if not sd.exists():
         print(f"mentat-session: session dir not found: {sd}", file=sys.stderr)
@@ -94,12 +94,12 @@ def _humanize_age(age_secs: float) -> str:
 _STATUS_MARK = {"waiting": "◆", "idle": "✓", "?": "?", "working": "•"}
 
 
-def cmd_list() -> int:
+def cmd_list(all_sessions: bool = False) -> int:
     """Repo-wide session registry: scan ~/.mentat/logs/<repo>/*, status pulled from
     each session's newest jsonl tail, attention-needing sessions on top."""
     repo = _repo()
     repo_dir = _log_root() / repo
-    rows = _sessions.list_sessions(repo_dir)  # returns [] when the dir is absent
+    rows = _sessions.list_sessions(repo_dir, active_only=not all_sessions)
     if not rows:
         print(f"mentat-session: no sessions for {repo}")
         return 0
@@ -123,10 +123,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="mentat-session")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("list", help="Repo-wide session registry (attention-ordered)")
+    list_p = sub.add_parser("list", help="Repo-wide session registry (attention-ordered)")
+    list_p.add_argument("--all", dest="all_sessions", action="store_true", default=False, help="Show all sessions")
 
     track_p = sub.add_parser("track", help="Stream live events")
     track_p.add_argument("session", nargs="?", default=None)
+    track_p.add_argument("--all", dest="all_sessions", action="store_true", default=False, help="Show all sessions")
 
     doctor_p = sub.add_parser("doctor", help="Build verdict markdown")
     doctor_p.add_argument("session", nargs="?", default=None)
@@ -144,9 +146,10 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     session = getattr(args, "session", None)
+    all_sessions = getattr(args, "all_sessions", False)
     dispatch = {
-        "list": lambda: cmd_list(),
-        "track": lambda: cmd_track(session),
+        "list": lambda: cmd_list(all_sessions),
+        "track": lambda: cmd_track(session, all_sessions),
         "doctor": lambda: cmd_doctor(session),
         "report": lambda: cmd_report(session),
         "diagnose": lambda: cmd_diagnose(session),
