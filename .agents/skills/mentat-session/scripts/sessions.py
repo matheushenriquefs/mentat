@@ -112,35 +112,9 @@ def newest_jsonl(session_dir: Path) -> Path | None:
     return best
 
 
-def _tail_row(log_file: Path) -> dict[str, object] | None:
-    """Last non-blank JSON row of a jsonl file (None if unreadable/empty)."""
-    last: dict[str, object] | None = None
-    for row in iter_rows(log_file):
-        last = row
-    return last
-
-
 def _is_waiting_stream(row: dict[str, object]) -> bool:
     """A harness stream row showing the agent blocked on the operator (AskUserQuestion)."""
     return harness_stream.is_ask_user_question(row)
-
-
-def _audit_tail(session_dir: Path) -> dict[str, object] | None:
-    """The latest audit event (row carrying an `event` key) across the session's jsonls, by ts.
-
-    The terminal signal (chunk.landed / plan.succeeded / chunk.ejected …) lives in the audit
-    log, which may have an *older* mtime than a still-open harness session.jsonl. Reading the
-    single newest file's tail would then misread a finished session as working/crashed, so
-    completion is judged from the audit stream, not from whichever file was touched last.
-    """
-    best: dict[str, object] | None = None
-    best_ts = ""
-    for log_file in session_dir.glob("*.jsonl"):
-        for row in iter_rows(log_file):
-            ts = str(row.get("ts", ""))
-            if "event" in row and ts >= best_ts:
-                best, best_ts = row, ts
-    return best
 
 
 def derive_status(row: dict[str, object] | None, age_secs: float | None, *, stale_secs: float = STALE_SECS) -> str:
@@ -164,30 +138,91 @@ def derive_status(row: dict[str, object] | None, age_secs: float | None, *, stal
     return "?" if is_stale else "working"
 
 
-def _status_from(
+def _status_from_signals(
     audit: dict[str, object] | None,
-    newest: Path | None,
+    newest_tail: dict[str, object] | None,
     age_secs: float | None,
     *,
     stale_secs: float = STALE_SECS,
 ) -> str:
-    """Classify from already-read signals: authoritative audit tail + the newest jsonl.
+    """Classify from already-read signals: audit tail row + newest-file tail row.
 
-    A terminal/eject audit event wins regardless of file mtime (fixes the completed-session
-    misclassification). Otherwise a live `AskUserQuestion` in the newest tail means waiting;
-    failing both, freshness decides working vs ? (crashed).
+    Terminal/eject audit event wins regardless of file mtime. Otherwise an
+    AskUserQuestion in newest_tail means waiting. Freshness decides working vs ?
+    as fallback.
     """
     if audit is not None and (audit.get("event") in TERMINAL_EVENTS or audit.get("event") == "chunk.ejected"):
         return derive_status(audit, age_secs, stale_secs=stale_secs)
-    tail = _tail_row(newest) if newest is not None else None
-    if tail is not None and _is_waiting_stream(tail):
+    if newest_tail is not None and _is_waiting_stream(newest_tail):
         return "waiting"
-    return derive_status(audit if audit is not None else tail, age_secs, stale_secs=stale_secs)
+    return derive_status(audit if audit is not None else newest_tail, age_secs, stale_secs=stale_secs)
+
+
+class SessionStatus:
+    """Fused single-pass scan for one session directory.
+
+    Replaces separate newest_jsonl + _audit_tail + _tail_row calls with one
+    pass per jsonl. Memoized — safe to construct once and query many times.
+    Falls back to directory mtime when no jsonl files exist.
+    """
+
+    def __init__(self, session_dir: Path, now: float, *, stale_secs: float = STALE_SECS) -> None:
+        self._dir = session_dir
+        self._now = now
+        self._stale_secs = stale_secs
+        self._scanned = False
+        self._mtime: float | None = None
+        self._audit: dict[str, object] | None = None
+        self._newest_tail: dict[str, object] | None = None
+
+    def _scan(self) -> None:
+        if self._scanned:
+            return
+        self._scanned = True
+        best_mtime = -1.0
+        best_audit_ts = ""
+        for f in self._dir.glob("*.jsonl"):
+            m = _safe_mtime(f)
+            if m is None:
+                continue
+            last_row: dict[str, object] | None = None
+            for row in _iter_rows(f):
+                last_row = row
+                ts = str(row.get("ts", ""))
+                if "event" in row and ts >= best_audit_ts:
+                    self._audit, best_audit_ts = row, ts
+            if m > best_mtime:
+                best_mtime = m
+                self._newest_tail = last_row
+        # Fall back to directory mtime when no jsonl files are present.
+        self._mtime = best_mtime if best_mtime >= 0.0 else _safe_mtime(self._dir)
+
+    @property
+    def mtime(self) -> float | None:
+        self._scan()
+        return self._mtime
+
+    @property
+    def audit_tail(self) -> dict[str, object] | None:
+        self._scan()
+        return self._audit
+
+    @property
+    def newest_tail(self) -> dict[str, object] | None:
+        self._scan()
+        return self._newest_tail
+
+    def derive(self) -> str:
+        """Classification string: working / waiting / idle / ? — one entry point."""
+        self._scan()
+        age = max(0.0, self._now - self._mtime) if self._mtime is not None else None
+        return _status_from_signals(self._audit, self._newest_tail, age, stale_secs=self._stale_secs)
 
 
 def session_status(session_dir: Path, age_secs: float | None, *, stale_secs: float = STALE_SECS) -> str:
     """Pull one session's status, reconciling the audit signal with the live stream."""
-    return _status_from(_audit_tail(session_dir), newest_jsonl(session_dir), age_secs, stale_secs=stale_secs)
+    ss = SessionStatus(session_dir, 0.0, stale_secs=stale_secs)
+    return _status_from_signals(ss.audit_tail, ss.newest_tail, age_secs, stale_secs=stale_secs)
 
 
 def _event_name(audit: dict[str, object] | None) -> str | None:
@@ -247,16 +282,15 @@ def session_worktree(session_dir: Path) -> str | None:
 
 def _build_record(sub: Path, clock: float, stale_secs: float) -> SessionRecord | None:
     """One session's status record, or None if it vanished mid-scan."""
-    newest = newest_jsonl(sub)
-    mtime = _safe_mtime(newest) if newest is not None else _safe_mtime(sub)
+    ss = SessionStatus(sub, clock, stale_secs=stale_secs)
+    mtime = ss.mtime
     if mtime is None:
         return None
-    audit = _audit_tail(sub)
     age = max(0.0, clock - mtime)
     return {
         "session": sub.name,
-        "status": _status_from(audit, newest, age, stale_secs=stale_secs),
+        "status": ss.derive(),
         "mtime": mtime,
         "age": age,
-        "last_event": _event_name(audit),
+        "last_event": _event_name(ss.audit_tail),
     }
