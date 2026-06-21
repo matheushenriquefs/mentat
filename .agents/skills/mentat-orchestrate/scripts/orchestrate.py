@@ -274,13 +274,18 @@ def run_orchestrate(
     chunks, hitl = _partition_fanout(results, mark_ejected=sched.mark_ejected)
     hitl_slugs.update(hitl)
 
-    _land_queue.drain(
+    drain_results = _land_queue.drain(
         chunks,
         holding=holding,
         on_landed=sched.mark_landed,
         on_ejected=sched.mark_ejected,
         next_ready=sched.next_ready,
     )
+    stalled = [r for r in drain_results if r.get("status") == "stalled"]
+    if stalled:
+        pending = stalled[0].get("pending", [])
+        print(f"mentat-orchestrate: stalled — pending chunks: {pending}", file=sys.stderr)
+
     _utils.emit_event(
         "batch.reviewed",
         {"session": session_id, "summary": f"batch review for session {session_id} — advisory"},
@@ -288,7 +293,7 @@ def run_orchestrate(
 
     _prune_stale_worktrees(preserve=hitl_slugs)
 
-    rc = 1 if sched.has_ejections() or hitl_slugs else 0
+    rc = 1 if sched.has_ejections() or hitl_slugs or stalled else 0
     if rc == 0:
         _cfg_path = Path.home() / ".mentat" / "config.toml"
         _cfg = _load_config_file(_cfg_path) if _cfg_path.exists() else {}
