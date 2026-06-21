@@ -4,6 +4,7 @@ Status: Accepted (locked)
 Date: 2026-05-31
 Amended: 2026-06-09 (v2 — folds 0007 + 0008; Python gate runner; gate filesystem layout)
 Amended: 2026-06-10 (v3 — reviewers promoted to `.agents/agents/` subagents; `score.py` added; install-time symlinks; old LLM rubric dir retired)
+Amended: 2026-06-20 (v4 — `mentat-rules-reviewer` + `mentat-context-reviewer` join the gate as advisory; ADR-0012 code-rules layer)
 
 ## Context
 
@@ -35,6 +36,14 @@ Gate filesystem layout:
 
 Severity per gate: `code/precommit.py` = blocking; `code/smells.py` = advisory;
 `mentat-bug-reviewer` = blocking with threshold; `mentat-smell-reviewer` = advisory.
+
+Advisory reviewers (folded from ADR-0012): `mentat-rules-reviewer` (code-rule
+conformance against `.agents/rules/` + lexicon contradictions) and
+`mentat-context-reviewer` (prose/prompt residue + self-containment) both enter the
+gate as `advise` — `score.py` routes them through `score_rules` / `score_context`,
+which never return `block`. They are promoted to enforcing once the tree conforms;
+that promotion records the threshold chosen. Their verdict bases do not overlap:
+rules-reviewer owns code rules and lexicon, context-reviewer owns prose residue.
 
 Must-not-exist veto (folded from ADR-0007): `code/precommit.py` emits `block` on
 forbidden file/path patterns (e.g. test-file writes during impl phase).

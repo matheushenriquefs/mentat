@@ -62,6 +62,24 @@ def score_smell(raw: dict[str, Any]) -> GateResult:
     return GateResult("advise", score, "")
 
 
+def score_rules(raw: dict[str, Any]) -> GateResult:
+    """Code-rule conformance (ADR-0012). Advisory — surfaces violations, never blocks.
+
+    Promoted to enforcing once the tree conforms; that change records the threshold.
+    """
+    n = len(raw.get("violations", []))
+    return GateResult("advise", 1.0, f"{n} rule violation(s)" if n else "")
+
+
+def score_context(raw: dict[str, Any]) -> GateResult:
+    """Prose/prompt residue (ADR-0012). Advisory — surfaces findings, never blocks.
+
+    Promoted to enforcing once the tree conforms; that change records the threshold.
+    """
+    n = len(raw.get("findings", []))
+    return GateResult("advise", 1.0, f"{n} residue finding(s)" if n else "")
+
+
 def aggregate(results: list[GateResult]) -> GateResult:
     """Veto > threshold; never average. First block wins."""
     for r in results:
@@ -85,4 +103,8 @@ def score_from_file(path: Path) -> GateResult:
         return score_bug(raw)
     if "smell" in reviewer:
         return score_smell(raw)
+    if "rules" in reviewer:
+        return score_rules(raw)
+    if "context" in reviewer:
+        return score_context(raw)
     return GateResult("pass", 1.0, f"unknown reviewer {reviewer!r}")
