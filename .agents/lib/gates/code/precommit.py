@@ -104,6 +104,42 @@ def _gate_jq(path: Path) -> tuple[str | None, str | None]:
     return None, None
 
 
+def _check(path: Path, cls: str, blocks: list[str], advisories: list[str]) -> None:
+    if cls in ("skill", "command"):
+        msg = _gate_frontmatter(path)
+        if msg:
+            blocks.append(msg)
+        return
+    if cls == "adr":
+        msg = _gate_adr(path)
+        if msg:
+            blocks.append(msg)
+        return
+    if cls == "workflow":
+        msg = _gate_workflow(path)
+        if msg:
+            blocks.append(msg)
+        return
+    if cls == "jsonc":
+        msg = _gate_jsonc(path)
+        if msg:
+            blocks.append(msg)
+        return
+    if cls == "shell":
+        block, advise = _gate_shell(path)
+        if block:
+            blocks.append(block)
+        if advise:
+            advisories.append(advise)
+        return
+    if cls == "jq":
+        block, advise = _gate_jq(path)
+        if block:
+            blocks.append(block)
+        if advise:
+            advisories.append(advise)
+
+
 def run(chunk_path: Path | None) -> tuple[str, str]:
     """Return (verdict, message). verdict in {'pass', 'block', 'advise'}."""
     if chunk_path is None or not chunk_path.exists():
@@ -118,34 +154,7 @@ def run(chunk_path: Path | None) -> tuple[str, str]:
         if cls is None:
             continue
         try:
-            if cls == "adr":
-                msg = _gate_adr(path)
-                if msg:
-                    blocks.append(msg)
-            elif cls in ("skill", "command"):
-                msg = _gate_frontmatter(path)
-                if msg:
-                    blocks.append(msg)
-            elif cls == "workflow":
-                msg = _gate_workflow(path)
-                if msg:
-                    blocks.append(msg)
-            elif cls == "jsonc":
-                msg = _gate_jsonc(path)
-                if msg:
-                    blocks.append(msg)
-            elif cls == "shell":
-                block, advise = _gate_shell(path)
-                if block:
-                    blocks.append(block)
-                if advise:
-                    advisories.append(advise)
-            elif cls == "jq":
-                block, advise = _gate_jq(path)
-                if block:
-                    blocks.append(block)
-                if advise:
-                    advisories.append(advise)
+            _check(path, cls, blocks, advisories)
         except OSError as e:
             advisories.append(f"{path}: read error: {e}")
 
