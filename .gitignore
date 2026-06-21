@@ -1,5 +1,6 @@
 context/mattpocock-skills/
 .mentat/worktrees/
+.mentat/metrics/
 context
 .dmux
 .dmux-hooks
