@@ -1,4 +1,4 @@
-"""LQ5: _load_plans exits 65 on a blocked_by slug not found in the batch."""
+"""LQ5: _load_plans validates blocked_by refs and handles external deps."""
 
 from __future__ import annotations
 
@@ -25,15 +25,32 @@ def _make_plan(tmp_path: Path, slug: str, class_: str = "AFK", blocked_by: list[
     return p
 
 
-def test_load_plans_exits_65_on_dangling_blocked_by_ref(tmp_path: Path) -> None:
-    """A plan whose blocked_by slug is not in the batch exits 65."""
+def test_load_plans_warns_on_out_of_batch_blocked_by_ref(tmp_path: Path, capsys) -> None:
+    """Out-of-batch blocked_by slug warns but loads — LQ1 treats it as external dep."""
     orch = load_module("orchestrate")
-    plan_a = _make_plan(tmp_path, "plan-a", blocked_by=["nonexistent-typo-slug"])
+    plan_a = _make_plan(tmp_path, "plan-a", blocked_by=["prior-batch-slug"])
+
+    plans = orch._load_plans([plan_a])
+
+    assert len(plans) == 1
+    assert plans[0].slug == "plan-a"
+    err = capsys.readouterr().err
+    assert "prior-batch-slug" in err, f"warning must name the unknown slug; stderr={err!r}"
+
+
+def test_load_plans_exits_65_on_parent_index_blocked_by(tmp_path: Path) -> None:
+    """Blocking on a parent-index slug still exits 65 — always invalid."""
+    orch = load_module("orchestrate")
+    # Write parent as a parent-index (with siblings list).
+    _make_plan(tmp_path, "sib")
+    parent = tmp_path / "parent-idx.md"
+    parent.write_text("---\nid: parent-idx\nclass: AFK\nblocked_by: []\nsiblings: [sib]\n---\n")
+    blocker = _make_plan(tmp_path, "child", blocked_by=["parent-idx"])
 
     with pytest.raises(SystemExit) as exc_info:
-        orch._load_plans([plan_a])
+        orch._load_plans([parent, blocker])
 
-    assert exc_info.value.code == 65, f"expected exit 65, got {exc_info.value.code}"
+    assert exc_info.value.code == 65, f"expected exit 65 for parent-index dep, got {exc_info.value.code}"
 
 
 def test_load_plans_does_not_exit_on_valid_in_batch_blocked_by(tmp_path: Path) -> None:

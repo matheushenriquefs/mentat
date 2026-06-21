@@ -83,8 +83,11 @@ def _load_plans(paths: list[Path], *, _expanding: bool = False) -> list[_schedul
                     print(f"cannot block on parent index: {dep}", file=sys.stderr)
                     raise SystemExit(EX_DATAERR)
                 if dep not in known_slugs:
-                    print(f"unknown blocked_by slug '{dep}' in plan '{plan.slug}' (not in batch)", file=sys.stderr)
-                    raise SystemExit(EX_DATAERR)
+                    print(
+                        f"warning: blocked_by '{dep}' in '{plan.slug}' not in batch"
+                        " — treated as already-landed external dep",
+                        file=sys.stderr,
+                    )
 
     return plans
 
