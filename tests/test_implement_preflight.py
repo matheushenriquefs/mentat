@@ -11,10 +11,14 @@ import pytest
 from tests.conftest import init_git_repo, load_script
 
 _SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts"
+_GIT_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-git/scripts"
 
 
 def _load():
-    return load_script(_SCRIPTS / "implement.py", "implement_mod")
+    mod = load_script(_SCRIPTS / "implement.py", "implement_mod")
+    mod._GIT_WORKTREE_PY = _GIT_SCRIPTS / "worktree.py"
+    mod._GIT_SCRIPT = _GIT_SCRIPTS / "git.py"
+    return mod
 
 
 @pytest.fixture

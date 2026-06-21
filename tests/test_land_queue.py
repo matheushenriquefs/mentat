@@ -103,3 +103,98 @@ def test_land_queue_emits_canonical_verdict_jsonl_shape():
     assert "tip" in result
     assert result["status"] in ("success", "eject")
     assert result["tip"] == "sha1"
+
+
+# ── _ff_merge integration tests ──────────────────────────────────────────────
+
+import subprocess as _subprocess  # noqa: E402
+
+
+def _git(args: list[str], cwd) -> None:
+    _subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+
+
+def _setup_ff_repo(tmp_path):
+    """Two-worktree fixture: main on 'holding', chunk on 'feature' 1 commit ahead."""
+    lq = load_module("land_queue")
+    main_repo = tmp_path / "main"
+    main_repo.mkdir()
+
+    _git(["init", "-b", "holding", str(main_repo)], cwd=tmp_path)
+    for k, v in (("user.email", "t@t"), ("user.name", "T"), ("commit.gpgsign", "false")):
+        _git(["config", k, v], cwd=main_repo)
+
+    (main_repo / "README").write_text("init\n")
+    _git(["add", "."], cwd=main_repo)
+    _git(["commit", "-m", "init"], cwd=main_repo)
+
+    _git(["checkout", "-b", "feature"], cwd=main_repo)
+    (main_repo / "README").write_text("feature\n")
+    _git(["add", "."], cwd=main_repo)
+    _git(["commit", "-m", "feature commit"], cwd=main_repo)
+
+    feature_sha = _subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=main_repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+    _git(["checkout", "holding"], cwd=main_repo)
+
+    chunk_wt = tmp_path / "chunk"
+    _git(["worktree", "add", str(chunk_wt), "feature"], cwd=main_repo)
+
+    chunk = lq.Chunk(slug="test-chunk", worktree=chunk_wt)
+    return main_repo, chunk, lq, feature_sha
+
+
+def test_ff_merge_updates_main_worktree(tmp_path) -> None:
+    """After _ff_merge, main worktree HEAD and on-disk files reflect feature tip."""
+    main_repo, chunk, lq, feature_sha = _setup_ff_repo(tmp_path)
+
+    result = lq._ff_merge(chunk, "holding")
+
+    assert result is True, "_ff_merge should return True on clean FF"
+
+    resolved = _subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=main_repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert resolved == feature_sha, f"main HEAD {resolved!r} != feature_sha {feature_sha!r}"
+
+    assert (main_repo / "README").read_text() == "feature\n", "README not updated in main worktree working tree"
+
+
+def test_ff_merge_refuses_dirty_main_worktree(tmp_path) -> None:
+    """Dirty main worktree: _ff_merge returns False, ref stays put, dirt survives."""
+    main_repo, chunk, lq, _ = _setup_ff_repo(tmp_path)
+
+    before_sha = _subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=main_repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+    (main_repo / "README").write_text("dirty\n")
+
+    result = lq._ff_merge(chunk, "holding")
+
+    assert result is False, "_ff_merge must return False when main worktree is dirty"
+
+    after_sha = _subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=main_repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert after_sha == before_sha, "ref must not advance when main worktree is dirty"
+
+    assert (main_repo / "README").read_text() == "dirty\n", "dirty state must be preserved"

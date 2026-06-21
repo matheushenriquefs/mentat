@@ -7,6 +7,7 @@ entrypoint still imports cleanly (smoke `--help`).
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -20,16 +21,27 @@ LOADER = REPO_ROOT / ".agents/lib/loader.py"
 _DEF_LOAD_SIBLING = re.compile(r"^def load_sibling\b", re.M)
 _DEF_LOCAL = re.compile(r"^def _load_sibling\b", re.M)
 
+_PRUNE_DIRS = {".venv", "__pycache__", ".git"}
+
+
+def _py_files(root: Path) -> list[Path]:
+    """Walk root, pruning _PRUNE_DIRS so rglob never enters them."""
+    result = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _PRUNE_DIRS]
+        for f in filenames:
+            if f.endswith(".py"):
+                result.append(Path(dirpath) / f)
+    return result
+
 
 def _skill_scripts() -> list[Path]:
-    return [p for p in SKILLS_DIR.rglob("*.py") if "__pycache__" not in p.parts]
+    return _py_files(SKILLS_DIR)
 
 
 def test_exactly_one_load_sibling_definition() -> None:
     """`load_sibling` is defined once, in lib/loader.py."""
-    defs = [
-        p for p in REPO_ROOT.rglob("*.py") if "__pycache__" not in p.parts and _DEF_LOAD_SIBLING.search(p.read_text())
-    ]
+    defs = [p for p in _py_files(REPO_ROOT) if _DEF_LOAD_SIBLING.search(p.read_text())]
     assert defs == [LOADER], f"load_sibling must be defined only in {LOADER}, found: {defs}"
 
 

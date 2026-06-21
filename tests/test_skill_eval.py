@@ -28,7 +28,7 @@ def test_eval_invokes_promptfoo(tmp_path):
         calls.append(cmd)
         return MagicMock(returncode=0)
 
-    with patch("subprocess.run", fake_run):
+    with patch("shutil.which", return_value="/usr/local/bin/promptfoo"), patch("subprocess.run", fake_run):
         eval_mod.cmd_eval("my-skill", evals_dir=evals_file.parent)
 
     assert calls
