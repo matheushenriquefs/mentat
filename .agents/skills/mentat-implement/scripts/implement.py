@@ -140,6 +140,40 @@ def _logs_path() -> str:
     return str(_session_dir_fn(session))
 
 
+def _compaction_threshold() -> int | None:
+    """Read compaction_threshold_tokens from config. Returns None if absent or unset."""
+    from lib.config import load_config_file as _load_cfg
+
+    cfg_path_env = os.environ.get("MENTAT_CONFIG")
+    cfg_path = Path(cfg_path_env) if cfg_path_env else Path.home() / ".mentat" / "config.toml"
+    if not cfg_path.exists():
+        return None
+    try:
+        data = _load_cfg(cfg_path)
+        val = data.get("compaction_threshold_tokens")
+        return int(val) if val is not None else None
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _checkpoint_if_needed(result: Any, *, slug: str, threshold: int | None) -> None:
+    """Write a checkpoint summary if usage_tokens >= threshold."""
+    if threshold is None:
+        return
+    usage = getattr(result, "usage_tokens", None)
+    if usage is None or usage < threshold:
+        return
+    from lib.session import summary_file as _summary_file
+
+    sid = os.environ.get("MENTAT_SESSION", slug)
+    path = _summary_file(sid)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"---\nstatus: succeeded\n---\nToken checkpoint: {usage} tokens used "
+        f"(threshold {threshold}). Slug: {slug}. Next spawn can use this as seed_summary.\n"
+    )
+
+
 def _prune_worktrees_preflight() -> None:
     """Sweep clean, inactive, stale worktrees before this run starts.
 
@@ -289,16 +323,29 @@ def _run_and_doctor(plan_path: Path, *, harness: str | None = None, model: str |
     return rc
 
 
-def _invoke_harness(harness: str, prompt: str, *, afk: bool, model: str | None = None) -> Any:
+def _load_harness_module(key: str, path: Path) -> Any:
+    spec = importlib.util.spec_from_file_location(key, path)
+    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+def _invoke_harness(
+    harness: str,
+    prompt: str,
+    *,
+    afk: bool,
+    model: str | None = None,
+    seed_summary: str | None = None,
+) -> Any:
     harness_dir = Path(__file__).resolve().parent / "harness"
     adapter_name = harness.replace("-", "_")
     adapter_path = harness_dir / f"{adapter_name}.py"
     if not adapter_path.exists():
         adapter_path = harness_dir / "claude_code.py"
-    spec = importlib.util.spec_from_file_location(adapter_name, adapter_path)
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod.invoke(prompt, afk=afk, model=model)
+    mod = _load_harness_module(adapter_name, adapter_path)
+    env_seed = os.environ.get("MENTAT_SEED_SUMMARY") or seed_summary
+    return mod.invoke(prompt, afk=afk, model=model, seed_summary=env_seed)
 
 
 def _detect_self_answer(result: Any) -> bool:

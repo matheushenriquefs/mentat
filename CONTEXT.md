@@ -55,6 +55,9 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 **must_not_exist veto**
 : A veto triggered when `mentat-test-reviewer` finds the implementation asserts behavior the plan did not ask for (hallucination). Inverted polarity: higher hallucination score = worse. _Avoid_: treating this as a threshold to meet.
 
+**Compaction threshold**
+: `compaction_threshold_tokens` in `~/.mentat/config.toml`. When a harness run reports token usage ≥ threshold, mentat writes a checkpoint `summary.md{status: succeeded}` so the next spawn can be seeded with prior context (`MENTAT_SEED_SUMMARY`). Vendor-neutral: adapters report `usage_tokens: int | None`; `None` (cursor) bypasses the threshold check. _Avoid_: confusing this with the harness's own compaction — mentat checkpoints at slice/chunk boundaries, independently of any internal harness compaction.
+
 **Harness tool**
 : A MCP/skill resource the orchestration layer uses — `bash`, `grep`, `Read`, `Agent`. Not a target-repo tool. _Avoid_: bare 'tool' when the distinction matters.
 

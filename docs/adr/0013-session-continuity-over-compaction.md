@@ -1,6 +1,6 @@
 # ADR 0013: Session continuity over compaction
 
-Status: Proposed (F4 spike complete — go/no-go: GO)
+Status: Accepted
 Date: 2026-06-20
 
 ## Context
