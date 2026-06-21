@@ -245,10 +245,12 @@ def test_render_preview_empty_still_renders_gutter():
     assert isinstance(lines, list)
 
 
-def test_render_focus_shows_session_rule_and_tools():
+def test_render_focus_shows_session_rule_and_tools(tmp_path):
     track = load_module("track")
+    sd = tmp_path / "s-a"
+    _write_stream(sd, "session", [_assistant("Read", "Bash")])
     rec = _rec("s-a", "working", "chunk.spawned")
-    lines = track.render_focus(rec, ["Read", "Bash"])
+    lines = track.render_focus(rec, sd)
     body = "\n".join(lines)
     assert tui.section_rule("s-a — working") in body  # focused header rule
     assert "Read" in body and "Bash" in body
@@ -324,3 +326,37 @@ def test_toggle_view_flips():
     track = load_module("track")
     assert track.toggle_view("transcript") == "audit"
     assert track.toggle_view("audit") == "transcript"
+
+
+# ── V3: handle_key toggle + render_focus wired to dual-stream renderer ────────
+
+
+def test_handle_key_toggle():
+    track = load_module("track")
+    assert track.handle_key("t", 1, 3) == (1, "toggle")
+
+
+def test_render_focus_transcript_shows_chat(tmp_path):
+    """render_focus in transcript view shows assistant text and tool names."""
+    track = load_module("track")
+    sd = tmp_path / "s-1"
+    _write_stream(sd, "session", [_assistant("Read", text="doing stuff")])
+    rec = _rec("s-1", "working")
+    lines = track.render_focus(rec, sd, "transcript")
+    body = "\n".join(lines)
+    assert "doing stuff" in body
+    assert "Read" in body
+    assert tui.section_rule("s-1 — working") in body
+    assert "back" in body
+
+
+def test_render_focus_audit_shows_events(tmp_path):
+    """render_focus in audit view shows event timeline."""
+    track = load_module("track")
+    sd = tmp_path / "s-1"
+    sd.mkdir(parents=True, exist_ok=True)
+    (sd / "mentat-impl.jsonl").write_text(json.dumps({"ts": "t", "event": "chunk.spawned", "payload": {}}) + "\n")
+    rec = _rec("s-1", "working")
+    lines = track.render_focus(rec, sd, "audit")
+    body = "\n".join(lines)
+    assert "chunk.spawned" in body

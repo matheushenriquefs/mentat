@@ -210,6 +210,8 @@ def handle_key(key: str, selected: int, count: int) -> tuple[int, str | None]:
         return selected, "focus"
     if key == "x":
         return selected, "kill"
+    if key == "t":
+        return selected, "toggle"
     return selected, None
 
 
@@ -232,12 +234,15 @@ def render_preview(tool_names: list[str]) -> list[str]:
     return [f"{gutter} {tui.tool_glyph(n)} {n}" for n in tool_names]
 
 
-def render_focus(record: dict[str, object], tool_names: list[str]) -> list[str]:
-    """Focused single-session view: the `── [session] ──` rule + a deeper tool tail."""
+def render_focus(record: dict[str, object], session_dir: Path, view: str = _VIEW_TRANSCRIPT) -> list[str]:
+    """Focused single-session view: section rule + transcript or audit log, t-toggleable."""
     lines = [tui.section_rule(f"{record['session']} — {record['status']}")]
-    lines += render_preview(tool_names)
+    if view == _VIEW_TRANSCRIPT:
+        lines += render_transcript_lines(session_dir)
+    else:
+        lines += render_audit_lines(session_dir)
     lines.append("")
-    lines.append(tui.color("enter/esc back · x kill · q quit", tui.DIM))
+    lines.append(tui.color("t toggle · enter/esc back · x kill · q quit", tui.DIM))
     return lines
 
 
@@ -274,11 +279,11 @@ def _selected(entries: list[Entry], selected: int) -> Entry:
     return entries[min(selected, len(entries) - 1)]
 
 
-def _draw(entries: list[Entry], selected: int, repo: str, *, focused: bool) -> None:
+def _draw(entries: list[Entry], selected: int, repo: str, *, focused: bool, view: str = _VIEW_TRANSCRIPT) -> None:
     sys.stdout.write(tui.CLEAR_HOME)
     if focused and entries:
         record, session_dir = _selected(entries, selected)
-        for line in render_focus(record, _tools(session_dir, limit=FOCUS_LINES)):
+        for line in render_focus(record, session_dir, view):
             print(line)
         sys.stdout.flush()
         return
@@ -312,13 +317,13 @@ def navigate(repo_dir: Path, *, repo: str) -> int:
     import termios
     import tty
 
-    selected, focused = 0, False
+    selected, focused, view = 0, False, _VIEW_TRANSCRIPT
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
     try:
         tty.setcbreak(fd)
         while True:
-            _draw(entries, selected, repo, focused=focused)
+            _draw(entries, selected, repo, focused=focused, view=view)
             key = _read_key(POLL_SECS)
             if key is not None:
                 selected, action = handle_key(key, selected, len(entries))
@@ -326,6 +331,8 @@ def navigate(repo_dir: Path, *, repo: str) -> int:
                     break
                 if action == "focus" and entries:
                     focused = not focused
+                if action == "toggle":
+                    view = toggle_view(view)
                 if action == "kill" and entries:
                     _kill(_selected(entries, selected)[1])
             entries = _registry(repo_dir)
