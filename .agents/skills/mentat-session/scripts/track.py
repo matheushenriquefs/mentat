@@ -215,15 +215,29 @@ def handle_key(key: str, selected: int, count: int) -> tuple[int, str | None]:
     return selected, None
 
 
-def render_list(records: list[dict[str, object]], selected: int) -> list[str]:
-    """List pane: one row per session, `>` on the selection, status dot + name + last event."""
-    out: list[str] = []
+def render_list(records: list[dict[str, object]], selected: int, *, viewport_height: int | None = None) -> list[str]:
+    """List pane: one row per session, `>` on the selection, status dot + name + last event.
+
+    When viewport_height is given, scrolls to keep the selected row visible and
+    appends a '… N more' affordance when records are truncated at the bottom.
+    """
+    all_lines: list[str] = []
     for i, r in enumerate(records):
         cursor = ">" if i == selected else " "
         dot = tui.status_dot(str(r["status"]))
         last = r.get("last_event") or "-"
-        out.append(f"{cursor} {dot} {r['status']:<{_STATUS_COL}} {r['session']}  {last}")
-    return out
+        all_lines.append(f"{cursor} {dot} {r['status']:<{_STATUS_COL}} {r['session']}  {last}")
+
+    if viewport_height is None or len(all_lines) <= viewport_height:
+        return all_lines
+
+    half = viewport_height // 2
+    offset = max(0, min(selected - half, len(all_lines) - viewport_height))
+    window = all_lines[offset : offset + viewport_height]
+    remaining = len(all_lines) - (offset + viewport_height)
+    if remaining > 0:
+        window.append(f"  … {remaining} more")
+    return window
 
 
 def render_preview(tool_names: list[str]) -> list[str]:
@@ -279,6 +293,16 @@ def _selected(entries: list[Entry], selected: int) -> Entry:
     return entries[min(selected, len(entries) - 1)]
 
 
+def _terminal_height() -> int:
+    """Terminal row count (fallback 20 when unknown)."""
+    try:
+        import shutil
+
+        return shutil.get_terminal_size((80, 20)).lines
+    except Exception:
+        return 20
+
+
 def _draw(entries: list[Entry], selected: int, repo: str, *, focused: bool, view: str = _VIEW_TRANSCRIPT) -> None:
     sys.stdout.write(tui.CLEAR_HOME)
     if focused and entries:
@@ -289,7 +313,9 @@ def _draw(entries: list[Entry], selected: int, repo: str, *, focused: bool, view
         return
     records = [rec for rec, _ in entries]
     print(tui.section_rule(f"{repo} — {len(records)} session(s)"))
-    for line in render_list(records, selected):
+    h = _terminal_height()
+    list_viewport = max(5, h - PREVIEW_LINES - 5)
+    for line in render_list(records, selected, viewport_height=list_viewport):
         print(line)
     if entries:
         record, session_dir = _selected(entries, selected)

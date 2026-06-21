@@ -360,3 +360,34 @@ def test_render_focus_audit_shows_events(tmp_path):
     lines = track.render_focus(rec, sd, "audit")
     body = "\n".join(lines)
     assert "chunk.spawned" in body
+
+
+# ── V4: viewport bounding for the list pane ───────────────────────────────────
+
+
+def test_render_list_viewport_keeps_cursor_visible():
+    """50 records, viewport=10, selected=30 → window around row 30, row 0 absent."""
+    track = load_module("track")
+    records = [_rec(f"s-{i:02d}", "working") for i in range(50)]
+    lines = track.render_list(records, 30, viewport_height=10)
+    body = "\n".join(lines)
+    assert "s-30" in body
+    assert "s-00" not in body
+    non_empty = [ln for ln in lines if ln.strip()]
+    assert len(non_empty) <= 11  # 10 records + optional "… N more"
+
+
+def test_render_list_no_viewport_shows_all():
+    track = load_module("track")
+    records = [_rec(f"s-{i}", "working") for i in range(5)]
+    lines = track.render_list(records, 0)
+    assert len(lines) == 5
+
+
+def test_render_list_affordance_when_truncated():
+    """… N more line appears when viewport cuts records at the bottom."""
+    track = load_module("track")
+    records = [_rec(f"s-{i}", "working") for i in range(20)]
+    lines = track.render_list(records, 0, viewport_height=5)
+    body = "\n".join(lines)
+    assert "more" in body
