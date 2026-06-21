@@ -300,3 +300,37 @@ def test_report_summary_names_hitl_blocker(tmp_path):
     summary = doctor.build_summary(sd)
     assert "hitl-required" in summary
     assert "pick a queue" in summary
+
+
+# ── F1: marker lives in session log dir, not worktree ─────────────────────────
+
+
+def test_read_blocked_summary_reads_from_session_log_dir(tmp_path, monkeypatch):
+    """F1 tracer: _read_blocked_summary must find the marker at
+    ~/.mentat/logs/<repo>/<session>/summary.md (the seam), not in the worktree."""
+    impl = _impl()
+    sid = "implement-f1test-9999"
+    repo = "myrepo"
+    monkeypatch.setenv("MENTAT_SESSION", sid)
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", repo)
+
+    seam_dir = tmp_path / repo / sid
+    seam_dir.mkdir(parents=True)
+    (seam_dir / "summary.md").write_text("---\nstatus: blocked\n---\nWhich auth? OAuth or SAML?\n")
+
+    # Pass an EMPTY worktree (no summary.md there) — must still find it via seam
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    assert impl._read_blocked_summary(worktree) == "Which auth? OAuth or SAML?"
+
+
+def test_afk_ambiguity_prompt_directs_to_session_log_dir(tmp_path):
+    """F1 tracer: the AFK prompt must direct the agent to write summary.md in
+    the session log dir (via MENTAT_SESSION_LOG), not the worktree root."""
+    impl = _impl()
+    contract = impl._AFK_AMBIGUITY_CONTRACT
+    # Must mention the session env var so the agent can resolve the log dir
+    assert "MENTAT_SESSION_LOG" in contract or "session log" in contract.lower(), (
+        "_AFK_AMBIGUITY_CONTRACT must direct to session log dir, not worktree"
+    )

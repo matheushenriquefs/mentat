@@ -308,14 +308,18 @@ def _detect_self_answer(result: Any) -> bool:
     return _utils.detect_self_answer(Path(session_log))
 
 
-def _read_blocked_summary(worktree: Path) -> str | None:
-    """The agent's blocker body if it wedged, else None (S5).
+def _blocked_summary_path() -> Path | None:
+    """The canonical summary.md path for the current session, or None if session is unset."""
+    sid = os.environ.get("MENTAT_SESSION")
+    if not sid:
+        return None
+    from lib.session import summary_file as _summary_file
 
-    A wedge = ``<worktree>/summary.md`` whose frontmatter ``status`` is
-    ``blocked``. Returns the body (frontmatter stripped). A missing file, a read
-    error, or a summary without the blocked status is not a wedge → None.
-    """
-    path = worktree / SUMMARY_FILE
+    return _summary_file(sid)
+
+
+def _read_summary_at(path: Path) -> str | None:
+    """Read and return body from path if status==blocked, else None."""
     if not path.exists():
         return None
     try:
@@ -328,15 +332,33 @@ def _read_blocked_summary(worktree: Path) -> str | None:
     return "\n".join(text.splitlines()[body_start:]).strip()
 
 
+def _read_blocked_summary(worktree: Path) -> str | None:
+    """The agent's blocker body if it wedged, else None (S5).
+
+    F1: reads from the session log dir (lib.session.summary_file) — the one
+    canonical location the AFK agent writes to via $MENTAT_SESSION_LOG.
+    Falls back to the worktree path for compatibility with tests that set up
+    the old location before F1 migration completes.
+    """
+    seam = _blocked_summary_path()
+    if seam is not None:
+        result = _read_summary_at(seam)
+        if result is not None:
+            return result
+    # Legacy / worktree fallback (pre-F1 or MENTAT_SESSION unset)
+    return _read_summary_at(worktree / SUMMARY_FILE)
+
+
 def _promote_blocked_summary(body: str) -> None:
-    """Mirror the agent's blocker body into the session log dir's summary.md so
-    ``mentat-session report`` surfaces it. The success path writes the same file
-    from audit events; on a wedge we have the body directly. Best-effort — a
-    write failure must not mask the hitl-required ejection."""
-    log_dir = Path(_logs_path())
+    """Ensure the blocker body is in the session log dir's summary.md so
+    ``mentat-session report`` surfaces it. F1: agent already writes there;
+    this covers the self-answer case where the agent never wrote the file.
+    Best-effort — a write failure must not mask the hitl-required ejection."""
+    seam = _blocked_summary_path()
+    target = seam if seam is not None else Path(_logs_path()) / SUMMARY_FILE
     try:
-        log_dir.mkdir(parents=True, exist_ok=True)
-        (log_dir / SUMMARY_FILE).write_text(body + "\n")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(body + "\n")
     except OSError:
         pass
 
@@ -373,8 +395,10 @@ _AFK_AMBIGUITY_CONTRACT = (
     "AFK contract: no human is available to answer questions. If you hit a "
     "decision the plan does not resolve and cannot resolve it safely yourself, "
     "do NOT guess or fabricate. Write the blocker — the question plus the "
-    "options you see — to `summary.md` in the worktree root with YAML "
+    "options you see — to `summary.md` in the session log directory with YAML "
     "frontmatter `---` then `status: blocked` then `---`, and stop immediately. "
+    "The session log directory is the parent of `$MENTAT_SESSION_LOG` "
+    "(i.e. `$(dirname $MENTAT_SESSION_LOG)/summary.md`). "
     "That file hands the slice back to the operator cleanly; guessing produces "
     "wrong work that looks finished."
 )

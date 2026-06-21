@@ -6,6 +6,7 @@ Amended: 2026-06-09 (v2 — past-tense verbs; `~/.mentat/logs`; `EVENT_CATALOG` 
 Amended: 2026-06-10 (v3 — Stripe-style naming policy; reasons live in payload, not name)
 Amended: 2026-06-11 (v4 — chunk.teardown added, 10 events)
 Amended: 2026-06-12 (v5 — task.* + session.prune added, 16 events)
+Amended: 2026-06-20 (v6 — F1: summary.md is one status-bearing file in the session log dir)
 
 ## Context
 
@@ -29,7 +30,13 @@ Envelope schema (JSONL, one row per event):
 - `payload`: JSON object — verdicts, scores, file:line refs only. Never raw diff.
 
 **Log path:** `~/.mentat/logs/<repo>/<session>/<agent>-<slug>.jsonl`  
-**Stderr sidecar:** `<base>/.stderr/<agent>-<slug>.stderr`
+**Stderr sidecar:** `<base>/.stderr/<agent>-<slug>.stderr`  
+**Summary file (F1):** `~/.mentat/logs/<repo>/<session>/summary.md` — one status-bearing file
+per session. Frontmatter `status:` ∈ `{succeeded, failed, blocked, hitl-required}`.
+`blocked` / `hitl-required` indicate an AFK wedge; `succeeded` / `failed` are set by
+`mentat-session doctor`. The AFK agent writes here via `$MENTAT_SESSION_LOG` (parent dir);
+`implement.py` reads it via `lib.session.summary_file(sid)`. Replaces the previous two-location
+scheme (worktree root + session log dir).
 
 **`EVENT_CATALOG`** lives in `.agents/skills/mentat-log/scripts/log.py` as
 `dict[str, list[str]]` (event name → required fields). Stdlib only, no pydantic, no jsonc.

@@ -64,6 +64,9 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 **Slug**
 : A chunk's unique id — also its worktree dirname and `mentat_slug` container label. Format: `mentat-<epoch>-<pid>-<rand>`. _Avoid_: "id", "name", "tag".
 
+**Summary file status vocabulary**
+: `summary.md` in the session log dir carries a `status:` frontmatter field that disambiguates outcome. Canonical values: `succeeded` (plan completed cleanly), `failed` (TDD/gate failure), `blocked` (AFK hit an unresolvable design call — operator must resolve), `hitl-required` (same intent, used in audit payloads). The file is written by the AFK agent (blocked) or by `mentat-session doctor` (succeeded/failed). _Avoid_: "completed" (hides outcome), custom strings outside this set.
+
 ## Relationships
 
 - Slice → chunk: a plan document becomes a running execution.
