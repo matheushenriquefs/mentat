@@ -41,6 +41,7 @@ class EjectReason:
     PREFLIGHT_WORKTREE_FAILED = "preflight-worktree-failed"
     MAIN_TREE_REFUSED = "main-tree-refused"
     UPSTREAM_EJECTED = "upstream_ejected"
+    WORKER_DIED = "worker-died"
 
 
 EJECT_REASONS: frozenset[str] = frozenset(
@@ -53,6 +54,7 @@ EJECT_REASONS: frozenset[str] = frozenset(
         EjectReason.PREFLIGHT_WORKTREE_FAILED,
         EjectReason.MAIN_TREE_REFUSED,
         EjectReason.UPSTREAM_EJECTED,
+        EjectReason.WORKER_DIED,
     }
 )
 
