@@ -185,22 +185,25 @@ def _teardown_worktree(target: Path) -> None:
         print(f"mentat-implement: preserving dirty worktree {target}", file=sys.stderr)
 
 
-def _auto_doctor() -> None:
-    """Spawn mentat-session doctor on death. Honor $EDITOR for the diagnosis if set.
+def _run_session_cmd(subcmd: str) -> None:
+    """Run `session.py <subcmd> [<session_id>]`.
 
-    S1 guarantees MENTAT_SESSION is set on every path, so the doctor always fires
-    on a diagnosable death — there is no session-unset early-return to silently
-    skip it (the root cause of killed standalone AFK sessions going undiagnosed).
-    When the id is somehow absent, session.py's ``doctor`` falls back to the
-    latest session for the repo, so the arg is appended only when set.
+    Session id appended only when set; session.py falls back to latest session for
+    the repo when absent, so doctor/report always fires on a diagnosable death even
+    when MENTAT_SESSION is unset.
     """
     if not _SESSION_SCRIPT.exists():
         return
-    cmd = ["python3", str(_SESSION_SCRIPT), "doctor"]
+    cmd = ["python3", str(_SESSION_SCRIPT), subcmd]
     session_id = os.environ.get("MENTAT_SESSION")
     if session_id:
         cmd.append(session_id)
     subprocess.run(cmd, capture_output=True, check=False)
+
+
+def _auto_doctor() -> None:
+    """Spawn mentat-session doctor on death. Honor $EDITOR for the diagnosis if set."""
+    _run_session_cmd("doctor")
     editor = os.environ.get("EDITOR")
     if editor:
         diag = Path(_logs_path()) / "diagnosis.md"
@@ -209,18 +212,8 @@ def _auto_doctor() -> None:
 
 
 def _auto_summary() -> None:
-    """On a clean finish, write the success-side report-back summary (S8) — the
-    twin of _auto_doctor's diagnosis. Shells `mentat-session report` so the
-    spawning operator can read what this AFK session implemented without asking
-    the main harness. The session id is appended only when set; session.py's
-    ``report`` falls back to the latest session for the repo otherwise."""
-    if not _SESSION_SCRIPT.exists():
-        return
-    cmd = ["python3", str(_SESSION_SCRIPT), "report"]
-    session_id = os.environ.get("MENTAT_SESSION")
-    if session_id:
-        cmd.append(session_id)
-    subprocess.run(cmd, capture_output=True, check=False)
+    """On clean finish, write success-side report-back summary."""
+    _run_session_cmd("report")
 
 
 def _is_main_worktree(cwd: Path) -> bool:
