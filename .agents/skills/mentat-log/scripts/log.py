@@ -81,7 +81,7 @@ def _reject(base: Path, repo: str, session: str, agent: str, slug: str, event: s
     print(f"mentat-log: reject event={event} reason={reason} (sidecar={sc})", file=sys.stderr)
 
 
-def _validate_row(row: dict) -> list[str]:
+def _validate_row(row: dict[str, object]) -> list[str]:
     """Return list of validation errors for a single row dict."""
     errors: list[str] = []
     for field in ("ts", "agent", "session", "event", "payload"):
@@ -128,9 +128,9 @@ def cmd_emit(args: argparse.Namespace) -> int:
 
     base = _log_root()
     repo = _repo()
-    # Last-resort guard only: S1's ensure_session sets MENTAT_SESSION before any
-    # emit on both entrypoints. A surviving `orphan-` id flags an unkeyed
-    # emission (the exact bug S1 fixes) — greppable, no <epoch>/manual/auto lie.
+    # Last-resort guard: ensure_session sets MENTAT_SESSION before any emit on
+    # both entrypoints. A surviving `orphan-` id flags an unkeyed emission —
+    # greppable, no epoch/manual/auto lie.
     session = _session() or f"orphan-session-{os.getpid()}"
     slug = _agent_slug()
 

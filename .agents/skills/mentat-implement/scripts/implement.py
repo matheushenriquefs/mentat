@@ -530,12 +530,12 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     return 0
 
 
-def _do_land(chunk: Any, *, holding: str, land_queue: Any) -> dict:
+def _do_land(chunk: Any, *, holding: str, land_queue: Any) -> dict[str, object]:
     """Thin wrapper around land_queue.land — exists so tests can patch it."""
     return land_queue.land(chunk, holding=holding)
 
 
-def _land_and_review(slug: str, worktree: Path, holding: str) -> dict:
+def _land_and_review(slug: str, worktree: Path, holding: str) -> dict[str, object]:
     """Land one chunk and spawn advisory reviewers.
 
     Called after run_plan returns 0 when --land is set. Uses land_queue.land

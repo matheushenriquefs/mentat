@@ -6,6 +6,8 @@ import argparse
 import os
 import sys
 import tempfile
+import types as _types
+from collections.abc import Callable
 from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parent
@@ -19,30 +21,22 @@ from lib.events import bind  # noqa: E402
 from lib.exits import EX_USAGE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
-_utils = load_sibling(__file__, "lifecycle")
+_utils: _types.ModuleType = load_sibling(__file__, "lifecycle")  # type: ignore[assignment]
 
 emit = bind("mentat-tasks")
 
 
 def cmd_next_id(_args: argparse.Namespace) -> int:
-    import types
-
-    u = _utils
-    assert isinstance(u, types.ModuleType)
-    td: Path = u.tasks_dir()
+    td: Path = _utils.tasks_dir()
     if not td.exists():
         print("T001")
         return 0
-    print(u.next_id(td))
+    print(_utils.next_id(td))
     return 0
 
 
 def cmd_create(args: argparse.Namespace) -> int:
-    import types
-
-    u = _utils
-    assert isinstance(u, types.ModuleType)
-    td: Path = u.tasks_dir()
+    td: Path = _utils.tasks_dir()
     td.mkdir(parents=True, exist_ok=True)
 
     slug: str = args.slug
@@ -51,7 +45,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         print(f"tasks: slug '{slug}' already exists: {existing[0].name}", file=sys.stderr)
         return 1
 
-    tid: str = u.next_id(td)
+    tid: str = _utils.next_id(td)
     target = td / f"{tid}-{slug}.md"
     body = sys.stdin.read()
     fm: dict[str, str] = {
@@ -60,7 +54,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         "class": "",
         "claimed_by": "",
         "claim_expires_at": "",
-        "created_at": u.now_rfc3339(),
+        "created_at": _utils.now_rfc3339(),
     }
     content = frontmatter.encode(fm, body)
     fh, tmp = tempfile.mkstemp(dir=td, prefix=f".{target.name}.", suffix=".tmp")
@@ -76,10 +70,6 @@ def cmd_create(args: argparse.Namespace) -> int:
 
 
 def cmd_claim(args: argparse.Namespace) -> int:
-    import types
-
-    u = _utils
-    assert isinstance(u, types.ModuleType)
     path = Path(args.file)
     lock = path.with_suffix(".md.lock")
     try:
@@ -91,7 +81,7 @@ def cmd_claim(args: argparse.Namespace) -> int:
 
     agent: str = args.agent
     ttl = int(args.ttl_seconds)
-    expires_at: str = u.now_rfc3339(ttl)
+    expires_at: str = _utils.now_rfc3339(ttl)
     try:
         frontmatter.mutate(path, claimed_by=agent, status="in-progress", claim_expires_at=expires_at)
     except Exception:
@@ -105,11 +95,7 @@ def cmd_claim(args: argparse.Namespace) -> int:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    import types
-
-    u = _utils
-    assert isinstance(u, types.ModuleType)
-    td: Path = u.tasks_dir()
+    td: Path = _utils.tasks_dir()
     if not td.exists():
         return 0
     status_filter: str | None = getattr(args, "status", None)
@@ -155,17 +141,13 @@ def cmd_wontfix(args: argparse.Namespace) -> int:
 
 
 def cmd_refresh(args: argparse.Namespace) -> int:
-    import types
-
-    u = _utils
-    assert isinstance(u, types.ModuleType)
     path = Path(args.file)
     lock = path.with_suffix(".md.lock")
     if not lock.exists():
         print(f"tasks: no active claim on {path.name}", file=sys.stderr)
         return 1
     ttl = int(args.ttl_seconds)
-    frontmatter.mutate(path, claim_expires_at=u.now_rfc3339(ttl))
+    frontmatter.mutate(path, claim_expires_at=_utils.now_rfc3339(ttl))
     return 0
 
 
@@ -211,27 +193,25 @@ def main(argv: list[str] | None = None) -> None:
     list_p = sub.add_parser("list")
     list_p.add_argument("--status", default=None)
 
+    _dispatch: dict[str, Callable[[argparse.Namespace], int]] = {
+        "next-id": cmd_next_id,
+        "create": cmd_create,
+        "claim": cmd_claim,
+        "release": cmd_release,
+        "refresh": cmd_refresh,
+        "done": cmd_done,
+        "wontfix": cmd_wontfix,
+        "list": cmd_list,
+    }
+
     args = parser.parse_args(argv)
 
-    if args.cmd == "next-id":
-        rc = cmd_next_id(args)
-    elif args.cmd == "create":
-        rc = cmd_create(args)
-    elif args.cmd == "claim":
-        rc = cmd_claim(args)
-    elif args.cmd == "release":
-        rc = cmd_release(args)
-    elif args.cmd == "refresh":
-        rc = cmd_refresh(args)
-    elif args.cmd == "done":
-        rc = cmd_done(args)
-    elif args.cmd == "wontfix":
-        rc = cmd_wontfix(args)
-    elif args.cmd == "list":
-        rc = cmd_list(args)
-    else:
+    handler = _dispatch.get(args.cmd)
+    if handler is None:
         parser.print_help(sys.stderr)
         rc = EX_USAGE
+    else:
+        rc = handler(args)
     if rc != 0:
         sys.exit(rc)
 
