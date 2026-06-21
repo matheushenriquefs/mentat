@@ -4,8 +4,8 @@ File-class dispatcher: ADR docs need three sections, agent/command docs need YAM
 frontmatter, workflow docs need at least one cross-ref link, *.jsonc must parse
 as JSON after stripping pure `//` comment lines.
 
-External-interpreter checks (bash -n, jq) are downgraded to "advise" when their
-interpreters aren't on PATH so the gate stays portable in container or host runs.
+External-interpreter checks (bash -n, jq) block when the interpreter is absent.
+A missing interpreter for a file that needs it is a hard error — not an advisory.
 """
 
 from __future__ import annotations
@@ -86,9 +86,9 @@ def _gate_jsonc(path: Path) -> str | None:
 
 
 def _gate_shell(path: Path) -> tuple[str | None, str | None]:
-    """Return (block_msg, advise_msg). Advise if bash not on PATH."""
+    """Return (block_msg, advise_msg). Block if bash not on PATH."""
     if shutil.which("bash") is None:
-        return None, f"{path}: bash not on PATH — syntax check skipped"
+        return f"{path}: bash not on PATH — cannot verify shell syntax", None
     r = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
     if r.returncode != 0:
         return f"{path}: bash -n syntax error: {(r.stderr or '').strip()}", None
@@ -96,8 +96,9 @@ def _gate_shell(path: Path) -> tuple[str | None, str | None]:
 
 
 def _gate_jq(path: Path) -> tuple[str | None, str | None]:
+    """Return (block_msg, advise_msg). Block if jq not on PATH."""
     if shutil.which("jq") is None:
-        return None, f"{path}: jq not on PATH — parse check skipped"
+        return f"{path}: jq not on PATH — cannot verify jq syntax", None
     r = subprocess.run(["jq", "-n", "-c", "-f", str(path)], stdin=subprocess.DEVNULL, capture_output=True, text=True)
     if r.returncode != 0:
         return f"{path}: jq parse fail: {(r.stderr or '').strip()}", None

@@ -138,6 +138,35 @@ def test_precommit_skips_dot_git(tmp_path):
     assert verdict == "pass"
 
 
+# ── Slice 3 (G5): missing interpreter blocks, not advises ────────────────────
+
+
+def test_precommit_missing_bash_blocks(tmp_path, monkeypatch):
+    import shutil as _shutil
+
+    pre = _load_precommit()
+    original_which = _shutil.which
+    monkeypatch.setattr(_shutil, "which", lambda cmd: None if cmd == "bash" else original_which(cmd))
+    (tmp_path / "script.sh").write_text("#!/bin/bash\necho hello\n")
+    verdict, msg = pre.run(tmp_path)
+    assert verdict == "block"
+    assert "bash" in msg
+    assert "cannot verify" in msg
+
+
+def test_precommit_missing_jq_blocks(tmp_path, monkeypatch):
+    import shutil as _shutil
+
+    pre = _load_precommit()
+    original_which = _shutil.which
+    monkeypatch.setattr(_shutil, "which", lambda cmd: None if cmd == "jq" else original_which(cmd))
+    (tmp_path / "filter.jq").write_text("select(.x) !!BAD!!\n")
+    verdict, msg = pre.run(tmp_path)
+    assert verdict == "block"
+    assert "jq" in msg
+    assert "cannot verify" in msg
+
+
 # ── smells gate ──────────────────────────────────────────────────────────
 
 
