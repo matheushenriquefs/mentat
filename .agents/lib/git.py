@@ -64,10 +64,10 @@ def worktree_for_slug(slug: str, cwd: Path | None = None) -> Path:
 def is_dirty(path: Path) -> bool:
     """True iff the worktree at path has uncommitted changes.
 
-    Fails safe: a git error is treated as dirty to preserve un-landed work.
+    Fails safe: any git error (including missing .git) is treated as dirty to
+    preserve un-landed work.  A missing .git gitlink (partial worktree remove)
+    makes ``git status`` fail with rc != 0, which is caught by the error branch.
     """
-    if not (path / ".git").exists():
-        return False
     r = _run(["-C", str(path), "status", "--porcelain"])
     if r.returncode != 0:
         return True
