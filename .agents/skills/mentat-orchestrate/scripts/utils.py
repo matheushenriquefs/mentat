@@ -11,6 +11,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 from lib import config as _config  # noqa: E402
 from lib import frontmatter as _frontmatter  # noqa: E402
 from lib import paths  # noqa: E402,F401  # type: ignore[reportUnusedImport]  # pyright: ignore[reportUnusedImport]
+from lib import plans as _plans  # noqa: E402
 from lib.events import bind  # noqa: E402
 from lib.gates import engine as _gate_engine  # noqa: E402
 
@@ -19,9 +20,7 @@ read_config = _config.read_config
 
 
 def resolve_plan_ref(ref: str) -> Path:
-    if "/" in ref or ref.endswith(".md"):
-        return Path(ref).expanduser().resolve()
-    return Path.home() / ".agents" / "plans" / f"{ref}.md"
+    return _plans.resolve_plan_ref(ref)
 
 
 def parse_frontmatter(plan_path: Path) -> dict[str, str]:

@@ -11,19 +11,15 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib import plans as _plans  # noqa: E402
 from lib.events import bind  # noqa: E402
 
 _emit = bind("mentat-plan")
 
 
 def resolve_plan(ref: str) -> Path:
-    """Resolve a plan slug-or-path to a canonical absolute Path.
-
-    Pure path arithmetic — does not stat.
-    """
-    if "/" in ref or ref.endswith(".md"):
-        return Path(ref).expanduser().resolve()
-    return Path.home() / ".agents" / "plans" / f"{ref}.md"
+    """Resolve a plan slug-or-path to a canonical absolute Path. Pure path arithmetic — does not stat."""
+    return _plans.resolve_plan_ref(ref)
 
 
 def write_plan(slug: str, body_path: Path, *, plans_dir: Path | None = None) -> Path:

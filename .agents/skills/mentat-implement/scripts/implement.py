@@ -119,9 +119,9 @@ def mark_test_writable(slug: str, path: str) -> None:
 
 
 def resolve_plan_path(ref: str) -> Path:
-    if "/" in ref or ref.endswith(".md"):
-        return Path(ref).expanduser().resolve()
-    return Path.home() / ".agents" / "plans" / f"{ref}.md"
+    from lib import plans as _plans
+
+    return _plans.resolve_plan_ref(ref)
 
 
 def parse_frontmatter(plan_path: Path) -> dict[str, str]:

@@ -21,27 +21,25 @@ LOADER = REPO_ROOT / ".agents/lib/loader.py"
 _DEF_LOAD_SIBLING = re.compile(r"^def load_sibling\b", re.M)
 _DEF_LOCAL = re.compile(r"^def _load_sibling\b", re.M)
 
-_PRUNE_DIRS = {".venv", "__pycache__", ".git"}
+_PRUNE_DIRS = {"__pycache__", ".venv", ".git"}
 
 
-def _py_files(root: Path) -> list[Path]:
-    """Walk root, pruning _PRUNE_DIRS so rglob never enters them."""
-    result = []
+def _all_py_files(root: Path):
+    """Walk root, pruning volatile dirs that cause rglob race conditions."""
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in _PRUNE_DIRS]
-        for f in filenames:
-            if f.endswith(".py"):
-                result.append(Path(dirpath) / f)
-    return result
+        for fname in filenames:
+            if fname.endswith(".py"):
+                yield Path(dirpath) / fname
 
 
 def _skill_scripts() -> list[Path]:
-    return _py_files(SKILLS_DIR)
+    return list(_all_py_files(SKILLS_DIR))
 
 
 def test_exactly_one_load_sibling_definition() -> None:
     """`load_sibling` is defined once, in lib/loader.py."""
-    defs = [p for p in _py_files(REPO_ROOT) if _DEF_LOAD_SIBLING.search(p.read_text())]
+    defs = [p for p in _all_py_files(REPO_ROOT) if _DEF_LOAD_SIBLING.search(p.read_text())]
     assert defs == [LOADER], f"load_sibling must be defined only in {LOADER}, found: {defs}"
 
 
