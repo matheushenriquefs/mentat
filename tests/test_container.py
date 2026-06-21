@@ -654,3 +654,31 @@ def test_cmd_up_fails_when_bringup_fails_despite_stale_container(tmp_path, monke
 
     rc = container_mod.cmd_up(tmp_path)
     assert rc != 0, "cmd_up must return non-zero when bring-up command fails"
+
+
+# ── C1: devcontainer CLI missing ──────────────────────────────────────────────
+
+
+def test_cmd_up_devcontainer_cli_missing_returns_failure(tmp_path, monkeypatch, capsys):
+    """cmd_up must return EX_FAILURE (not traceback) when devcontainer CLI is not on PATH."""
+    container_mod = load_module("container")
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and cmd and cmd[0] == "devcontainer":
+            raise FileNotFoundError("No such file or directory: 'devcontainer'")
+        r = MagicMock()
+        r.returncode = 0
+        r.stdout = ""
+        return r
+
+    monkeypatch.setattr(container_mod, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container_mod.utils, "container_id_for", lambda slug: None)
+    monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(container_mod, "_ensure_devcontainer_json", lambda wt, slug: None)
+
+    rc = container_mod.cmd_up(tmp_path)
+
+    captured = capsys.readouterr()
+    assert rc != 0, "cmd_up must return non-zero when devcontainer CLI is absent"
+    assert captured.err, "cmd_up must emit an actionable message to stderr"
+    assert "devcontainer" in captured.err.lower() or "path" in captured.err.lower()

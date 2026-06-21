@@ -247,7 +247,14 @@ def cmd_up(wt: Path) -> int:
         cmd += ["--remote-env", f"GIT_DIR={git_dir}"]
         cmd += ["--remote-env", f"GIT_WORK_TREE={ws}"]
 
-    result = subprocess.run(cmd, capture_output=False)
+    try:
+        result = subprocess.run(cmd, capture_output=False)
+    except FileNotFoundError:
+        print(
+            "mentat-container: devcontainer CLI not on PATH — install via: npm install -g @devcontainers/cli",
+            file=sys.stderr,
+        )
+        return EX_FAILURE
     if result.returncode != 0:
         return EX_FAILURE
 
