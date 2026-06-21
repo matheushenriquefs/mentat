@@ -39,7 +39,7 @@ def cmd_track(session_id: str | None) -> int:
     if not sd.exists():
         print(f"mentat-session: session dir not found: {sd}", file=sys.stderr)
         return 1
-    _track.stream(sd)
+    _track.view_session(sd)
     return 0
 
 

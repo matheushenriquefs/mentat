@@ -43,3 +43,41 @@ def is_ask_user_question(row: object) -> bool:
     ejecting); for live tracking it means the session is blocked on the operator.
     """
     return "AskUserQuestion" in tool_uses(row)
+
+
+def assistant_text(row: object) -> str:
+    """Concatenated text content from one assistant stream row (empty if none)."""
+    if _field(row, "type") != "assistant":
+        return ""
+    content = _field(_field(row, "message"), "content")
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for b in cast("list[object]", content):
+        if _field(b, "type") == "text":
+            t = _field(b, "text")
+            if isinstance(t, str):
+                parts.append(t)
+    return "".join(parts)
+
+
+def tool_result(row: object) -> str:
+    """Brief summary of tool result content from one user stream row (empty if none)."""
+    if _field(row, "type") != "user":
+        return ""
+    content = _field(_field(row, "message"), "content")
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for b in cast("list[object]", content):
+        if _field(b, "type") == "tool_result":
+            inner = _field(b, "content")
+            if isinstance(inner, str):
+                parts.append(inner[:200])
+            elif isinstance(inner, list):
+                for ib in cast("list[object]", inner):
+                    if _field(ib, "type") == "text":
+                        t = _field(ib, "text")
+                        if isinstance(t, str):
+                            parts.append(t[:100])
+    return " ".join(parts)[:300]

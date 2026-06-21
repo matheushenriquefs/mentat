@@ -15,10 +15,14 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib import harness_stream as _hs  # noqa: E402
 from lib import tui  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
 _sessions = load_sibling(__file__, "sessions")
+
+_VIEW_TRANSCRIPT = "transcript"
+_VIEW_AUDIT = "audit"
 
 _COLORS = {
     "started": "\033[34m",  # blue
@@ -68,6 +72,109 @@ def stream(session_dir: Path, *, follow: bool = True, use_color: bool | None = N
         if not follow or time.time() > end_time:
             break
         time.sleep(0.1)
+
+
+# ── dual-stream log renderer ─────────────────────────────────────────────────
+
+
+def toggle_view(view: str) -> str:
+    """Pure: flip between transcript and audit views."""
+    return _VIEW_AUDIT if view == _VIEW_TRANSCRIPT else _VIEW_TRANSCRIPT
+
+
+def render_transcript_lines(session_dir: Path, *, limit: int = 0) -> list[str]:
+    """Transcript view: assistant text + tool_glyph calls + result summaries, newest tail.
+
+    Reads all *.jsonl in session_dir, filters to harness stream rows (type-keyed,
+    no event key), takes the last `limit` rows (0 = FOCUS_LINES), renders chat.
+    """
+    rows: list[dict[str, object]] = []
+    for f in sorted(session_dir.glob("*.jsonl")):
+        rows.extend(_sessions.iter_rows(f))
+    stream_rows = [r for r in rows if "type" in r and "event" not in r]
+    cap = limit or FOCUS_LINES
+    tail = stream_rows[-cap:]
+    gutter = tui.color(tui.PIPE, tui.DIM)
+    out: list[str] = []
+    for row in tail:
+        row_type = row.get("type")
+        if row_type == "assistant":
+            text = _hs.assistant_text(row)
+            tools = _hs.tool_uses(row)
+            if text.strip():
+                for line in text.splitlines():
+                    out.append(f"{gutter} {line[:200]}")
+            for name in tools:
+                out.append(f"{gutter} {tui.tool_glyph(name)} {name}")
+        elif row_type == "user":
+            result = _hs.tool_result(row)
+            if result:
+                out.append(f"{gutter}  └ {result[:200]}")
+    if not out:
+        out = [f"{gutter} (no transcript yet)"]
+    return out
+
+
+def render_audit_lines(session_dir: Path, *, limit: int = 0) -> list[str]:
+    """Audit view: envelope rows (event key) as 'ts event payload', newest tail."""
+    rows: list[dict[str, object]] = []
+    for f in sorted(session_dir.glob("*.jsonl")):
+        rows.extend(_sessions.iter_rows(f))
+    audit_rows = [r for r in rows if "event" in r]
+    cap = limit or FOCUS_LINES
+    tail = audit_rows[-cap:]
+    gutter = tui.color(tui.PIPE, tui.DIM)
+    out: list[str] = []
+    for row in tail:
+        ts = str(row.get("ts", ""))[-19:]
+        event = row.get("event", "?")
+        payload = json.dumps(row.get("payload", {}))
+        out.append(f"{gutter} {ts} {event} {payload[:100]}")
+    if not out:
+        out = [f"{gutter} (no audit events yet)"]
+    return out
+
+
+def view_session(session_dir: Path) -> None:
+    """Show a session's transcript (default) or audit log; 't' toggles, 'q'/esc quits.
+
+    Non-tty: print transcript once and return.
+    """
+    if not sys.stdin.isatty():
+        for line in render_transcript_lines(session_dir):
+            print(line)
+        return
+
+    import termios
+    import tty as _tty
+
+    view = _VIEW_TRANSCRIPT
+    fd = sys.stdin.fileno()
+    saved = termios.tcgetattr(fd)
+    try:
+        _tty.setcbreak(fd)
+        while True:
+            sys.stdout.write(tui.CLEAR_HOME)
+            label = view
+            print(tui.section_rule(f"{session_dir.name} — {label}"))
+            if view == _VIEW_TRANSCRIPT:
+                lines = render_transcript_lines(session_dir)
+            else:
+                lines = render_audit_lines(session_dir)
+            for line in lines:
+                print(line)
+            print()
+            print(tui.color("t toggle · q quit", tui.DIM))
+            sys.stdout.flush()
+            key = _read_key(1.0)
+            if key == "t":
+                view = toggle_view(view)
+            elif key in ("q", "\x1b"):
+                break
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+        sys.stdout.write(tui.CLEAR_HOME)
+        sys.stdout.flush()
 
 
 # ── multi-AFK navigator ───────────────────────────────────────────────────────

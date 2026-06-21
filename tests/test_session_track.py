@@ -21,11 +21,16 @@ def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
 
 
-def _assistant(*tool_names: str) -> dict:
-    return {
-        "type": "assistant",
-        "message": {"content": [{"type": "tool_use", "name": n} for n in tool_names]},
-    }
+def _assistant(*tool_names: str, text: str = "") -> dict:
+    blocks = []
+    if text:
+        blocks.append({"type": "text", "text": text})
+    blocks += [{"type": "tool_use", "name": n} for n in tool_names]
+    return {"type": "assistant", "message": {"content": blocks}}
+
+
+def _tool_result(content: str) -> dict:
+    return {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "x", "content": content}]}}
 
 
 # ── harness_stream.tool_uses — tool-call names from one stream row ─────────────
@@ -249,3 +254,73 @@ def test_render_focus_shows_session_rule_and_tools():
     assert "Read" in body and "Bash" in body
     assert tui.PIPE in body  # preview gutter reused
     assert "back" in body  # exit hint
+
+
+# ── V2: harness_stream extractors + dual-stream renderers ────────────────────
+
+
+def test_assistant_text_extracts_text_blocks():
+    row = {
+        "type": "assistant",
+        "message": {
+            "content": [
+                {"type": "text", "text": "hello world"},
+                {"type": "tool_use", "name": "Read"},
+            ]
+        },
+    }
+    assert harness_stream.assistant_text(row) == "hello world"
+
+
+def test_assistant_text_empty_for_non_assistant():
+    assert harness_stream.assistant_text({"type": "user"}) == ""
+    assert harness_stream.assistant_text({"type": "assistant", "message": {"content": []}}) == ""
+    assert harness_stream.assistant_text("bad") == ""
+
+
+def test_tool_result_extracts_string_content():
+    row = _tool_result("file contents here")
+    assert "file contents here" in harness_stream.tool_result(row)
+
+
+def test_tool_result_empty_for_non_user():
+    assert harness_stream.tool_result({"type": "assistant"}) == ""
+    assert harness_stream.tool_result("bad") == ""
+
+
+def test_render_transcript_shows_chat_not_blank(tmp_path):
+    """session.jsonl with only harness rows renders chat text, not '[] {}'."""
+    track = load_module("track")
+    sd = tmp_path / "s-1"
+    _write_stream(
+        sd,
+        "session",
+        [
+            _assistant("Read", text="Let me read that."),
+            _tool_result("file contents"),
+        ],
+    )
+    lines = track.render_transcript_lines(sd)
+    body = "\n".join(lines)
+    assert "Let me read that." in body
+    assert "Read" in body
+    assert "[] {}" not in body
+
+
+def test_render_audit_shows_events(tmp_path):
+    """Audit-only dir renders event timeline."""
+    track = load_module("track")
+    sd = tmp_path / "s-audit"
+    sd.mkdir()
+    (sd / "mentat-impl.jsonl").write_text(
+        json.dumps({"ts": "2026-01-01T00:00:00+00:00", "event": "chunk.spawned", "payload": {"slug": "x"}}) + "\n"
+    )
+    lines = track.render_audit_lines(sd)
+    body = "\n".join(lines)
+    assert "chunk.spawned" in body
+
+
+def test_toggle_view_flips():
+    track = load_module("track")
+    assert track.toggle_view("transcript") == "audit"
+    assert track.toggle_view("audit") == "transcript"
