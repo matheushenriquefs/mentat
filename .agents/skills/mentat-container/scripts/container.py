@@ -89,6 +89,18 @@ def _git_mount_for_worktree(wt: Path) -> str | None:
     return f"source={main_git},target={main_git},type=bind"
 
 
+def _main_repo_root_for_wt(wt: Path) -> Path | None:
+    """Return the main repo root for a worktree (.git file pointer), or None."""
+    git_path = wt / ".git"
+    if not git_path.is_file():
+        return None
+    content = git_path.read_text().strip()
+    if not content.startswith("gitdir:"):
+        return None
+    gitdir = content.split(":", 1)[1].strip()
+    return Path(gitdir).parent.parent.parent
+
+
 def _atomic_write(path: Path, text: str) -> None:
     """Write text via a sibling .tmp then atomic replace."""
     tmp = path.parent / (path.name + ".tmp")
@@ -195,15 +207,8 @@ def cmd_up(wt: Path) -> int:
     _ensure_devcontainer_json(wt, slug)
 
     # Symlink shared dirs from main repo
-    if (wt / ".git").is_file():
-        _git_parts = (wt / ".git").read_text().split()
-        if not _git_parts:
-            return
-        git_target = _git_parts[-1]
-        root = Path(git_target).parent
-        while root.name != ".git" and root != root.parent:
-            root = root.parent
-        repo_root = root.parent
+    repo_root = _main_repo_root_for_wt(wt)
+    if repo_root is not None:
         for d in ("vendor", "node_modules"):
             src = repo_root / d
             dst = wt / d
