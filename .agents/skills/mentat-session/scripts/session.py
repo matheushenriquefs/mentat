@@ -32,7 +32,7 @@ def _session_dir(repo: str, session_id: str) -> Path:
 def cmd_track(session_id: str | None) -> int:
     repo = _repo()
     repo_dir = _log_root() / repo
-    # No session id → live multi-AFK navigator over the whole repo registry (S7).
+    # No session id → live multi-AFK navigator over the whole repo registry.
     if session_id is None:
         return _track.navigate(repo_dir, repo=repo)
     sd = _session_dir_fn(session_id)

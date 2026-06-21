@@ -84,7 +84,7 @@ def all_events(session_dir: Path) -> list[dict[str, object]]:
     return sorted(events, key=lambda e: str(e.get("ts", "")))
 
 
-# ── repo-wide registry (S6) ───────────────────────────────────────────────────
+# ── repo-wide registry ────────────────────────────────────────────────────────
 # The filesystem is the registry: each subdir of ~/.mentat/logs/<repo> is one
 # session. We have no push hooks, so status is *pulled* from the tail row of the
 # session's newest jsonl, classified against its st_mtime freshness.
@@ -250,7 +250,7 @@ def list_sessions(repo_dir: Path, *, now: float | None = None, stale_secs: float
 
 
 def session_stream_tools(session_dir: Path, *, limit: int = 20) -> list[str]:
-    """The last `limit` harness tool-call names from a session's stream (S7 preview pane).
+    """The last `limit` harness tool-call names from a session's stream (preview pane).
 
     Reads the captured stream-json (session.jsonl). Audit rows yield nothing — only
     assistant tool_use blocks count — so globbing every jsonl is safe. Order is the
@@ -266,7 +266,7 @@ def session_stream_tools(session_dir: Path, *, limit: int = 20) -> list[str]:
 def session_worktree(session_dir: Path) -> str | None:
     """The worktree path this session was spawned into (from its `chunk.spawned` audit), or None.
 
-    The S7 kill bind needs the worktree to tear down; the session log dir is not the
+    The kill bind needs the worktree to tear down; the session log dir is not the
     worktree. Returns the `worktree` field of the latest spawn event by ts.
     """
     worktree: str | None = None

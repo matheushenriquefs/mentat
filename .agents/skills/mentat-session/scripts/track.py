@@ -1,4 +1,4 @@
-"""Live event stream for a session (tail -f style) + multi-AFK navigator (S7)."""
+"""Live event stream for a session (tail -f style) + multi-AFK navigator."""
 
 from __future__ import annotations
 
@@ -70,8 +70,8 @@ def stream(session_dir: Path, *, follow: bool = True, use_color: bool | None = N
         time.sleep(0.1)
 
 
-# ── multi-AFK navigator (S7) ──────────────────────────────────────────────────
-# No push hooks → timer-poll the S6 registry each tick. The pure parts below
+# ── multi-AFK navigator ───────────────────────────────────────────────────────
+# No push hooks → timer-poll the registry each tick. The pure parts below
 # (keypress reducer + list/preview renderers) are gate-tested; `navigate` is the
 # thin raw-tty/select I/O shell that wires them to the live filesystem.
 
@@ -80,9 +80,9 @@ PREVIEW_LINES = 20  # tool-calls tailed in the list-view preview pane
 FOCUS_LINES = 40  # tool-calls tailed in the focused single-session view
 _STATUS_COL = 8  # status column width in the list pane
 
-# A registry entry: the S6 status record paired with its absolute session dir.
+# A registry entry: the status record paired with its absolute session dir.
 # The dir is kept alongside (not stuffed into the record) so SessionRecord stays
-# the pure S6 contract and the navigator's preview/kill target is explicit.
+# the pure registry contract and the navigator's preview/kill target is explicit.
 Entry = tuple[dict[str, object], Path]
 
 
