@@ -562,30 +562,20 @@ def _do_land(chunk: Any, *, holding: str, land_queue: Any) -> dict[str, object]:
 
 
 def _land_and_review(slug: str, worktree: Path, holding: str) -> dict[str, object]:
-    """Land one chunk and spawn advisory reviewers.
+    """Land one chunk onto the holding branch.
 
     Called after run_plan returns 0 when --land is set. Uses land_queue.land
     for the single-chunk case (no Scheduler needed — drain() with one chunk and
-    scheduler=None is equivalent). Spawns advisory batch review after landing.
-    Returns a dict with status, landed tip sha, and reviewer summary.
+    scheduler=None is equivalent). Returns a dict with status and landed tip sha.
     """
     _land_script = paths.SKILLS_DIR / "mentat-orchestrate/scripts/land_queue.py"
-    _batch_script = paths.SKILLS_DIR / "mentat-orchestrate/scripts/batch_review.py"
-
     land_queue = _load_mod("land_queue", _land_script)
-    batch_review = _load_mod("batch_review", _batch_script)
-
     chunk = land_queue.Chunk(slug=slug, worktree=worktree)
     verdict = _do_land(chunk, holding=holding, land_queue=land_queue)
-
-    session_id = os.environ.get("MENTAT_SESSION", slug)
-    review_result = batch_review.review(session_id)
-
     return {
         "status": verdict.get("status"),
         "tip": verdict.get("tip"),
         "holding": holding,
-        "verdicts": review_result,
     }
 
 
@@ -723,12 +713,7 @@ def main() -> None:
     # must resume once the design call is made. Doctor already ran inside
     # _run_and_doctor and writes to ~/.mentat/logs, so teardown loses nothing.
     if rc == 0:
-        from lib.config import load_config_file as _load_cfg
-
-        _cfg_path = Path.home() / ".mentat" / "config.toml"
-        _cfg = _load_cfg(_cfg_path) if _cfg_path.exists() else {}
-        diff_tool = _cfg.get("diff_tool") or "git diff"
-        print(f"mentat-implement: review the diff with `{diff_tool}`", file=sys.stderr)
+        print("mentat-implement: review the diff with `git diff main..HEAD`", file=sys.stderr)
 
     if rc != 0 and rc not in _PRESERVE_WORKTREE_EXITS and target is not None:
         os.chdir(target.parents[2])  # step out to repo root before removing

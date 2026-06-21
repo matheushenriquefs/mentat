@@ -1,8 +1,8 @@
-"""F2: implement --land self-contained mode.
+"""F2 + B6: implement --land self-contained mode.
 
 `mentat-implement run --land --holding <branch> <plan>` runs plan start→finish:
-TDD loop then land via land_queue.land, then advisory batch review — no
-mentat-orchestrate needed.
+TDD loop then land via land_queue.land — no mentat-orchestrate needed.
+B6 removed the dangling batch_review.py load.
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ def test_land_and_review_function_exists():
     assert callable(getattr(impl, "_land_and_review", None)), "implement.py missing _land_and_review function"
 
 
-# ── _land_and_review calls land_queue.land and spawns reviewers ───────────────
+# ── _land_and_review calls land_queue.land ────────────────────────────────────
 
 
 def test_land_and_review_calls_land_queue_land(tmp_path):
@@ -83,16 +83,9 @@ def test_land_and_review_calls_land_queue_land(tmp_path):
         land_calls.append({"slug": chunk.slug, "holding": holding})
         return {"slug": chunk.slug, "status": "success", "tip": "abc123"}
 
-    class FakeBatchReview:
-        @staticmethod
-        def review(session_id):
-            return {"verdicts": []}
-
     with (
         patch.object(impl, "_do_land", fake_do_land),
-        patch.object(
-            impl, "_load_mod", lambda key, path: FakeLandQueue() if "land_queue" in key else FakeBatchReview()
-        ),
+        patch.object(impl, "_load_mod", lambda key, path: FakeLandQueue()),
     ):
         result = impl._land_and_review("myplan", tmp_path, "main")
 
@@ -102,8 +95,8 @@ def test_land_and_review_calls_land_queue_land(tmp_path):
     assert result is not None, "_land_and_review returned None"
 
 
-def test_land_and_review_spawns_reviewer_verdicts(tmp_path):
-    """F2 tracer: after landing, _land_and_review must return a dict with status + verdicts."""
+def test_land_and_review_returns_status_and_tip(tmp_path):
+    """_land_and_review must return a dict with status + tip (no verdicts after B6)."""
     impl = _impl()
 
     class FakeChunk:
@@ -114,22 +107,63 @@ def test_land_and_review_spawns_reviewer_verdicts(tmp_path):
     class FakeLandQueue:
         Chunk = FakeChunk
 
-        def land(self, chunk, *, holding):
-            return {"slug": chunk.slug, "status": "success", "tip": "sha123"}
-
-    class FakeBatchReview:
-        @staticmethod
-        def review(session_id):
-            return {"verdicts": ["ok"]}
-
     with (
         patch.object(impl, "_do_land", lambda chunk, *, holding, land_queue: {"status": "success", "tip": "sha123"}),
-        patch.object(
-            impl, "_load_mod", lambda key, path: FakeLandQueue() if "land_queue" in key else FakeBatchReview()
-        ),
+        patch.object(impl, "_load_mod", lambda key, path: FakeLandQueue()),
     ):
         result = impl._land_and_review("myplan", tmp_path, "main")
 
     assert isinstance(result, dict), "_land_and_review must return a dict"
     assert "status" in result, "result missing 'status' key"
-    assert "verdicts" in result, "result missing 'verdicts' key"
+    assert result.get("status") == "success"
+
+
+# ── B6: _land_and_review must not crash with missing batch_review.py ──────────
+
+
+def test_land_and_review_no_import_error(tmp_path):
+    """_land_and_review must not crash — batch_review.py was removed (B6)."""
+    impl = _impl()
+
+    class FakeChunk:
+        def __init__(self, slug, worktree):
+            self.slug = slug
+            self.worktree = worktree
+
+    class FakeLandQueue:
+        Chunk = FakeChunk
+
+    def fake_do_land(chunk, *, holding, land_queue):
+        return {"slug": chunk.slug, "status": "success", "tip": "abc123"}
+
+    # Only patch land_queue — batch_review must NOT be loaded at all
+    with (
+        patch.object(impl, "_do_land", fake_do_land),
+        patch.object(impl, "_load_mod", lambda key, path: FakeLandQueue()),
+    ):
+        result = impl._land_and_review("myplan", tmp_path, "main")
+
+    assert result is not None
+    assert result.get("status") == "success"
+    assert "tip" in result
+
+
+def test_land_and_review_no_verdicts_key(tmp_path):
+    """After B6, _land_and_review result must NOT include 'verdicts' (batch_review removed)."""
+    impl = _impl()
+
+    class FakeChunk:
+        def __init__(self, slug, worktree):
+            self.slug = slug
+            self.worktree = worktree
+
+    class FakeLandQueue:
+        Chunk = FakeChunk
+
+    with (
+        patch.object(impl, "_do_land", lambda chunk, *, holding, land_queue: {"status": "success", "tip": "sha"}),
+        patch.object(impl, "_load_mod", lambda key, path: FakeLandQueue()),
+    ):
+        result = impl._land_and_review("slug", tmp_path, "main")
+
+    assert "verdicts" not in result, "verdicts key must be absent after B6 removes batch_review"
