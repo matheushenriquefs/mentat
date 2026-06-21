@@ -259,6 +259,7 @@ def run_orchestrate(
     dry_run: bool,
 ) -> int:
     session_id = ensure_session("orchestrate", holding)
+    print(f"mentat-orchestrate: track this run with `mentat-session track {session_id}`", file=sys.stderr)
     plans = _load_plans(plan_paths)
     anchored, auto = _scheduler.partition(plans)
 

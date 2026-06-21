@@ -27,10 +27,14 @@ def _make_plan(tmp_path: Path, plan_class: str, body: str = "## Slice 1\nDo the 
 
 
 def _fake_utils():
-    return type("U", (), {
-        "default_harness": staticmethod(lambda: "claude_code"),
-        "detect_self_answer": staticmethod(lambda p: False),
-    })()
+    return type(
+        "U",
+        (),
+        {
+            "default_harness": staticmethod(lambda: "claude_code"),
+            "detect_self_answer": staticmethod(lambda p: False),
+        },
+    )()
 
 
 def _patch_common(monkeypatch, impl):
@@ -63,9 +67,7 @@ def test_afk_prompt_contains_commit_contract(tmp_path, monkeypatch):
 
     prompt = captured.get("prompt", "")
     assert "git commit" in prompt, f"Expected 'git commit' in prompt, got: {prompt[:200]}"
-    assert "one commit per slice" in prompt.lower(), (
-        f"Expected 'one commit per slice' in prompt, got: {prompt[:200]}"
-    )
+    assert "one commit per slice" in prompt.lower(), f"Expected 'one commit per slice' in prompt, got: {prompt[:200]}"
 
 
 def test_hitl_prompt_unchanged(tmp_path, monkeypatch):

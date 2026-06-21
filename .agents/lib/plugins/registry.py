@@ -6,7 +6,7 @@ import importlib.metadata
 import sys
 from pathlib import Path
 
-from . import DiffProvider, HarnessProvider, MentatPlugin
+from . import HarnessProvider, MentatPlugin
 
 _LIB_ROOT = Path(__file__).resolve().parents[1]
 if str(_LIB_ROOT.parent) not in sys.path:
@@ -51,29 +51,23 @@ def _discover_plugins() -> list[MentatPlugin]:
 def resolve_slots(
     plugins: list[MentatPlugin],
     order: list[str],
-    builtin_diff: DiffProvider,
     builtin_harness: HarnessProvider,
-) -> tuple[DiffProvider, HarnessProvider]:
+) -> HarnessProvider:
     """Apply first-wins slot resolution with config ordering.
 
-    Returns (diff_provider, harness_provider).
-    Built-ins act as last-resort fallback.
+    Returns harness_provider. Built-in acts as last-resort fallback.
+    diff slot removed in F3 — use diff_tool config key for diff suggestions.
     """
-    # Reorder by config-specified order; unknown names appended at end
     ordered = sorted(plugins, key=lambda p: order.index(p.name) if p.name in order else len(order))
 
-    diff: DiffProvider | None = None
     harness: HarnessProvider | None = None
-
     for plugin in ordered:
-        if diff is None and plugin.diff is not None:
-            diff = plugin.diff
         if harness is None and plugin.harness is not None:
             harness = plugin.harness
-        if diff is not None and harness is not None:
+        if harness is not None:
             break
 
-    return (diff or builtin_diff, harness or builtin_harness)
+    return harness or builtin_harness
 
 
 def load(config_path: Path | None = None) -> list[MentatPlugin]:

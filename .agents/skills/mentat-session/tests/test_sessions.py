@@ -5,8 +5,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 import sessions
 
@@ -36,6 +34,7 @@ def test_returns_none_when_only_manual_present(tmp_path):
 
 def test_latest_session_returns_most_recent(tmp_path):
     import time
+
     a = tmp_path / "session-a"
     a.mkdir()
     time.sleep(0.01)

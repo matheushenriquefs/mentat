@@ -1,4 +1,4 @@
-"""Tests for plugin registry — ADR-0009."""
+"""Tests for plugin registry — ADR-0009. diff slot removed in F3."""
 
 from __future__ import annotations
 
@@ -8,11 +8,6 @@ from plugins import MentatPlugin
 from plugins.registry import resolve_slots
 
 
-class FakeDiff:
-    def get_diff(self, worktree: str) -> str:
-        return "fake diff"
-
-
 class FakeHarness:
     name = "fake"
 
@@ -20,45 +15,44 @@ class FakeHarness:
         return 0
 
 
-def test_zero_plugins_uses_builtins() -> None:
-    builtin_diff = FakeDiff()
+def test_zero_plugins_uses_builtin_harness() -> None:
     builtin_harness = FakeHarness()
-    diff, harness = resolve_slots([], [], builtin_diff, builtin_harness)
-    assert diff is builtin_diff
+    harness = resolve_slots([], [], builtin_harness)
     assert harness is builtin_harness
 
 
-def test_one_plugin_overrides_diff_builtin() -> None:
-    custom_diff = FakeDiff()
-    plugin = MentatPlugin(name="my-plugin", diff=custom_diff)
-    builtin_diff = FakeDiff()
+def test_plugin_overrides_harness_builtin() -> None:
+    custom_harness = FakeHarness()
+    custom_harness.name = "custom"
+    plugin = MentatPlugin(name="my-plugin", harness=custom_harness)
     builtin_harness = FakeHarness()
-    diff, harness = resolve_slots([plugin], [], builtin_diff, builtin_harness)
-    assert diff is custom_diff
-    assert harness is builtin_harness
+    harness = resolve_slots([plugin], [], builtin_harness)
+    assert harness is custom_harness
 
 
-def test_two_plugins_both_providing_diff_first_wins() -> None:
-    diff_a = FakeDiff()
-    diff_b = FakeDiff()
-    plugin_a = MentatPlugin(name="plugin-a", diff=diff_a)
-    plugin_b = MentatPlugin(name="plugin-b", diff=diff_b)
-    builtin_diff = FakeDiff()
+def test_two_plugins_both_providing_harness_first_wins() -> None:
+    harness_a = FakeHarness()
+    harness_a.name = "a"
+    harness_b = FakeHarness()
+    harness_b.name = "b"
+    plugin_a = MentatPlugin(name="plugin-a", harness=harness_a)
+    plugin_b = MentatPlugin(name="plugin-b", harness=harness_b)
     builtin_harness = FakeHarness()
-    diff, _ = resolve_slots([plugin_a, plugin_b], [], builtin_diff, builtin_harness)
-    assert diff is diff_a
+    harness = resolve_slots([plugin_a, plugin_b], [], builtin_harness)
+    assert harness is harness_a
 
 
 def test_config_order_controls_first_wins() -> None:
-    diff_a = FakeDiff()
-    diff_b = FakeDiff()
-    plugin_a = MentatPlugin(name="plugin-a", diff=diff_a)
-    plugin_b = MentatPlugin(name="plugin-b", diff=diff_b)
-    builtin_diff = FakeDiff()
+    harness_a = FakeHarness()
+    harness_a.name = "a"
+    harness_b = FakeHarness()
+    harness_b.name = "b"
+    plugin_a = MentatPlugin(name="plugin-a", harness=harness_a)
+    plugin_b = MentatPlugin(name="plugin-b", harness=harness_b)
     builtin_harness = FakeHarness()
     # Order says plugin-b first
-    diff, _ = resolve_slots([plugin_a, plugin_b], ["plugin-b", "plugin-a"], builtin_diff, builtin_harness)
-    assert diff is diff_b
+    harness = resolve_slots([plugin_a, plugin_b], ["plugin-b", "plugin-a"], builtin_harness)
+    assert harness is harness_b
 
 
 def test_plugin_missing_entry_point_factory_raises() -> None:

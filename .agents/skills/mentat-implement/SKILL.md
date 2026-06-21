@@ -9,66 +9,49 @@ Atomic single-plan executor. ONE job: execute one plan in the calling session. N
 
 ## How to invoke
 
-Slash form (in-harness) leads; the `python3` line is the underlying call.
-
 ```
 /mentat-implement <plan-ref> [--harness <name>]
-python3 ~/.agents/skills/mentat-implement/scripts/implement.py <plan-ref> [--harness <name>]
+/mentat-implement run --land [--holding <branch>] <plan-ref>
 ```
 
 `plan-ref`: bare slug (`my-plan`) or path. Multi-slug → exit 1 (use mentat-orchestrate).
 
-Argparse subcommands (peers): `run` (default), `mark-test-writable <slug> <path>`; `implement <plan>` == `implement run <plan>`. No branch param, does NOT land — the arg-order asymmetry with `orchestrate run <holding-branch> <plan-ref>+` (branch first) is by design, not an inconsistency.
+Subcommands (peers): `run` (default), `mark-test-writable <slug> <path>`.
+
+`--land`: after all slices green, rebase onto `<holding>` (default `main`), fast-forward merge, spawn advisory batch review — no `mentat-orchestrate` needed. Use for a single plan start→finish in one session. `--holding` order is intentionally swapped vs. `orchestrate run <branch> <plan>+`.
 
 ## Preflight
 
-1. **Worktree.** When cwd is the main worktree (`git rev-parse --git-dir` == `--git-common-dir`), invoke `mentat-git worktree create <plan-slug>` and `chdir` into the new worktree. Already in a sibling worktree → skipped. Not in a repo → skipped. `MENTAT_SKIP_PREFLIGHT=1` → skipped (test isolation).
-2. **Worktree-create failure** (path conflict / missing base / git error) → emit `chunk.ejected{reason: preflight-worktree-failed, preflight_exit: <rc>}` and exit with the same rc (65/66/70).
-3. **Slice artifacts.** Derive a bash predicate per slice (exists / absent / `grep -c <pattern> <file> -ge N`). Skip slices whose predicate already passes; refuse to re-run DONE slices.
+1. **Worktree.** Main worktree → create sibling via `mentat-git worktree create <slug>` + chdir. Already in sibling → skipped. Not in repo → skipped. `MENTAT_SKIP_PREFLIGHT=1` → skipped.
+2. **Failure** → emit `chunk.ejected{reason: preflight-worktree-failed}` + exit rc (65/66/70).
+3. **Slice artifacts.** Skip already-passing predicates; refuse re-run on DONE slices.
 4. **Container** auto-ups via `mentat-container up`; second miss → exit 69.
 
 ## Gate formula
 
-After all slices green, spawn `mentat-plan-reviewer`, `mentat-test-reviewer`, `mentat-bug-reviewer`, `mentat-smell-reviewer` in parallel. Per ADR-0003 (never average, veto-style):
+After all slices green, spawn four reviewers in parallel (ADR-0003, veto-style):
 
 ```
 gate_pass =
-      deterministic_checks_all_green     # VETO — tests / coverage delta ≥ 0 / no weakened assertion
+      deterministic_checks_all_green     # VETO — tests / coverage / no weakened assertion
   AND trajectory_blacklist_clean         # VETO — bug-reviewer blacklist
   AND max_latent_bug_sev < high          # VETO — bug-reviewer latent-bug lens
-  AND plan_alignment    ≥ 0.88           # plan-reviewer threshold
-  AND test_asserts_plan ≥ 0.88           # test-reviewer threshold
-  AND smell_findings.hard_tier == []     # VETO — smell-reviewer hard tier
-  AND smell_findings.soft_tier[sev=high] == []  # VETO — soft tier sev=high
+  AND plan_alignment    ≥ 0.88           # plan-reviewer
+  AND test_asserts_plan ≥ 0.88           # test-reviewer
+  AND smell_findings.hard_tier == []     # VETO
+  AND smell_findings.soft_tier[sev=high] == []  # VETO
 ```
 
-Any veto/threshold fail → fix, re-commit, re-spawn. Do not rebase on FAIL. Dismissals enumerate refuted findings + disproof in `review.submitted.payload.reason`; prose-only dismissal forbidden.
+Fail → fix, re-commit, re-spawn. No rebase on FAIL. Dismissals require refuted findings + disproof; prose-only forbidden.
 
 ## Execution flow
 
-```
-mentat-implement <single-plan-slug>
-
-1. Read plan frontmatter: id, class.
-2. If class == AFK:
-     adapter invoked --disallowedTools AskUserQuestion (no prompt-hang) +
-     ambiguity contract: unresolvable design call → write blocker to
-     <worktree>/summary.md (frontmatter status: blocked), stop; never guess.
-3. If class == HITL: adapter invoked normally (AskUserQuestion allowed).
-4. TDD loop over plan slices via /tdd: red test → impl → gate → commit per slice.
-5. On AFK ambiguity (worktree summary.md{status: blocked}, or defensively a
-     self-answered AskUserQuestion): emit
-     chunk.ejected{reason: hitl-required, summary} + exit 42, worktree preserved.
-6. On success → exit 0.
-7. On TDD/gate failure → exit 1.
-8. On signals → standard signal exit codes.
-```
-
-## Decisions
-
-- No `MENTAT_BATCH_CLASS` env var. Class lives in plan frontmatter (source of truth).
-- Harness: default from `~/.mentat/config.toml` `harness` key; override via `--harness`.
-- Gate runner: iterates `.agents/lib/gates/code/*.py` (`run(chunk_path)`); spawns reviewer subagents (`mentat-{plan,test,bug,smell}-reviewer`) via Agent tool; `score.py` aggregates.
+1. Read `class` from plan frontmatter.
+2. AFK: adapter invoked `--disallowedTools AskUserQuestion`; unresolvable call → write `summary.md{status: blocked}`, stop.
+3. HITL: adapter invoked normally (`AskUserQuestion` allowed).
+4. TDD loop: red test → impl → gate → commit per slice.
+5. AFK wedge detected → emit `chunk.ejected{hitl-required}` + exit 42, preserve worktree.
+6. Success → exit 0. TDD/gate failure → exit 1.
 
 ## Exit codes
 
@@ -88,32 +71,23 @@ mentat-implement <single-plan-slug>
 
 - One plan slug per invocation. Refuse multi-slug input with exit 64.
 - Container required (ADR-0004). Exit 69 if container down at preflight.
-- AFK class disallows `AskUserQuestion` (can't hang); ambiguity → agent writes `summary.md{status: blocked}` → emit `chunk.ejected{hitl-required}`, exit 42, preserve worktree.
+- AFK: no interactive prompts. Ambiguity → `summary.md{status: blocked}` → `chunk.ejected{hitl-required}` exit 42.
+- HITL: `AskUserQuestion` allowed at any phase.
 - Rename/delete: `git mv`/`git rm` first in own commit; post-commit `git ls-files | grep <old>` must be empty.
-- Stale-ref sweep: after any rename/delete, run the plan's `rg` lines; non-zero hits → abort the slice.
+- Stale-ref sweep: after rename/delete, non-zero rg hits → abort the slice.
 - One commit per slice via `/mentat-commit`. No squash.
 - All emit calls route through `mentat-log emit`; never write JSONL directly.
-- Read-only test mount enforced per `<slug>.tests.json` manifest when present.
+- Session id from `$MENTAT_SESSION` (`<role>-<slug>-<pid>` format).
 
 ## Read-only test mount (ADR-0010)
 
-When `~/.agents/plans/<slug>.tests.json` exists, `mentat-implement` reads it before
-`/mentat-container-up`:
+When `~/.agents/plans/<slug>.tests.json` exists, reads it before `/mentat-container-up`:
 
 ```json
 { "closed": ["tests/test_foo.py"], "open": ["tests/test_new.py"] }
 ```
 
-- `closed - open` paths → mounted `readonly` via `--mount type=bind,...,readonly`.
-- `open` paths → writable (plan author declared intent to modify them).
-- Absent manifest → no extra mounts; ADR-0006 soft layer still applies.
+`closed - open` → mounted `readonly`. `open` → writable. Absent manifest → no extra mounts.
 
-`mark-test-writable <slug> <path>` subcommand (peer of `run` under argparse) flips a
-closed path writable for the red-test step; reverts to `ro,bind` after red commits.
+`mark-test-writable <slug> <path>` flips a closed path writable for the red-test step.
 Audited as `test.writable.requested`.
-
-## Constraints
-
-- HITL class: `AskUserQuestion` allowed at any phase.
-- AFK class: no interactive prompts. Ambiguity is ejection, not a question.
-- Session id from `$MENTAT_SESSION` (`<role>-<slug>-<pid>` format).

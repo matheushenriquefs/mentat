@@ -482,6 +482,42 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     return 0
 
 
+def _land_and_review(slug: str, worktree: Path, holding: str) -> dict:
+    """Land one chunk and spawn advisory reviewers. F2: self-contained mode.
+
+    Called after run_plan returns 0 when --land is set. Uses land_queue.land
+    for the single-chunk case (no Scheduler needed — drain() with one chunk and
+    scheduler=None is equivalent). Spawns advisory batch review after landing.
+    Returns a dict with status, landed tip sha, and reviewer summary.
+    """
+    import importlib.util
+
+    _land_script = paths.SKILLS_DIR / "mentat-orchestrate/scripts/land_queue.py"
+    _batch_script = paths.SKILLS_DIR / "mentat-orchestrate/scripts/batch_review.py"
+
+    def _load_mod(key: str, path: Path):
+        spec = importlib.util.spec_from_file_location(key, path)
+        mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        return mod
+
+    land_queue = _load_mod("land_queue", _land_script)
+    batch_review = _load_mod("batch_review", _batch_script)
+
+    chunk = land_queue.Chunk(slug=slug, worktree=worktree)
+    verdict = land_queue.land(chunk, holding=holding)
+
+    session_id = os.environ.get("MENTAT_SESSION", slug)
+    review_result = batch_review.review(session_id)
+
+    return {
+        "status": verdict.get("status"),
+        "tip": verdict.get("tip"),
+        "holding": holding,
+        "verdicts": review_result,
+    }
+
+
 _SUBCOMMANDS = frozenset({"run", "mark-test-writable"})
 
 
@@ -497,6 +533,18 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("plan_refs", nargs="+", metavar="plan-ref")
     run.add_argument("--harness", default=None)
     run.add_argument("--model", default=None)
+    run.add_argument(
+        "--land",
+        action="store_true",
+        default=False,
+        help="Land after all slices green and spawn advisory reviewers (self-contained mode)",
+    )
+    run.add_argument(
+        "--holding",
+        default=None,
+        metavar="BRANCH",
+        help="Holding branch to land onto (required with --land; defaults to 'main')",
+    )
 
     mark = sub.add_parser("mark-test-writable", help="Flip a closed test path writable for the red step")
     mark.add_argument("slug")
@@ -537,6 +585,8 @@ def main() -> None:
     # session.jsonl capture happen for standalone runs too. Computed while still
     # in the main worktree so MENTAT_REPO resolves to the repo, not the slug dir.
     ensure_session("implement", slug)
+    session_id = os.environ.get("MENTAT_SESSION", slug)
+    print(f"mentat-implement: track this run with `mentat-session track {session_id}`", file=sys.stderr)
     _prune_worktrees_preflight()
     pf_rc, target = preflight_worktree(slug)
     if pf_rc != 0:
@@ -575,11 +625,25 @@ def main() -> None:
         sys.exit(EX_USAGE)
 
     rc = _run_and_doctor(plan_path, harness=args.harness, model=args.model)
+
+    if rc == 0 and getattr(args, "land", False):
+        holding = getattr(args, "holding", None) or "main"
+        worktree = target if target is not None else Path.cwd()
+        _land_and_review(slug, worktree, holding)
+
     # Implement owns the worktree it created: on its own failure drop it if
     # clean, preserve if dirty. Signal exits and a hitl-required wedge are
     # preserved unconditionally — the wedge worktree holds work the operator
     # must resume once the design call is made. Doctor already ran inside
     # _run_and_doctor and writes to ~/.mentat/logs, so teardown loses nothing.
+    if rc == 0:
+        from lib.config import load_config_file as _load_cfg
+
+        _cfg_path = Path.home() / ".mentat" / "config.toml"
+        _cfg = _load_cfg(_cfg_path) if _cfg_path.exists() else {}
+        diff_tool = _cfg.get("diff_tool") or "git diff"
+        print(f"mentat-implement: review the diff with `{diff_tool}`", file=sys.stderr)
+
     if rc != 0 and rc not in _PRESERVE_WORKTREE_EXITS and target is not None:
         os.chdir(target.parents[2])  # step out to repo root before removing
         _teardown_worktree(target)

@@ -1,19 +1,14 @@
-"""Mentat plugin API — Vite-derived, 2 slots: diff + harness.
+"""Mentat plugin API — Vite-derived, 1 slot: harness.
 
 See docs/PLUGINS.md and ADR-0009 for design rationale.
+HarnessProvider is documented-future-API — the real adapters live at
+implement/scripts/harness/; wiring through the Protocol is deferred to F5.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
-
-
-@runtime_checkable
-class DiffProvider(Protocol):
-    """Provides the diff text for a worktree."""
-
-    def get_diff(self, worktree: str) -> str: ...
 
 
 @runtime_checkable
@@ -29,10 +24,9 @@ class HarnessProvider(Protocol):
 class MentatPlugin:
     """Single plugin registration.
 
-    A plugin may fill the diff slot, the harness slot, or both.
+    A plugin may fill the harness slot.
     First plugin that fills a slot wins (ADR-0009).
     """
 
     name: str
-    diff: DiffProvider | None = field(default=None)
     harness: HarnessProvider | None = field(default=None)
