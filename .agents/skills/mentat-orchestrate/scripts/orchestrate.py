@@ -294,7 +294,13 @@ def run_orchestrate(
     if anchored:
         _emit_anchored_chunks(anchored, harness=harness, model=model)
 
-    sched = _scheduler.Scheduler(auto)
+    # Build Scheduler from ALL plans (anchored + auto) so cross-partition
+    # blocked_by edges are tracked.  auto chunks are the only spawn candidates
+    # (they never appear in `next_ready` as anchored slugs), so anchored plans
+    # act as "known but not-yet-landed" deps that gate auto dependents correctly.
+    # mark_ejected then cascades across the full plan graph, including HITL
+    # downstream — fixing the silent cascade miss when an auto upstream dies.
+    sched = _scheduler.Scheduler(anchored + auto)
     hitl_slugs: set[str] = set()
 
     results = _fan_out_plans(auto, harness=harness, model=model)
@@ -312,6 +318,20 @@ def run_orchestrate(
     if stalled:
         pending = stalled[0].get("pending", [])
         print(f"mentat-orchestrate: stalled — pending chunks: {pending}", file=sys.stderr)
+
+    # Emit cascade ejection events for anchored plans whose upstream was ejected.
+    # The drain loop only processes auto chunks, so anchored cascade victims are
+    # silently in sched.ejected_slugs() but never emitted — fix that here so the
+    # operator sees them in the audit log and skips implementing them.
+    anchored_slugs = {p.slug for p in anchored}
+    for slug in sched.ejected_slugs():
+        if slug in anchored_slugs:
+            plan_obj = next((p for p in anchored if p.slug == slug), None)
+            where = str(plan_obj.path.parent) if plan_obj else str(Path.cwd())
+            _emit_event(
+                "chunk.ejected",
+                ejected_payload(slug, EjectReason.UPSTREAM_EJECTED, where),
+            )
 
     _utils.emit_event(
         "batch.reviewed",
@@ -375,7 +395,13 @@ def main() -> None:
         slugs = [line.strip() for line in sys.stdin if line.strip()]
         import json
 
-        results = _land_all(slugs, holding=args.holding)
+        # Resolve slugs → plan paths for dep-aware drain ordering.  Plans that
+        # cannot be resolved (e.g. ad-hoc slugs) are silently skipped; the
+        # drain falls back to input order for those chunks.
+        plan_paths = [_utils.resolve_plan_ref(s) for s in slugs]
+        existing_paths = [p for p in plan_paths if p.exists()]
+        lq_plans = _load_plans(existing_paths, _expanding=False) if existing_paths else None
+        results = _land_all(slugs, holding=args.holding, plans=lq_plans)
         for r in results:
             print(json.dumps(r))
 

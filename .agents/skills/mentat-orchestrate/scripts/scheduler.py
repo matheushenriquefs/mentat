@@ -138,6 +138,10 @@ class Scheduler:
         """True if any slug has been ejected (includes cascade victims)."""
         return bool(self._ejected)
 
+    def ejected_slugs(self) -> frozenset[str]:
+        """Return all ejected slugs (direct + cascade victims)."""
+        return frozenset(self._ejected)
+
     def mark_ejected(self, slug: str) -> list[str]:
         """Eject slug + cascade to every downstream slug. Return cascaded list."""
         self._ejected.add(slug)
