@@ -682,3 +682,70 @@ def test_cmd_up_devcontainer_cli_missing_returns_failure(tmp_path, monkeypatch, 
     assert rc != 0, "cmd_up must return non-zero when devcontainer CLI is absent"
     assert captured.err, "cmd_up must emit an actionable message to stderr"
     assert "devcontainer" in captured.err.lower() or "path" in captured.err.lower()
+
+
+# ── C2: widened stopped-container detection ───────────────────────────────────
+
+
+def test_cmd_up_created_container_detected_fails_loud_when_unusable(tmp_path, monkeypatch):
+    """created-status containers must be detected; if unusable after start, return non-zero."""
+    container_mod = load_module("container")
+
+    def fake_run(cmd, **kw):
+        r = MagicMock()
+        r.returncode = 0
+        r.stdout = ""
+        r.stderr = ""
+        if not isinstance(cmd, list):
+            return r
+        # Return a container only when the widened query includes status=created
+        if len(cmd) > 1 and cmd[1] == "ps" and any("status=created" in str(a) for a in cmd):
+            r.stdout = "cre123\n"
+        return r
+
+    monkeypatch.setattr(container_mod, "_host_runtime", lambda: False)
+    # container_id_for always None — docker start leaves no usable container
+    monkeypatch.setattr(container_mod.utils, "container_id_for", lambda slug: None)
+    monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(container_mod, "_ensure_devcontainer_json", lambda wt, slug: None)
+
+    rc = container_mod.cmd_up(tmp_path)
+
+    assert rc != 0, "cmd_up must not return 0 when created container is unusable after start"
+
+
+# ── C3: docker start stderr surfaced ──────────────────────────────────────────
+
+
+def test_cmd_up_docker_start_failure_does_not_raise_and_surfaces_stderr(tmp_path, monkeypatch, capsys):
+    """Failed docker start must not raise CalledProcessError — must return non-zero with stderr shown."""
+    container_mod = load_module("container")
+
+    import subprocess as _sp
+
+    def fake_run(cmd, **kw):
+        r = MagicMock()
+        r.returncode = 0
+        r.stdout = ""
+        r.stderr = ""
+        if not isinstance(cmd, list):
+            return r
+        if len(cmd) > 1 and cmd[1] == "ps":
+            r.stdout = "cid_bad\n"
+        elif len(cmd) > 1 and cmd[1] == "start":
+            r.returncode = 1
+            r.stderr = "Error: no such container: cid_bad\n"
+            if kw.get("check"):
+                raise _sp.CalledProcessError(1, cmd, stderr=r.stderr)
+        return r
+
+    monkeypatch.setattr(container_mod, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container_mod.utils, "container_id_for", lambda slug: None)
+    monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
+
+    rc = container_mod.cmd_up(tmp_path)
+
+    captured = capsys.readouterr()
+    assert rc != 0, "failed docker start must return non-zero"
+    assert "Traceback" not in captured.err, "must not leak CalledProcessError traceback"
+    assert "no such container" in captured.err or "cid_bad" in captured.err

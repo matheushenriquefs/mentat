@@ -197,18 +197,46 @@ def cmd_up(wt: Path) -> int:
         _ensure_safe_directory(ws, cid)
         return 0
 
-    # Stopped container
+    # Stopped container — check all non-running states so created/paused/restarting/dead
+    # containers are caught and restarted, not silently skipped to cold-start.
     stopped = subprocess.run(
-        [_docker(), "ps", "-aq", "--filter", f"label=mentat_slug={slug}", "--filter", "status=exited"],
+        [
+            _docker(),
+            "ps",
+            "-aq",
+            "--filter",
+            f"label=mentat_slug={slug}",
+            "--filter",
+            "status=exited",
+            "--filter",
+            "status=created",
+            "--filter",
+            "status=paused",
+            "--filter",
+            "status=restarting",
+            "--filter",
+            "status=dead",
+        ],
         capture_output=True,
         text=True,
     )
     if stopped.returncode == 0 and stopped.stdout.strip():
         ids = stopped.stdout.strip().split()
-        subprocess.run([_docker(), "start"] + ids, check=True, capture_output=True)
+        start_result = subprocess.run([_docker(), "start"] + ids, capture_output=True, text=True)
+        if start_result.returncode != 0:
+            print(
+                f"mentat-container: docker start failed: {start_result.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return EX_FAILURE
         cid2 = utils.container_id_for(slug)
-        if cid2:
-            _ensure_safe_directory(ws, cid2)
+        if cid2 is None:
+            print(
+                f"mentat-container: docker start succeeded but no usable container found for slug={slug}",
+                file=sys.stderr,
+            )
+            return EX_FAILURE
+        _ensure_safe_directory(ws, cid2)
         return 0
 
     # Cold start
