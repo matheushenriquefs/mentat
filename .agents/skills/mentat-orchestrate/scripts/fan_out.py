@@ -21,11 +21,11 @@ _IMPLEMENT_SCRIPT = paths.SKILLS_DIR / "mentat-implement/scripts/implement.py"
 _CONTAINER_SCRIPT = paths.CONTAINER_SCRIPT
 _LOG_SCRIPT = paths.LOG_SCRIPT
 
-_utils = load_sibling(__file__, "utils")
+_utils = load_sibling(__file__, "plans")
 
 
 def _log_dir_for(session_id: str) -> Path:
-    """Per-session log dir. Delegates to the lib.session seam (F0)."""
+    """Per-session log dir. Delegates to lib.session."""
     return _session_dir_fn(session_id)
 
 
@@ -43,7 +43,7 @@ def _spawn_worktree_subprocess(
     child so the harness adapter can redirect stream-json into the log file.
 
     seed_summary — when set, injects MENTAT_SEED_SUMMARY into child env so the
-    harness adapter seeds the new session with prior context (F5 continuity).
+    harness adapter seeds the new session with prior context.
 
     Returns (session_id, Popen). The caller may use the Popen to throttle
     concurrent spawns via Popen.poll().

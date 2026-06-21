@@ -140,7 +140,7 @@ def test_shell_wrapper_errors_when_python_missing():
 
 def test_safe_symlink_recovers_from_broken_parent_symlink(tmp_path):
     """Parent path being a broken symlink must not crash mkdir."""
-    utils = load_module("utils")
+    utils = load_module("filesystem")
     source = tmp_path / "src"
     source.mkdir()
     missing = tmp_path / "missing_target"

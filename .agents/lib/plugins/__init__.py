@@ -2,7 +2,7 @@
 
 See docs/PLUGINS.md and ADR-0009 for design rationale.
 HarnessProvider is documented-future-API — the real adapters live at
-implement/scripts/harness/; wiring through the Protocol is deferred to F5.
+implement/scripts/harness/; wiring through the Protocol is a follow-on change.
 """
 
 from __future__ import annotations

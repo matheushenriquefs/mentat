@@ -102,7 +102,7 @@ def test_bulk_symlinks_present(fake_clone: Path, fake_home: Path) -> None:
 
 def test_idempotent_second_run(fake_clone: Path, fake_home: Path) -> None:
     plan = _load("plan")
-    utils = _load("utils")
+    utils = _load("filesystem")
     ip = plan.compute_plan(home=fake_home, clone_root=fake_clone)
     for action in ip.add:
         if action.action_type == "symlink" and action.source:
@@ -122,7 +122,7 @@ def test_conflict_abort_on_non_symlink(fake_clone: Path, fake_home: Path) -> Non
 
 
 def test_safe_symlink_raises_on_conflict(tmp_path: Path) -> None:
-    utils = _load("utils")
+    utils = _load("filesystem")
     real_file = tmp_path / "real.md"
     real_file.write_text("user content\n")
     source = tmp_path / "src.md"

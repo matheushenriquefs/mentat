@@ -72,7 +72,7 @@ Pick only if:
 
 ## Boundary with other skills
 
-`mentat-issues` (intake) → writes task via `mentat-tasks create`.
+Intake skill → writes task via `mentat-tasks create`.
 `triage` → mutates `class` + `status`.
 `mentat-prd` → references task ids as `T###` in prose.
 `mentat-tasks` owns schema + filesystem protocol only.

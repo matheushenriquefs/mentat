@@ -2,7 +2,6 @@
 
 Status: Accepted (locked)
 Date: 2026-06-09 (revised 2026-06-13)
-Parent plan: mentat-python-rewrite-v2 / mentat-rehome-layout
 
 ## Context
 
@@ -47,7 +46,7 @@ imports. Pydantic, PyYAML allowed in `[dependency-groups] dev` (tests only).
 ├── lib/                    # shared Python library (symlink → <repo>/lib)
 ├── docs/                   # ARCHITECTURE, ADRs, PATHS.md (symlinks)
 ├── logs/<repo>/<session>/  # audit NDJSON (per ADR-0007)
-├── config.jsonc            # user config
+├── config.toml             # user config
 └── worktrees/<slug>/       # chunk worktrees (per ADR-0002)
 ```
 
@@ -87,7 +86,7 @@ into the source tree). No `parents[N]` arithmetic required.
 Canonical sibling-module loader: `from lib.loader import load_sibling`. Usage:
 
 ```python
-_utils = load_sibling(__file__, "utils")
+_plans = load_sibling(__file__, "plans")
 ```
 
 ### Skill layout (unchanged)
@@ -98,7 +97,7 @@ _utils = load_sibling(__file__, "utils")
 └── scripts/
     ├── __init__.py
     ├── <bin>.py
-    └── utils.py
+    └── <purpose>.py   # named for what it does, not "utils"
 ```
 
 ### Cross-skill calls (updated)
@@ -122,10 +121,8 @@ in library code, no commented-out code, no TODO comments.
 `python3` hard dep on user box (already via devcontainer feature). Bash dropped from
 user-facing surface. Test suite established (~1,000 LOC target).
 
-**Migration:** `mentat-install` stale-paths sweep (S4 of `mentat-rehome-layout`)
-removes old `~/.agents/{bin,lib,docs}` symlinks and plants new ones at
-`~/.mentat/{bin,lib,docs}`. Existing chunk worktrees at `<repo>/../<slug>` stay in
-place; new ones land under `<repo>/.mentat/worktrees/`. Contributors with patches
-against `.agents/{bin,lib,docs}` paths rebase after `mentat-rehome-repo-flatten` lands.
+**Migration:** `mentat-install` removes old `~/.agents/{bin,lib,docs}` symlinks and
+plants new ones at `~/.mentat/{bin,lib,docs}`. Existing chunk worktrees at
+`<repo>/../<slug>` stay in place; new ones land under `<repo>/.mentat/worktrees/`.
 
 Exception: `bin/mentat-install` is the canonical install wrapper path post-flatten.

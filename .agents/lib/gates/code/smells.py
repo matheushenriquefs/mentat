@@ -18,6 +18,7 @@ from __future__ import annotations
 import ast
 import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 _WALK_DIR = Path(__file__).resolve().parents[1]
@@ -94,7 +95,7 @@ def _nested_conditional(tree: ast.AST, path: Path, limit: int) -> list[str]:
     return findings
 
 
-def _iter_py(root: Path):
+def _iter_py(root: Path) -> Iterator[Path]:
     for p in root.rglob("*.py"):
         if any(part in _SKIP_DIRS for part in p.parts):
             continue

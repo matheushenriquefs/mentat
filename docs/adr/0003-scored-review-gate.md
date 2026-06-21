@@ -5,6 +5,7 @@ Date: 2026-05-31
 Amended: 2026-06-09 (v2 — folds 0007 + 0008; Python gate runner; gate filesystem layout)
 Amended: 2026-06-10 (v3 — reviewers promoted to `.agents/agents/` subagents; `score.py` added; install-time symlinks; old LLM rubric dir retired)
 Amended: 2026-06-20 (v4 — `mentat-rules-reviewer` + `mentat-context-reviewer` join the gate as advisory; ADR-0012 code-rules layer)
+Amended: 2026-06-21 (v5 — both reviewers promoted from advisory to veto; full-tree scan confirmed clean)
 
 ## Context
 
@@ -25,6 +26,8 @@ gate_pass =
   AND plan_alignment    >= 0.88          # Prompt Alignment (user mode) — LLM threshold
   AND test_asserts_plan >= 0.88          # Faithfulness scorer (plan-as-context) — LLM threshold
   AND smell_score       >= 0.85          # code-smell advisory — no max-sev veto
+  AND rules_violations  == 0             # code-rule conformance — VETO (promoted v5)
+  AND context_findings  == 0             # prose/prompt residue — VETO (promoted v5)
 ```
 
 Gate filesystem layout:
@@ -37,13 +40,13 @@ Gate filesystem layout:
 Severity per gate: `code/precommit.py` = blocking; `code/smells.py` = advisory;
 `mentat-bug-reviewer` = blocking with threshold; `mentat-smell-reviewer` = advisory.
 
-Advisory reviewers (folded from ADR-0012): `mentat-rules-reviewer` (code-rule
-conformance against `.agents/rules/` + lexicon contradictions) and
-`mentat-context-reviewer` (prose/prompt residue + self-containment) both enter the
-gate as `advise` — `score.py` routes them through `score_rules` / `score_context`,
-which never return `block`. They are promoted to enforcing once the tree conforms;
-that promotion records the threshold chosen. Their verdict bases do not overlap:
-rules-reviewer owns code rules and lexicon, context-reviewer owns prose residue.
+Enforcing reviewers (promoted v5, folded from ADR-0012): `mentat-rules-reviewer`
+(code-rule conformance against `.agents/rules/` + lexicon contradictions) and
+`mentat-context-reviewer` (prose/prompt residue + self-containment) are both veto gates —
+`score.py` routes them through `score_rules` / `score_context`, which return `block` on
+any finding (zero tolerance). Full-tree scan confirmed clean before promotion. Their
+verdict bases do not overlap: rules-reviewer owns code rules and lexicon, context-reviewer
+owns prose residue.
 
 Must-not-exist veto (folded from ADR-0007): `code/precommit.py` emits `block` on
 forbidden file/path patterns (e.g. test-file writes during impl phase).

@@ -30,7 +30,7 @@ def _events_mod():
 
 
 def test_orchestrate_emit_event_surfaces_failure(capsys):
-    utils = _load(_ORCH / "utils.py", "orch_utils")
+    utils = _load(_ORCH / "plans.py", "orch_utils")
     fake = MagicMock(returncode=2, stderr="log script crashed\nERROR: bad path\n", stdout="")
     with patch.object(_events_mod().subprocess, "run", return_value=fake):
         utils.emit_event("chunk.spawned", {"slug": "x"})
@@ -40,7 +40,7 @@ def test_orchestrate_emit_event_surfaces_failure(capsys):
 
 
 def test_orchestrate_emit_event_silent_on_success(capsys):
-    utils = _load(_ORCH / "utils.py", "orch_utils_ok")
+    utils = _load(_ORCH / "plans.py", "orch_utils_ok")
     fake = MagicMock(returncode=0, stderr="", stdout="")
     with patch.object(_events_mod().subprocess, "run", return_value=fake):
         utils.emit_event("chunk.spawned", {"slug": "x"})

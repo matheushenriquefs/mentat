@@ -67,7 +67,7 @@ _PRESERVE_WORKTREE_EXITS = frozenset({130, 143, EX_HITL_REQUIRED})
 _BLOCKED_STATUS = "blocked"
 
 
-_utils = load_sibling(__file__, "utils")
+_utils = load_sibling(__file__, "harness_utils")
 
 
 # ── public helpers (patchable in tests) ─────────────────────────────────────

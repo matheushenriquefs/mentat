@@ -13,7 +13,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 from lib import git as _git  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
-_utils = load_sibling(__file__, "utils")
+_utils = load_sibling(__file__, "plans")
 
 _AGENTS_ROOT = Path(__file__).resolve().parents[3]  # .agents/
 if str(_AGENTS_ROOT) not in sys.path:

@@ -36,7 +36,7 @@ key, not a plugin slot.
 **HarnessProvider is documented-future-API.** The real harness seam today is
 `implement/scripts/harness/{claude_code,cursor}.py` — two live adapters invoked directly by
 `implement.py`. `HarnessProvider` Protocol stays in the module as the intended extension
-contract; `_invoke_harness` routing through it is deferred to F5. Third-party adapters may
+contract; `_invoke_harness` routing through it is a follow-on change. Third-party adapters may
 implement the Protocol today but are not yet auto-invoked by `_invoke_harness`.
 
 **Resolution per slot:** `first` kind. Iterate plugins in config-declared order.

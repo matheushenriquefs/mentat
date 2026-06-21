@@ -5,7 +5,7 @@ description: >
   Use when setting up mentat on a new machine or after pulling updates.
 ---
 
-Idempotent install: creates `~/.mentat/` state dirs, symlinks (clone mode) or copies (user-install mode) skill dirs to `~/.agents/skills/`, creates per-harness symlinks for detected harnesses (`~/.claude/`, `~/.cursor/`), ships ADRs via `~/.agents/docs/adr` symlink, reports stale paths. Interactively prompts for 3rd-party companions (matt-pocock-skills, caveman) — see `scripts/companions.py`.
+Idempotent install: creates `~/.mentat/` state dirs, symlinks (clone mode) or copies (user-install mode) skill dirs to `~/.agents/skills/`, creates per-harness symlinks for detected harnesses (`~/.claude/`, `~/.cursor/`), ships ADRs via `~/.mentat/docs/adr` symlink, reports stale paths. Interactively prompts for 3rd-party companions (matt-pocock-skills, caveman) — see `scripts/companions.py`.
 
 ## How to invoke
 
@@ -29,7 +29,7 @@ Prompts for two 3rd-party suites (matt-pocock-skills, juliusbrussee-caveman) via
 
 ## PATH setup phase
 
-Prompts to add `~/.mentat/bin` to the shell rc file (`~/.zshrc`, `~/.bashrc`, fish). Skipped if already in `$PATH` or rc. Uses `/dev/tty` for `curl | bash`. `--yes` / `--skip-path-setup` skip.
+Prompts to add `~/.mentat/bin` to the shell rc file (`~/.zshrc`, `~/.bashrc`, fish). Skipped if already in `$PATH` or rc. Uses `/dev/tty` for `curl | bash`. `--yes` skips.
 
 ## Runtime deps
 

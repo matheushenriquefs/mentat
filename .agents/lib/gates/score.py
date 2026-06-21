@@ -73,21 +73,19 @@ def score_smell(raw: dict[str, Any]) -> GateResult:
 
 
 def score_rules(raw: dict[str, Any]) -> GateResult:
-    """Code-rule conformance (ADR-0012). Advisory — surfaces violations, never blocks.
-
-    Promoted to enforcing once the tree conforms; that change records the threshold.
-    """
-    n = len(raw.get("violations") or [])
-    return GateResult("advise", ADVISORY_SCORE, f"{n} rule violation(s)" if n else "")
+    """Code-rule conformance (ADR-0012). Veto — zero violations required (promoted 2026-06-21)."""
+    violations: list[Any] = raw.get("violations") or []
+    if violations:
+        return GateResult("block", 0.0, f"rules: {len(violations)} violation(s)")
+    return GateResult("pass", 1.0, "")
 
 
 def score_context(raw: dict[str, Any]) -> GateResult:
-    """Prose/prompt residue (ADR-0012). Advisory — surfaces findings, never blocks.
-
-    Promoted to enforcing once the tree conforms; that change records the threshold.
-    """
-    n = len(raw.get("findings") or [])
-    return GateResult("advise", ADVISORY_SCORE, f"{n} residue finding(s)" if n else "")
+    """Prose/prompt residue (ADR-0012). Veto — zero findings required (promoted 2026-06-21)."""
+    findings: list[Any] = raw.get("findings") or []
+    if findings:
+        return GateResult("block", 0.0, f"context: {len(findings)} residue finding(s)")
+    return GateResult("pass", 1.0, "")
 
 
 def aggregate(results: list[GateResult]) -> GateResult:

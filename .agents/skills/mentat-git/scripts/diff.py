@@ -12,7 +12,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib.loader import load_sibling  # noqa: E402
 
-utils = load_sibling(__file__, "utils")
+utils = load_sibling(__file__, "identity")
 
 
 def cmd_diff(base: str) -> int:

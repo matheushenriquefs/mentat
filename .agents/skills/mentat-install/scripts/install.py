@@ -20,7 +20,7 @@ _emit_installed_fn = bind("mentat-install")
 
 _plan = load_sibling(__file__, "plan")
 _render = load_sibling(__file__, "render")
-_utils = load_sibling(__file__, "utils")
+_utils = load_sibling(__file__, "filesystem")
 _companions = load_sibling(__file__, "companions")
 _path_setup = load_sibling(__file__, "path_setup")
 

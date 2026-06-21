@@ -19,7 +19,7 @@ from lib.events import bind  # noqa: E402
 from lib.exits import EX_USAGE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
-_utils = load_sibling(__file__, "utils")
+_utils = load_sibling(__file__, "lifecycle")
 
 emit = bind("mentat-tasks")
 

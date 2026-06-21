@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import compose_render
 import container
+import container_ops as utils
 import pytest
-import utils
 from lib import devcontainer as _dc_mod
 
 from tests.conftest import load_script
@@ -25,7 +25,7 @@ def load_module(name: str):
 
 
 def test_slug_for_cwd_from_worktree(tmp_path, monkeypatch):
-    utils = load_module("utils")
+    utils = load_module("container_ops")
     monkeypatch.chdir(tmp_path)
 
     def fake_run(cmd, **kwargs):
@@ -41,7 +41,7 @@ def test_slug_for_cwd_from_worktree(tmp_path, monkeypatch):
 
 
 def test_resolve_workspace_folder_reads_devcontainer(tmp_path):
-    utils = load_module("utils")
+    utils = load_module("container_ops")
     dcj_dir = tmp_path / ".devcontainer"
     dcj_dir.mkdir()
     (dcj_dir / "devcontainer.json").write_text(json.dumps({"name": "test", "workspaceFolder": "/workspaces/custom"}))
@@ -50,7 +50,7 @@ def test_resolve_workspace_folder_reads_devcontainer(tmp_path):
 
 
 def test_resolve_workspace_folder_falls_back_when_missing(tmp_path):
-    utils = load_module("utils")
+    utils = load_module("container_ops")
     result = utils.resolve_workspace_folder(tmp_path)
     assert result == f"/workspaces/{tmp_path.name}"
 

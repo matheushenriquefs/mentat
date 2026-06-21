@@ -12,7 +12,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib.loader import load_sibling  # noqa: E402
 
-_utils = load_sibling(__file__, "utils")
+_utils = load_sibling(__file__, "registry")
 
 
 def cmd_scaffold(skill_name: str, *, skills_root: Path | None = None, evals_dir: Path | None = None) -> int:

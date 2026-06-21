@@ -40,20 +40,20 @@ RFC3339_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
 def test_next_id_empty_dir(td: Path) -> None:
-    u = _reload("utils")
+    u = _reload("lifecycle")
     assert u.next_id(td) == "T001"
 
 
 def test_next_id_with_existing(td: Path) -> None:
     (td / "T001-a.md").touch()
     (td / "T003-c.md").touch()
-    u = _reload("utils")
+    u = _reload("lifecycle")
     assert u.next_id(td) == "T004"
 
 
 def test_next_id_zero_pad(td: Path) -> None:
     (td / "T009-x.md").touch()
-    u = _reload("utils")
+    u = _reload("lifecycle")
     assert u.next_id(td) == "T010"
 
 

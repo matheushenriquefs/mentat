@@ -1,7 +1,8 @@
 # ADR 0012: Code-rules layer
 
-Status: Accepted
+Status: Accepted (locked)
 Date: 2026-06-20
+Amended: 2026-06-21 (v2 — both reviewers promoted to veto; advisory phase complete)
 
 ## Context
 
@@ -31,12 +32,11 @@ immutability) and `architecture.md` (group by function, module interface and
 imports). They state mentat's stdlib-only argparse conventions; database- or
 framework-specific clauses do not apply and are absent.
 
-**Staged enforcement.** Both `mentat-rules-reviewer` (new) and
-`mentat-context-reviewer` (already present, until now invoked by hand) enter the
-scored gate (ADR-0003) as **advisory** — verdict `advise`, never a veto. A later
-change promotes them to enforcing once the tree conforms to the rules. Gating them
-as a veto before the existing tree conforms would block every commit, so advisory
-is the only safe entry state. The promotion records the threshold chosen.
+**Staged enforcement (complete).** Both `mentat-rules-reviewer` (new) and
+`mentat-context-reviewer` entered the scored gate (ADR-0003) as **advisory** until
+the tree conformed. As of 2026-06-21 both are **veto** gates — zero violations and
+zero residue findings required. A full-tree scan confirmed clean before promotion.
+Threshold chosen: zero tolerance (veto), matching bebop's code-rules convention.
 
 ## Consequences
 
@@ -45,5 +45,7 @@ is the only safe entry state. The promotion records the threshold chosen.
 - Two reviewers split the work without overlap: `mentat-rules-reviewer` owns
   code-rule conformance and lexicon contradictions; `mentat-context-reviewer` owns
   prose and prompt residue. Their verdict bases do not intersect.
-- The advisory entry means the gate's behavior does not change on the day the
-  layer lands — findings surface, nothing blocks — until the promotion flips them.
+- Promotion to veto required a full-tree cleanup: 34 context findings (F0/F5 code
+  comments, stale `.config.jsonc` references, unresolved skill pointers) and 9 rules
+  violations (2 missing return types, 7 `utils.py` filenames renamed to descriptive
+  names) were resolved before the flip.

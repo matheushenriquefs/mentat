@@ -53,7 +53,7 @@ python3 ~/.agents/skills/mentat-skill/scripts/skill.py scaffold <new-skill-name>
 
 ## Scaffold flow
 
-1. Spawn `skill-creator` subagent to draft `.agents/skills/<new-skill-name>/SKILL.md`.
+1. Draft `.agents/skills/<new-skill-name>/SKILL.md` following voice class and LOC budget from `docs/STYLE.md`.
 2. Copy `.agents/lib/templates/promptfooconfig.yaml` into the new skill dir.
 3. Derive 10 diverse test inputs from the new SKILL.md and seed `promptfooconfig.yaml`.
 4. Symlink the directory into `~/.claude/skills/<new-skill-name>` so the harness picks it up live.

@@ -24,7 +24,7 @@ def _write_log(path: Path, rows: list[dict]) -> None:
 
 
 def test_detect_self_answer_streamjson_positive(tmp_path):
-    utils = _load("utils")
+    utils = _load("harness_utils")
     log = tmp_path / "session.jsonl"
     _write_log(
         log,
@@ -49,7 +49,7 @@ def test_detect_self_answer_streamjson_positive(tmp_path):
 
 
 def test_detect_self_answer_streamjson_negative(tmp_path):
-    utils = _load("utils")
+    utils = _load("harness_utils")
     log = tmp_path / "session.jsonl"
     _write_log(
         log,
@@ -70,12 +70,12 @@ def test_detect_self_answer_streamjson_negative(tmp_path):
 
 
 def test_detect_self_answer_missing_log_returns_false(tmp_path):
-    utils = _load("utils")
+    utils = _load("harness_utils")
     assert utils.detect_self_answer(tmp_path / "nope.jsonl") is False
 
 
 def test_detect_self_answer_malformed_rows_ignored(tmp_path):
-    utils = _load("utils")
+    utils = _load("harness_utils")
     log = tmp_path / "session.jsonl"
     log.write_text('not json\n{}\n{"type":"junk"}\n')
     assert utils.detect_self_answer(log) is False

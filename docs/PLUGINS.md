@@ -76,7 +76,7 @@ plugins = { order = ["aider-harness"] }
 > **`HarnessProvider` is a documented-future-API (ADR-0009).** The real harness seam
 > today is `implement/scripts/harness/{claude_code,cursor}.py`. `_invoke_harness` is not yet
 > wired through the Protocol. Use `--harness` CLI flag or `harness =` in config.toml to
-> select built-ins; third-party adapters registered here are deferred to F5 for live wiring.
+> select built-ins; third-party adapters registered here are not yet auto-invoked by `_invoke_harness`.
 
 ---
 

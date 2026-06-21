@@ -16,7 +16,7 @@ def load_module(name: str):
 
 def test_commit_routes_to_container_when_present():
     commit_mod = load_module("commit")
-    utils_mod = load_module("utils")
+    utils_mod = load_module("identity")
 
     with (
         patch.object(utils_mod, "container_id_for_cwd", return_value="abc123"),
@@ -38,7 +38,7 @@ def test_commit_routes_to_container_when_present():
 
 def test_commit_auto_ups_when_no_container_then_commits():
     commit_mod = load_module("commit")
-    utils_mod = load_module("utils")
+    utils_mod = load_module("identity")
 
     cid_sequence = iter([None, "abc123"])
     with (
@@ -62,7 +62,7 @@ def test_commit_auto_ups_when_no_container_then_commits():
 
 def test_commit_exits_69_when_bringup_fails():
     commit_mod = load_module("commit")
-    utils_mod = load_module("utils")
+    utils_mod = load_module("identity")
 
     with (
         patch.object(utils_mod, "container_id_for_cwd", return_value=None),

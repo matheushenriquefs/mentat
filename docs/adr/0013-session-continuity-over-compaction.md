@@ -12,7 +12,7 @@ outside. Mentat needs a harness-agnostic way to checkpoint at a slice boundary,
 write a session summary, and spawn a fresh seeded session so the chunk continues
 without losing critical context.
 
-## F4 spike findings
+## Spike findings
 
 Two capabilities proved on both adapters:
 
@@ -30,7 +30,7 @@ prepended to the prompt before the plan body. The adapter spawns a brand-new ses
 fresh session seeded with the summary, not a resumed one. Proved: the summary text arrives
 in the prompt stream on both adapters (verified via fake-run test).
 
-**Contract confirmed for F5:**
+**Contract confirmed:**
 - `Result.usage_tokens: int | None` — `int` when stream-json log is available (claude-code),
   `None` otherwise (cursor or no session_log).
 - `invoke(..., seed_summary: str | None = None)` — both adapters, zero breaking change.
@@ -39,7 +39,7 @@ in the prompt stream on both adapters (verified via fake-run test).
 - Cumulative-count fallback: if `usage_tokens is None`, mentat counts completed slices
   and uses a configurable slice-count threshold instead of token threshold.
 
-## Decision (pending F5 implementation)
+## Decision
 
 Mentat owns the checkpoint→summary→respawn loop. Harness adapters report usage and accept
 a seed summary. The loop runs between slices (in `implement.py`) and between chunks
@@ -49,4 +49,4 @@ a seed summary. The loop runs between slices (in `implement.py`) and between chu
 
 `implement.py` calls `invoke()` with `seed_summary` on respawn. `fan_out.py` does the same
 between chunks. No new abstract methods on `HarnessProvider` Protocol — both adapters already
-implement the extended `invoke()` signature. F5 wires the checkpoint loop.
+implement the extended `invoke()` signature. A follow-on change wires the checkpoint loop.

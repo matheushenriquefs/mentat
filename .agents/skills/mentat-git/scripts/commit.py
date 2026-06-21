@@ -14,7 +14,7 @@ from lib import devcontainer  # noqa: E402
 from lib.exits import EX_UNAVAILABLE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
-utils = load_sibling(__file__, "utils")
+utils = load_sibling(__file__, "identity")
 
 
 def _host_identity() -> list[str]:

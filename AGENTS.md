@@ -33,7 +33,7 @@ When editing prompt files in `.agents/`:
 2. Run verification with `python3 ~/.agents/skills/mentat-container/scripts/container.py run '<test cmd>'` if the target repo has one.
 3. Commit via the `mentat-git` skill (routes through devcontainer if one exists).
 
-Until Mentat has release tags, promote harness changes to the user's global install:
+Promote harness changes to the user's global install:
 
 ```bash
 cp -R .agents/ ~/.agents/
@@ -59,7 +59,7 @@ Every command emits start + complete events via `mentat-log emit`. Event catalog
 
 ## Ship Surface
 
-`mentat-install` rsyncs `.agents/` to `~/.agents/`. Excluded: `evals/`, `plans/`, `.dmux/`, `.mentat/`.
+`mentat-install` copies `.agents/` to `~/.agents/`. Excluded: `evals/`, `plans/`, `.dmux/`, `.mentat/`.
 
 ## Platform Support
 

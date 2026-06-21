@@ -102,5 +102,5 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 | [0008](docs/adr/0008-python-runtime.md) | Python runtime | Stdlib-only at the bin layer; uv/ruff/pyright/pytest at the dev layer. Container-required Python 3.11+. |
 | [0009](docs/adr/0009-plugin-api.md) | Plugin API | Vite-derived 2-slot extension surface (rubric, gate). Mentat core stays minimal. |
 | [0010](docs/adr/0010-readonly-test-mount.md) | Read-only test mount | OCP `<plan>.tests.json` manifest + container bind-mount with `readonly` flag. |
-| [0013](docs/adr/0013-session-continuity-over-compaction.md) | Session continuity | Checkpoint at slice boundary, write summary, spawn fresh seeded session — harness-agnostic. F4 spike: GO. |
+| [0013](docs/adr/0013-session-continuity-over-compaction.md) | Session continuity | Checkpoint at slice boundary, write summary, spawn fresh seeded session — harness-agnostic. |
 

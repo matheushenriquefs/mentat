@@ -13,9 +13,9 @@ sys.path.insert(0, str(_GIT_SCRIPTS))
 
 import worktree as wt  # noqa: E402
 
-# Load utils explicitly to bypass sys.modules cache (other test files may have
-# cached a different utils.py; mentat-git/scripts/utils is the one we need).
-_utils_spec = _importlib_util.spec_from_file_location("mentat_git_utils", _GIT_SCRIPTS / "utils.py")
+# Load identity explicitly to bypass sys.modules cache (other test files may have
+# cached a different module; mentat-git/scripts/identity is the one we need).
+_utils_spec = _importlib_util.spec_from_file_location("mentat_git_utils", _GIT_SCRIPTS / "identity.py")
 _utils_mod = _importlib_util.module_from_spec(_utils_spec)
 _utils_spec.loader.exec_module(_utils_mod)
 
@@ -166,7 +166,7 @@ def test_mentat_git_does_not_call_docker_directly():
     import ast
 
     scripts_dir = _GIT_SCRIPTS
-    source = (scripts_dir / "utils.py").read_text()
+    source = (scripts_dir / "identity.py").read_text()
     tree = ast.parse(source)
 
     docker_calls: list[int] = []
@@ -185,4 +185,4 @@ def test_mentat_git_does_not_call_docker_directly():
         if isinstance(first_elem, ast.Constant) and first_elem.value == "docker":
             docker_calls.append(node.lineno)
 
-    assert not docker_calls, f"docker called directly via subprocess in utils.py at lines: {docker_calls}"
+    assert not docker_calls, f"docker called directly via subprocess in identity.py at lines: {docker_calls}"

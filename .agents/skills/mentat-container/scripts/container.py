@@ -17,7 +17,7 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 import compose_render  # noqa: E402
-import utils  # noqa: E402
+import container_ops as utils  # noqa: E402
 
 _docker = utils._docker
 

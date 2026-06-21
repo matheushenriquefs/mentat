@@ -25,7 +25,7 @@ from lib.loader import load_sibling  # noqa: E402
 from lib.session import ensure_session  # noqa: E402
 from lib.session import summary_file as _summary_file
 
-_utils = load_sibling(__file__, "utils")
+_utils = load_sibling(__file__, "plans")
 _scheduler = load_sibling(__file__, "scheduler")
 _fan_out = load_sibling(__file__, "fan_out")
 _land_queue = load_sibling(__file__, "land_queue")
@@ -120,7 +120,7 @@ _emit_event = _bind("mentat-orchestrate")
 
 
 def _read_chunk_seed(session_id: str) -> str | None:
-    """Return summary.md content for session_id if it exists (F5 checkpoint)."""
+    """Return summary.md content for session_id if it exists."""
     sf = _summary_file(session_id)
     return sf.read_text() if sf.exists() else None
 
@@ -139,7 +139,7 @@ def _fan_out_plans(
     and left its worktree for the operator; landing it would false-merge empty or
     partial work.
 
-    F5 checkpoint: after each chunk exits, reads its summary.md and seeds the next
+    After each chunk exits, reads its summary.md and seeds the next
     spawn so context survives across chunk boundaries.
     """
     cap = _concurrency_cap()
@@ -148,7 +148,7 @@ def _fan_out_plans(
     for plan in plans:
         while sum(1 for _, p, _ in live if p.poll() is None) >= cap:
             time.sleep(0.1)
-        # Harvest seeds from any chunks that finished while we waited (F5 checkpoint).
+        # Harvest seeds from any chunks that finished while we waited.
         for _plan, p, sid in live:
             if p.poll() is not None:
                 seed_summary = _read_chunk_seed(sid) or seed_summary

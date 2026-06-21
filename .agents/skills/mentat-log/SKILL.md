@@ -6,7 +6,7 @@ description: >
   or write a custom event from a script.
 ---
 
-Emit, validate, query, and prune structured JSONL audit entries under `~/.mentat/logs/`. Owns the canonical `EVENT_CATALOG` — the single source of truth for the 9 event types that all mentat skills emit.
+Emit, validate, query, and prune structured JSONL audit entries under `~/.mentat/logs/`. Owns the canonical `EVENT_CATALOG` — the single source of truth for the event types that all mentat skills emit.
 
 ## How to invoke
 

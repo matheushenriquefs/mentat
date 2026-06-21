@@ -6,12 +6,6 @@ One format for every entrypoint: ``<role>-<slug>-<pid>``.
   slug  = plan stem (implement) or holding branch (orchestrate); always present.
   pid   = os.getpid() — tiebreaks concurrent same-slug runs.
 
-Replaces four divergent legacy formats (``mentat-manual-<pid>``,
-``mentat-manual-<epoch>-<pid>``, ``auto-<stem>-<pid>``,
-``mentat-orchestrate-<pid>``). The ``<epoch>`` was noise (pid already
-disambiguates live processes) and made ids unstable + ungreppable; the
-``manual``/``auto`` literals lied once real sessions were minted.
-
 ``ensure_session`` exports ``MENTAT_SESSION`` + ``MENTAT_SESSION_LOG`` into the
 environment *before any harness spawn*, so events and ``session.jsonl`` capture
 are keyed from the first event instead of relying on an emit-time fallback.
@@ -30,9 +24,9 @@ def mint_session(role: str, slug: str, *, pid: int | None = None) -> str:
     return f"{role}-{slug}-{pid}"
 
 
-# ── session-log-path seam (F0) ────────────────────────────────────────────────
-# One owner of base/repo/session path arithmetic. Seven formerly-independent
-# copies collapsed here; each caller delegates so divergence is impossible.
+# ── session-log-path seam ────────────────────────────────────────────────────
+# One owner of base/repo/session path arithmetic; each caller delegates so
+# divergence is impossible.
 
 
 def log_root() -> Path:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 SKIP_DIRS = frozenset(
@@ -19,7 +20,7 @@ SKIP_DIRS = frozenset(
 )
 
 
-def iter_files(root: Path):
+def iter_files(root: Path) -> Iterator[Path]:
     """Yield all files under root, skipping SKIP_DIRS."""
     for p in root.rglob("*"):
         if not p.is_file():
