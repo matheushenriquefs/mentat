@@ -17,6 +17,8 @@ dev = [
     "pydantic",
     "pyyaml",
     "lefthook",
+    "coverage>=7",
+    "sqlite-utils>=3.36",
 ]
 
 [tool.pytest.ini_options]
