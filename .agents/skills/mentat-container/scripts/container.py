@@ -242,9 +242,7 @@ def cmd_up(wt: Path) -> int:
 
     result = subprocess.run(cmd, capture_output=False)
     if result.returncode != 0:
-        cid2 = utils.container_id_for(slug)
-        if not cid2:
-            return EX_FAILURE
+        return EX_FAILURE
 
     final_cid = utils.container_id_for(slug)
     if final_cid:

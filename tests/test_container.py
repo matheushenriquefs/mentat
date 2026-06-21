@@ -560,3 +560,35 @@ def test_container_cmd_down_delegates_to_devcontainer(monkeypatch):
     monkeypatch.setattr(_dc_mod, "down", lambda slug: down_calls.append(slug) or True)
     container.cmd_down(slug="test-slug")
     assert down_calls == ["test-slug"]
+
+
+# ── CT1: up must fail when bring-up fails ─────────────────────────────────────
+
+
+def test_cmd_up_fails_when_bringup_fails_despite_stale_container(tmp_path, monkeypatch):
+    """cmd_up must return non-zero when devcontainer up fails, even if a stale container exists."""
+    container_mod = load_module("container")
+
+    call_count = [0]
+
+    def fake_cid(slug):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return None  # first check: no running container
+        return "stale-cid"  # subsequent checks: stale container present
+
+    def fake_run(cmd, **kw):
+        r = MagicMock()
+        r.returncode = 0
+        r.stdout = ""
+        if isinstance(cmd, list) and "devcontainer" in cmd:
+            r.returncode = 1  # bring-up command fails
+        return r
+
+    monkeypatch.setattr(container_mod, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container_mod.utils, "container_id_for", fake_cid)
+    monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(container_mod, "_ensure_devcontainer_json", lambda wt, slug: None)
+
+    rc = container_mod.cmd_up(tmp_path)
+    assert rc != 0, "cmd_up must return non-zero when bring-up command fails"
