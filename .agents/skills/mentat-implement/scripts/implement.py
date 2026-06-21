@@ -297,10 +297,10 @@ def _run_and_doctor(plan_path: Path, *, harness: str | None = None, model: str |
     rc = run_plan(plan_path, harness=harness, model=model)
     if rc in _DOCTOR_EXIT_CODES:
         _auto_doctor()
-    elif rc == EX_OK and parse_frontmatter(plan_path).get("class", "HITL") == "AFK":
-        # Summary only for an AFK run that executed the plan to completion. A HITL
-        # plan also returns 0, but by handing off to the calling session (nothing
-        # implemented yet) — a "completed" summary there would be premature.
+        return rc
+    if rc == EX_OK and parse_frontmatter(plan_path).get("class", "HITL") == "AFK":
+        # Summary only for AFK runs that completed the plan. HITL returns 0 by handing
+        # off to the calling session — a success summary there would be premature.
         _auto_summary()
     return rc
 
