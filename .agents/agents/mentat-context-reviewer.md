@@ -52,7 +52,9 @@ Classes:
 
 ## Scoring
 
-Not in scope. Return findings only; caller scores or applies.
+Veto gate (ADR-0003 v5). Zero findings required — any finding returns `block` via
+`score_context`. Zero-tolerance; do not soften findings. Return findings only; caller
+applies.
 
 ## Refusals
 

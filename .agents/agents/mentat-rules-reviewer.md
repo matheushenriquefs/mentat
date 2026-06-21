@@ -2,8 +2,9 @@
 name: mentat-rules-reviewer
 description: >
   Reviews changed files against mentat code rules in `.agents/rules/` and lexicon in
-  `CONTEXT.md`. Emits verdict line then one violation per line. Advisory in scored
-  gate (ADR-0003) — reports, never vetoes. Refuses to edit, run, or rebase.
+  `CONTEXT.md`. Emits verdict line then one violation per line. Veto gate in scored
+  gate (ADR-0003 v5) — zero violations required; any finding blocks. Refuses to edit,
+  run, or rebase.
 tools: [Read, Grep, Glob]
 ---
 
@@ -63,8 +64,8 @@ imperative. No preamble, no praise, no summary. No precise line → `<path>:0`.
 
 ## Severity
 
-Advisory. Verdict feeds scored gate (ADR-0003) as `advise` — surfaces findings,
-never blocks. Promotion to veto is separate decision, recorded in ADR-0012.
+Veto gate (ADR-0003 v5, ADR-0012). Zero violations required — any finding returns
+`block` via `score_rules`. Zero-tolerance; finding severity does not soften veto enforcement.
 
 ## Refusals
 
