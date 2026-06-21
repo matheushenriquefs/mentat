@@ -57,7 +57,7 @@ python3 ~/.agents/skills/mentat-container/scripts/container.py doctor
 - `up` is idempotent: calling it twice is safe, returns exit 0 if already running.
 - `down` stops the container only — never touches branch state. Container respawns on the next `up`.
 - `run` requires container already up; fails fast with exit 2 if not running.
-- `compose_render` auto-detects `docker-compose.yml` or `Dockerfile` in worktree root.
+- `compose_render` auto-detects `docker-compose.yml` or `Dockerfile` in worktree root; a sidecar-only compose gets a generated `mentat-dev` service layered on (see below).
 - Atomic write for `.devcontainer/devcontainer.json`: writes to `.tmp` then renames.
 - Slug = `basename(git rev-parse --show-toplevel)`.
 - `workspaceFolder` read from `devcontainer.json`, not slug-derived.
@@ -77,6 +77,26 @@ to the host: `platform.machine()` is mapped — `arm64`/`aarch64` → `linux/arm
 
 The `compose.yml.tmpl` branch substitutes the same arch value into the user template's `$arch`.
 Static `docker-compose.yml` is user-owned and untouched — pin `platform:` there yourself if needed.
+
+## Sidecar-only compose (generated dev service)
+
+Some repos ship a `docker-compose.yml` only to run 3rd-party sidecars (a database, a
+cache, a private Nitter) while the app itself runs outside compose. Detection then finds
+**no** service that builds or mounts the source tree (`SidecarOnlyCompose`). Rather than
+mis-pick a sidecar as the workspace, `up` synthesizes a dev service and merges it onto the
+project compose via multi-file compose:
+
+- `devcontainer.json` lists `dockerComposeFile: ["../docker-compose.yml", "mentat-dev.compose.yml"]`
+  and sets `service: mentat-dev`. The overlay (`.devcontainer/mentat-dev.compose.yml`) is
+  written by `container.py`; `compose_render.synth_spec` stays pure and hands it back as text.
+- The two files merge into **one** compose project, so the dev service joins the project's
+  default network automatically — no explicit `networks:` block. The agent runs containerized
+  and the ADR-0004 mantra holds (nothing on the host).
+
+**Implication for app code:** inside the dev service, sidecars resolve by **service name**,
+not `localhost`. Code that reached a sidecar at `localhost:8080` on the host must use
+`nitter:8080` (the service name) in the container. mentat documents this; it does not rewrite
+your app's `localhost` references.
 
 ## Runtime: host opt-out (ADR-0004 forfeit)
 

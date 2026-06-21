@@ -92,6 +92,13 @@ def _git_mount_for_worktree(wt: Path) -> str | None:
     return f"source={main_git},target={main_git},type=bind"
 
 
+def _atomic_write(path: Path, text: str) -> None:
+    """Write text via a sibling .tmp then atomic replace."""
+    tmp = path.parent / (path.name + ".tmp")
+    tmp.write_text(text)
+    tmp.replace(path)
+
+
 def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
     import json as _json
     import re as _re
@@ -123,21 +130,26 @@ def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
         if git_mount and git_mount not in data.get("mounts", []):
             data.setdefault("mounts", []).append(git_mount)
         content = _json.dumps(data, indent=2)
+        extra_files: dict[str, str] = {}
     else:
         try:
-            content = compose_render.synth(wt)
+            spec = compose_render.synth_spec(wt)
         except ValueError as exc:
             print(str(exc), file=sys.stderr)
             raise SystemExit(1) from exc
+        content = spec.devcontainer_json
+        extra_files = spec.extra_files
         if git_mount:
             data = _json.loads(content)
             data.setdefault("mounts", []).append(git_mount)
             content = _json.dumps(data, indent=2)
 
     dcj.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dcj.parent / (dcj.name + ".tmp")
-    tmp.write_text(content)
-    tmp.replace(dcj)
+    _atomic_write(dcj, content)
+    # Generated compose files (rendered template, sidecar overlay) live beside
+    # devcontainer.json; synth stays pure, so the writes happen here.
+    for fname, text in extra_files.items():
+        _atomic_write(dcj.parent / fname, text)
 
 
 def _ensure_safe_directory(wt: Path, ws: str, slug: str, cid: str) -> None:
