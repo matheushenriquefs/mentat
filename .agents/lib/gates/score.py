@@ -93,14 +93,15 @@ def score_context(raw: dict[str, Any]) -> GateResult:
 
 
 def aggregate(results: list[GateResult]) -> GateResult:
-    """Veto > threshold; never average. First block wins."""
+    """Veto > threshold; never average. First block wins. All advisory reasons joined."""
     for r in results:
         if r.verdict == "block":
             return r
     advise = [r for r in results if r.verdict == "advise"]
     if advise:
-        return advise[0]
-    return GateResult("pass", 1.0, "")
+        reasons = "; ".join(r.reason for r in advise if r.reason)
+        return GateResult("advise", advise[0].score, reasons or "advisory")
+    return GateResult("pass", 1.0, "clean")
 
 
 # Routing keywords from score_from_file that map to blocking (veto) scorers.

@@ -129,3 +129,36 @@ def test_score_test_clean_veto_passes_on_high_score():
     score = _score_mod()
     result = score.score_test({"veto": "clean", "asserts_plan": 0.99})
     assert result.verdict == "pass"
+
+
+# ── Slice 2 (G4): aggregate preserves all advisory reasons ──────────────────
+
+
+def test_aggregate_advisory_joins_all_reasons():
+    score = _score_mod()
+    results = [
+        score.GateResult("advise", 0.9, "smell-a"),
+        score.GateResult("advise", 0.8, "smell-b"),
+        score.GateResult("advise", 0.7, "smell-c"),
+    ]
+    out = score.aggregate(results)
+    assert out.verdict == "advise"
+    assert "smell-a" in out.reason
+    assert "smell-b" in out.reason
+    assert "smell-c" in out.reason
+
+
+def test_aggregate_advisory_single_empty_reason_gets_fallback():
+    score = _score_mod()
+    results = [score.GateResult("advise", 1.0, "")]
+    out = score.aggregate(results)
+    assert out.verdict == "advise"
+    assert out.reason  # non-empty fallback
+
+
+def test_aggregate_clean_pass_has_nonempty_reason():
+    score = _score_mod()
+    results = [score.GateResult("pass", 1.0, "")]
+    out = score.aggregate(results)
+    assert out.verdict == "pass"
+    assert out.reason  # "clean" marker, not ""
