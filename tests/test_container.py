@@ -562,6 +562,44 @@ def test_container_cmd_down_delegates_to_devcontainer(monkeypatch):
     assert down_calls == ["test-slug"]
 
 
+# ── CT2: docker start one ID per arg ─────────────────────────────────────────
+
+
+def test_cmd_up_starts_multiple_stopped_containers_as_separate_args(tmp_path, monkeypatch):
+    """docker start must receive each container ID as a separate argv element, not newline-joined."""
+    container_mod = load_module("container")
+
+    docker_start_calls: list[list[str]] = []
+    started = [False]
+
+    def fake_cid(slug):
+        return "cid1" if started[0] else None
+
+    def fake_run(cmd, **kw):
+        r = MagicMock()
+        r.returncode = 0
+        r.stdout = ""
+        if isinstance(cmd, list) and len(cmd) > 1:
+            if cmd[1] == "start":
+                docker_start_calls.append(list(cmd))
+                started[0] = True
+            elif cmd[1] == "ps" and "status=exited" in cmd:
+                r.stdout = "cid1\ncid2\n"  # two stopped containers
+        return r
+
+    monkeypatch.setattr(container_mod, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container_mod.utils, "container_id_for", fake_cid)
+    monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
+
+    container_mod.cmd_up(tmp_path)
+
+    assert docker_start_calls, "docker start must be called"
+    start_cmd = docker_start_calls[0]
+    assert "cid1" in start_cmd, "cid1 must be a distinct argv element in docker start"
+    assert "cid2" in start_cmd, "cid2 must be a distinct argv element in docker start"
+    assert not any("\n" in arg for arg in start_cmd), "no newline-joined IDs in docker start"
+
+
 # ── CT1: up must fail when bring-up fails ─────────────────────────────────────
 
 

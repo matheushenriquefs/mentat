@@ -198,7 +198,8 @@ def cmd_up(wt: Path) -> int:
         text=True,
     )
     if stopped.returncode == 0 and stopped.stdout.strip():
-        subprocess.run([_docker(), "start", stopped.stdout.strip()], check=True, capture_output=True)
+        ids = stopped.stdout.strip().split()
+        subprocess.run([_docker(), "start"] + ids, check=True, capture_output=True)
         cid2 = utils.container_id_for(slug)
         if cid2:
             _ensure_safe_directory(ws, cid2)
