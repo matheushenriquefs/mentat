@@ -55,56 +55,47 @@ def _topo_sort(plans: list[Plan]) -> list[Plan]:
     return order
 
 
-def _has_downstream_hitl(
-    slug: str,
-    plans_by_slug: dict[str, Plan],
-    _visited: set[str] | None = None,
-) -> bool:
+def _has_downstream_hitl(slug: str, plans_by_slug: dict[str, Plan]) -> bool:
     """True if any plan transitively blocks on `slug` and is HITL."""
-    if _visited is None:
-        _visited = set()
-    if slug in _visited:
+    visited: set[str] = set()
+
+    def _walk(s: str) -> bool:
+        if s in visited:
+            return False
+        visited.add(s)
+        for plan in plans_by_slug.values():
+            if s in plan.blocked_by:
+                if plan.class_ == "HITL":
+                    return True
+                if _walk(plan.slug):
+                    return True
         return False
-    _visited.add(slug)
-    for plan in plans_by_slug.values():
-        if slug in plan.blocked_by:
-            if plan.class_ == "HITL":
+
+    return _walk(slug)
+
+
+def _has_upstream_hitl(slug: str, plans_by_slug: dict[str, Plan]) -> bool:
+    """True if any plan `slug` transitively blocks-on is HITL."""
+    visited: set[str] = set()
+
+    def _walk(s: str) -> bool:
+        if s in visited:
+            return False
+        visited.add(s)
+        plan = plans_by_slug.get(s)
+        if plan is None:
+            return False
+        for dep in plan.blocked_by:
+            dep_plan = plans_by_slug.get(dep)
+            if dep_plan is None:
+                continue
+            if dep_plan.class_ == "HITL":
                 return True
-            if _has_downstream_hitl(plan.slug, plans_by_slug, _visited):
+            if _walk(dep_plan.slug):
                 return True
-    return False
-
-
-def _has_upstream_hitl(
-    slug: str,
-    plans_by_slug: dict[str, Plan],
-    _visited: set[str] | None = None,
-) -> bool:
-    """True if any plan `slug` transitively blocks-on is HITL.
-
-    Mirror of `_has_downstream_hitl` over the reverse direction. The G1 fix:
-    an AFK whose upstream is HITL must anchor with the caller — the caller
-    drives the HITL in-session, so the AFK can't auto-spawn until after that
-    HITL lands. Promotion to anchored holds it back; the caller re-invokes
-    `orchestrate land-queue` once the upstream chunk is in.
-    """
-    if _visited is None:
-        _visited = set()
-    if slug in _visited:
         return False
-    _visited.add(slug)
-    plan = plans_by_slug.get(slug)
-    if plan is None:
-        return False
-    for dep in plan.blocked_by:
-        dep_plan = plans_by_slug.get(dep)
-        if dep_plan is None:
-            continue
-        if dep_plan.class_ == "HITL":
-            return True
-        if _has_upstream_hitl(dep_plan.slug, plans_by_slug, _visited):
-            return True
-    return False
+
+    return _walk(slug)
 
 
 class Scheduler:
