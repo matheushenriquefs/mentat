@@ -91,3 +91,24 @@ def test_fan_out_stdout_emits_chunk_slugs_newline_delim(tmp_path):
 
     slugs_in_output = [line.strip() for line in output.splitlines() if line.strip()]
     assert len(slugs_in_output) >= 3
+
+
+# ── B3: track suggestion must be bin form, not python3 path ───────────────────
+
+
+def test_fan_out_track_suggestion_is_bin_form(tmp_path):
+    """spawn_with_proc must print `mentat-session track <id>`, never `python3 ...`."""
+    fan_out = load_module("fan_out")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="p", class_="AFK", blocked_by=[], path=tmp_path / "p.md")
+
+    with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=("sess-binform", _FakePopen())):
+        with patch.object(fan_out, "_emit_event", lambda *a, **k: None):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                fan_out.spawn_with_proc(plan)
+            output = buf.getvalue()
+
+    assert "python3" not in output, f"bin form must not contain python3: {output!r}"
+    assert "mentat-session track" in output, f"must use bin form; got: {output!r}"
+    assert "sess-binform" in output, f"session id missing from track output: {output!r}"
