@@ -248,7 +248,7 @@ def cmd_up(wt: Path) -> int:
         for d in ("vendor", "node_modules"):
             src = repo_root / d
             dst = wt / d
-            if src.is_dir() and not dst.exists():
+            if src.is_dir() and not dst.exists() and not dst.is_symlink():
                 dst.symlink_to(src)
         env_src = repo_root / ".env"
         env_dst = wt / ".env"

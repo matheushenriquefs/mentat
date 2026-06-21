@@ -749,3 +749,39 @@ def test_cmd_up_docker_start_failure_does_not_raise_and_surfaces_stderr(tmp_path
     assert rc != 0, "failed docker start must return non-zero"
     assert "Traceback" not in captured.err, "must not leak CalledProcessError traceback"
     assert "no such container" in captured.err or "cid_bad" in captured.err
+
+
+# ── C4: broken symlink at dst does not raise ──────────────────────────────────
+
+
+def test_cmd_up_broken_symlink_at_dst_does_not_raise(tmp_path, monkeypatch):
+    """Dangling symlink at dst must not raise FileExistsError during cold-start symlink step."""
+    container_mod = load_module("container")
+
+    # Main repo with a vendor dir
+    main_repo = tmp_path / "main"
+    main_repo.mkdir()
+    (main_repo / "vendor").mkdir()
+
+    # Worktree with a dangling symlink at vendor
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    broken_link = wt / "vendor"
+    broken_link.symlink_to(tmp_path / "nonexistent_target")  # dangling
+
+    def fake_run(cmd, **kw):
+        r = MagicMock()
+        r.returncode = 0
+        r.stdout = ""
+        r.stderr = ""
+        return r
+
+    monkeypatch.setattr(container_mod, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container_mod.utils, "container_id_for", lambda slug: None)
+    monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(container_mod, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(container_mod, "_main_repo_root_for_wt", lambda wt: main_repo)
+
+    # Must not raise FileExistsError — must return an int
+    rc = container_mod.cmd_up(wt)
+    assert isinstance(rc, int), "cmd_up must return int, not raise on broken symlink"
