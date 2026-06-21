@@ -393,7 +393,7 @@ def _promote_blocked_summary(body: str) -> None:
     target = seam if seam is not None else _session_dir_fn(os.environ.get("MENTAT_SESSION", "manual")) / SUMMARY_FILE
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(body + "\n")
+        target.write_text(f"---\nstatus: {_BLOCKED_STATUS}\n---\n{body}\n")
     except OSError:
         pass
 

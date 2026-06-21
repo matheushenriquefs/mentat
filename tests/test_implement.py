@@ -158,8 +158,9 @@ def test_implement_afk_plan_self_answer_detected_exits_42(tmp_path):
 
     with patch.object(impl, "_invoke_harness", return_value=fake_result):
         with patch.object(impl, "_detect_self_answer", return_value=True):
-            with patch.object(impl, "_emit_event") as mock_emit:
-                rc = impl.run_plan(plan, harness="fake")
+            with patch.object(impl, "_promote_blocked_summary"):
+                with patch.object(impl, "_emit_event") as mock_emit:
+                    rc = impl.run_plan(plan, harness="fake")
 
     assert rc == 42
     emitted = [c.args[0] for c in mock_emit.call_args_list]
@@ -174,8 +175,9 @@ def test_implement_emits_chunk_ejected_with_hitl_reason(tmp_path):
 
     with patch.object(impl, "_invoke_harness", return_value=fake_result):
         with patch.object(impl, "_detect_self_answer", return_value=True):
-            with patch.object(impl, "_emit_event") as mock_emit:
-                impl.run_plan(plan, harness="fake")
+            with patch.object(impl, "_promote_blocked_summary"):
+                with patch.object(impl, "_emit_event") as mock_emit:
+                    impl.run_plan(plan, harness="fake")
 
     payloads = [c.args[1] for c in mock_emit.call_args_list if "ejected" in c.args[0]]
     assert payloads
@@ -451,6 +453,25 @@ def test_implement_no_doctor_on_signal_exit(tmp_path):
                 rc = impl._run_and_doctor(plan, harness="fake")
         assert rc == sig_rc
         mock_doc.assert_not_called()
+
+
+# ── H1: promote_blocked_summary must carry status: blocked frontmatter ──────────
+
+
+def test_promote_blocked_summary_readable_as_blocked(tmp_path):
+    """_promote_blocked_summary must write status:blocked frontmatter so that
+    _read_summary_at recognizes the file on re-read (self-answer path: the agent
+    never wrote summary.md, executor promotes the fallback body)."""
+    impl = load_module("implement")
+    summary_path = tmp_path / "session" / "summary.md"
+    summary_path.parent.mkdir()
+
+    with patch.object(impl, "_blocked_summary_path", return_value=summary_path):
+        impl._promote_blocked_summary("Cannot resolve the design call — two options remain.")
+
+    result = impl._read_summary_at(summary_path)
+    assert result is not None, "_read_summary_at must recognize status:blocked after promote"
+    assert "Cannot resolve" in result
 
 
 def test_auto_doctor_fires_when_session_unset(tmp_path, monkeypatch):
