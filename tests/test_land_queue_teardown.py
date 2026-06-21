@@ -156,3 +156,25 @@ def test_teardown_delegates_to_devcontainer_down(monkeypatch):
     land_queue._teardown_container("my-chunk")
 
     assert down_calls == ["my-chunk"]
+
+
+def test_drain_tears_down_all_pending_on_stall(tmp_path, monkeypatch) -> None:
+    """Stalled drain must tear down containers for all pending chunks, not just landed ones."""
+    a, b = _plan("a"), _plan("b", blocked_by=["a"])
+    sched = scheduler.Scheduler([a, b])
+    torn_down: list[str] = []
+    _install_stubs(monkeypatch, torn_down=torn_down)
+
+    # Only b's chunk arrives — a never does → stall; b's container must be torn down
+    chunks = [_chunk("b", tmp_path)]
+    results = land_queue.drain(
+        chunks,
+        holding="holding",
+        on_landed=sched.mark_landed,
+        on_ejected=sched.mark_ejected,
+        next_ready=sched.next_ready,
+    )
+
+    stalled = [r for r in results if r.get("status") == "stalled"]
+    assert stalled, f"expected stalled verdict, got {results}"
+    assert "b" in torn_down, f"stalled chunk b container must be torn down; torn_down={torn_down}"

@@ -142,11 +142,14 @@ def drain(
     while pending:
         ready = next_ready(pending)
         if ready is None:
+            stalled_pending = list(pending)
+            for slug in stalled_pending:
+                _teardown_container(slug)
             results.append(
                 {
                     "slug": None,
                     "status": "stalled",
-                    "pending": list(pending),
+                    "pending": stalled_pending,
                 }
             )
             return results

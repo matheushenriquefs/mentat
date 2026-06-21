@@ -41,6 +41,9 @@ def test_run_orchestrate_returns_1_on_stalled_drain(tmp_path: Path) -> None:
                         )
 
     assert rc == 1, f"expected rc=1 on stalled drain, got rc={rc}"
+    assert stalled_results[0]["pending"] == ["stall-plan"], (
+        f"stalled result must carry pending list; got {stalled_results[0]}"
+    )
 
 
 def test_run_orchestrate_returns_0_on_no_stall(tmp_path: Path) -> None:
