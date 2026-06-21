@@ -1,4 +1,4 @@
-"""slice-4: end-to-end HITL pipeline lands a chunk without `claude --headless`.
+"""End-to-end HITL pipeline lands a chunk without `claude --headless`.
 
 Flow:
 1. orchestrate.run_orchestrate on a HITL plan → emits

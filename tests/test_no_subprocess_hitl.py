@@ -1,8 +1,8 @@
-"""slice-1: orchestrate must not subprocess-run implement.py for HITL plans.
+"""orchestrate must not subprocess-run implement.py for HITL plans.
 
 Instead it emits chunk.spawned{harness:"hitl-in-session"} per HITL plan and
-returns control to the calling session. Anchored slugs are NOT appended to
-_land_all in the same orchestrate invocation.
+returns control to the calling session. Anchored slugs are NOT landed in the
+same orchestrate invocation.
 """
 
 from __future__ import annotations

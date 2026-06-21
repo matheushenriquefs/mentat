@@ -1,5 +1,5 @@
-"""slice-3: detect_self_answer parses stream-json schema (the format
-slice-2's adapter writes to MENTAT_SESSION_LOG)."""
+"""detect_self_answer parses stream-json schema (the format the AFK adapter
+writes to MENTAT_SESSION_LOG)."""
 
 from __future__ import annotations
 

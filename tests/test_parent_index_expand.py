@@ -1,9 +1,9 @@
-"""Slice 1: _load_plans expands parent-index plans into their listed siblings.
+"""_load_plans expands parent-index plans into their listed siblings.
 
 A plan with siblings: [a, b] in frontmatter is a parent index — not a runnable
-slice. _load_plans replaces it with the sibling plans, in order. The parent slug
-does not appear in the result. Nested parent indexes (sibling itself has siblings)
-are rejected with SystemExit(65).
+plan itself. _load_plans replaces it with the sibling plans, in order. The parent
+slug does not appear in the result. Nested parent indexes (sibling itself has
+siblings) are rejected with SystemExit(65).
 """
 
 from __future__ import annotations

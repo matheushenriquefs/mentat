@@ -11,7 +11,7 @@ Partition rule (topological order):
 
     HITL                       → anchored
     AFK with downstream HITL   → anchored   (existing G2 rule)
-    AFK with upstream HITL     → anchored   (G1 — added in this slice)
+    AFK with upstream HITL     → anchored
     AFK otherwise              → auto
 """
 
@@ -104,13 +104,13 @@ class Scheduler:
     `next_ready(candidates)` walks the candidate slugs in order and returns the
     first one whose `blocked_by` is wholly satisfied (every upstream is in
     `landed`). An unknown slug — chunk has no loaded plan — is treated as
-    immediately ready, so ad-hoc/external chunks keep flowing the way they
-    did before slice-2.
+    immediately ready, so ad-hoc/external chunks keep flowing without
+    blocking on missing plans.
 
     `mark_landed` / `mark_ejected` are the only state mutations. They are
     additive: once a slug enters either set, it stays put. Ejection cascade
-    (slice-3) walks the reverse-dep graph and pushes downstream slugs into
-    `ejected` so they get skipped, not stalled.
+    walks the reverse-dep graph and pushes downstream slugs into `ejected`
+    so they get skipped, not stalled.
     """
 
     def __init__(self, plans: list[Plan]) -> None:
@@ -135,7 +135,7 @@ class Scheduler:
         self._landed.add(slug)
 
     def mark_ejected(self, slug: str) -> list[str]:
-        """Eject slug + cascade to every downstream slug. Return cascaded list (slice-3)."""
+        """Eject slug + cascade to every downstream slug. Return cascaded list."""
         self._ejected.add(slug)
         cascaded: list[str] = []
         # Walk reverse-dep graph: any plan that lists an ejected slug in

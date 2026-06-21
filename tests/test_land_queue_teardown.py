@@ -1,4 +1,4 @@
-"""Slice-2: drain tears down container after every chunk exit path."""
+"""drain tears down container after every chunk exit path."""
 
 from __future__ import annotations
 

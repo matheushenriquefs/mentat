@@ -1,5 +1,5 @@
-"""Slice-3: run_orchestrate prunes stale labeled containers at session start.
-Slice port-worktree-prune: prune stale worktrees at session-end with dirty-check.
+"""run_orchestrate prunes stale labeled containers at session start and stale
+worktrees at session end with dirty-check.
 """
 
 from __future__ import annotations
@@ -128,7 +128,7 @@ def test_orchestrate_does_not_call_docker_directly():
     assert not docker_calls, f"docker called directly via subprocess at lines: {docker_calls}"
 
 
-# ── shell-port-worktree-prune helpers ────────────────────────────────────────
+# ── worktree prune helpers ────────────────────────────────────────────────────
 
 
 def _cp_proc(returncode: int = 0, stdout: str = "") -> subprocess.CompletedProcess:  # type: ignore[type-arg]
@@ -149,7 +149,7 @@ def _make_wt(wt_root: Path, name: str, *, age_secs: int = 7200) -> Path:
     return wt
 
 
-# ── shell-port-worktree-prune tests ──────────────────────────────────────────
+# ── worktree prune tests ──────────────────────────────────────────────────────
 
 
 def test_prune_runs_at_session_end_not_start(tmp_path, monkeypatch):
@@ -276,9 +276,9 @@ def test_prune_skips_active(tmp_path, monkeypatch):
 
 
 def test_prune_is_path_based_not_name_based(tmp_path, monkeypatch):
-    """Identity is path, not name (S1 landmine fix): a clean stale worktree is
-    pruned regardless of its name — including one the legacy mentat-manual-*
-    name-exemption would have spared."""
+    """Identity is path, not name: a clean stale worktree is pruned regardless
+    of its name — including one the legacy mentat-manual-* name-exemption
+    would have spared."""
     orchestrate = _load("orchestrate")
     monkeypatch.chdir(tmp_path)
 

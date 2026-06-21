@@ -5,7 +5,7 @@ description: >
   Use when you want to orchestrate a batch of plan slices across worktrees.
 ---
 
-Hybrid orchestrator: one bin, three stage modules (`fan_out`, `land_queue`, `batch_review`), four subcommands. Reads plan frontmatter to partition plans into anchored (HITL) and auto-spawned (AFK) groups. Spawns AFK plans in parallel via `ProcessPoolExecutor`; runs HITL plans in the current session. Lands all chunks serially onto the holding branch with gate checks.
+Hybrid orchestrator: one bin, two stage modules (`fan_out`, `land_queue`), four subcommands. Reads plan frontmatter to partition plans into anchored (HITL) and auto-spawned (AFK) groups. Spawns AFK plans in parallel via `subprocess.Popen` with manual polling; runs HITL plans in the current session. Lands all chunks serially onto the holding branch with gate checks.
 
 ## How to invoke
 
@@ -36,7 +36,7 @@ Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the hol
    - AFK with upstream HITL dep → anchored_here (caller must drive the
      upstream HITL in-session before the downstream AFK can spawn)
    - AFK with no HITL anywhere in the dep chain → auto_spawn
-4. Spawn auto_spawn in parallel (ProcessPoolExecutor).
+4. Spawn auto_spawn in parallel (subprocess.Popen with manual polling).
    Print track command immediately after spawn.
 5. Emit `chunk.spawned{harness:"hitl-in-session"}` per anchored plan and
    return control. Caller queries the audit log

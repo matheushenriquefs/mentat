@@ -135,9 +135,9 @@ def _fan_out_plans(
     (ADR-0004) and can be overridden via ~/.mentat/config.toml `concurrency`.
 
     Returns each plan paired with its child exit code, so the caller can route a
-    ``EX_HITL_REQUIRED`` (42) child away from landing (S5) — a wedged AFK self-
-    ejected and left its worktree for the operator; landing it would false-merge
-    empty or partial work.
+    ``EX_HITL_REQUIRED`` (42) child away from landing — a wedged AFK self-ejected
+    and left its worktree for the operator; landing it would false-merge empty or
+    partial work.
 
     F5 checkpoint: after each chunk exits, reads its summary.md and seeds the next
     spawn so context survives across chunk boundaries.
@@ -201,7 +201,7 @@ def _prune_stale_worktrees(preserve: set[str] | None = None) -> None:
 
     ``preserve`` slugs are held back from the sweep — a wedged (hitl-required)
     chunk's worktree must survive for the operator even when it is clean and
-    inactive (S5). They are folded into the active set the prune treats as live.
+    inactive. They are folded into the active set the prune treats as live.
     """
     wt_root = Path.cwd() / ".mentat" / "worktrees"
     active = set(_devcontainer.list_active_slugs()) | (preserve or set())

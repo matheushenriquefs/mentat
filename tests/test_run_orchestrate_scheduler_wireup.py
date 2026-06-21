@@ -1,16 +1,13 @@
-"""Regression: `run_orchestrate` must hand `_land_all` plan-slug-keyed chunks.
+"""Regression: `run_orchestrate` must pass plan-slug-keyed chunks to `land_queue.drain`.
 
-The bug surfaced by mentat-bug-reviewer post-slice-4: `_fan_out_plans`
-returns synthetic session_ids (`auto-<stem>-<pid>`), but `Scheduler` is
-keyed by `plan.slug` from frontmatter. If `_land_all` is invoked with
-session_ids, `Scheduler._plans.get(session_id)` returns None, the
-unknown-slug fallback in `next_ready` fires for every chunk, and the
-slice-2 dep gating + slice-3 eject cascade silently no-op on the prod
-`run` path.
+`_fan_out_plans` returns `(plan, returncode)` pairs keyed by `plan.slug` from
+frontmatter. If slugs are swapped for session_ids, `Scheduler._plans.get(session_id)`
+returns None, the unknown-slug fallback in `next_ready` fires for every chunk, and
+dep gating + eject cascade silently no-op on the prod `run` path.
 
-This test stubs the spawn + drain at module boundary and asserts the
-chunk slugs reaching `land_queue.drain` match the plans' frontmatter
-slugs — so the Scheduler can actually resolve them.
+This test stubs the spawn + drain at module boundary and asserts the chunk slugs
+reaching `land_queue.drain` match the plans' frontmatter slugs — so the Scheduler
+can actually resolve them.
 """
 
 from __future__ import annotations

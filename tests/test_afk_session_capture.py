@@ -1,4 +1,4 @@
-"""slice-2: AFK fan-out generates session_id, creates log dir 0o700, exports
+"""AFK fan-out generates session_id, creates log dir 0o700, exports
 MENTAT_SESSION + MENTAT_SESSION_LOG to the child. Adapter invokes claude with
 --session-id + --output-format stream-json, redirects stdout into the log
 file, and populates Result.session_log.
