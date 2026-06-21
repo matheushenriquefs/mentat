@@ -20,6 +20,7 @@ from lib import frontmatter  # noqa: E402
 from lib.events import bind  # noqa: E402
 from lib.exits import EX_USAGE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
+from lib.session import ensure_session as _ensure_session  # noqa: E402
 
 _utils: _types.ModuleType = load_sibling(__file__, "lifecycle")  # type: ignore[assignment]
 
@@ -206,11 +207,15 @@ def main(argv: list[str] | None = None) -> None:
 
     args = parser.parse_args(argv)
 
+    _EMIT_CMDS = {"create", "claim", "release", "done", "wontfix"}
+
     handler = _dispatch.get(args.cmd)
     if handler is None:
         parser.print_help(sys.stderr)
         rc = EX_USAGE
     else:
+        if args.cmd in _EMIT_CMDS:
+            _ensure_session("mentat-tasks", "cli")
         rc = handler(args)
     if rc != 0:
         sys.exit(rc)

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import os
 import sys
 import threading
 from pathlib import Path
@@ -122,3 +124,30 @@ def test_release_emits_task_released(task_file: Path) -> None:
     with patch("lib.events._spawn") as mock_spawn:
         t.main(["release", str(task_file)])
     mock_spawn.assert_called_once_with("mentat-tasks", "task.released", {"id": "T001"})
+
+
+# ── LT2: session routing tests ───────────────────────────────────────────────
+
+
+def test_cmd_create_sets_session_when_unset(td: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without MENTAT_SESSION, tasks calls ensure_session → MENTAT_SESSION set to mentat-tasks-*."""
+    monkeypatch.delenv("MENTAT_SESSION", raising=False)
+    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.setenv("MENTAT_REPO", "test-repo")
+    monkeypatch.setattr(sys, "stdin", io.StringIO("# body\n"))
+    t = _reload("tasks")
+    with patch("lib.events._spawn"):
+        t.main(["create", "test-task"])
+    session = os.environ.get("MENTAT_SESSION")
+    assert session is not None, "MENTAT_SESSION not set; ensure_session not called"
+    assert session.startswith("mentat-tasks-"), f"unexpected session prefix: {session!r}"
+
+
+def test_cmd_create_inherits_parent_session_unchanged(td: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """With MENTAT_SESSION already set, ensure_session must not overwrite it."""
+    monkeypatch.setenv("MENTAT_SESSION", "orchestrate-parent-999")
+    monkeypatch.setattr(sys, "stdin", io.StringIO("# body\n"))
+    t = _reload("tasks")
+    with patch("lib.events._spawn"):
+        t.main(["create", "test-task"])
+    assert os.environ.get("MENTAT_SESSION") == "orchestrate-parent-999"
