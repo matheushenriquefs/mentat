@@ -43,7 +43,8 @@ def cmd_track(session_id: str | None) -> int:
     return 0
 
 
-def cmd_doctor(session_id: str | None) -> int:
+def _resolve_session(session_id: str | None) -> Path | int:
+    """Resolve session_id to an existing session dir, or return an exit code."""
     repo = _repo()
     repo_dir = _log_root() / repo
     if session_id is None:
@@ -55,6 +56,13 @@ def cmd_doctor(session_id: str | None) -> int:
     if not sd.exists():
         print(f"mentat-session: session dir not found: {sd}", file=sys.stderr)
         return 1
+    return sd
+
+
+def cmd_doctor(session_id: str | None) -> int:
+    sd = _resolve_session(session_id)
+    if isinstance(sd, int):
+        return sd
     diag = _doctor.write_diagnosis(sd)
     print(diag.read_text())
     return 0
@@ -63,17 +71,9 @@ def cmd_doctor(session_id: str | None) -> int:
 def cmd_report(session_id: str | None) -> int:
     """Render the success-side report-back summary (twin of doctor). Operator
     sees what an AFK session implemented without asking the main harness."""
-    repo = _repo()
-    repo_dir = _log_root() / repo
-    if session_id is None:
-        session_id = _sessions.latest_session(repo_dir)
-    if session_id is None:
-        print("mentat-session: no sessions found", file=sys.stderr)
-        return 1
-    sd = _session_dir_fn(session_id)
-    if not sd.exists():
-        print(f"mentat-session: session dir not found: {sd}", file=sys.stderr)
-        return 1
+    sd = _resolve_session(session_id)
+    if isinstance(sd, int):
+        return sd
     summary = _doctor.write_summary(sd)
     print(summary.read_text())
     return 0
@@ -112,14 +112,9 @@ def cmd_list() -> int:
 
 
 def cmd_diagnose(session_id: str | None) -> int:
-    repo = _repo()
-    repo_dir = _log_root() / repo
-    if session_id is None:
-        session_id = _sessions.latest_session(repo_dir)
-    if session_id is None:
-        print("mentat-session: no sessions found", file=sys.stderr)
-        return 1
-    sd = _session_dir_fn(session_id)
+    sd = _resolve_session(session_id)
+    if isinstance(sd, int):
+        return sd
     _diagnose.run_diagnose(sd)
     return 0
 
