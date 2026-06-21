@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import shutil
 import subprocess
 import sys
@@ -20,9 +19,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 import compose_render  # noqa: E402
 import utils  # noqa: E402
 
-
-def _docker() -> str:
-    return os.environ.get("MENTAT_DOCKER", "docker")
+_docker = utils._docker
 
 
 def _host_runtime() -> bool:
@@ -152,7 +149,7 @@ def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
         _atomic_write(dcj.parent / fname, text)
 
 
-def _ensure_safe_directory(wt: Path, ws: str, slug: str, cid: str) -> None:
+def _ensure_safe_directory(ws: str, cid: str) -> None:
     subprocess.run(
         [
             _docker(),
@@ -178,7 +175,7 @@ def cmd_up(wt: Path) -> int:
     ws = utils.resolve_workspace_folder(wt)
 
     if cid:
-        _ensure_safe_directory(wt, ws, slug, cid)
+        _ensure_safe_directory(ws, cid)
         return 0
 
     # Stopped container
@@ -189,15 +186,13 @@ def cmd_up(wt: Path) -> int:
     )
     if stopped.returncode == 0 and stopped.stdout.strip():
         subprocess.run([_docker(), "start", stopped.stdout.strip()], check=True, capture_output=True)
-        ws = utils.resolve_workspace_folder(wt)
         cid2 = utils.container_id_for(slug)
         if cid2:
-            _ensure_safe_directory(wt, ws, slug, cid2)
+            _ensure_safe_directory(ws, cid2)
         return 0
 
     # Cold start
     _ensure_devcontainer_json(wt, slug)
-    ws = utils.resolve_workspace_folder(wt)
 
     # Symlink shared dirs from main repo
     if (wt / ".git").is_file():
@@ -247,7 +242,7 @@ def cmd_up(wt: Path) -> int:
 
     final_cid = utils.container_id_for(slug)
     if final_cid:
-        _ensure_safe_directory(wt, ws, slug, final_cid)
+        _ensure_safe_directory(ws, final_cid)
     return 0
 
 
