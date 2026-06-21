@@ -125,7 +125,7 @@ class Scheduler:
             plan = self._plans.get(slug)
             if plan is None:
                 return slug
-            deps = set(plan.blocked_by)
+            deps = set(plan.blocked_by) & self._plans.keys()
             if deps - self._landed:
                 continue
             return slug

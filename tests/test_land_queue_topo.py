@@ -106,11 +106,16 @@ def test_drain_without_scheduler_is_unchanged(tmp_path, monkeypatch) -> None:
 
 
 def test_stalled_dep_lists_pending(tmp_path, monkeypatch) -> None:
-    """Chunk references a missing-upstream plan → drain returns with pending list."""
-    x = _plan("x", blocked_by=["missing"])
-    sched = scheduler.Scheduler([x])
+    """In-batch dep whose chunk never arrives → drain returns stalled with pending list.
 
-    chunks = [_chunk("x", tmp_path)]
+    "a" is known to the scheduler but no chunk for it is passed to drain; "b"
+    depends on "a" and can never become ready → stall.
+    """
+    a, b = _plan("a"), _plan("b", blocked_by=["a"])
+    sched = scheduler.Scheduler([a, b])
+
+    # Only b's chunk arrives — a's chunk is never queued.
+    chunks = [_chunk("b", tmp_path)]
     ff_calls: list[str] = []
     _install_stubs(monkeypatch, ff_calls)
 
@@ -122,10 +127,10 @@ def test_stalled_dep_lists_pending(tmp_path, monkeypatch) -> None:
         next_ready=sched.next_ready,
     )
 
-    assert ff_calls == [], f"x should not have landed, ff_calls={ff_calls}"
+    assert ff_calls == [], f"b should not have landed, ff_calls={ff_calls}"
     stalled = [r for r in results if r.get("status") == "stalled"]
-    assert stalled, f"expected stalled verdict for x, got {results}"
-    assert set(stalled[0].get("pending", [])) == {"x"}
+    assert stalled, f"expected stalled verdict for b, got {results}"
+    assert set(stalled[0].get("pending", [])) == {"b"}
 
 
 def test_blocked_chunk_waits_until_upstream_lands(tmp_path, monkeypatch) -> None:
