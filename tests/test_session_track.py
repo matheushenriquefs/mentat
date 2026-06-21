@@ -391,3 +391,35 @@ def test_render_list_affordance_when_truncated():
     lines = track.render_list(records, 0, viewport_height=5)
     body = "\n".join(lines)
     assert "more" in body
+
+
+# ── V5: fix _read_key escape-burst parsing over a real pty ───────────────────
+
+
+def test_read_key_over_pty():
+    """_read_key over a real pty: sequences classified correctly, lone ESC → quit."""
+    import os
+    import pty
+    import termios
+    import tty as _tty
+
+    track = load_module("track")
+    cases = [
+        (b"\x1b[A", "UP"),
+        (b"\x1b[B", "DOWN"),
+        (b"\x1b", "\x1b"),
+        (b"j", "j"),
+        (b"\x1b[15~", None),  # F5 escape → swallow
+    ]
+    for data, expected in cases:
+        master, slave = pty.openpty()
+        old = termios.tcgetattr(slave)
+        _tty.setraw(slave)
+        try:
+            os.write(master, data)
+            result = track._read_key(0.5, _fd=slave)
+            assert result == expected, f"data={data!r}: expected {expected!r}, got {result!r}"
+        finally:
+            termios.tcsetattr(slave, termios.TCSADRAIN, old)
+            os.close(master)
+            os.close(slave)

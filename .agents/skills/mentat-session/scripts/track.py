@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import select
 import subprocess
 import sys
@@ -260,28 +261,38 @@ def render_focus(record: dict[str, object], session_dir: Path, view: str = _VIEW
     return lines
 
 
-def _read_key(timeout: float) -> str | None:
+def _read_key(timeout: float, *, _fd: int | None = None) -> str | None:
     """One keypress from stdin within `timeout`s, or None on tick. Raw-tty shell only.
 
-    A bare ESC (no follow byte) is quit; a recognized arrow maps to UP/DOWN; any
-    other escape sequence is fully drained and swallowed (None) so its trailing
-    bytes don't leak into the next read as spurious keystrokes.
+    Reads the whole available burst from the raw fd in one shot to avoid Python's
+    buffered stdin splitting a multi-byte escape sequence (e.g. `\\x1b[A`) across
+    calls — which made arrows return bare ESC (= quit) instead of UP/DOWN.
+
+    `_fd` overrides the fd for testing (pass a pty slave fd).
     """
-    ready, _, _ = select.select([sys.stdin], [], [], timeout)
+    fd = sys.stdin.fileno() if _fd is None else _fd
+    ready, _, _ = select.select([fd], [], [], timeout)
     if not ready:
         return None
-    ch = sys.stdin.read(1)
-    if ch != "\x1b":
-        return ch
-    seq = ""
-    while True:  # consume the whole sequence that arrived with the ESC
-        more, _, _ = select.select([sys.stdin], [], [], 0.01)
-        if not more:
-            break
-        seq += sys.stdin.read(1)
-    if not seq:
-        return "\x1b"  # bare ESC → quit
-    return {"[A": "UP", "[B": "DOWN"}.get(seq)  # arrow → UP/DOWN; anything else → None
+    try:
+        burst = os.read(fd, 16)
+    except OSError:
+        return None
+    if not burst:
+        return None
+    if burst == b"\x1b":
+        return "\x1b"  # lone ESC → quit
+    if burst.startswith(b"\x1b"):
+        tail = burst[1:]
+        if tail == b"[A":
+            return "UP"
+        if tail == b"[B":
+            return "DOWN"
+        return None  # other escape sequence → swallow
+    try:
+        return burst.decode("utf-8")[0]
+    except (UnicodeDecodeError, IndexError):
+        return None
 
 
 def _tools(session_dir: Path, *, limit: int) -> list[str]:
