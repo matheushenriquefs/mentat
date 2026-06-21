@@ -6,6 +6,8 @@ See docs/EXIT-CODES.md for the full table.
 from __future__ import annotations
 
 EX_OK = 0
+EX_FAILURE = 1
+EX_ARGPARSE = 2  # argparse and shell convention for bad args / wrong environment
 EX_USAGE = 64
 EX_DATAERR = 65
 EX_NOINPUT = 66

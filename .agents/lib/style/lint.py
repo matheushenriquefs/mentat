@@ -11,6 +11,7 @@ _LIB = Path(__file__).resolve().parents[1]
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
+from exits import EX_FAILURE, EX_OK, EX_USAGE  # noqa: E402
 from frontmatter import parse as _parse_frontmatter  # noqa: E402
 
 BANNED_RE = re.compile(
@@ -129,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     if not args:
         print("usage: lint.py <file> [<file> ...]", file=sys.stderr)
-        return 64
+        return EX_USAGE
 
     all_errs: list[str] = []
     for a in args:
@@ -139,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for e in all_errs:
         print(e, file=sys.stderr)
-    return 1 if all_errs else 0
+    return EX_FAILURE if all_errs else EX_OK
 
 
 if __name__ == "__main__":

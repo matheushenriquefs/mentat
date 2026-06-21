@@ -27,7 +27,7 @@ DIM = _ANSI_DIM
 # Clear screen + move cursor home — the tracker repaints in place each tick.
 CLEAR_HOME = "\033[2J\033[H"
 
-# ── S7 tracking vocabulary ────────────────────────────────────────────────────
+# ── tracking vocabulary ───────────────────────────────────────────────────────
 # Single-width glyphs drawn from the house set so the install/prompt UI and the
 # live tracker share one look. No emoji.
 _TOOL_GLYPHS = {
@@ -87,7 +87,7 @@ def section_rule(label: str) -> str:
     return f"── [{label}] ──"
 
 
-def print_step(symbol: str, text: str, dim: bool = False) -> None:
+def print_step(symbol: str, text: str, *, dim: bool = False) -> None:
     sym = color(symbol, _ANSI_DIM if dim else _ANSI_GREEN)
     print(f"{sym}  {text}")
     print(color(PIPE, _ANSI_DIM))
