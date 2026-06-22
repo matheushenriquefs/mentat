@@ -62,7 +62,7 @@ python3 ~/.agents/skills/mentat-container/scripts/container.py doctor
 - Slug = `basename(git rev-parse --show-toplevel)`.
 - `workspaceFolder` read from `devcontainer.json`, not slug-derived.
 - `doctor` walks rules and prints human-readable status for each.
-- ADR-0004: project tools execute inside the container; host execution is forbidden by callers (e.g. `mentat-git`).
+- ADR-0004: project tools execute inside the container by default; callers must not bypass `container.py`. `runtime = "host"` (see below) is the only supported opt-out and is config-driven, not a caller decision.
 
 ## Arch handling
 

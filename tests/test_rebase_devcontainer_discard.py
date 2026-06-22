@@ -58,16 +58,23 @@ def _setup_rebase_fixture(tmp_path: Path) -> tuple[Path, Path]:
     return repo, feature_wt
 
 
-def test_discard_path_removes_untracked_devcontainer(tmp_path: Path) -> None:
-    """discard_path must remove untracked files under the given path."""
+def test_discard_path_preserves_untracked_devcontainer(tmp_path: Path) -> None:
+    """discard_path must NOT remove untracked files under .devcontainer/.
+
+    Synthesized overlay files (e.g. devcontainer-lock.json, mentat-dev.compose.yml)
+    are untracked but required for container bring-up. git clean -fd would silently
+    delete them — discard_path must only restore tracked files (git checkout --).
+    """
     _repo, feature_wt = _setup_rebase_fixture(tmp_path)
 
-    # Add a new untracked file under .devcontainer
+    # Simulate a synthesized overlay file that was NOT committed.
     (feature_wt / ".devcontainer" / "devcontainer-lock.json").write_text('{"lockfileVersion": 1}\n')
 
     git_lib.discard_path(feature_wt, ".devcontainer/")
 
-    assert not (feature_wt / ".devcontainer" / "devcontainer-lock.json").exists()
+    assert (feature_wt / ".devcontainer" / "devcontainer-lock.json").exists(), (
+        "discard_path must preserve untracked overlay files in .devcontainer/"
+    )
 
 
 def test_discard_path_restores_tracked_devcontainer(tmp_path: Path) -> None:

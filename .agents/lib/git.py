@@ -81,14 +81,17 @@ def remove_worktree(path: Path) -> bool:
 
 
 def discard_path(cwd: Path, path: str) -> None:
-    """Discard tracked changes and remove untracked files under *path* in the worktree.
+    """Restore tracked files under *path* to HEAD in the worktree.
 
-    Best-effort — errors are silently ignored.  Used before rebase to remove
-    transient files (e.g. .devcontainer/ modified by mentat-container up) that
-    would cause git to refuse the rebase with "You have unstaged changes."
+    Best-effort — errors are silently ignored.  Used before rebase to undo
+    modifications to tracked files (e.g. .devcontainer/ patched by
+    mentat-container up) that would cause git to refuse the rebase.
+
+    Intentionally does NOT run ``git clean`` — synthesized overlay files
+    (e.g. a generated devcontainer.json) are untracked and must survive rebase.
+    Untracked files never block git rebase anyway.
     """
     _run(["checkout", "--", path], cwd=cwd)
-    _run(["clean", "-fd", path], cwd=cwd)
 
 
 def rebase_ff_only(cwd: Path, onto: str) -> tuple[str | None, str | None]:
@@ -120,23 +123,27 @@ def ff_merge(cwd: Path, holding: str) -> str | None:
     entries = worktree_list(cwd=cwd)
     if not entries:
         return "git-error"
-    main_wt = Path(entries[0]["worktree"])
-    branch_r = _run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=main_wt)
-    if branch_r.returncode != 0:
-        return "git-error"
-    current = branch_r.stdout.strip()
-    if current == holding:
-        # Branch is currently checked out — git fetch refuses to update it.
-        # Use git update-ref instead (no working-tree touch, works dirty).
-        # Verify ff first: holding tip must be an ancestor of sha.
-        tip_r = _run(["rev-parse", f"refs/heads/{holding}"], cwd=main_wt)
+    # Find which worktree (if any) has holding checked out — git fetch refuses
+    # to update a currently-checked-out branch regardless of which worktree
+    # holds it, so we must use update-ref via that worktree specifically.
+    # entries[0] is always main per git docs, but holding may be checked out in
+    # a linked worktree instead.
+    holding_wt = next(
+        (Path(e["worktree"]) for e in entries if e.get("branch") == holding),
+        None,
+    )
+    if holding_wt is not None:
+        # holding is currently checked out — verify ff then update-ref (no
+        # working-tree touch, works dirty).
+        tip_r = _run(["rev-parse", f"refs/heads/{holding}"], cwd=holding_wt)
         if tip_r.returncode != 0:
             return "git-error"
-        anc = _run(["merge-base", "--is-ancestor", tip_r.stdout.strip(), sha], cwd=main_wt)
+        anc = _run(["merge-base", "--is-ancestor", tip_r.stdout.strip(), sha], cwd=holding_wt)
         if anc.returncode != 0:
             return "not-ff"
-        r = _run(["update-ref", f"refs/heads/{holding}", sha], cwd=main_wt)
+        r = _run(["update-ref", f"refs/heads/{holding}", sha], cwd=holding_wt)
     else:
-        # Branch is NOT checked out — git fetch . enforces ff automatically.
+        # Not checked out anywhere — git fetch enforces ff automatically.
+        main_wt = Path(entries[0]["worktree"])
         r = _run(["fetch", ".", f"{sha}:refs/heads/{holding}"], cwd=main_wt)
     return None if r.returncode == 0 else "git-error"

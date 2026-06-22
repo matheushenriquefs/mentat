@@ -153,13 +153,16 @@ def _fan_out_plans(
     cap = _concurrency_cap()
     live: list[tuple[_scheduler.Plan, subprocess.Popen, str]] = []
     seed_summary: str | None = None
+    seeded: set[str] = set()  # session IDs already harvested — avoid re-reading stale entries
     for plan in plans:
         while sum(1 for _, p, _ in live if p.poll() is None) >= cap:
             time.sleep(0.1)
-        # Harvest seeds from any chunks that finished while we waited.
+        # Harvest seeds from newly-finished chunks only (skip already-seeded IDs so
+        # a chunk that finished in an earlier round cannot overwrite a newer seed).
         for _plan, p, sid in live:
-            if p.poll() is not None:
+            if sid not in seeded and p.poll() is not None:
                 seed_summary = _read_chunk_seed(sid) or seed_summary
+                seeded.add(sid)
         _session_id, proc = _fan_out.spawn_with_proc(plan, harness=harness, model=model, seed_summary=seed_summary)
         live.append((plan, proc, _session_id))
     results: list[tuple[_scheduler.Plan, int]] = []
