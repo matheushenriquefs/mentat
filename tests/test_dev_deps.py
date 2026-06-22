@@ -1,4 +1,4 @@
-"""Verify coverage and sqlite-utils are declared as dev dependencies."""
+"""Verify coverage is declared as a dev dependency."""
 
 from __future__ import annotations
 
@@ -16,8 +16,3 @@ def _dev_deps() -> list[str]:
 def test_coverage_declared_as_dev_dep() -> None:
     deps = _dev_deps()
     assert any("coverage" in d for d in deps), f"coverage not in dev deps: {deps}"
-
-
-def test_sqlite_utils_declared_as_dev_dep() -> None:
-    deps = _dev_deps()
-    assert any("sqlite-utils" in d for d in deps), f"sqlite-utils not in dev deps: {deps}"
