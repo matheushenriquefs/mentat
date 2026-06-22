@@ -174,6 +174,24 @@ def _prune_worktrees_preflight() -> None:
     worktrees.prune_stale(wt_root, active_slugs=set(devcontainer.list_active_slugs()))
 
 
+def _repo_root_from_worktree(worktree: Path) -> Path:
+    """Return the main worktree root from any registered worktree path.
+
+    Uses the shared git-common-dir (`.git`) rather than counting path components,
+    so it works regardless of worktree depth. Falls back to parents[2] on error.
+    """
+    r = subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        capture_output=True,
+        text=True,
+        cwd=str(worktree),
+    )
+    if r.returncode == 0:
+        common = Path(r.stdout.strip())
+        return common.parent if common.name == ".git" else common
+    return worktree.parents[2]
+
+
 def _teardown_worktree(target: Path) -> None:
     """On implement's own failure: drop a clean worktree + its container,
     preserve a dirty one (it holds un-landed work the operator must finish)."""
@@ -291,7 +309,7 @@ def preflight_worktree(slug: str) -> tuple[int, Path | None]:
         return (result.returncode, None)
     line = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
     if not line:
-        return (0, None)
+        return (EX_SOFTWARE, None)
     target = Path(line)
     if not target.is_dir():
         return (EX_SOFTWARE, None)
@@ -504,7 +522,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     if afk:
         home_agents = str(Path.home()) + "/.agents/"
         cwd_agents = str(Path.cwd()) + "/.agents/"
-        if home_agents != cwd_agents:
+        if home_agents != cwd_agents and Path(cwd_agents).is_dir():
             plan_body = plan_body.replace(home_agents, cwd_agents)
     prompt = f"{_AFK_COMMIT_CONTRACT}\n\n{_AFK_AMBIGUITY_CONTRACT}\n\n{plan_body}"
     result = _invoke_harness(harness, prompt, afk=afk, model=model)
@@ -721,7 +739,7 @@ def main() -> None:
         print("mentat-implement: review the diff with `git diff main..HEAD`", file=sys.stderr)
 
     if rc != 0 and rc not in _PRESERVE_WORKTREE_EXITS and target is not None:
-        os.chdir(target.parents[2])  # step out to repo root before removing
+        os.chdir(_repo_root_from_worktree(target))
         _teardown_worktree(target)
     sys.exit(rc)
 

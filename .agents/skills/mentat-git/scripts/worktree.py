@@ -55,6 +55,15 @@ def _existing_worktree(main_root: Path, target: Path) -> bool:
     return any(Path(e["worktree"]).resolve() == resolved for e in _list_worktrees(main_root))
 
 
+def _is_prunable_target(main_root: Path, target: Path) -> bool:
+    """True iff `target` is registered as a prunable worktree (dir is gone)."""
+    resolved = target.resolve()
+    for e in _list_worktrees(main_root):
+        if Path(e["worktree"]).resolve() == resolved:
+            return "prunable" in e
+    return False
+
+
 def _branch_exists(main_root: Path, branch: str) -> bool:
     r = _git(["rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"], cwd=main_root)
     return r.returncode == 0
@@ -177,6 +186,11 @@ def cmd_worktree_create(slug: str, *, base: str | None = None, parent: Path | No
     if parent is None:
         parent = main_root / ".mentat" / "worktrees"
     target = (parent / slug).resolve()
+
+    # If the target has a stale admin record (prunable — dir is gone but record lingers),
+    # prune it before the idempotency check so we don't return rc=0 with a missing dir.
+    if _is_prunable_target(main_root, target):
+        _git(["worktree", "prune"], cwd=main_root)
 
     if _existing_worktree(main_root, target):
         print(str(target))
