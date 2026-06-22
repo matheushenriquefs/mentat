@@ -53,14 +53,14 @@ python3 ~/.agents/skills/mentat-container/scripts/container.py doctor
 
 ## Rules
 
-- `up` synthesizes `.devcontainer/devcontainer.json` atomically if absent (compose or Dockerfile auto-detected).
+- `up` synthesizes `.devcontainer/devcontainer.json` atomically if absent (compose or Dockerfile auto-detected). If a `devcontainer.json` already exists, `up` normalizes `name`, `workspaceFolder`, `workspaceMount`, `postCreateCommand`, `onCreateCommand`, and `mounts` in place when the workspace folder drifts from `/workspaces/<slug>` or the git mount is missing.
 - `up` is idempotent: calling it twice is safe, returns exit 0 if already running.
-- `down` stops the container only — never touches branch state. Container respawns on the next `up`.
+- `down` stops and removes the container (`docker rm -f`) — never touches branch state. Container respawns on the next `up`.
 - `run` requires container already up; fails fast with exit 2 if not running.
 - `compose_render` auto-detects `docker-compose.yml` or `Dockerfile` in worktree root; a sidecar-only compose gets a generated `mentat-dev` service layered on (see below).
 - Atomic write for `.devcontainer/devcontainer.json`: writes to `.tmp` then renames.
 - Slug = `basename(git rev-parse --show-toplevel)`.
-- `workspaceFolder` read from `devcontainer.json`, not slug-derived.
+- `workspaceFolder` is normalized to `/workspaces/<slug>` on the write path; read from existing `devcontainer.json` at run/exec time.
 - `doctor` walks rules and prints human-readable status for each.
 - ADR-0004: project tools execute inside the container by default; callers must not bypass `container.py`. `runtime = "host"` (see below) is the only supported opt-out and is config-driven, not a caller decision.
 
@@ -116,5 +116,5 @@ containerize:
 - `runtime = "host"` skips the container entirely; tools run on the host (ADR-0004 forfeit).
 - `MENTAT_DOCKER` env var overrides the `docker` binary path (test isolation only).
 - `MENTAT_PLATFORM` env var overrides host-arch detection for synth.
-- `devcontainer.json` written only when absent; never overwritten if present.
+- `devcontainer.json` synthesized when absent; normalized in place (name, workspaceFolder, mounts, postCreateCommand) when present but drifted from the expected slug-derived layout.
 - Arch mismatch emits a warning via `doctor`; it does not exit non-zero.

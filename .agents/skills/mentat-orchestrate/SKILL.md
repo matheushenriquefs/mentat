@@ -61,11 +61,11 @@ Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the hol
 ## Verdict JSONL shape
 
 ```json
-{"slug": "...", "status": "success|eject", "tip": "...",
+{"slug": "...", "status": "success|eject|stalled", "tip": "...",
  "reason": "...", "conflicted_files": [...], "resume_cmd": "...", "findings": [...]}
 ```
 
-`status ∈ {success, eject}` · `reason ∈ {rebase-conflict, gate-fail, not-ff, implement-fail, hitl-ambiguity}`
+`status ∈ {success, eject, stalled}` · `reason ∈ {implement-failed, gate-failed, rebase-conflicted, not-ff, git-error, hitl-required, preflight-worktree-failed, main-tree-refused, upstream_ejected, worker-died}`
 
 ## Exit codes
 
