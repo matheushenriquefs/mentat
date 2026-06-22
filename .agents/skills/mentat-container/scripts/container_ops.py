@@ -25,11 +25,16 @@ def _docker() -> str:
 
 
 def container_id_for(slug: str) -> str | None:
-    result = subprocess.run(
-        [_docker(), "ps", "-q", "--filter", f"label=mentat_slug={slug}"],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            [_docker(), "ps", "-q", "--filter", f"label=mentat_slug={slug}"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        print("mentat-container: docker ps timed out (daemon unresponsive?)", file=sys.stderr)
+        return None
     if result.returncode != 0:
         return None
     cid = result.stdout.strip().splitlines()

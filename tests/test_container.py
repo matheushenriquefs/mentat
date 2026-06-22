@@ -900,3 +900,68 @@ def test_cmd_up_broken_symlink_at_dst_does_not_raise(tmp_path, monkeypatch):
     # Must not raise FileExistsError — must return an int
     rc = container_mod.cmd_up(wt)
     assert isinstance(rc, int), "cmd_up must return int, not raise on broken symlink"
+
+
+# ── S1: subprocess timeout bounds ─────────────────────────────────────────────
+
+
+def test_container_id_for_timeout_returns_none(monkeypatch):
+    """container_id_for must return None (not hang) when docker ps times out."""
+    ops = load_module("container_ops")
+    import subprocess as _sp
+
+    def fake_run(cmd, **kw):
+        raise _sp.TimeoutExpired(cmd, 30)
+
+    with patch("subprocess.run", fake_run):
+        result = ops.container_id_for("any-slug")
+    assert result is None
+
+
+def test_cmd_up_ps_aq_timeout_returns_failure(tmp_path, monkeypatch, capsys):
+    """cmd_up must return non-zero and not hang when docker ps -aq times out."""
+    container_mod = load_module("container")
+    import subprocess as _sp
+
+    call_n = [0]
+
+    def fake_run(cmd, **kw):
+        call_n[0] += 1
+        # First call is container_id_for (via utils); subsequent ps -aq times out
+        if isinstance(cmd, list) and cmd[1:3] == ["ps", "-aq"]:
+            raise _sp.TimeoutExpired(cmd, 30)
+        r = MagicMock()
+        r.returncode = 0
+        r.stdout = ""
+        return r
+
+    monkeypatch.setattr(container_mod, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container_mod.utils, "container_id_for", lambda slug: None)
+    monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
+
+    rc = container_mod.cmd_up(tmp_path)
+    assert rc != 0
+
+
+def test_cmd_up_devcontainer_up_timeout_returns_failure(tmp_path, monkeypatch, capsys):
+    """cmd_up must return non-zero and emit message when devcontainer up times out."""
+    container_mod = load_module("container")
+    import subprocess as _sp
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and cmd and cmd[0] == "devcontainer":
+            raise _sp.TimeoutExpired(cmd, 900)
+        r = MagicMock()
+        r.returncode = 0
+        r.stdout = ""
+        return r
+
+    monkeypatch.setattr(container_mod, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container_mod.utils, "container_id_for", lambda slug: None)
+    monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(container_mod, "_ensure_devcontainer_json", lambda wt, slug: None)
+
+    rc = container_mod.cmd_up(tmp_path)
+    captured = capsys.readouterr()
+    assert rc != 0
+    assert captured.err, "timeout must emit diagnostic to stderr"

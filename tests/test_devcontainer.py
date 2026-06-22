@@ -255,3 +255,47 @@ def test_devcontainer_stdlib_only():
                 third_party.append(node.module)
 
     assert not third_party, f"non-stdlib imports found: {third_party}"
+
+
+# ── S1/S4: timeouts + MENTAT_DOCKER ──────────────────────────────────────────
+
+
+def test_run_docker_timeout_returns_none(monkeypatch):
+    """_run_docker must return None (not raise) when subprocess times out."""
+    import subprocess as _sp
+
+    def fake_run(*a, **k):
+        raise _sp.TimeoutExpired([], 30)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = devcontainer._run_docker(["docker", "ps", "-q"])
+    assert result is None
+
+
+def test_run_docker_honors_mentat_docker(monkeypatch):
+    """_run_docker must use MENTAT_DOCKER env var instead of hardcoded 'docker'."""
+    captured: list[list[str]] = []
+
+    def fake_run(argv, **kw):
+        captured.append(list(argv))
+        return _cp(0, "")
+
+    monkeypatch.setenv("MENTAT_DOCKER", "my-docker")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    devcontainer._run_docker(["docker", "ps", "-q"])
+    assert captured, "subprocess.run not called"
+    assert captured[0][0] == "my-docker", f"expected 'my-docker', got {captured[0][0]!r}"
+
+
+def test_up_devcontainer_timeout_returns_false(monkeypatch, tmp_path):
+    """up() must return False when devcontainer up times out, not raise."""
+    import subprocess as _sp
+
+    def fake_run(argv, **kw):
+        if isinstance(argv, list) and argv and argv[0] == "devcontainer":
+            raise _sp.TimeoutExpired(argv, 900)
+        return _cp(0, "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = devcontainer.up("my-slug", tmp_path)
+    assert result is False

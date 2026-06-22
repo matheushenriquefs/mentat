@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import os
 import shutil
 import subprocess
 import sys
@@ -169,20 +171,22 @@ def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
 
 
 def _ensure_safe_directory(ws: str, cid: str) -> None:
-    subprocess.run(
-        [
-            _docker(),
-            "exec",
-            cid,
-            "git",
-            "config",
-            "--global",
-            "--add",
-            "safe.directory",
-            ws,
-        ],
-        capture_output=True,
-    )
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        subprocess.run(
+            [
+                _docker(),
+                "exec",
+                cid,
+                "git",
+                "config",
+                "--global",
+                "--add",
+                "safe.directory",
+                ws,
+            ],
+            capture_output=True,
+            timeout=30,
+        )
 
 
 def cmd_up(wt: Path) -> int:
@@ -198,30 +202,39 @@ def cmd_up(wt: Path) -> int:
         return 0
 
     # created/paused/restarting/dead states must not be silently skipped to cold-start.
-    stopped = subprocess.run(
-        [
-            _docker(),
-            "ps",
-            "-aq",
-            "--filter",
-            f"label=mentat_slug={slug}",
-            "--filter",
-            "status=exited",
-            "--filter",
-            "status=created",
-            "--filter",
-            "status=paused",
-            "--filter",
-            "status=restarting",
-            "--filter",
-            "status=dead",
-        ],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        stopped = subprocess.run(
+            [
+                _docker(),
+                "ps",
+                "-aq",
+                "--filter",
+                f"label=mentat_slug={slug}",
+                "--filter",
+                "status=exited",
+                "--filter",
+                "status=created",
+                "--filter",
+                "status=paused",
+                "--filter",
+                "status=restarting",
+                "--filter",
+                "status=dead",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        print("mentat-container: docker ps timed out (daemon unresponsive?)", file=sys.stderr)
+        return EX_UNAVAILABLE
     if stopped.returncode == 0 and stopped.stdout.strip():
         ids = stopped.stdout.strip().split()
-        start_result = subprocess.run([_docker(), "start"] + ids, capture_output=True, text=True)
+        try:
+            start_result = subprocess.run([_docker(), "start"] + ids, capture_output=True, text=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            print("mentat-container: docker start timed out", file=sys.stderr)
+            return EX_UNAVAILABLE
         if start_result.returncode != 0:
             print(
                 f"mentat-container: docker start failed: {start_result.stderr.strip()}",
@@ -229,7 +242,7 @@ def cmd_up(wt: Path) -> int:
             )
             return EX_FAILURE
         cid2 = utils.container_id_for(slug)
-        if cid2 is None:
+        if not cid2:
             print(
                 f"mentat-container: docker start succeeded but no usable container found for slug={slug}",
                 file=sys.stderr,
@@ -254,13 +267,17 @@ def cmd_up(wt: Path) -> int:
         if env_src.exists() and not env_dst.exists():
             shutil.copy2(env_src, env_dst)
 
-    git_dir_result = subprocess.run(
-        ["git", "rev-parse", "--git-dir"],
-        capture_output=True,
-        text=True,
-        cwd=str(wt),
-    )
-    git_dir = git_dir_result.stdout.strip() if git_dir_result.returncode == 0 else ""
+    try:
+        git_dir_result = subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            capture_output=True,
+            text=True,
+            cwd=str(wt),
+            timeout=30,
+        )
+        git_dir = git_dir_result.stdout.strip() if git_dir_result.returncode == 0 else ""
+    except subprocess.TimeoutExpired:
+        git_dir = ""
 
     cmd = [
         "devcontainer",
@@ -274,14 +291,21 @@ def cmd_up(wt: Path) -> int:
         cmd += ["--remote-env", f"GIT_DIR={git_dir}"]
         cmd += ["--remote-env", f"GIT_WORK_TREE={ws}"]
 
+    _up_timeout = int(os.environ.get("MENTAT_UP_TIMEOUT", "900"))
     try:
-        result = subprocess.run(cmd, capture_output=False)
+        result = subprocess.run(cmd, capture_output=False, timeout=_up_timeout)
     except FileNotFoundError:
         print(
             "mentat-container: devcontainer CLI not on PATH — install via: npm install -g @devcontainers/cli",
             file=sys.stderr,
         )
         return EX_FAILURE
+    except subprocess.TimeoutExpired:
+        print(
+            f"mentat-container: devcontainer up timed out after {_up_timeout}s",
+            file=sys.stderr,
+        )
+        return EX_UNAVAILABLE
     if result.returncode != 0:
         return EX_FAILURE
 
@@ -346,8 +370,8 @@ def _doctor_section_container(wt: Path, host_arch: str) -> tuple[list[str], list
     slug = wt.name
     print("[container]")
     try:
-        daemon_ok = subprocess.run([_docker(), "info"], capture_output=True).returncode == 0
-    except FileNotFoundError:
+        daemon_ok = subprocess.run([_docker(), "info"], capture_output=True, timeout=30).returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         daemon_ok = False
     if not daemon_ok:
         print(_col("daemon", "not running"))
@@ -356,12 +380,16 @@ def _doctor_section_container(wt: Path, host_arch: str) -> tuple[list[str], list
         print(_col("daemon", "running"))
         cid = utils.container_id_for(slug)
         if cid:
-            inspect = subprocess.run(
-                [_docker(), "inspect", "--format", "{{.Platform}}", cid],
-                capture_output=True,
-                text=True,
-            )
-            img_platform = inspect.stdout.strip() if inspect.returncode == 0 else "unknown"
+            try:
+                inspect = subprocess.run(
+                    [_docker(), "inspect", "--format", "{{.Platform}}", cid],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                img_platform = inspect.stdout.strip() if inspect.returncode == 0 else "unknown"
+            except subprocess.TimeoutExpired:
+                img_platform = "unknown"
             print(_col("image platf", img_platform))
             if (host_arch == "arm64" and "amd64" in img_platform) or (
                 host_arch in ("x86_64", "amd64") and "arm64" in img_platform
@@ -470,8 +498,8 @@ def cmd_doctor(wt: Path) -> int:
     import platform as _platform
 
     try:
-        host_arch = subprocess.run(["uname", "-m"], capture_output=True, text=True).stdout.strip()
-    except FileNotFoundError:
+        host_arch = subprocess.run(["uname", "-m"], capture_output=True, text=True, timeout=30).stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         host_arch = "unknown"
     host_os = f"{_platform.system().lower()} {_platform.release()}"
 

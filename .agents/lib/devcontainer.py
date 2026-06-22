@@ -19,11 +19,19 @@ class PruneResult:
     containers_removed: int
 
 
-def _run_docker(argv: list[str]) -> subprocess.CompletedProcess[str] | None:
+def _docker_bin() -> str:
+    return os.environ.get("MENTAT_DOCKER", "docker")
+
+
+def _run_docker(argv: list[str], *, timeout: int = 30) -> subprocess.CompletedProcess[str] | None:
+    cmd = [_docker_bin()] + argv[1:]
     try:
-        return subprocess.run(argv, capture_output=True, text=True)
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError:
         print("devcontainer: docker not on PATH", file=sys.stderr)
+        return None
+    except subprocess.TimeoutExpired:
+        print(f"devcontainer: docker command timed out after {timeout}s", file=sys.stderr)
         return None
 
 
@@ -118,13 +126,17 @@ def up(slug: str, wt: Path) -> bool:
         _run_docker(["docker", "start", r.stdout.strip()])
         return container_id_for_slug(slug) is not None
     # Cold start via devcontainer CLI
-    git_dir_r = subprocess.run(
-        ["git", "rev-parse", "--git-dir"],
-        capture_output=True,
-        text=True,
-        cwd=str(wt),
-    )
-    git_dir = git_dir_r.stdout.strip() if git_dir_r.returncode == 0 else ""
+    try:
+        git_dir_r = subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            capture_output=True,
+            text=True,
+            cwd=str(wt),
+            timeout=30,
+        )
+        git_dir = git_dir_r.stdout.strip() if git_dir_r.returncode == 0 else ""
+    except subprocess.TimeoutExpired:
+        git_dir = ""
     ws = f"/workspaces/{slug}"
     cmd = [
         "devcontainer",
@@ -136,10 +148,14 @@ def up(slug: str, wt: Path) -> bool:
     ]
     if git_dir:
         cmd += ["--remote-env", f"GIT_DIR={git_dir}", "--remote-env", f"GIT_WORK_TREE={ws}"]
+    up_timeout = int(os.environ.get("MENTAT_UP_TIMEOUT", "900"))
     try:
-        result = subprocess.run(cmd, capture_output=False)
+        result = subprocess.run(cmd, capture_output=False, timeout=up_timeout)
     except FileNotFoundError:
         print("devcontainer: devcontainer CLI not on PATH", file=sys.stderr)
+        return False
+    except subprocess.TimeoutExpired:
+        print(f"devcontainer: devcontainer up timed out after {up_timeout}s", file=sys.stderr)
         return False
     return result.returncode == 0 or container_id_for_slug(slug) is not None
 
@@ -167,7 +183,7 @@ def exec(  # noqa: A001
     cid = container_id_for_slug(slug)
     if cid is None:
         return None
-    docker = os.environ.get("MENTAT_DOCKER", "docker")
+    docker = _docker_bin()
     cmd = [docker, "exec"]
     if workdir:
         cmd += ["--workdir", workdir]
