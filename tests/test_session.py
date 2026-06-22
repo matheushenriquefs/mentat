@@ -309,3 +309,153 @@ def test_diagnose_feeds_doctor_output_into_loop(tmp_path):
             diag_mod.run_diagnose(session_dir)
 
     assert loop_inputs
+
+
+# ── session.py dispatcher branches ───────────────────────────────────────────
+
+
+def _make_session_env(tmp_path: Path, monkeypatch) -> tuple:
+    """Return (session_mod, log_root) with env vars pointing to tmp dirs."""
+    session_mod = load_module("session")
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
+    monkeypatch.setenv("MENTAT_REPO", "testrepo")
+    return session_mod, log_root
+
+
+def test_cmd_track_no_session_id_calls_navigate(tmp_path, monkeypatch):
+    session_mod, log_root = _make_session_env(tmp_path, monkeypatch)
+    (log_root / "testrepo").mkdir()
+    navigate_calls: list = []
+    with patch.object(session_mod._track, "navigate", side_effect=lambda *a, **kw: navigate_calls.append(kw) or 0):
+        rc = session_mod.cmd_track(None)
+    assert rc == 0
+    assert navigate_calls
+
+
+def test_cmd_track_session_not_found_returns_1(tmp_path, monkeypatch):
+    session_mod, _ = _make_session_env(tmp_path, monkeypatch)
+    rc = session_mod.cmd_track("nonexistent-session-xyz")
+    assert rc == 1
+
+
+def test_cmd_track_session_found_calls_view_session(tmp_path, monkeypatch):
+    session_mod, log_root = _make_session_env(tmp_path, monkeypatch)
+    session_dir = log_root / "testrepo" / "sess-abc"
+    session_dir.mkdir(parents=True)
+    view_calls: list = []
+    with patch.object(session_mod._track, "view_session", side_effect=lambda sd: view_calls.append(sd)):
+        rc = session_mod.cmd_track("sess-abc")
+    assert rc == 0
+    assert view_calls
+
+
+def test_resolve_session_no_sessions_returns_1(tmp_path, monkeypatch):
+    session_mod, log_root = _make_session_env(tmp_path, monkeypatch)
+    (log_root / "testrepo").mkdir()
+    result = session_mod._resolve_session(None)
+    assert result == 1
+
+
+def test_resolve_session_dir_not_found_returns_1(tmp_path, monkeypatch):
+    session_mod, log_root = _make_session_env(tmp_path, monkeypatch)
+    (log_root / "testrepo").mkdir()
+    result = session_mod._resolve_session("does-not-exist-xyz")
+    assert result == 1
+
+
+def test_cmd_doctor_invalid_session_returns_1(tmp_path, monkeypatch):
+    session_mod, _ = _make_session_env(tmp_path, monkeypatch)
+    rc = session_mod.cmd_doctor("no-such-session")
+    assert rc == 1
+
+
+def test_cmd_doctor_valid_session_writes_diagnosis(tmp_path, monkeypatch):
+    session_mod, log_root = _make_session_env(tmp_path, monkeypatch)
+    session_dir = log_root / "testrepo" / "sess-doc"
+    session_dir.mkdir(parents=True)
+    fake_diag = session_dir / "diagnosis.md"
+    fake_diag.write_text("## Verdict\n- landed\n")
+    buf = io.StringIO()
+    with patch.object(session_mod._doctor, "write_diagnosis", return_value=fake_diag):
+        with redirect_stdout(buf):
+            rc = session_mod.cmd_doctor("sess-doc")
+    assert rc == 0
+    assert "Verdict" in buf.getvalue()
+
+
+def test_cmd_report_invalid_session_returns_1(tmp_path, monkeypatch):
+    session_mod, _ = _make_session_env(tmp_path, monkeypatch)
+    rc = session_mod.cmd_report("no-such-session")
+    assert rc == 1
+
+
+def test_cmd_diagnose_invalid_session_returns_1(tmp_path, monkeypatch):
+    session_mod, _ = _make_session_env(tmp_path, monkeypatch)
+    rc = session_mod.cmd_diagnose("no-such-session")
+    assert rc == 1
+
+
+def test_cmd_diagnose_valid_session_calls_run_diagnose(tmp_path, monkeypatch):
+    session_mod, log_root = _make_session_env(tmp_path, monkeypatch)
+    session_dir = log_root / "testrepo" / "sess-diag"
+    session_dir.mkdir(parents=True)
+    calls: list = []
+    with patch.object(session_mod._diagnose, "run_diagnose", side_effect=lambda sd: calls.append(sd)):
+        rc = session_mod.cmd_diagnose("sess-diag")
+    assert rc == 0
+    assert calls
+
+
+# ── _humanize_age branches ────────────────────────────────────────────────────
+
+
+def test_humanize_age_seconds():
+    session_mod = load_module("session")
+    assert session_mod._humanize_age(45) == "45s ago"
+
+
+def test_humanize_age_minutes():
+    session_mod = load_module("session")
+    assert session_mod._humanize_age(120) == "2m ago"
+
+
+def test_humanize_age_hours():
+    session_mod = load_module("session")
+    assert session_mod._humanize_age(7200) == "2h ago"
+
+
+def test_humanize_age_days():
+    session_mod = load_module("session")
+    assert session_mod._humanize_age(172800) == "2d ago"
+
+
+# ── main() dispatch ───────────────────────────────────────────────────────────
+
+
+def test_main_dispatches_list(tmp_path, monkeypatch):
+    session_mod = load_module("session")
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "testrepo")
+    (tmp_path / "logs" / "testrepo").mkdir(parents=True)
+    monkeypatch.setattr("sys.argv", ["session.py", "list"])
+    import pytest as _pytest
+
+    with _pytest.raises(SystemExit) as exc:
+        session_mod.main()
+    assert exc.value.code == 0
+
+
+def test_main_dispatches_track_no_session(tmp_path, monkeypatch):
+    session_mod = load_module("session")
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "testrepo")
+    (tmp_path / "logs" / "testrepo").mkdir(parents=True)
+    monkeypatch.setattr("sys.argv", ["session.py", "track"])
+    import pytest as _pytest
+
+    with patch.object(session_mod._track, "navigate", return_value=0):
+        with _pytest.raises(SystemExit) as exc:
+            session_mod.main()
+    assert exc.value.code == 0

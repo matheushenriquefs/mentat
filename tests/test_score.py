@@ -162,3 +162,126 @@ def test_aggregate_clean_pass_has_nonempty_reason():
     out = score.aggregate(results)
     assert out.verdict == "pass"
     assert out.reason  # "clean" marker, not ""
+
+
+# ── score_plan ────────────────────────────────────────────────────────────────
+
+
+def test_score_plan_passes_on_high_score():
+    score = _score_mod()
+    result = score.score_plan({"score": 0.95})
+    assert result.verdict == "pass"
+
+
+def test_score_plan_blocks_on_low_score():
+    score = _score_mod()
+    result = score.score_plan({"score": 0.5})
+    assert result.verdict == "block"
+    assert "0.50" in result.reason
+
+
+def test_score_plan_veto_must_not_exist_no_detail():
+    score = _score_mod()
+    result = score.score_plan({"veto": "must_not_exist"})
+    assert result.verdict == "block"
+    assert result.score == 0.0
+
+
+def test_score_plan_veto_must_not_exist_with_detail():
+    score = _score_mod()
+    result = score.score_plan({"veto": "must_not_exist", "veto_detail": "file X must not exist"})
+    assert result.verdict == "block"
+    assert "file X" in result.reason
+
+
+# ── score_bug ─────────────────────────────────────────────────────────────────
+
+
+def test_score_bug_passes_all_clear():
+    score = _score_mod()
+    result = score.score_bug({})
+    assert result.verdict == "pass"
+
+
+def test_score_bug_blocks_on_dirty_blacklist():
+    score = _score_mod()
+    result = score.score_bug({"blacklist": "reward-hacking"})
+    assert result.verdict == "block"
+    assert "blacklist" in result.reason
+
+
+def test_score_bug_blocks_on_max_sev_high():
+    score = _score_mod()
+    result = score.score_bug({"max_sev": "high"})
+    assert result.verdict == "block"
+    assert "high" in result.reason
+
+
+def test_score_bug_blocks_on_hallucination_severe():
+    score = _score_mod()
+    result = score.score_bug({"hallucination": "severe"})
+    assert result.verdict == "block"
+    assert "hallucination" in result.reason
+
+
+def test_score_bug_blacklist_clean_passes():
+    score = _score_mod()
+    result = score.score_bug({"blacklist": "clean"})
+    assert result.verdict == "pass"
+
+
+# ── score_smell ───────────────────────────────────────────────────────────────
+
+
+def test_score_smell_advisory_above_threshold():
+    score = _score_mod()
+    result = score.score_smell({"score": 0.95})
+    assert result.verdict == "advise"
+    assert result.reason == ""
+
+
+def test_score_smell_advisory_below_threshold():
+    score = _score_mod()
+    result = score.score_smell({"score": 0.5})
+    assert result.verdict == "advise"
+    assert "0.50" in result.reason
+
+
+# ── score_from_file routing ───────────────────────────────────────────────────
+
+
+def test_score_from_file_routes_plan_reviewer(tmp_path: Path):
+    score = _score_mod()
+    p = tmp_path / "plan.json"
+    p.write_text(json.dumps({"reviewer": "mentat-plan-reviewer", "score": 0.95}))
+    assert score.score_from_file(p).verdict == "pass"
+
+
+def test_score_from_file_routes_test_reviewer(tmp_path: Path):
+    score = _score_mod()
+    p = tmp_path / "test.json"
+    p.write_text(json.dumps({"reviewer": "mentat-test-reviewer", "veto": "clean", "asserts_plan": 0.95}))
+    assert score.score_from_file(p).verdict == "pass"
+
+
+def test_score_from_file_routes_bug_reviewer(tmp_path: Path):
+    score = _score_mod()
+    p = tmp_path / "bug.json"
+    p.write_text(json.dumps({"reviewer": "mentat-bug-reviewer"}))
+    assert score.score_from_file(p).verdict == "pass"
+
+
+def test_score_from_file_routes_smell_reviewer(tmp_path: Path):
+    score = _score_mod()
+    p = tmp_path / "smell.json"
+    p.write_text(json.dumps({"reviewer": "mentat-smell-reviewer", "score": 0.95}))
+    assert score.score_from_file(p).verdict == "advise"
+
+
+def test_score_from_file_routes_unknown_reviewer(tmp_path: Path):
+    score = _score_mod()
+    p = tmp_path / "unknown-reviewer.json"
+    p.write_text(json.dumps({"reviewer": "mentat-unknown-reviewer"}))
+    result = score.score_from_file(p)
+    assert result.verdict == "pass"
+    assert "unknown" in result.reason

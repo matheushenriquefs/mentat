@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -55,3 +56,56 @@ def test_git_no_diff_sibling_load():
     # load_sibling(__file__, "diff") must be gone
     assert 'load_sibling(__file__, "diff")' not in src
     assert "load_sibling(__file__, 'diff')" not in src
+
+
+# ── main() dispatch ───────────────────────────────────────────────────────────
+
+
+def test_main_dispatches_commit(monkeypatch):
+    git = load_script(SCRIPTS / "git.py", "mentat_git_main_commit")
+    monkeypatch.setattr("sys.argv", ["git.py", "commit"])
+    with patch.object(git, "cmd_commit", return_value=0) as mock:
+        with pytest.raises(SystemExit) as exc:
+            git.main()
+    assert exc.value.code == 0
+    mock.assert_called_once_with([])
+
+
+def test_main_dispatches_rebase(monkeypatch):
+    git = load_script(SCRIPTS / "git.py", "mentat_git_main_rebase")
+    monkeypatch.setattr("sys.argv", ["git.py", "rebase", "main"])
+    with patch.object(git, "cmd_rebase", return_value=0) as mock:
+        with pytest.raises(SystemExit) as exc:
+            git.main()
+    assert exc.value.code == 0
+    mock.assert_called_once_with("main")
+
+
+def test_main_dispatches_worktree_create(monkeypatch):
+    git = load_script(SCRIPTS / "git.py", "mentat_git_main_wt_create")
+    monkeypatch.setattr("sys.argv", ["git.py", "worktree", "create", "my-slug"])
+    with patch.object(git, "cmd_worktree_create", return_value=0) as mock:
+        with pytest.raises(SystemExit) as exc:
+            git.main()
+    assert exc.value.code == 0
+    mock.assert_called_once_with("my-slug", base=None, parent=None)
+
+
+def test_main_dispatches_worktree_sweep(monkeypatch):
+    git = load_script(SCRIPTS / "git.py", "mentat_git_main_wt_sweep")
+    monkeypatch.setattr("sys.argv", ["git.py", "worktree", "sweep"])
+    with patch.object(git, "cmd_worktree_sweep", return_value=0) as mock:
+        with pytest.raises(SystemExit) as exc:
+            git.main()
+    assert exc.value.code == 0
+    mock.assert_called_once_with(dry_run=True)
+
+
+def test_main_dispatches_worktree_sweep_force(monkeypatch):
+    git = load_script(SCRIPTS / "git.py", "mentat_git_main_wt_sweep_force")
+    monkeypatch.setattr("sys.argv", ["git.py", "worktree", "sweep", "--force"])
+    with patch.object(git, "cmd_worktree_sweep", return_value=0) as mock:
+        with pytest.raises(SystemExit) as exc:
+            git.main()
+    assert exc.value.code == 0
+    mock.assert_called_once_with(dry_run=False)

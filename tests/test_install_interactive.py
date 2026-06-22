@@ -102,3 +102,41 @@ def test_install_one_yes_to_first_prompt_skips_subprocess() -> None:
     with patch.object(companions.subprocess, "run") as mock_run:
         companions.install_one(fake_companion, tty=tty)
     assert mock_run.call_count == 0
+
+
+def test_install_one_declines_run_command_skips_subprocess() -> None:
+    """User says no to 'already installed?' then declines to run → skipped."""
+    companions = _load("companions")
+    fake_companion = {
+        "name": "test-companion",
+        "docs": "https://example.com",
+        "install_cmd": ["echo", "hello"],
+    }
+    # "n" = not installed, "" = accept default cmd, "n" = decline run
+    tty = _FakeTTY(["n", "", "n"])
+    with patch.object(companions.subprocess, "run") as mock_run:
+        companions.install_one(fake_companion, tty=tty)
+    assert mock_run.call_count == 0
+
+
+def test_install_one_subprocess_fails_prints_warning() -> None:
+    """subprocess.run returns non-zero → print failure message, not crash."""
+    companions = _load("companions")
+    fake_companion = {
+        "name": "test-companion",
+        "docs": "https://example.com",
+        "install_cmd": ["false"],
+    }
+    tty = _FakeTTY(["n", "", "y"])
+    with patch.object(companions.subprocess, "run") as mock_run:
+        mock_run.return_value.returncode = 1
+        companions.install_one(fake_companion, tty=tty)
+    assert mock_run.call_count == 1
+
+
+def test_print_banner_outputs_to_stdout(capsys: pytest.CaptureFixture[str]) -> None:
+    companions = _load("companions")
+    with patch.object(companions.sys.stdout, "isatty", return_value=False):
+        companions._print_banner()
+    out = capsys.readouterr().out
+    assert "mentat" in out.lower()

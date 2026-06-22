@@ -91,3 +91,130 @@ def test_unknown_shell_skips_with_manual_instructions(tmp_path, monkeypatch) -> 
     assert printed, "expected print_step to be called"
     all_text = " ".join(str(s) for step in printed for s in step)
     assert "manually" in all_text, "expected manual-add instructions in output"
+
+
+def test_setup_path_already_in_path_skips(tmp_path, monkeypatch) -> None:
+    """PATH already contains ~/.mentat/bin → print skip immediately."""
+    path_setup = _load("path_setup")
+    mentat_bin = tmp_path / ".mentat" / "bin"
+    mentat_bin.mkdir(parents=True)
+    monkeypatch.setenv("PATH", str(mentat_bin) + ":/usr/bin")
+
+    printed: list[tuple] = []
+    with (
+        patch.object(path_setup, "_MENTAT_BIN", mentat_bin),
+        patch.object(path_setup, "print_step", side_effect=lambda *a, **kw: printed.append(a)),
+    ):
+        path_setup.setup_path(yes=False)
+
+    assert printed
+    all_text = " ".join(str(s) for step in printed for s in step)
+    assert "already" in all_text
+
+
+def test_setup_path_rc_already_has_mentat_skips(tmp_path, monkeypatch) -> None:
+    """rc file already contains .mentat/bin → skip without writing."""
+    path_setup = _load("path_setup")
+    mentat_bin = tmp_path / ".mentat" / "bin"
+    zshrc = tmp_path / ".zshrc"
+    zshrc.write_text('export PATH="$HOME/.mentat/bin:$PATH"\n')
+    patched_rc = {"zsh": zshrc, "bash": tmp_path / ".bashrc", "fish": tmp_path / ".config/fish/config.fish"}
+
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    printed: list[tuple] = []
+    with (
+        patch.object(path_setup, "_MENTAT_BIN", mentat_bin),
+        patch.object(path_setup, "_SHELL_RC", patched_rc),
+        patch.object(path_setup, "print_step", side_effect=lambda *a, **kw: printed.append(a)),
+    ):
+        path_setup.setup_path(yes=False)
+
+    assert printed
+    all_text = " ".join(str(s) for step in printed for s in step)
+    assert "already" in all_text
+    assert not (tmp_path / ".bashrc").exists()
+
+
+def test_setup_path_yes_prints_manual_when_not_in_rc(tmp_path, monkeypatch) -> None:
+    """yes=True + not yet in rc → print manual instructions, do not write rc."""
+    path_setup = _load("path_setup")
+    mentat_bin = tmp_path / ".mentat" / "bin"
+    zshrc = tmp_path / ".zshrc"
+    patched_rc = {"zsh": zshrc, "bash": tmp_path / ".bashrc", "fish": tmp_path / ".config/fish/config.fish"}
+
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    printed: list[tuple] = []
+    with (
+        patch.object(path_setup, "_MENTAT_BIN", mentat_bin),
+        patch.object(path_setup, "_SHELL_RC", patched_rc),
+        patch.object(path_setup, "print_step", side_effect=lambda *a, **kw: printed.append(a)),
+    ):
+        path_setup.setup_path(yes=True)
+
+    assert not zshrc.exists(), "rc must not be written when --yes"
+    assert printed
+
+
+def test_setup_path_tty_none_prints_manual(tmp_path, monkeypatch) -> None:
+    """open_tty yields None → print manual instructions, do not write rc."""
+    import contextlib
+
+    path_setup = _load("path_setup")
+    mentat_bin = tmp_path / ".mentat" / "bin"
+    zshrc = tmp_path / ".zshrc"
+    patched_rc = {"zsh": zshrc, "bash": tmp_path / ".bashrc", "fish": tmp_path / ".config/fish/config.fish"}
+
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    @contextlib.contextmanager
+    def _no_tty():
+        yield None
+
+    printed: list[tuple] = []
+    with (
+        patch.object(path_setup, "_MENTAT_BIN", mentat_bin),
+        patch.object(path_setup, "_SHELL_RC", patched_rc),
+        patch.object(path_setup, "open_tty", _no_tty),
+        patch.object(path_setup, "print_step", side_effect=lambda *a, **kw: printed.append(a)),
+    ):
+        path_setup.setup_path(yes=False)
+
+    assert not zshrc.exists()
+    assert printed
+
+
+def test_setup_path_user_declines_skips(tmp_path, monkeypatch) -> None:
+    """prompt_yn returns False → PATH not updated."""
+    import contextlib
+
+    path_setup = _load("path_setup")
+    mentat_bin = tmp_path / ".mentat" / "bin"
+    zshrc = tmp_path / ".zshrc"
+    patched_rc = {"zsh": zshrc, "bash": tmp_path / ".bashrc", "fish": tmp_path / ".config/fish/config.fish"}
+
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    @contextlib.contextmanager
+    def _fake_tty():
+        yield object()
+
+    printed: list[tuple] = []
+    with (
+        patch.object(path_setup, "_MENTAT_BIN", mentat_bin),
+        patch.object(path_setup, "_SHELL_RC", patched_rc),
+        patch.object(path_setup, "open_tty", _fake_tty),
+        patch.object(path_setup, "prompt_yn", return_value=False),
+        patch.object(path_setup, "print_step", side_effect=lambda *a, **kw: printed.append(a)),
+    ):
+        path_setup.setup_path(yes=False)
+
+    assert not zshrc.exists()
+    assert printed
+    all_text = " ".join(str(s) for step in printed for s in step)
+    assert "manually" in all_text or "skip" in all_text.lower() or "not updated" in all_text
