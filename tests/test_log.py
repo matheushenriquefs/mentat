@@ -353,6 +353,168 @@ def test_emit_chunk_ejected_catalog_reason_accepted(tmp_path, monkeypatch):
     assert rc == 0, "catalog reason must be accepted"
 
 
+# ── _validate_row (module-level) ────────────────────────────────────────────
+
+
+def test_validate_row_missing_top_level_field_reported():
+    errs = log_mod._validate_row({"ts": "t", "agent": "a"})
+    assert any("missing field" in e for e in errs)
+
+
+def test_validate_row_unknown_event_reported():
+    row = {"ts": "t", "agent": "a", "session": "s", "event": "not.real", "payload": {}}
+    errs = log_mod._validate_row(row)
+    assert any("unknown event" in e for e in errs)
+
+
+def test_validate_row_payload_not_dict_reported():
+    row = {"ts": "t", "agent": "a", "session": "s", "event": "plan.started", "payload": [1, 2]}
+    errs = log_mod._validate_row(row)
+    assert any("payload must be object" in e for e in errs)
+
+
+def test_validate_row_missing_required_payload_field_reported():
+    row = {"ts": "t", "agent": "a", "session": "s", "event": "plan.started", "payload": {}}
+    errs = log_mod._validate_row(row)
+    assert any("missing required payload field" in e and "'path'" in e for e in errs)
+
+
+def test_validate_row_valid_row_no_errors():
+    row = {"ts": "t", "agent": "a", "session": "s", "event": "plan.started", "payload": {"path": "/x.md"}}
+    assert log_mod._validate_row(row) == []
+
+
+# ── cmd_emit missing branches (module-level) ─────────────────────────────────
+
+
+def test_emit_unknown_event_returns_rc1(tmp_path, monkeypatch):
+    import json as _json
+
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "r")
+    monkeypatch.setenv("MENTAT_SESSION", "s-ue")
+    args = _make_emit_args("a", "not.a.real.event", _json.dumps({}))
+    assert log_mod.cmd_emit(args) == 1
+
+
+def test_emit_invalid_json_payload_returns_rc1(tmp_path, monkeypatch):
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "r")
+    monkeypatch.setenv("MENTAT_SESSION", "s-ij")
+    args = _make_emit_args("a", "plan.started", "not-valid-json{{{")
+    assert log_mod.cmd_emit(args) == 1
+
+
+def test_emit_payload_not_dict_returns_rc1(tmp_path, monkeypatch):
+    import json as _json
+
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "r")
+    monkeypatch.setenv("MENTAT_SESSION", "s-nd")
+    args = _make_emit_args("a", "plan.started", _json.dumps([1, 2, 3]))
+    assert log_mod.cmd_emit(args) == 1
+
+
+# ── cmd_validate (module-level) ──────────────────────────────────────────────
+
+
+def _make_validate_args(file: str) -> _argparse.Namespace:
+    ns = _argparse.Namespace()
+    ns.file = file
+    return ns
+
+
+def test_validate_file_not_found_returns_rc1(tmp_path):
+    args = _make_validate_args(str(tmp_path / "nonexistent.jsonl"))
+    assert log_mod.cmd_validate(args) == 1
+
+
+def test_validate_invalid_json_line_returns_rc1(tmp_path):
+    f = tmp_path / "bad.jsonl"
+    f.write_text("not-json\n")
+    assert log_mod.cmd_validate(_make_validate_args(str(f))) == 1
+
+
+def test_validate_empty_lines_skipped_returns_0(tmp_path):
+    import json as _json
+
+    f = tmp_path / "ok.jsonl"
+    row = {"ts": "t", "agent": "a", "session": "s", "event": "plan.started", "payload": {"path": "/x.md"}}
+    f.write_text("\n" + _json.dumps(row) + "\n\n")
+    assert log_mod.cmd_validate(_make_validate_args(str(f))) == 0
+
+
+def test_validate_valid_file_returns_0(tmp_path):
+    import json as _json
+
+    f = tmp_path / "valid.jsonl"
+    row = {"ts": "t", "agent": "a", "session": "s", "event": "plan.started", "payload": {"path": "/x.md"}}
+    f.write_text(_json.dumps(row) + "\n")
+    assert log_mod.cmd_validate(_make_validate_args(str(f))) == 0
+
+
+# ── cmd_query (module-level) ─────────────────────────────────────────────────
+
+
+def _make_query_args(session: str, event: str | None = None, agent: str | None = None) -> _argparse.Namespace:
+    ns = _argparse.Namespace()
+    ns.session = session
+    ns.event = event
+    ns.agent = agent
+    return ns
+
+
+def test_query_session_dir_not_found_returns_rc1(tmp_path, monkeypatch):
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "r")
+    assert log_mod.cmd_query(_make_query_args("nonexistent-session")) == 1
+
+
+def test_query_no_filter_returns_all_events(tmp_path, monkeypatch):
+    import json as _json
+
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "r")
+    monkeypatch.setenv("MENTAT_SESSION", "s-qall")
+    monkeypatch.setenv("MENTAT_SLUG", "ag")
+    for event, payload in [("plan.started", {"path": "/a.md"}), ("plan.succeeded", {"path": "/a.md"})]:
+        args = _make_emit_args("ag", event, _json.dumps(payload))
+        log_mod.cmd_emit(args)
+
+    import contextlib
+    import io
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = log_mod.cmd_query(_make_query_args("s-qall"))
+    assert rc == 0
+    lines = [ln for ln in buf.getvalue().splitlines() if ln.strip()]
+    events = {_json.loads(ln)["event"] for ln in lines}
+    assert "plan.started" in events
+    assert "plan.succeeded" in events
+
+
+# ── cmd_prune (module-level) ─────────────────────────────────────────────────
+
+
+def _make_prune_args(before: str) -> _argparse.Namespace:
+    ns = _argparse.Namespace()
+    ns.before = before
+    return ns
+
+
+def test_prune_invalid_date_returns_rc1(tmp_path, monkeypatch):
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "r")
+    assert log_mod.cmd_prune(_make_prune_args("not-a-date")) == 1
+
+
+def test_prune_missing_repo_dir_returns_0(tmp_path, monkeypatch):
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "no-such-repo")
+    assert log_mod.cmd_prune(_make_prune_args("2020-01-01")) == 0
+
+
 def test_emit_missing_required_key_rejected(tmp_path, monkeypatch):
     import json as _json
 

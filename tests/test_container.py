@@ -55,6 +55,121 @@ def test_resolve_workspace_folder_falls_back_when_missing(tmp_path):
     assert result == f"/workspaces/{tmp_path.name}"
 
 
+def test_resolve_workspace_folder_git_file_worktree_uses_name(tmp_path):
+    ops = load_module("container_ops")
+    (tmp_path / ".git").write_text("gitdir: ../main/.git/worktrees/wt")
+    result = ops.resolve_workspace_folder(tmp_path)
+    assert result == f"/workspaces/{tmp_path.name}"
+
+
+def test_resolve_workspace_folder_invalid_json_falls_back(tmp_path):
+    ops = load_module("container_ops")
+    dcj_dir = tmp_path / ".devcontainer"
+    dcj_dir.mkdir()
+    (dcj_dir / "devcontainer.json").write_text("not-json{{{")
+    result = ops.resolve_workspace_folder(tmp_path)
+    assert result == f"/workspaces/{tmp_path.name}"
+
+
+def test_resolve_workspace_folder_missing_key_falls_back(tmp_path):
+    ops = load_module("container_ops")
+    dcj_dir = tmp_path / ".devcontainer"
+    dcj_dir.mkdir()
+    (dcj_dir / "devcontainer.json").write_text(json.dumps({"name": "test"}))
+    result = ops.resolve_workspace_folder(tmp_path)
+    assert result == f"/workspaces/{tmp_path.name}"
+
+
+def test_slug_for_cwd_git_fails_returns_cwd_name(tmp_path, monkeypatch):
+    ops = load_module("container_ops")
+    monkeypatch.chdir(tmp_path)
+
+    def fake_run(cmd, **kw):
+        class R:
+            returncode = 1
+            stdout = ""
+
+        return R()
+
+    with patch("subprocess.run", fake_run):
+        slug = ops.slug_for_cwd()
+    assert slug == tmp_path.name
+
+
+def test_container_id_for_docker_fails_returns_none():
+    ops = load_module("container_ops")
+
+    def fake_run(cmd, **kw):
+        class R:
+            returncode = 1
+            stdout = ""
+
+        return R()
+
+    with patch("subprocess.run", fake_run):
+        assert ops.container_id_for("my-slug") is None
+
+
+def test_container_id_for_empty_output_returns_none():
+    ops = load_module("container_ops")
+
+    def fake_run(cmd, **kw):
+        class R:
+            returncode = 0
+            stdout = ""
+
+        return R()
+
+    with patch("subprocess.run", fake_run):
+        assert ops.container_id_for("my-slug") is None
+
+
+def test_container_id_for_returns_first_cid():
+    ops = load_module("container_ops")
+
+    def fake_run(cmd, **kw):
+        class R:
+            returncode = 0
+            stdout = "abc123\ndef456\n"
+
+        return R()
+
+    with patch("subprocess.run", fake_run):
+        assert ops.container_id_for("my-slug") == "abc123"
+
+
+def test_assert_safe_directory_git_fails_raises_systemexit():
+    ops = load_module("container_ops")
+
+    def fake_run(cmd, **kw):
+        class R:
+            returncode = 1
+            stdout = ""
+
+        return R()
+
+    with patch("subprocess.run", fake_run):
+        import pytest as _pytest
+
+        with _pytest.raises(SystemExit) as exc_info:
+            ops.assert_safe_directory()
+        assert exc_info.value.code == 2
+
+
+def test_assert_safe_directory_git_succeeds_no_exit():
+    ops = load_module("container_ops")
+
+    def fake_run(cmd, **kw):
+        class R:
+            returncode = 0
+            stdout = ".git"
+
+        return R()
+
+    with patch("subprocess.run", fake_run):
+        ops.assert_safe_directory()  # must not raise
+
+
 # ── compose_render ────────────────────────────────────────────────────────────
 
 

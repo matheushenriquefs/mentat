@@ -118,6 +118,88 @@ def test_suggest_tasks_references_slug():
     assert "my-slug" in msg
 
 
+def test_write_plan_default_plans_dir_when_none(tmp_path):
+    """write_plan with plans_dir=None uses ~/.agents/plans — covers the None branch."""
+    plan_mod = load_module("plan")
+    body_file = tmp_path / "body.md"
+    body_file.write_text("# Plan\n")
+
+    calls: list[str] = []
+    original_emit = plan_mod._emit
+    plan_mod._emit = lambda event, payload: calls.append(event)
+    try:
+        with patch("pathlib.Path.home", return_value=tmp_path):
+            dest = plan_mod.write_plan("default-slug", body_file, plans_dir=None)
+        assert dest == tmp_path / ".agents" / "plans" / "default-slug.md"
+        assert "plan.succeeded" in calls
+    finally:
+        plan_mod._emit = original_emit
+
+
+def test_write_plan_oserror_emits_failed_and_reraises(tmp_path):
+    plan_mod = load_module("plan")
+    plans_dir = tmp_path / "plans"
+    plans_dir.mkdir()
+    nonexistent_body = tmp_path / "does_not_exist.md"
+    failed_events: list[str] = []
+
+    original_emit = plan_mod._emit
+
+    def fake_emit(event: str, payload: dict) -> None:
+        failed_events.append(event)
+
+    plan_mod._emit = fake_emit
+    try:
+        import pytest as _pytest
+
+        with _pytest.raises(OSError):
+            plan_mod.write_plan("err-slug", nonexistent_body, plans_dir=plans_dir)
+        assert "plan.failed" in failed_events
+    finally:
+        plan_mod._emit = original_emit
+
+
+def test_main_no_subcommand_exits_1(tmp_path):
+    result = run_plan([], env={"HOME": str(tmp_path)})
+    assert result.returncode != 0
+
+
+def test_main_resolve_slug_prints_path(tmp_path, monkeypatch, capsys):
+    """main() with resolve-slug cmd prints canonical path."""
+    plan_mod = load_module("plan")
+    monkeypatch.setattr("sys.argv", ["plan.py", "resolve-slug", "my-plan"])
+    try:
+        plan_mod.main()
+    except SystemExit as exc:
+        assert exc.code == 0 or exc.code is None
+    captured = capsys.readouterr()
+    assert "my-plan.md" in captured.out
+
+
+def test_main_write_calls_write_plan(tmp_path, monkeypatch, capsys):
+    """main() with write cmd invokes write_plan and prints tasks suggestion."""
+    plan_mod = load_module("plan")
+    body_file = tmp_path / "body.md"
+    body_file.write_text("# Plan\n")
+    plans_dir = tmp_path / "plans"
+    plans_dir.mkdir()
+
+    original_emit = plan_mod._emit
+    plan_mod._emit = lambda event, payload: None
+    monkeypatch.setattr("sys.argv", ["plan.py", "write", "cli-slug", str(body_file)])
+    try:
+        with patch("pathlib.Path.home", return_value=tmp_path):
+            try:
+                plan_mod.main()
+            except SystemExit as exc:
+                assert exc.code == 0 or exc.code is None
+        captured = capsys.readouterr()
+        assert "/mentat-tasks" in captured.out
+        assert "cli-slug" in captured.out
+    finally:
+        plan_mod._emit = original_emit
+
+
 def test_write_cli_prints_tasks_suggestion(tmp_path):
     """`plan.py write` output ends with a /mentat-tasks suggestion for the slug."""
     body_file = tmp_path / "body.md"

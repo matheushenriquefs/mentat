@@ -473,3 +473,88 @@ def test_read_key_over_pty():
 
 
 # ── V6: active_only filter + --all flag ───────────────────────────────────────
+
+# ── _color_for_event ─────────────────────────────────────────────────────────
+
+
+def test_color_for_event_known_suffix_returns_nonempty():
+    track = load_module("track")
+    color = track._color_for_event("plan.started")
+    assert color != ""
+    assert color.startswith("\033[")
+
+
+def test_color_for_event_unknown_suffix_returns_empty():
+    track = load_module("track")
+    assert track._color_for_event("totally.unknown.event") == ""
+
+
+def test_color_for_event_ejected_suffix():
+    track = load_module("track")
+    color = track._color_for_event("chunk.ejected")
+    assert color != ""
+
+
+# ── render_transcript_lines / render_audit_lines empty cases ─────────────────
+
+
+def test_render_transcript_lines_empty_session_shows_placeholder(tmp_path):
+    track = load_module("track")
+    sd = tmp_path / "empty-session"
+    sd.mkdir()
+    lines = track.render_transcript_lines(sd)
+    assert any("no transcript yet" in ln for ln in lines)
+
+
+def test_render_transcript_lines_audit_only_shows_placeholder(tmp_path):
+    """Audit-only rows (event key) are filtered out — transcript shows placeholder."""
+    track = load_module("track")
+    sd = tmp_path / "audit-only"
+    sd.mkdir()
+    (sd / "impl.jsonl").write_text(json.dumps({"ts": "t", "event": "chunk.spawned", "payload": {"slug": "x"}}) + "\n")
+    lines = track.render_transcript_lines(sd)
+    assert any("no transcript yet" in ln for ln in lines)
+
+
+def test_render_audit_lines_empty_session_shows_placeholder(tmp_path):
+    track = load_module("track")
+    sd = tmp_path / "empty-audit"
+    sd.mkdir()
+    lines = track.render_audit_lines(sd)
+    assert any("no audit events yet" in ln for ln in lines)
+
+
+def test_render_audit_lines_stream_only_shows_placeholder(tmp_path):
+    """Harness stream rows (no event key) are filtered out — audit shows placeholder."""
+    track = load_module("track")
+    sd = tmp_path / "stream-only"
+    _write_stream(sd, "session", [_assistant("Read")])
+    lines = track.render_audit_lines(sd)
+    assert any("no audit events yet" in ln for ln in lines)
+
+
+# ── view_session non-tty path ─────────────────────────────────────────────────
+
+
+def test_view_session_non_tty_prints_transcript_and_returns(tmp_path, monkeypatch):
+    track = load_module("track")
+    sd = tmp_path / "s-view"
+    _write_stream(sd, "session", [_assistant("Read", text="doing work")])
+    monkeypatch.setattr("sys.stdin", type("FakeStdin", (), {"isatty": lambda self: False})())
+    lines_captured = []
+    monkeypatch.setattr("builtins.print", lambda *a, **kw: lines_captured.append(" ".join(str(x) for x in a)))
+    track.view_session(sd)
+    body = "\n".join(lines_captured)
+    assert "Read" in body or "doing work" in body
+
+
+# ── _read_key timeout (select returns empty) ─────────────────────────────────
+
+
+def test_read_key_timeout_returns_none(monkeypatch):
+    import select as _select
+
+    track = load_module("track")
+    monkeypatch.setattr(_select, "select", lambda *a, **kw: ([], [], []))
+    result = track._read_key(0.01, _fd=0)
+    assert result is None

@@ -138,6 +138,177 @@ def test_shell_wrapper_errors_when_python_missing():
 # ── utils.py ──────────────────────────────────────────────────────────────────
 
 
+# ── _execute_actions branch coverage ──────────────────────────────────────────
+
+
+def test_execute_actions_mkdir(tmp_path):
+    install_mod = load_module("install")
+    target = tmp_path / "newdir"
+    ip = install_mod._plan.InstallPlan(
+        add=[install_mod._plan.Action("mkdir", None, target)],
+        update=[],
+        stale=[],
+        conflicts=[],
+        missing_companions=[],
+        skipped=[],
+    )
+    ok = install_mod._execute_actions(ip, dry_run=False)
+    assert ok is True
+    assert target.exists()
+
+
+def test_execute_actions_file_create(tmp_path):
+    install_mod = load_module("install")
+    target = tmp_path / "config.toml"
+    ip = install_mod._plan.InstallPlan(
+        add=[install_mod._plan.Action("file-create", None, target)],
+        update=[],
+        stale=[],
+        conflicts=[],
+        missing_companions=[],
+        skipped=[],
+    )
+    ok = install_mod._execute_actions(ip, dry_run=False)
+    assert ok is True
+    assert target.exists()
+
+
+def test_execute_actions_symlink(tmp_path):
+    install_mod = load_module("install")
+    source = tmp_path / "src"
+    source.mkdir()
+    target = tmp_path / "link"
+    ip = install_mod._plan.InstallPlan(
+        add=[install_mod._plan.Action("symlink", source, target)],
+        update=[],
+        stale=[],
+        conflicts=[],
+        missing_companions=[],
+        skipped=[],
+    )
+    ok = install_mod._execute_actions(ip, dry_run=False)
+    assert ok is True
+    assert target.is_symlink()
+
+
+def test_execute_actions_copy_no_source_warns_and_returns_false(tmp_path, capsys):
+    install_mod = load_module("install")
+    target = tmp_path / "dst"
+    ip = install_mod._plan.InstallPlan(
+        add=[install_mod._plan.Action("copy", None, target)],
+        update=[],
+        stale=[],
+        conflicts=[],
+        missing_companions=[],
+        skipped=[],
+    )
+    ok = install_mod._execute_actions(ip, dry_run=False)
+    assert ok is False
+    captured = capsys.readouterr()
+    assert "warning" in captured.err.lower()
+
+
+def test_execute_actions_copy_with_source(tmp_path):
+    install_mod = load_module("install")
+    source = tmp_path / "src_dir"
+    source.mkdir()
+    (source / "file.txt").write_text("data")
+    target = tmp_path / "dst_dir"
+    ip = install_mod._plan.InstallPlan(
+        add=[install_mod._plan.Action("copy", source, target)],
+        update=[],
+        stale=[],
+        conflicts=[],
+        missing_companions=[],
+        skipped=[],
+    )
+    ok = install_mod._execute_actions(ip, dry_run=False)
+    assert ok is True
+    assert (target / "file.txt").read_text() == "data"
+
+
+def test_execute_actions_update_symlink(tmp_path):
+    install_mod = load_module("install")
+    source = tmp_path / "src"
+    source.mkdir()
+    target = tmp_path / "link"
+    ip = install_mod._plan.InstallPlan(
+        add=[],
+        update=[install_mod._plan.Action("symlink", source, target)],
+        stale=[],
+        conflicts=[],
+        missing_companions=[],
+        skipped=[],
+    )
+    ok = install_mod._execute_actions(ip, dry_run=False)
+    assert ok is True
+    assert target.is_symlink()
+
+
+# ── do_install edge cases ──────────────────────────────────────────────────────
+
+
+def test_do_install_conflicts_returns_dataerr(tmp_path, monkeypatch):
+    install_mod = load_module("install")
+    home = _fake_home(tmp_path, monkeypatch)
+    fake_ip = install_mod._plan.InstallPlan(
+        add=[],
+        update=[],
+        stale=[],
+        conflicts=[tmp_path / "conflict"],
+        missing_companions=[],
+        skipped=[],
+    )
+    with (
+        patch.object(install_mod._plan, "compute_plan", return_value=fake_ip),
+        patch.object(install_mod._render, "render", return_value=""),
+    ):
+        rc = install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False)
+    assert rc == 65  # EX_DATAERR
+
+
+def test_do_install_partial_failure_warns_and_returns_1(tmp_path, monkeypatch):
+    install_mod = load_module("install")
+    home = _fake_home(tmp_path, monkeypatch)
+    fake_ip = install_mod._plan.InstallPlan(
+        add=[],
+        update=[],
+        stale=[],
+        conflicts=[],
+        missing_companions=[],
+        skipped=[],
+    )
+    with (
+        patch.object(install_mod._plan, "compute_plan", return_value=fake_ip),
+        patch.object(install_mod._render, "render", return_value=""),
+        patch.object(install_mod, "_execute_actions", return_value=False),
+        patch.object(install_mod._companions, "install_all"),
+        patch.object(install_mod._path_setup, "setup_path"),
+        patch.object(install_mod, "_emit_installed"),
+    ):
+        rc = install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False)
+    assert rc == 1
+
+
+# ── do_repo_install edge cases ────────────────────────────────────────────────
+
+
+def test_do_repo_install_not_in_git_repo_returns_1():
+    install_mod = load_module("install")
+
+    def fake_run(cmd, **kw):
+        class R:
+            returncode = 1
+            stdout = ""
+            stderr = "not a git repo"
+
+        return R()
+
+    with patch("subprocess.run", fake_run):
+        rc = install_mod.do_repo_install(repo_path=None)
+    assert rc == 1
+
+
 def test_safe_symlink_recovers_from_broken_parent_symlink(tmp_path):
     """Parent path being a broken symlink must not crash mkdir."""
     utils = load_module("filesystem")
