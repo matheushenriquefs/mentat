@@ -669,6 +669,30 @@ class TestPostCreateCommandLefthookInstall:
         assert lefthook_pos > cd_pos, "lefthook install must run after cd into worktree dir"
 
 
+# ── S2: list/object postCreateCommand form ────────────────────────────────────
+
+
+def test_ensure_devcontainer_json_list_command_not_replaced(tmp_path):
+    """List-form postCreateCommand must not raise and must remain unchanged."""
+    wt = tmp_path / "my-feature"
+    wt.mkdir()
+    slug = wt.name
+    dcj = wt / ".devcontainer" / "devcontainer.json"
+    dcj.parent.mkdir()
+    data = {
+        "name": "mentat",
+        "workspaceFolder": "/workspaces/mentat",
+        "postCreateCommand": ["echo", "hi"],
+    }
+    dcj.write_text(json.dumps(data, indent=2))
+
+    container._ensure_devcontainer_json(wt, slug)
+
+    result = json.loads(dcj.read_text())
+    assert result["postCreateCommand"] == ["echo", "hi"], "list-form command must not be mutated"
+    assert result["workspaceFolder"] == f"/workspaces/{slug}"
+
+
 def test_container_cmd_down_delegates_to_devcontainer(monkeypatch):
     down_calls: list[str] = []
     monkeypatch.setattr(_dc_mod, "down", lambda slug: down_calls.append(slug) or True)

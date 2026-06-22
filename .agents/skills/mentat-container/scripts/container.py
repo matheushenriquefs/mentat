@@ -143,7 +143,7 @@ def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
             if "workspaceMount" in data:
                 data["workspaceMount"] = _re.sub(r"target=[^,]+", f"target={expected_ws}", data["workspaceMount"])
             for key in ("postCreateCommand", "onCreateCommand"):
-                if key in data:
+                if key in data and isinstance(data[key], str):
                     data[key] = data[key].replace(old_ws, expected_ws)
         if git_mount and git_mount not in data.get("mounts", []):
             data.setdefault("mounts", []).append(git_mount)
