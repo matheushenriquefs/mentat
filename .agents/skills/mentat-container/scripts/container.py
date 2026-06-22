@@ -197,8 +197,7 @@ def cmd_up(wt: Path) -> int:
         _ensure_safe_directory(ws, cid)
         return 0
 
-    # Stopped container — check all non-running states so created/paused/restarting/dead
-    # containers are caught and restarted, not silently skipped to cold-start.
+    # created/paused/restarting/dead states must not be silently skipped to cold-start.
     stopped = subprocess.run(
         [
             _docker(),
