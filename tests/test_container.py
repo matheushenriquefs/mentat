@@ -96,7 +96,7 @@ def test_slug_for_cwd_git_fails_returns_cwd_name(tmp_path, monkeypatch):
     assert slug == tmp_path.name
 
 
-def test_container_id_for_docker_fails_returns_none():
+def test_container_id_for_docker_fails_returns_daemon_down():
     ops = load_module("container_ops")
 
     def fake_run(cmd, **kw):
@@ -107,7 +107,10 @@ def test_container_id_for_docker_fails_returns_none():
         return R()
 
     with patch("subprocess.run", fake_run):
-        assert ops.container_id_for("my-slug") is None
+        result = ops.container_id_for("my-slug")
+        # DAEMON_DOWN sentinel: falsy but not None — daemon unreachable distinct from no container
+        assert not result
+        assert result is not None
 
 
 def test_container_id_for_empty_output_returns_none():
@@ -929,8 +932,8 @@ def test_cmd_up_broken_symlink_at_dst_does_not_raise(tmp_path, monkeypatch):
 # ── S1: subprocess timeout bounds ─────────────────────────────────────────────
 
 
-def test_container_id_for_timeout_returns_none(monkeypatch):
-    """container_id_for must return None (not hang) when docker ps times out."""
+def test_container_id_for_timeout_returns_daemon_down(monkeypatch):
+    """container_id_for must return DAEMON_DOWN (not hang) when docker ps times out."""
     ops = load_module("container_ops")
     import subprocess as _sp
 
@@ -939,7 +942,9 @@ def test_container_id_for_timeout_returns_none(monkeypatch):
 
     with patch("subprocess.run", fake_run):
         result = ops.container_id_for("any-slug")
-    assert result is None
+    # DAEMON_DOWN: falsy but not None — timeout = daemon unreachable
+    assert not result
+    assert result is not None
 
 
 def test_cmd_up_ps_aq_timeout_returns_failure(tmp_path, monkeypatch, capsys):
@@ -989,3 +994,21 @@ def test_cmd_up_devcontainer_up_timeout_returns_failure(tmp_path, monkeypatch, c
     captured = capsys.readouterr()
     assert rc != 0
     assert captured.err, "timeout must emit diagnostic to stderr"
+
+
+# ── S3: daemon-down distinct from container-absent ────────────────────────────
+
+
+def test_cmd_run_daemon_down_no_up_first_message(tmp_path, monkeypatch, capsys):
+    """When docker ps fails (daemon unreachable), run must NOT say 'run up first'."""
+    container_mod = load_module("container")
+
+    monkeypatch.setattr(container_mod, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container_mod.utils, "container_id_for", lambda slug: container_mod.utils.DAEMON_DOWN)
+
+    rc = container_mod.cmd_run(tmp_path, "echo hi")
+
+    captured = capsys.readouterr()
+    assert rc != 0
+    assert "mentat-container up" not in captured.err, "daemon-down path must not say 'run mentat-container up first'"
+    assert "daemon" in captured.err.lower() or "docker" in captured.err.lower()

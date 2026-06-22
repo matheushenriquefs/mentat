@@ -321,6 +321,12 @@ def cmd_run(wt: Path, command: str) -> int:
         _warn_host_runtime_once(slug)
         return _run_on_host(command, wt)
     cid = utils.container_id_for(slug)
+    if cid is utils.DAEMON_DOWN:
+        print(
+            f"mentat-container: docker daemon not reachable for slug {slug} (is Docker running?)",
+            file=sys.stderr,
+        )
+        return EX_UNAVAILABLE
     if not cid:
         print(
             f"mentat-container: container not running for slug {slug} (run 'mentat-container up' first)",

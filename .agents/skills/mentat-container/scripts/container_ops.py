@@ -24,7 +24,22 @@ def _docker() -> str:
     return os.environ.get("MENTAT_DOCKER", "docker")
 
 
-def container_id_for(slug: str) -> str | None:
+class _DaemonDownType:
+    """Falsy sentinel: docker ps rc != 0 or timeout → daemon unreachable."""
+
+    __slots__ = ()
+
+    def __bool__(self) -> bool:
+        return False
+
+    def __repr__(self) -> str:
+        return "DAEMON_DOWN"
+
+
+DAEMON_DOWN = _DaemonDownType()
+
+
+def container_id_for(slug: str) -> str | _DaemonDownType | None:
     try:
         result = subprocess.run(
             [_docker(), "ps", "-q", "--filter", f"label=mentat_slug={slug}"],
@@ -34,9 +49,9 @@ def container_id_for(slug: str) -> str | None:
         )
     except subprocess.TimeoutExpired:
         print("mentat-container: docker ps timed out (daemon unresponsive?)", file=sys.stderr)
-        return None
+        return DAEMON_DOWN
     if result.returncode != 0:
-        return None
+        return DAEMON_DOWN
     cid = result.stdout.strip().splitlines()
     return cid[0] if cid else None
 
