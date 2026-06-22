@@ -6,7 +6,7 @@ Usage:
 Default sources: .agents/lib,.agents/skills,tasks
 Outputs:
     stdout  — coverage report --show-missing
-    cwd     — coverage.json  (totals.percent_covered consumed by health runner)
+    cwd     — coverage.json  (machine-readable totals + per-file missing branches)
 """
 
 from __future__ import annotations
