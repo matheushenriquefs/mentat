@@ -143,7 +143,14 @@ def ff_merge(cwd: Path, holding: str) -> str | None:
             return "not-ff"
         r = _run(["update-ref", f"refs/heads/{holding}", sha], cwd=holding_wt)
     else:
-        # Not checked out anywhere — git fetch enforces ff automatically.
+        # Not checked out anywhere — verify ff before fetch (fetch exit code alone
+        # doesn't distinguish non-ff rejection from a true git error).
         main_wt = Path(entries[0]["worktree"])
+        tip_r = _run(["rev-parse", f"refs/heads/{holding}"], cwd=main_wt)
+        if tip_r.returncode != 0:
+            return "git-error"
+        anc = _run(["merge-base", "--is-ancestor", tip_r.stdout.strip(), sha], cwd=main_wt)
+        if anc.returncode != 0:
+            return "not-ff"
         r = _run(["fetch", ".", f"{sha}:refs/heads/{holding}"], cwd=main_wt)
     return None if r.returncode == 0 else "git-error"
