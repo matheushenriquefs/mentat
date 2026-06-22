@@ -156,10 +156,11 @@ def format_trend(t: dict[str, Any]) -> str:
 
 
 def _run_coverage() -> dict[str, Any]:
-    rc = subprocess.run([sys.executable, "tasks/coverage.py"])
-    if rc.returncode != 0:
-        raise RuntimeError("coverage runner failed")
-    with open("coverage.json") as f:
+    subprocess.run(["uv", "run", "python", "tasks/coverage.py"])
+    cov_file = Path("coverage.json")
+    if not cov_file.exists():
+        raise RuntimeError("coverage runner failed — coverage.json not produced")
+    with cov_file.open() as f:
         return json.load(f)  # type: ignore[no-any-return]
 
 
