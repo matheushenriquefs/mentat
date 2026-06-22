@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -21,7 +22,7 @@ from lib import paths  # noqa: E402
 from lib import worktrees as _worktrees  # noqa: E402
 from lib.events import HITL_IN_SESSION, EjectReason, ejected_payload, spawned_payload  # noqa: E402
 from lib.events import bind as _bind  # noqa: E402
-from lib.exits import EX_DATAERR, EX_HITL_REQUIRED, EX_NOINPUT  # noqa: E402
+from lib.exits import EX_DATAERR, EX_HITL_REQUIRED, EX_NOINPUT, EX_UNAVAILABLE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 from lib.session import ensure_session  # noqa: E402
 from lib.session import summary_file as _summary_file
@@ -30,6 +31,8 @@ _utils = load_sibling(__file__, "plans")
 _scheduler = load_sibling(__file__, "scheduler")
 _fan_out = load_sibling(__file__, "fan_out")
 _land_queue = load_sibling(__file__, "land_queue")
+
+_SIGNAL_EXIT_BASE = 128  # Shell-reported signal exit: 128 + signum
 
 
 def _parse_list_field(raw: str) -> list[str]:
@@ -124,6 +127,26 @@ def _concurrency_cap() -> int:
         return 3
 
 
+def _chunk_timeout() -> int:
+    """Wall-clock deadline per chunk in seconds. Default 1800 (30 min).
+
+    Reads MENTAT_CHUNK_TIMEOUT env first, then config key ``chunk_timeout``.
+    Must be greater than the container sibling's devcontainer-up cap so a
+    slow-but-live build is never killed before its inner timeout fires.
+    """
+    env_val = os.environ.get("MENTAT_CHUNK_TIMEOUT")
+    if env_val is not None:
+        try:
+            return max(1, int(env_val))
+        except ValueError:
+            pass
+    raw = _utils.read_config().get("chunk_timeout", 1800)
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return 1800
+
+
 _emit_event = _bind("mentat-orchestrate")
 
 
@@ -151,23 +174,38 @@ def _fan_out_plans(
     spawn so context survives across chunk boundaries.
     """
     cap = _concurrency_cap()
-    live: list[tuple[_scheduler.Plan, subprocess.Popen, str]] = []
+    deadline_s = _chunk_timeout()
+    live: list[tuple[_scheduler.Plan, subprocess.Popen, str, float]] = []
     seed_summary: str | None = None
     seeded: set[str] = set()  # session IDs already harvested — avoid re-reading stale entries
     for plan in plans:
-        while sum(1 for _, p, _ in live if p.poll() is None) >= cap:
+        while sum(1 for _, p, _, _ in live if p.poll() is None) >= cap:
             time.sleep(0.1)
         # Harvest seeds from newly-finished chunks only (skip already-seeded IDs so
         # a chunk that finished in an earlier round cannot overwrite a newer seed).
-        for _plan, p, sid in live:
+        for _plan, p, sid, _ in live:
             if sid not in seeded and p.poll() is not None:
                 seed_summary = _read_chunk_seed(sid) or seed_summary
                 seeded.add(sid)
         _session_id, proc = _fan_out.spawn_with_proc(plan, harness=harness, model=model, seed_summary=seed_summary)
-        live.append((plan, proc, _session_id))
+        live.append((plan, proc, _session_id, time.monotonic()))
     results: list[tuple[_scheduler.Plan, int]] = []
-    for plan, p, _sid in live:
-        p.wait()
+    grace_s = 5
+    for plan, p, _sid, spawn_time in live:
+        remaining = deadline_s - (time.monotonic() - spawn_time)
+        try:
+            p.wait(timeout=max(0.0, remaining))
+        except subprocess.TimeoutExpired:
+            print(
+                f"mentat-orchestrate: chunk {plan.slug} timed out after {deadline_s}s — killing",
+                file=sys.stderr,
+            )
+            p.terminate()
+            try:
+                p.wait(timeout=grace_s)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                p.wait()
         results.append((plan, p.returncode))
     return results
 
@@ -188,7 +226,7 @@ def _partition_fanout(
     hitl: set[str] = set()
     for plan, rc in results:
         worktree = _worktree_for_slug(plan.slug)
-        if rc < 0 or rc >= 128:
+        if rc < 0 or rc >= _SIGNAL_EXIT_BASE:
             # Signal kill (rc<0 from Popen) or shell-reported signal exit (128+signum).
             # A dead worker produced no verdict — landing it would false-merge.
             _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.WORKER_DIED, str(worktree)))
@@ -197,20 +235,32 @@ def _partition_fanout(
             hitl.add(plan.slug)
             _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.HITL_REQUIRED, str(worktree)))
             mark_ejected(plan.slug)
+        elif rc == EX_UNAVAILABLE:
+            # Container/infra failure — the worker never ran, no code produced.
+            _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.WORKER_DIED, str(worktree)))
+            mark_ejected(plan.slug)
+        elif rc != 0:
+            # Any other non-zero exit: implement or gate failure.
+            _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.IMPLEMENT_FAILED, str(worktree)))
+            mark_ejected(plan.slug)
         else:
             chunks.append(_land_queue.Chunk(slug=plan.slug, worktree=worktree))
     return chunks, hitl
 
 
 def _prune_stale_containers() -> None:
-    """Prune stale labeled containers — unless a stale worktree is dirty (its
-    leftovers need a runnable container). Identity-by-path via lib.worktrees."""
+    """Prune stale labeled containers. Dirty worktrees are logged but do not block pruning.
+
+    A dirty worktree's container is typically still running (and therefore not
+    pruneable) or recent enough to survive docker's ``until=1h`` filter. Skipping
+    the entire prune whenever *any* worktree is dirty accumulates orphan containers
+    from all other crashed runs — so we always prune and let docker's filters protect
+    genuinely live resources.
+    """
     wt_root = Path.cwd() / ".mentat" / "worktrees"
     dirty = _worktrees.dirty_stale(wt_root)
-    if dirty:
-        for name in dirty:
-            print(f"devcontainer: skipping prune — dirty worktree '{name}'", file=sys.stderr)
-        return
+    for name in dirty:
+        print(f"devcontainer: dirty worktree '{name}' — its container may still be live", file=sys.stderr)
 
     result = _devcontainer.prune()
     _utils.emit_event("session.prune", {"reclaimed_bytes": result.reclaimed_bytes})
@@ -238,7 +288,7 @@ def _spawn_batch_doctor() -> None:
         return
     with contextlib.suppress(OSError):
         subprocess.Popen(
-            ["python3", str(_session_script), "doctor", "--reason=batch-failed"],
+            ["python3", str(_session_script), "doctor"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -345,6 +395,20 @@ def run_orchestrate(
 
     rc = 1 if sched.has_ejections() or hitl_slugs or stalled else 0
     if rc != 0:
+        # Print named eject summary so operator knows which slugs failed and why.
+        # Drain results carry land-queue eject reasons; partition-ejected chunks
+        # appear in sched.ejected_slugs() but not in drain_results.
+        drain_eject_slugs = {r.get("slug") for r in drain_results if r.get("status") == "eject"}
+        for v in drain_results:
+            if v.get("status") == "eject":
+                slug = v.get("slug", "?")
+                reason = v.get("reason", "?")
+                print(f"mentat-orchestrate: ejected {slug} — {reason}", file=sys.stderr)
+        for slug in sorted(sched.ejected_slugs()):
+            if slug not in drain_eject_slugs and slug not in hitl_slugs:
+                print(f"mentat-orchestrate: ejected {slug}", file=sys.stderr)
+        for slug in sorted(hitl_slugs):
+            print(f"mentat-orchestrate: ejected {slug} — hitl-required", file=sys.stderr)
         _spawn_batch_doctor()
     else:
         print(f"mentat-orchestrate: review the diff with `git diff {holding}..HEAD`", file=sys.stderr)

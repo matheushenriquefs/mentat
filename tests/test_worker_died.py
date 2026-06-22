@@ -79,15 +79,19 @@ def test_worker_died_boundary_rc_128_ejects(tmp_path):
     )
 
 
-def test_normal_nonzero_rc_still_lands(tmp_path):
-    """rc=1 (implement-failed) is not a signal exit — chunk goes to land queue."""
+def test_normal_nonzero_rc_ejects_as_implement_failed(tmp_path):
+    """rc=1 (implement-failed) must eject, not land (Slice 1 fix)."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
+    from lib.events import EjectReason
 
     chunks, hitl, emitted = _run_partition(orch, routing, tmp_path, 1)
 
-    assert len(chunks) == 1, "rc=1 chunk must reach land queue"
+    assert chunks == [], "rc=1 must not reach land queue"
     assert hitl == set()
+    assert any(ev == "chunk.ejected" and p.get("reason") == EjectReason.IMPLEMENT_FAILED for ev, p in emitted), (
+        f"implement-failed not emitted for rc=1; got {emitted}"
+    )
 
 
 def test_hitl_rc_still_routes_to_hitl(tmp_path):

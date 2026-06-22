@@ -194,7 +194,7 @@ class _ScriptedPopen:
             return None
         return 0
 
-    def wait(self):
+    def wait(self, timeout=None):
         self._remaining = 0
         self.returncode = 0
         return 0

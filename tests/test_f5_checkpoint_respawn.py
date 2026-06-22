@@ -224,7 +224,7 @@ def test_fan_out_plans_seeds_next_chunk_from_completed_summary(tmp_path: Path, m
         def poll(self):
             return 0 if self._done else None
 
-        def wait(self):
+        def wait(self, timeout=None):
             self._done = True
 
     def fake_spawn_with_proc(plan, *, harness=None, model=None, seed_summary=None):

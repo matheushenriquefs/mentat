@@ -364,8 +364,13 @@ def test_prune_emits_session_prune_event(tmp_path, monkeypatch):
     assert payload["worktrees_removed"] == 1
 
 
-def test_container_prune_inherits_dirty_check(tmp_path, monkeypatch):
-    """If any stale worktree under .mentat/worktrees/ is dirty, devcontainer.prune is not called."""
+def test_container_prune_runs_even_with_dirty_worktree(tmp_path, monkeypatch):
+    """devcontainer.prune must run even when dirty worktrees exist (Slice 5 fix).
+
+    A dirty worktree's container is typically running or recent enough to survive
+    docker's until=1h filter. Skipping the whole prune when any worktree is dirty
+    leaks orphan containers from other crashed runs.
+    """
     orchestrate = _load("orchestrate")
     monkeypatch.chdir(tmp_path)
 
@@ -390,7 +395,7 @@ def test_container_prune_inherits_dirty_check(tmp_path, monkeypatch):
 
     orchestrate._prune_stale_containers()
 
-    assert prune_calls == [], f"devcontainer.prune must not be called when dirty worktrees exist; got {prune_calls}"
+    assert prune_calls == [1], f"devcontainer.prune must be called even when dirty worktrees exist; got {prune_calls}"
 
 
 def test_prune_failure_does_not_abort(tmp_path, monkeypatch):
