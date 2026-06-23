@@ -73,7 +73,11 @@ def _spawn_worktree_subprocess(
     }
     if seed_summary:
         env["MENTAT_SEED_SUMMARY"] = seed_summary
-    proc = subprocess.Popen(cmd, env=env)
+    # start_new_session=True puts the child in its own process group / session,
+    # which the harness grandchild (implement.py -> harness) inherits. On a
+    # timeout, orchestrate group-kills that pgid so the grandchild is reaped too
+    # instead of orphaning and continuing to mutate the worktree (Bug A).
+    proc = subprocess.Popen(cmd, env=env, start_new_session=True)
     return session_id, proc
 
 

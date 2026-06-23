@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -150,6 +152,42 @@ def _chunk_timeout() -> int:
 _emit_event = _bind("mentat-orchestrate")
 
 
+def _kill_tree(proc: subprocess.Popen, grace_s: float) -> None:
+    """SIGTERM, then (after grace_s) SIGKILL the child's whole process group.
+
+    fan_out spawns the child with ``start_new_session=True``, so it leads its own
+    process group and the harness grandchild inherits it. Signalling the group —
+    not just ``proc.pid`` — reaps the grandchild that otherwise orphans (reparents
+    to init) and keeps mutating the worktree / holding the container (Bug A).
+
+    Group resolution / signalling is guarded: a child already reaped (or a test
+    double without a real pid) falls back to ``proc.terminate()``/``proc.kill()``.
+    Every wait is bounded by grace_s so a stuck child cannot hang the supervisor.
+    """
+    pid = getattr(proc, "pid", None)
+    pgid: int | None = None
+    if pid is not None:
+        with contextlib.suppress(ProcessLookupError, OSError):
+            pgid = os.getpgid(pid)
+
+    def _signal(sig: int, fallback: Callable[[], None]) -> None:
+        with contextlib.suppress(ProcessLookupError):
+            if pgid is not None:
+                os.killpg(pgid, sig)
+            else:
+                fallback()
+
+    _signal(signal.SIGTERM, proc.terminate)
+    try:
+        proc.wait(timeout=grace_s)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    _signal(signal.SIGKILL, proc.kill)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        proc.wait(timeout=grace_s)
+
+
 def _read_chunk_seed(session_id: str) -> str | None:
     """Return summary.md content for session_id if it exists."""
     sf = _summary_file(session_id)
@@ -200,12 +238,7 @@ def _fan_out_plans(
                 f"mentat-orchestrate: chunk {plan.slug} timed out after {deadline_s}s — killing",
                 file=sys.stderr,
             )
-            p.terminate()
-            try:
-                p.wait(timeout=grace_s)
-            except subprocess.TimeoutExpired:
-                p.kill()
-                p.wait()
+            _kill_tree(p, grace_s)
         results.append((plan, p.returncode))
     return results
 
@@ -281,8 +314,6 @@ def _prune_stale_worktrees(preserve: set[str] | None = None) -> None:
 
 def _spawn_batch_doctor() -> None:
     """Non-blocking doctor spawn after a failed batch. Swallows all errors."""
-    import contextlib
-
     _session_script = paths.SKILLS_DIR / "mentat-session/scripts/session.py"
     if not _session_script.exists():
         return
