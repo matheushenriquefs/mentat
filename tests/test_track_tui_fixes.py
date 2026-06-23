@@ -227,3 +227,83 @@ def test_empty_hint_last_event_only_used_for_audit():
     """A last_event in transcript view never leaks the lifecycle hint."""
     track = load_module("track")
     assert track.empty_hint("transcript", "chunk.landed") == track.empty_hint("transcript", None)
+
+
+# ── Slice 5: color the transcript by structured role (+ wire audit) ───────────
+
+
+def _tool(*names: str) -> dict:
+    return {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": n} for n in names]}}
+
+
+def _tool_result_row(content: str) -> dict:
+    return {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "x", "content": content}]}}
+
+
+def _as_tty(monkeypatch, tui, on: bool = True):
+    monkeypatch.setattr(tui.sys.stdout, "isatty", lambda: on)
+
+
+def test_transcript_tool_use_line_is_cyan(tmp_path, monkeypatch):
+    track = load_module("track")
+    tui = _tui()
+    _as_tty(monkeypatch, tui)
+    sd = tmp_path / "s"
+    _write_stream(sd, "session", [_tool("Read")])
+    line = next(ln for ln in track._transcript_content(sd) if "Read" in ln)
+    assert tui.CYAN in line
+    assert tui.tool_glyph("Read") in line
+
+
+def test_transcript_assistant_text_is_uncolored_prose(tmp_path, monkeypatch):
+    track = load_module("track")
+    tui = _tui()
+    _as_tty(monkeypatch, tui)
+    sd = tmp_path / "s"
+    _write_stream(sd, "session", [_assistant("plain prose here")])
+    line = next(ln for ln in track._transcript_content(sd) if "plain prose here" in ln)
+    assert tui.CYAN not in line and tui.YELLOW not in line  # only the dim gutter, no role color
+
+
+def test_transcript_ask_user_question_is_yellow(tmp_path, monkeypatch):
+    track = load_module("track")
+    tui = _tui()
+    _as_tty(monkeypatch, tui)
+    sd = tmp_path / "s"
+    _write_stream(sd, "session", [_tool("AskUserQuestion")])
+    line = next(ln for ln in track._transcript_content(sd) if "AskUserQuestion" in ln)
+    assert tui.YELLOW in line and tui.CYAN not in line
+
+
+def test_transcript_tool_result_is_dim_gutter(tmp_path, monkeypatch):
+    track = load_module("track")
+    tui = _tui()
+    _as_tty(monkeypatch, tui)
+    sd = tmp_path / "s"
+    _write_stream(sd, "session", [_tool_result_row("file contents")])
+    line = next(ln for ln in track._transcript_content(sd) if "└" in ln)
+    assert tui.DIM in line
+
+
+def test_transcript_non_tty_stays_unwrapped(tmp_path, monkeypatch):
+    track = load_module("track")
+    tui = _tui()
+    _as_tty(monkeypatch, tui, on=False)
+    sd = tmp_path / "s"
+    _write_stream(sd, "session", [_tool("Read")])
+    body = "\n".join(track._transcript_content(sd))
+    assert tui.CYAN not in body and tui.DIM not in body  # tty guard no-ops every wrap
+
+
+def test_color_for_event_maps_outcome_to_sgr():
+    track = load_module("track")
+    assert track._color_for_event("plan.succeeded") == "\033[32m"  # green
+    assert track._color_for_event("chunk.ejected") == "\033[31m"  # red
+
+
+def test_focus_frame_header_is_bold(monkeypatch):
+    track = load_module("track")
+    tui = _tui()
+    _as_tty(monkeypatch, tui)
+    frame = track._focus_frame(_rec("s-a", "working"), ["line"], scroll_top=None, height=5)
+    assert tui.BOLD in frame[0]

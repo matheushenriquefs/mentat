@@ -20,10 +20,15 @@ _ANSI_DIM = "\033[2m"
 _ANSI_GREEN = "\033[32m"
 _ANSI_YELLOW = "\033[33m"
 _ANSI_RED = "\033[31m"
+_ANSI_CYAN = "\033[36m"
+_ANSI_BOLD = "\033[1m"
 _ANSI_RESET = "\033[0m"
 
-# Exported palette handle for consumers (the tracker) that pass an SGR code to color().
+# Exported palette handles for consumers (the tracker) that pass an SGR code to color().
 DIM = _ANSI_DIM
+CYAN = _ANSI_CYAN  # transcript tool-call role
+YELLOW = _ANSI_YELLOW  # transcript AskUserQuestion (operator-attention) role
+BOLD = _ANSI_BOLD  # focus header rule
 # Clear screen + move cursor home. Used only on enter/exit now — repainting with
 # this each tick erases the whole screen and blank-flashes (flicker). The tracker's
 # per-tick paint() uses HOME + per-line CLEAR_EOL instead.

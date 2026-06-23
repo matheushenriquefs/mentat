@@ -92,14 +92,17 @@ def _transcript_content(session_dir: Path, *, limit: int = 0) -> list[str]:
             text = _hs.assistant_text(row)
             tools = _hs.tool_uses(row)
             if text.strip():
+                # Agent prose stays default fg — it's the bulk you read.
                 for line in text.splitlines():
                     out.append(f"{gutter} {line[:200]}")
             for name in tools:
-                out.append(f"{gutter} {tui.tool_glyph(name)} {name}")
+                # Tool calls cyan; an AskUserQuestion is operator-attention → yellow.
+                role = tui.YELLOW if name == "AskUserQuestion" else tui.CYAN
+                out.append(f"{gutter} {tui.color(f'{tui.tool_glyph(name)} {name}', role)}")
         elif row_type == "user":
             result = _hs.tool_result(row)
             if result:
-                out.append(f"{gutter}  └ {result[:200]}")
+                out.append(f"{gutter}  └ {tui.color(result[:200], tui.DIM)}")
     return out
 
 
@@ -123,9 +126,11 @@ def _audit_content(session_dir: Path, *, limit: int = 0) -> list[str]:
     out: list[str] = []
     for row in tail:
         ts = str(row.get("ts", ""))[-19:]
-        event = row.get("event", "?")
+        event = str(row.get("event", "?"))
         payload = json.dumps(row.get("payload", {}))
-        out.append(f"{gutter} {ts} {event} {payload[:100]}")
+        sgr = _color_for_event(event)
+        body = f"{event} {payload[:100]}"
+        out.append(f"{gutter} {ts} {tui.color(body, sgr) if sgr else body}")
     return out
 
 
@@ -319,7 +324,7 @@ def render_focus(record: dict[str, object], session_dir: Path, view: str = _VIEW
 def _focus_frame(record: dict[str, object], content: list[str], *, scroll_top: int | None, height: int) -> list[str]:
     """Scroll-windowed focus frame: bold header, ↑/↓ affordances, the visible window, hint."""
     visible, above, below = window_lines(content, scroll_top=scroll_top, height=height)
-    lines = [tui.section_rule(f"{record['session']} — {record['status']}")]
+    lines = [tui.color(tui.section_rule(f"{record['session']} — {record['status']}"), tui.BOLD)]
     if above:
         lines.append(tui.color(f"↑ {above} more", tui.DIM))
     lines += visible
