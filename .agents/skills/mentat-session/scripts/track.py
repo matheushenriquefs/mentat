@@ -62,14 +62,14 @@ def render_transcript_lines(session_dir: Path, *, limit: int = 0) -> list[str]:
     """Transcript view: assistant text + tool_glyph calls + result summaries, newest tail.
 
     Reads all *.jsonl in session_dir, filters to harness stream rows (type-keyed,
-    no event key), takes the last `limit` rows (0 = FOCUS_LINES), renders chat.
+    no event key); limit 0 = the full history (focus pane scrolls it), else tails.
     """
     rows: list[dict[str, object]] = []
     for f in sorted(session_dir.glob("*.jsonl")):
         rows.extend(_sessions.iter_rows(f))
     stream_rows = [r for r in rows if "type" in r and "event" not in r]
-    cap = limit or FOCUS_LINES
-    tail = stream_rows[-cap:]
+    # limit 0 = full history (the focus pane scrolls it); a positive limit tails.
+    tail = stream_rows[-limit:] if limit else stream_rows
     gutter = tui.color(tui.PIPE, tui.DIM)
     out: list[str] = []
     for row in tail:
@@ -97,8 +97,8 @@ def render_audit_lines(session_dir: Path, *, limit: int = 0) -> list[str]:
     for f in sorted(session_dir.glob("*.jsonl")):
         rows.extend(_sessions.iter_rows(f))
     audit_rows = [r for r in rows if "event" in r]
-    cap = limit or FOCUS_LINES
-    tail = audit_rows[-cap:]
+    # limit 0 = full history (the focus pane scrolls it); a positive limit tails.
+    tail = audit_rows[-limit:] if limit else audit_rows
     gutter = tui.color(tui.PIPE, tui.DIM)
     out: list[str] = []
     for row in tail:
@@ -160,7 +160,7 @@ def view_session(session_dir: Path) -> None:
 
 POLL_SECS = 1.0  # registry re-scan cadence
 PREVIEW_LINES = 20  # tool-calls tailed in the list-view preview pane
-FOCUS_LINES = 40  # tool-calls tailed in the focused single-session view
+_FOCUS_OVERHEAD = 5  # header + 2 scroll affordances + blank + hint reserved around the focus window
 _STATUS_COL = 8  # status column width in the list pane
 
 # A registry entry: the status record paired with its absolute session dir.
@@ -190,6 +190,35 @@ def resolve_focus_index(entries: Sequence[object], pinned_session: str | None, f
         if _record_of(e).get("session") == pinned_session:
             return i
     return None
+
+
+def window_lines(all_lines: list[str], *, scroll_top: int | None, height: int) -> tuple[list[str], int, int]:
+    """Slice the focus history into a viewport. Pure.
+
+    `scroll_top is None` → follow the live tail (window the last `height`). An int →
+    a frozen top-anchored view at that absolute line, clamped to [0, max(0, len-height)]
+    so a growing tail doesn't shift the view while scrolled up and an out-of-range
+    value never raises. Returns (visible, more_above, more_below) for the affordances.
+    """
+    total = len(all_lines)
+    max_top = max(0, total - height)
+    start = max_top if scroll_top is None else max(0, min(scroll_top, max_top))
+    visible = all_lines[start : start + height]
+    above = start
+    below = max(0, total - (start + len(visible)))
+    return visible, above, below
+
+
+def scroll(scroll_top: int | None, delta: int, total: int, height: int) -> int | None:
+    """Apply a scroll delta (j/k = ±1, d/u = ±height//2), clamped. Pure.
+
+    Reaching the bottom returns `None` to re-arm tail-follow; otherwise a frozen
+    absolute top. `scroll_top is None` means currently tailing (anchored at the bottom).
+    """
+    max_top = max(0, total - height)
+    current = max_top if scroll_top is None else scroll_top
+    new = max(0, min(current + delta, max_top))
+    return None if new >= max_top else new
 
 
 def handle_key(key: str, selected: int, count: int) -> tuple[int, str | None]:
@@ -258,6 +287,20 @@ def render_focus(record: dict[str, object], session_dir: Path, view: str = _VIEW
         lines += render_audit_lines(session_dir)
     lines.append("")
     lines.append(tui.color("t toggle · enter/esc back · x kill · q quit", tui.DIM))
+    return lines
+
+
+def _focus_frame(record: dict[str, object], content: list[str], *, scroll_top: int | None, height: int) -> list[str]:
+    """Scroll-windowed focus frame: bold header, ↑/↓ affordances, the visible window, hint."""
+    visible, above, below = window_lines(content, scroll_top=scroll_top, height=height)
+    lines = [tui.section_rule(f"{record['session']} — {record['status']}")]
+    if above:
+        lines.append(tui.color(f"↑ {above} more", tui.DIM))
+    lines += visible
+    if below:
+        lines.append(tui.color(f"↓ {below} more", tui.DIM))
+    lines.append("")
+    lines.append(tui.color("j/k·d/u scroll · t toggle · enter/esc back · x kill · q quit", tui.DIM))
     return lines
 
 
@@ -331,11 +374,12 @@ def _restore_seq() -> str:
     return tui.SHOW_CURSOR + tui.ALT_EXIT
 
 
-def _frame(entries: list[Entry], selected: int, repo: str, *, focused: bool, view: str, rows: int) -> list[str]:
-    """Build the whole frame as a list of lines (no I/O) for the repaint engine."""
-    if focused and entries:
-        record, session_dir = _selected(entries, selected)
-        return render_focus(record, session_dir, view)
+def _frame(entries: list[Entry], selected: int, repo: str, *, rows: int) -> list[str]:
+    """Build the list-view frame as a list of lines (no I/O) for the repaint engine.
+
+    The focused single-session frame is built by `_focus_frame` in the navigate
+    loop, which owns the scroll window.
+    """
     records = [rec for rec, _ in entries]
     lines = [tui.section_rule(f"{repo} — {len(records)} session(s)")]
     overhead = 5  # section_rule + blank + preview-section_rule + blank + hint
@@ -381,6 +425,7 @@ def navigate(repo_dir: Path, *, repo: str, active_only: bool = True) -> int:
     import tty
 
     selected, focused, view = 0, False, _VIEW_TRANSCRIPT
+    scroll_top: int | None = None  # None = follow tail; int = frozen absolute top
     # Pin the list cursor and (when zoomed) focus to the *session name*, not the
     # integer index a background re-sort keeps shuffling (flicker root cause A).
     cursor_session: str | None = str(entries[0][0]["session"]) if entries else None
@@ -403,7 +448,19 @@ def navigate(repo_dir: Path, *, repo: str, active_only: bool = True) -> int:
         sys.stdout.flush()
         while True:
             cols, rows = _terminal_size()
-            frame = _frame(entries, selected, repo, focused=focused, view=view, rows=rows)
+            focus_content: list[str] = []
+            focus_height = 0
+            if focused and entries:
+                record, session_dir = _selected(entries, selected)
+                focus_content = (
+                    render_transcript_lines(session_dir)
+                    if view == _VIEW_TRANSCRIPT
+                    else render_audit_lines(session_dir)
+                )
+                focus_height = max(1, rows - _FOCUS_OVERHEAD)
+                frame = _focus_frame(record, focus_content, scroll_top=scroll_top, height=focus_height)
+            else:
+                frame = _frame(entries, selected, repo, rows=rows)
             fp = _frame_fingerprint(frame, cols, rows)
             if fp != last_fp:
                 # Repaint only when the visible frame (or terminal size) changed —
@@ -414,15 +471,35 @@ def navigate(repo_dir: Path, *, repo: str, active_only: bool = True) -> int:
             key = _read_key(POLL_SECS)
             if _TERMINATE:
                 break
-            if key is not None:
+            if key is not None and focused:
+                # Focus mode: j/k·d/u scroll, t toggles view (resetting scroll), enter/esc
+                # backs out, x kills, q quits.
+                total = len(focus_content)
+                if key == "q":
+                    break
+                if key in ("\n", "\r", "\x1b"):
+                    focused, pinned, scroll_top = False, None, None
+                elif key == "t":
+                    view, scroll_top = toggle_view(view), None
+                elif key == "x" and entries:
+                    _kill(_selected(entries, selected)[1])
+                elif key in ("j", "DOWN"):
+                    scroll_top = scroll(scroll_top, 1, total, focus_height)
+                elif key in ("k", "UP"):
+                    scroll_top = scroll(scroll_top, -1, total, focus_height)
+                elif key == "d":
+                    scroll_top = scroll(scroll_top, focus_height // 2, total, focus_height)
+                elif key == "u":
+                    scroll_top = scroll(scroll_top, -(focus_height // 2), total, focus_height)
+            elif key is not None:
                 selected, action = handle_key(key, selected, len(entries))
                 if entries:
                     cursor_session = str(_selected(entries, selected)[0]["session"])
                 if action == "quit":
                     break
                 if action == "focus" and entries:
-                    focused = not focused
-                    pinned = str(_selected(entries, selected)[0]["session"]) if focused else None
+                    focused, scroll_top = True, None
+                    pinned = str(_selected(entries, selected)[0]["session"])
                 if action == "toggle":
                     view = toggle_view(view)
                 if action == "kill" and entries:
@@ -437,11 +514,11 @@ def navigate(repo_dir: Path, *, repo: str, active_only: bool = True) -> int:
             if focused:
                 focus_idx = resolve_focus_index(entries, pinned, None)
                 if focus_idx is None:
-                    focused, pinned = False, None
+                    focused, pinned, scroll_top = False, None, None
                 else:
                     selected, cursor_session = focus_idx, pinned
             if not entries:
-                focused = False
+                focused, scroll_top = False, None
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, saved)
         signal.signal(signal.SIGTERM, prev_sigterm)

@@ -127,3 +127,79 @@ def test_restore_sequence_shows_cursor_and_exits_alt_screen():
     seq = track._restore_seq()
     assert tui.SHOW_CURSOR in seq
     assert tui.ALT_EXIT in seq
+
+
+# ── Slice 3: scrollback in the focused transcript ─────────────────────────────
+
+
+def _write_stream(session_dir: Path, name: str, rows: list[dict]) -> None:
+    import json
+
+    session_dir.mkdir(parents=True, exist_ok=True)
+    (session_dir / f"{name}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+
+def _assistant(text: str) -> dict:
+    return {"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}}
+
+
+def test_render_transcript_lines_returns_full_history(tmp_path):
+    """Drop the pre-tail cap so the focus pane has something to scroll."""
+    track = load_module("track")
+    sd = tmp_path / "s-1"
+    _write_stream(sd, "session", [_assistant(f"line {i}") for i in range(60)])  # > old FOCUS_LINES cap
+    lines = track.render_transcript_lines(sd)
+    body = "\n".join(lines)
+    assert "line 0" in body and "line 59" in body  # head and tail both present
+
+
+def test_window_lines_follows_tail_when_unfrozen():
+    track = load_module("track")
+    lines = [str(i) for i in range(10)]
+    vis, above, below = track.window_lines(lines, scroll_top=None, height=3)
+    assert vis == ["7", "8", "9"]
+    assert above == 7 and below == 0
+
+
+def test_window_lines_frozen_top_anchored():
+    track = load_module("track")
+    lines = [str(i) for i in range(10)]
+    vis, above, below = track.window_lines(lines, scroll_top=2, height=3)
+    assert vis == ["2", "3", "4"]
+    assert above == 2 and below == 5
+
+
+def test_window_lines_clamps_out_of_range_without_raising():
+    track = load_module("track")
+    lines = [str(i) for i in range(5)]
+    vis, above, below = track.window_lines(lines, scroll_top=999, height=3)
+    assert vis == ["2", "3", "4"] and above == 2 and below == 0  # clamped to max_top
+    vis2, above2, _ = track.window_lines(lines, scroll_top=-5, height=3)
+    assert vis2 == ["0", "1", "2"] and above2 == 0
+
+
+def test_window_lines_shorter_than_height():
+    track = load_module("track")
+    vis, above, below = track.window_lines(["a", "b"], scroll_top=None, height=10)
+    assert vis == ["a", "b"] and above == 0 and below == 0
+
+
+def test_scroll_rearms_tail_at_bottom():
+    track = load_module("track")
+    # total 10, height 3 → max_top 7; from 6 stepping +1 reaches the bottom → None.
+    assert track.scroll(6, 1, 10, 3) is None
+
+
+def test_scroll_up_from_tail_freezes_absolute():
+    track = load_module("track")
+    assert track.scroll(None, -1, 10, 3) == 6  # tail max_top 7, up one → frozen at 6
+
+
+def test_scroll_half_page_delta_is_height_over_two():
+    track = load_module("track")
+    assert track.scroll(10, 6 // 2, 20, 6) == 13  # +half-page from 10
+
+
+def test_scroll_clamps_top_to_zero():
+    track = load_module("track")
+    assert track.scroll(1, -5, 10, 3) == 0
