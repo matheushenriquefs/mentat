@@ -304,42 +304,63 @@ def _selected(entries: list[Entry], selected: int) -> Entry:
     return entries[min(selected, len(entries) - 1)]
 
 
-def _terminal_height() -> int:
-    """Terminal row count (fallback 20 when unknown)."""
+def _terminal_size() -> tuple[int, int]:
+    """Live (cols, rows) from the stdout tty. Fallback (80, 20) when unknown.
+
+    Reads the device directly via os.get_terminal_size, not shutil — shutil honors
+    a stale COLUMNS/LINES env first, which would freeze the layout across a resize.
+    """
     try:
-        import shutil
+        size = os.get_terminal_size(sys.stdout.fileno())
+        return size.columns, size.lines
+    except OSError:
+        return 80, 20
 
-        return shutil.get_terminal_size((80, 20)).lines
-    except Exception:
-        return 20
+
+def _frame_fingerprint(lines: list[str], cols: int, rows: int) -> int:
+    """Hash of the rendered frame + terminal size — repaint fires only when this changes.
+
+    Size is part of the hash so a SIGWINCH resize repaints even when content is
+    static (the fixed-width frame string alone wouldn't differ).
+    """
+    return hash((tuple(lines), cols, rows))
 
 
-def _draw(entries: list[Entry], selected: int, repo: str, *, focused: bool, view: str = _VIEW_TRANSCRIPT) -> None:
-    sys.stdout.write(tui.CLEAR_HOME)
+def _restore_seq() -> str:
+    """Terminal-restore escapes: show the cursor and leave the alternate screen."""
+    return tui.SHOW_CURSOR + tui.ALT_EXIT
+
+
+def _frame(entries: list[Entry], selected: int, repo: str, *, focused: bool, view: str, rows: int) -> list[str]:
+    """Build the whole frame as a list of lines (no I/O) for the repaint engine."""
     if focused and entries:
         record, session_dir = _selected(entries, selected)
-        for line in render_focus(record, session_dir, view):
-            print(line)
-        sys.stdout.flush()
-        return
+        return render_focus(record, session_dir, view)
     records = [rec for rec, _ in entries]
-    print(tui.section_rule(f"{repo} — {len(records)} session(s)"))
-    h = _terminal_height()
+    lines = [tui.section_rule(f"{repo} — {len(records)} session(s)")]
     overhead = 5  # section_rule + blank + preview-section_rule + blank + hint
-    available = max(6, h - overhead)
+    available = max(6, rows - overhead)
     preview_cap = min(PREVIEW_LINES, max(3, available // 2))
     list_viewport = max(3, available - preview_cap)
-    for line in render_list(records, selected, viewport_height=list_viewport):
-        print(line)
+    lines += render_list(records, selected, viewport_height=list_viewport)
     if entries:
         record, session_dir = _selected(entries, selected)
-        print()
-        print(tui.section_rule(str(record["session"])))
-        for line in render_preview(_tools(session_dir, limit=preview_cap)):
-            print(line)
-    print()
-    print(tui.color("j/k move · enter focus · x kill · q quit", tui.DIM))
-    sys.stdout.flush()
+        lines.append("")
+        lines.append(tui.section_rule(str(record["session"])))
+        lines += render_preview(_tools(session_dir, limit=preview_cap))
+    lines.append("")
+    lines.append(tui.color("j/k move · enter focus · x kill · q quit", tui.DIM))
+    return lines
+
+
+_TERMINATE = False
+
+
+def _on_sigterm(signum: int, frame: object) -> None:
+    """SIGTERM handler: set a flag only (signal-safe), the main loop exits and the
+    `finally` restores the tty — so a kill never leaves it in cbreak / cursor hidden."""
+    global _TERMINATE
+    _TERMINATE = True
 
 
 def navigate(repo_dir: Path, *, repo: str, active_only: bool = True) -> int:
@@ -354,6 +375,8 @@ def navigate(repo_dir: Path, *, repo: str, active_only: bool = True) -> int:
             print(line)
         return 0
 
+    import atexit
+    import signal
     import termios
     import tty
 
@@ -364,11 +387,33 @@ def navigate(repo_dir: Path, *, repo: str, active_only: bool = True) -> int:
     pinned: str | None = None
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
+
+    def _restore() -> None:
+        sys.stdout.write(_restore_seq())
+        sys.stdout.flush()
+
+    global _TERMINATE
+    _TERMINATE = False
+    prev_sigterm = signal.signal(signal.SIGTERM, _on_sigterm)
+    atexit.register(_restore)  # belt-and-suspenders if a hard exit skips `finally`
+    last_fp: int | None = None
     try:
         tty.setcbreak(fd)
+        sys.stdout.write(tui.ALT_ENTER + tui.HIDE_CURSOR)
+        sys.stdout.flush()
         while True:
-            _draw(entries, selected, repo, focused=focused, view=view)
+            cols, rows = _terminal_size()
+            frame = _frame(entries, selected, repo, focused=focused, view=view, rows=rows)
+            fp = _frame_fingerprint(frame, cols, rows)
+            if fp != last_fp:
+                # Repaint only when the visible frame (or terminal size) changed —
+                # no per-tick full-clear blank-flash (flicker root cause B).
+                sys.stdout.write(tui.paint(frame, rows=rows))
+                sys.stdout.flush()
+                last_fp = fp
             key = _read_key(POLL_SECS)
+            if _TERMINATE:
+                break
             if key is not None:
                 selected, action = handle_key(key, selected, len(entries))
                 if entries:
@@ -399,8 +444,10 @@ def navigate(repo_dir: Path, *, repo: str, active_only: bool = True) -> int:
                 focused = False
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, saved)
-        sys.stdout.write(tui.CLEAR_HOME)
+        signal.signal(signal.SIGTERM, prev_sigterm)
+        sys.stdout.write(_restore_seq())
         sys.stdout.flush()
+        atexit.unregister(_restore)
     return 0
 
 

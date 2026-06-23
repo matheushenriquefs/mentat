@@ -24,8 +24,42 @@ _ANSI_RESET = "\033[0m"
 
 # Exported palette handle for consumers (the tracker) that pass an SGR code to color().
 DIM = _ANSI_DIM
-# Clear screen + move cursor home — the tracker repaints in place each tick.
+# Clear screen + move cursor home. Used only on enter/exit now — repainting with
+# this each tick erases the whole screen and blank-flashes (flicker). The tracker's
+# per-tick paint() uses HOME + per-line CLEAR_EOL instead.
 CLEAR_HOME = "\033[2J\033[H"
+
+# ── low-flicker repaint seams ─────────────────────────────────────────────────
+# Hide/show cursor, home, erase-to-end-of-line, synchronized-output guard, and the
+# alternate-screen pair. The flicker-free idiom is HIDE_CURSOR + HOME + per-line
+# CLEAR_EOL (never \033[2J per frame), optionally wrapped in SYNC_BEGIN/END — a
+# hint that old terminals ignore, so the frame must be coherent without it.
+HIDE_CURSOR = "\033[?25l"
+SHOW_CURSOR = "\033[?25h"
+HOME = "\033[H"
+CLEAR_EOL = "\033[K"
+SYNC_BEGIN = "\033[?2026h"
+SYNC_END = "\033[?2026l"
+ALT_ENTER = "\033[?1049h"
+ALT_EXIT = "\033[?1049l"
+
+
+def paint(lines: list[str], *, rows: int) -> str:
+    """One coherent frame: home, each line + erase-to-EOL, stale rows erased, down to `rows`.
+
+    No \\033[2J — the screen is overwritten in place, not cleared, so there is no
+    blank flash. Trailing rows beyond the new (shorter) frame are erased so a
+    previous longer frame leaves no residue. Wrapped in synchronized-output markers
+    (a hint; terminals that don't grok it still render a correct frame).
+    """
+    out = [SYNC_BEGIN, HOME]
+    for line in lines:
+        out.append(f"{line}{CLEAR_EOL}\n")
+    for _ in range(max(0, rows - len(lines))):
+        out.append(f"{CLEAR_EOL}\n")
+    out.append(SYNC_END)
+    return "".join(out)
+
 
 # ── tracking vocabulary ───────────────────────────────────────────────────────
 # Single-width glyphs drawn from the house set so the install/prompt UI and the

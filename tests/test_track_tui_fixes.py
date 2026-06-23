@@ -73,3 +73,57 @@ def test_render_list_shows_age_column():
     track = load_module("track")
     lines = track.render_list([_rec("s-a", age=120)], 0)
     assert "2m ago" in lines[0]
+
+
+# ── Slice 2: flicker-free repaint engine (flicker B) ──────────────────────────
+
+
+def _tui():
+    sys.path.insert(0, str(REPO_ROOT / ".agents"))
+    from lib import tui
+
+    return tui
+
+
+def test_paint_uses_home_and_eol_not_full_clear():
+    tui = _tui()
+    out = tui.paint(["alpha", "beta"], rows=5)
+    assert tui.HOME in out
+    assert tui.CLEAR_EOL in out
+    assert "\033[2J" not in out  # never the blank-flash full clear
+
+
+def test_paint_erases_trailing_stale_rows():
+    tui = _tui()
+    # 2 content lines into a 5-row viewport → 2 line-erases + 3 stale-row erases.
+    assert tui.paint(["a", "b"], rows=5).count(tui.CLEAR_EOL) == 5
+
+
+def test_paint_no_stale_erase_when_frame_fills_viewport():
+    tui = _tui()
+    out = tui.paint(["a", "b", "c"], rows=2)  # more lines than rows → no negative loop
+    assert out.count(tui.CLEAR_EOL) == 3
+
+
+def test_paint_wraps_in_synchronized_output():
+    tui = _tui()
+    out = tui.paint(["x"], rows=1)
+    assert out.startswith(tui.SYNC_BEGIN)
+    assert out.endswith(tui.SYNC_END)
+
+
+def test_frame_fingerprint_stable_and_size_sensitive():
+    track = load_module("track")
+    f = ["row one", "row two"]
+    assert track._frame_fingerprint(f, 80, 24) == track._frame_fingerprint(list(f), 80, 24)
+    assert track._frame_fingerprint(f, 80, 24) != track._frame_fingerprint(f, 100, 24)
+    assert track._frame_fingerprint(f, 80, 24) != track._frame_fingerprint(f, 80, 40)
+    assert track._frame_fingerprint(f, 80, 24) != track._frame_fingerprint(["row one"], 80, 24)
+
+
+def test_restore_sequence_shows_cursor_and_exits_alt_screen():
+    track = load_module("track")
+    tui = _tui()
+    seq = track._restore_seq()
+    assert tui.SHOW_CURSOR in seq
+    assert tui.ALT_EXIT in seq
