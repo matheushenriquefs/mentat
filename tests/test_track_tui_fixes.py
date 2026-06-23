@@ -203,3 +203,27 @@ def test_scroll_half_page_delta_is_height_over_two():
 def test_scroll_clamps_top_to_zero():
     track = load_module("track")
     assert track.scroll(1, -5, 10, 3) == 0
+
+
+# ── Slice 4: honest empty states (audit toggle) ───────────────────────────────
+
+
+def test_empty_hint_audit_with_known_last_event():
+    track = load_module("track")
+    assert track.empty_hint("audit", "chunk.landed") == "(no audit rows here — last lifecycle: chunk.landed)"
+
+
+def test_empty_hint_audit_without_last_event():
+    track = load_module("track")
+    assert track.empty_hint("audit", None) == "(no audit events yet — press t for the transcript)"
+
+
+def test_empty_hint_transcript():
+    track = load_module("track")
+    assert track.empty_hint("transcript", None) == "(no transcript — audit-only session; press t for lifecycle)"
+
+
+def test_empty_hint_last_event_only_used_for_audit():
+    """A last_event in transcript view never leaks the lifecycle hint."""
+    track = load_module("track")
+    assert track.empty_hint("transcript", "chunk.landed") == track.empty_hint("transcript", None)

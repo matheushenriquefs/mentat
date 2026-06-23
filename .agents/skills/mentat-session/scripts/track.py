@@ -58,8 +58,22 @@ def toggle_view(view: str) -> str:
     return _VIEW_AUDIT if view == _VIEW_TRANSCRIPT else _VIEW_TRANSCRIPT
 
 
-def render_transcript_lines(session_dir: Path, *, limit: int = 0) -> list[str]:
-    """Transcript view: assistant text + tool_glyph calls + result summaries, newest tail.
+def empty_hint(view: str, last_event: str | None) -> str:
+    """Truthful empty-state copy so `t` on a fresh/orchestrate session isn't mystifying.
+
+    Audit empty + a known last lifecycle event → name it; audit empty + none → point
+    at the transcript; transcript empty → it's an audit-only session. The last-event
+    hint is audit-only (a transcript-view last_event never leaks into the message).
+    """
+    if view == _VIEW_AUDIT:
+        if last_event:
+            return f"(no audit rows here — last lifecycle: {last_event})"
+        return "(no audit events yet — press t for the transcript)"
+    return "(no transcript — audit-only session; press t for lifecycle)"
+
+
+def _transcript_content(session_dir: Path, *, limit: int = 0) -> list[str]:
+    """Transcript content lines (assistant text + tool calls + result summaries); [] if none.
 
     Reads all *.jsonl in session_dir, filters to harness stream rows (type-keyed,
     no event key); limit 0 = the full history (focus pane scrolls it), else tails.
@@ -86,13 +100,19 @@ def render_transcript_lines(session_dir: Path, *, limit: int = 0) -> list[str]:
             result = _hs.tool_result(row)
             if result:
                 out.append(f"{gutter}  └ {result[:200]}")
-    if not out:
-        out = [f"{gutter} (no transcript yet)"]
     return out
 
 
-def render_audit_lines(session_dir: Path, *, limit: int = 0) -> list[str]:
-    """Audit view: envelope rows (event key) as 'ts event payload', newest tail."""
+def render_transcript_lines(session_dir: Path, *, limit: int = 0) -> list[str]:
+    """Transcript view content, or a one-line placeholder when the session has no stream."""
+    out = _transcript_content(session_dir, limit=limit)
+    if not out:
+        return [f"{tui.color(tui.PIPE, tui.DIM)} (no transcript yet)"]
+    return out
+
+
+def _audit_content(session_dir: Path, *, limit: int = 0) -> list[str]:
+    """Audit envelope rows as 'ts event payload'; [] if the session has no audit log."""
     rows: list[dict[str, object]] = []
     for f in sorted(session_dir.glob("*.jsonl")):
         rows.extend(_sessions.iter_rows(f))
@@ -106,8 +126,14 @@ def render_audit_lines(session_dir: Path, *, limit: int = 0) -> list[str]:
         event = row.get("event", "?")
         payload = json.dumps(row.get("payload", {}))
         out.append(f"{gutter} {ts} {event} {payload[:100]}")
+    return out
+
+
+def render_audit_lines(session_dir: Path, *, limit: int = 0) -> list[str]:
+    """Audit view content, or a one-line placeholder when the session has no audit log."""
+    out = _audit_content(session_dir, limit=limit)
     if not out:
-        out = [f"{gutter} (no audit events yet)"]
+        return [f"{tui.color(tui.PIPE, tui.DIM)} (no audit events yet)"]
     return out
 
 
@@ -453,10 +479,12 @@ def navigate(repo_dir: Path, *, repo: str, active_only: bool = True) -> int:
             if focused and entries:
                 record, session_dir = _selected(entries, selected)
                 focus_content = (
-                    render_transcript_lines(session_dir)
-                    if view == _VIEW_TRANSCRIPT
-                    else render_audit_lines(session_dir)
+                    _transcript_content(session_dir) if view == _VIEW_TRANSCRIPT else _audit_content(session_dir)
                 )
+                if not focus_content:
+                    last = record.get("last_event")
+                    hint = empty_hint(view, last if isinstance(last, str) else None)
+                    focus_content = [tui.color(hint, tui.DIM)]
                 focus_height = max(1, rows - _FOCUS_OVERHEAD)
                 frame = _focus_frame(record, focus_content, scroll_top=scroll_top, height=focus_height)
             else:
