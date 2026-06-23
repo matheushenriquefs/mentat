@@ -203,6 +203,14 @@ def _fan_out_plans(
     exit via Popen.poll() before spawning the next plan. The cap defaults to 3
     (ADR-0004) and can be overridden via ~/.mentat/config.toml `concurrency`.
 
+    Each chunk owns an **independent** wall-clock deadline measured from its own
+    spawn: a single supervisor loop polls every live child and kills only the
+    ones past `spawn_time + deadline_s`. A child within its own budget is never
+    killed no matter how long a sibling runs (Bug B — the old serial wait phase
+    blocked on each chunk's full deadline in turn, so later chunks inherited a
+    shrunken budget). The same deadline is enforced while waiting for a spawn-cap
+    slot, so a chunk that hangs during fan-out cannot stall further spawns.
+
     Returns each plan paired with its child exit code, so the caller can route a
     ``EX_HITL_REQUIRED`` (42) child away from landing — a wedged AFK self-ejected
     and left its worktree for the operator; landing it would false-merge empty or
@@ -213,11 +221,27 @@ def _fan_out_plans(
     """
     cap = _concurrency_cap()
     deadline_s = _chunk_timeout()
+    grace_s = 5
     live: list[tuple[_scheduler.Plan, subprocess.Popen, str, float]] = []
     seed_summary: str | None = None
     seeded: set[str] = set()  # session IDs already harvested — avoid re-reading stale entries
+
+    def _reap_if_overdue(plan: _scheduler.Plan, proc: subprocess.Popen, spawn_time: float) -> None:
+        """Group-kill `proc` if it is alive and past its own deadline."""
+        if proc.poll() is None and (time.monotonic() - spawn_time) >= deadline_s:
+            print(
+                f"mentat-orchestrate: chunk {plan.slug} timed out after {deadline_s}s — killing",
+                file=sys.stderr,
+            )
+            _kill_tree(proc, grace_s)
+
     for plan in plans:
+        # Throttle to the concurrency cap. While waiting for a slot, kill any
+        # already-live child past its own deadline so a hung chunk cannot stall
+        # new spawns (latent throttle bug).
         while sum(1 for _, p, _, _ in live if p.poll() is None) >= cap:
+            for _plan, p, _sid, spawn_time in live:
+                _reap_if_overdue(_plan, p, spawn_time)
             time.sleep(0.1)
         # Harvest seeds from newly-finished chunks only (skip already-seeded IDs so
         # a chunk that finished in an earlier round cannot overwrite a newer seed).
@@ -227,20 +251,28 @@ def _fan_out_plans(
                 seeded.add(sid)
         _session_id, proc = _fan_out.spawn_with_proc(plan, harness=harness, model=model, seed_summary=seed_summary)
         live.append((plan, proc, _session_id, time.monotonic()))
-    results: list[tuple[_scheduler.Plan, int]] = []
-    grace_s = 5
-    for plan, p, _sid, spawn_time in live:
-        remaining = deadline_s - (time.monotonic() - spawn_time)
-        try:
-            p.wait(timeout=max(0.0, remaining))
-        except subprocess.TimeoutExpired:
-            print(
-                f"mentat-orchestrate: chunk {plan.slug} timed out after {deadline_s}s — killing",
-                file=sys.stderr,
-            )
-            _kill_tree(p, grace_s)
-        results.append((plan, p.returncode))
-    return results
+
+    # Supervisor: poll all live children until each exits or passes its own
+    # deadline. Killing happens per-child against its own spawn_time, so a slow
+    # sibling never shrinks another chunk's budget.
+    returncodes: dict[int, int | None] = {}
+    pending = list(enumerate(live))
+    while pending:
+        still: list[tuple[int, tuple[_scheduler.Plan, subprocess.Popen, str, float]]] = []
+        for idx, (plan, p, _sid, spawn_time) in pending:
+            rc = p.poll()
+            if rc is not None:
+                returncodes[idx] = rc
+                continue
+            if (time.monotonic() - spawn_time) >= deadline_s:
+                _reap_if_overdue(plan, p, spawn_time)
+                returncodes[idx] = p.returncode
+                continue
+            still.append((idx, (plan, p, _sid, spawn_time)))
+        pending = still
+        if pending:
+            time.sleep(0.1)
+    return [(live[i][0], returncodes[i]) for i in range(len(live))]
 
 
 def _partition_fanout(
