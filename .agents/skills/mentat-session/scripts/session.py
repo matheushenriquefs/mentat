@@ -79,15 +79,9 @@ def cmd_report(session_id: str | None) -> int:
     return 0
 
 
-def _humanize_age(age_secs: float) -> str:
-    secs = int(age_secs)
-    if secs < 60:
-        return f"{secs}s ago"
-    if secs < 3600:
-        return f"{secs // 60}m ago"
-    if secs < 86400:
-        return f"{secs // 3600}h ago"
-    return f"{secs // 86400}d ago"
+# Age humanizer lives in the sessions lib so cmd_list and the navigator share one
+# impl; re-exported here under the name test_session.py and cmd_list reach for.
+_humanize_age = _sessions._humanize_age
 
 
 # ASCII status markers (no emoji — shares the tui.py vocabulary).

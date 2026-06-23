@@ -8,6 +8,7 @@ import os
 import select
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
@@ -168,6 +169,29 @@ _STATUS_COL = 8  # status column width in the list pane
 Entry = tuple[dict[str, object], Path]
 
 
+def _record_of(entry: object) -> dict[str, object]:
+    """The status record of a registry element — a bare record or an (record, path) Entry."""
+    return cast("dict[str, object]", entry[0] if isinstance(entry, tuple) else entry)
+
+
+def resolve_focus_index(entries: Sequence[object], pinned_session: str | None, fallback: int | None) -> int | None:
+    """Index of the record whose `session == pinned_session`, pinning focus to identity.
+
+    Pure. The registry re-sorts by (rank, age) every tick, so a fixed integer index
+    drifts onto a different session after a status flip — tracking the *name* instead
+    keeps focus and the list cursor glued to the session the operator chose.
+
+    `pinned_session is None` (nothing pinned yet) → `fallback`. Pinned but gone from
+    the registry (reaped) → `None`, so the caller can drop focus / clamp the cursor.
+    """
+    if pinned_session is None:
+        return fallback
+    for i, e in enumerate(entries):
+        if _record_of(e).get("session") == pinned_session:
+            return i
+    return None
+
+
 def handle_key(key: str, selected: int, count: int) -> tuple[int, str | None]:
     """Reduce one keypress to (new_selection, action). Pure — no I/O.
 
@@ -201,7 +225,8 @@ def render_list(records: list[dict[str, object]], selected: int, *, viewport_hei
         cursor = ">" if i == selected else " "
         dot = tui.status_dot(str(r["status"]))
         last = r.get("last_event") or "-"
-        all_lines.append(f"{cursor} {dot} {r['status']:<{_STATUS_COL}} {r['session']}  {last}")
+        age = _sessions._humanize_age(cast("float", r.get("age", 0.0)))
+        all_lines.append(f"{cursor} {dot} {r['status']:<{_STATUS_COL}} {r['session']}  {age:>9}  {last}")
 
     if viewport_height is None or len(all_lines) <= viewport_height:
         return all_lines
@@ -333,6 +358,10 @@ def navigate(repo_dir: Path, *, repo: str, active_only: bool = True) -> int:
     import tty
 
     selected, focused, view = 0, False, _VIEW_TRANSCRIPT
+    # Pin the list cursor and (when zoomed) focus to the *session name*, not the
+    # integer index a background re-sort keeps shuffling (flicker root cause A).
+    cursor_session: str | None = str(entries[0][0]["session"]) if entries else None
+    pinned: str | None = None
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
     try:
@@ -342,16 +371,30 @@ def navigate(repo_dir: Path, *, repo: str, active_only: bool = True) -> int:
             key = _read_key(POLL_SECS)
             if key is not None:
                 selected, action = handle_key(key, selected, len(entries))
+                if entries:
+                    cursor_session = str(_selected(entries, selected)[0]["session"])
                 if action == "quit":
                     break
                 if action == "focus" and entries:
                     focused = not focused
+                    pinned = str(_selected(entries, selected)[0]["session"]) if focused else None
                 if action == "toggle":
                     view = toggle_view(view)
                 if action == "kill" and entries:
                     _kill(_selected(entries, selected)[1])
             entries = _registry(repo_dir, active_only=active_only)
-            selected = min(selected, max(len(entries) - 1, 0))
+            # Re-resolve the cursor against the freshly re-sorted registry; if its
+            # session was reaped, clamp to the old slot.
+            cursor_idx = resolve_focus_index(entries, cursor_session, None)
+            selected = cursor_idx if cursor_idx is not None else min(selected, max(len(entries) - 1, 0))
+            cursor_session = str(_selected(entries, selected)[0]["session"]) if entries else None
+            # Re-resolve focus the same way; a reaped focus session drops the zoom.
+            if focused:
+                focus_idx = resolve_focus_index(entries, pinned, None)
+                if focus_idx is None:
+                    focused, pinned = False, None
+                else:
+                    selected, cursor_session = focus_idx, pinned
             if not entries:
                 focused = False
     finally:

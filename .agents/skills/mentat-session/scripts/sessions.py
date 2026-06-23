@@ -41,6 +41,22 @@ _RECENCY_SECS = 86400  # 24 hours
 STATUS_RANK = {"waiting": 0, "idle": 1, "?": 2, "working": 3}
 
 
+def _humanize_age(age_secs: float) -> str:
+    """Coarse 'N{s,m,h,d} ago' bucket for a session's idle age.
+
+    Lives here so the registry list (`cmd_list`) and the navigator list pane
+    (`render_list`) share one impl — no duplicate.
+    """
+    secs = int(age_secs)
+    if secs < 60:
+        return f"{secs}s ago"
+    if secs < 3600:
+        return f"{secs // 60}m ago"
+    if secs < 86400:
+        return f"{secs // 3600}h ago"
+    return f"{secs // 86400}d ago"
+
+
 def latest_session(repo_dir: Path) -> str | None:
     """Return the most recently modified session dir, excluding ad-hoc `mentat-manual-*` runs."""
     dirs = [d for d in repo_dir.iterdir() if d.is_dir() and not d.name.startswith("mentat-manual-")]
