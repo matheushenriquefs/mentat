@@ -459,3 +459,120 @@ def test_main_dispatches_track_no_session(tmp_path, monkeypatch):
         with _pytest.raises(SystemExit) as exc:
             session_mod.main()
     assert exc.value.code == 0
+
+
+# ── doctor edge branches: empty / no-terminal / HITL blocker ─────────────────
+
+
+def test_verdict_empty_events_is_all_unknown(tmp_path):
+    doctor_mod = load_module("doctor")
+    session_dir = tmp_path / "empty"
+    session_dir.mkdir()
+    verdict = doctor_mod.build_verdict(session_dir)
+    assert "Reason: unknown" in verdict
+    assert "Is regression: unknown" in verdict
+
+
+def test_verdict_events_without_terminal_reports_no_terminal(tmp_path):
+    doctor_mod = load_module("doctor")
+    session_dir = tmp_path / "no-terminal"
+    _write_log(
+        session_dir,
+        "mentat-implement",
+        [{"ts": "2026-01-01T00:00:00+00:00", "event": "plan.started", "payload": {"path": "/p.md"}}],
+    )
+    verdict = doctor_mod.build_verdict(session_dir)
+    assert "No terminal event found." in verdict
+    assert "Reason: unknown" in verdict
+
+
+def test_verdict_hitl_blocker_appended_to_suspect(tmp_path):
+    doctor_mod = load_module("doctor")
+    session_dir = tmp_path / "hitl"
+    _write_log(
+        session_dir,
+        "mentat-implement",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "event": "chunk.ejected",
+                "payload": {"slug": "c", "reason": "hitl-required", "where": "/wt", "summary": "need a decision"},
+            }
+        ],
+    )
+    verdict = doctor_mod.build_verdict(session_dir)
+    assert "Blocker: need a decision" in verdict
+
+
+def test_summary_no_terminal_says_completed_in_session(tmp_path):
+    doctor_mod = load_module("doctor")
+    session_dir = tmp_path / "insession"
+    _write_log(
+        session_dir,
+        "mentat-implement",
+        [{"ts": "2026-01-01T00:00:00+00:00", "event": "chunk.spawned", "payload": {"slug": "c"}}],
+    )
+    summary = doctor_mod.build_summary(session_dir)
+    assert "not yet landed" in summary
+
+
+def test_summary_hitl_blocker_appended(tmp_path):
+    doctor_mod = load_module("doctor")
+    session_dir = tmp_path / "hitl-sum"
+    _write_log(
+        session_dir,
+        "mentat-implement",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "event": "chunk.ejected",
+                "payload": {"slug": "c", "reason": "hitl-required", "summary": "blocked here"},
+            }
+        ],
+    )
+    summary = doctor_mod.build_summary(session_dir)
+    assert "Blocker: blocked here" in summary
+
+
+# ── sessions: row-parse robustness (non-dict JSON skipped) ───────────────────
+
+
+def test_iter_rows_from_text_skips_non_dict_and_garbage():
+    sessions_mod = load_module("sessions")
+    text = '{"a": 1}\n[1, 2, 3]\nnot json\n\n"bare string"\n{"b": 2}\n'
+    rows = list(sessions_mod.iter_rows_from_text(text))
+    assert rows == [{"a": 1}, {"b": 2}]
+
+
+def test_slug_for_chunk_is_file_stem():
+    sessions_mod = load_module("sessions")
+    assert sessions_mod.slug_for_chunk(Path("/x/mentat-implement-foo.jsonl")) == "mentat-implement-foo"
+
+
+def test_list_sessions_empty_when_repo_dir_missing(tmp_path):
+    sessions_mod = load_module("sessions")
+    assert sessions_mod.list_sessions(tmp_path / "nope") == []
+
+
+def test_status_from_signals_waiting_on_ask_user_question():
+    sessions_mod = load_module("sessions")
+    waiting = {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "AskUserQuestion"}]}}
+    assert sessions_mod._status_from_signals(None, waiting, 1.0) == "waiting"
+
+
+def test_session_worktree_ignores_non_dict_and_non_str_payload(tmp_path):
+    sessions_mod = load_module("sessions")
+    sd = tmp_path / "s-wt"
+    sd.mkdir()
+    rows = [
+        {"ts": "1", "event": "chunk.spawned", "payload": "not-a-dict"},
+        {"ts": "2", "event": "chunk.spawned", "payload": {"worktree": 123}},
+    ]
+    (sd / "audit.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    assert sessions_mod.session_worktree(sd) is None
+
+
+def test_build_record_none_for_vanished_session_dir(tmp_path):
+    """A dir removed mid-scan has no mtime → _build_record returns None, never raises."""
+    sessions_mod = load_module("sessions")
+    assert sessions_mod._build_record(tmp_path / "gone", clock=0.0, stale_secs=300) is None

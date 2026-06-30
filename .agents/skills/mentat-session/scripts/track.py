@@ -46,10 +46,6 @@ def _color_for_event(event: str) -> str:
     return ""
 
 
-def _is_tty() -> bool:
-    return sys.stdout.isatty()
-
-
 # ── dual-stream log renderer ─────────────────────────────────────────────────
 
 
@@ -151,7 +147,13 @@ def view_session(session_dir: Path) -> None:
         for line in render_transcript_lines(session_dir):
             print(line)
         return
+    _view_session_tty(session_dir)
 
+
+def _view_session_tty(session_dir: Path) -> None:  # pragma: no cover - raw-tty I/O shell
+    """Interactive transcript/audit viewer loop. Pure-render parts are tested via
+    render_transcript_lines / render_audit_lines / toggle_view; this is the thin
+    raw-tty wiring that can only run against a real terminal."""
     import termios
     import tty as _tty
 
@@ -162,12 +164,9 @@ def view_session(session_dir: Path) -> None:
         _tty.setcbreak(fd)
         while True:
             sys.stdout.write(tui.CLEAR_HOME)
-            label = view
-            print(tui.section_rule(f"{session_dir.name} — {label}"))
-            if view == _VIEW_TRANSCRIPT:
-                lines = render_transcript_lines(session_dir)
-            else:
-                lines = render_audit_lines(session_dir)
+            print(tui.section_rule(f"{session_dir.name} — {view}"))
+            is_transcript = view == _VIEW_TRANSCRIPT
+            lines = render_transcript_lines(session_dir) if is_transcript else render_audit_lines(session_dir)
             for line in lines:
                 print(line)
             print()
@@ -444,12 +443,19 @@ def navigate(repo_dir: Path, *, repo: str, active_only: bool = True) -> int:
     Thin I/O shell over the gate-tested pure parts. Falls back to a one-shot list
     print when stdin is not a tty (CI / piped).
     """
-    entries = _registry(repo_dir, active_only=active_only)
     if not sys.stdin.isatty():
+        entries = _registry(repo_dir, active_only=active_only)
         for line in render_list([rec for rec, _ in entries], 0):
             print(line)
         return 0
+    return _navigate_tty(repo_dir, repo=repo, active_only=active_only)
 
+
+def _navigate_tty(repo_dir: Path, *, repo: str, active_only: bool) -> int:  # pragma: no cover - raw-tty I/O shell
+    """Live raw-tty navigator loop. The pure parts it drives (handle_key, scroll,
+    resolve_focus_index, render_*, _frame_fingerprint) are gate-tested; this is the
+    thin select/termios shell that can only run against a real terminal."""
+    entries = _registry(repo_dir, active_only=active_only)
     import atexit
     import signal
     import termios

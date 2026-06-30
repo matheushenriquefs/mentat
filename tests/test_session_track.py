@@ -558,3 +558,226 @@ def test_read_key_timeout_returns_none(monkeypatch):
     monkeypatch.setattr(_select, "select", lambda *a, **kw: ([], [], []))
     result = track._read_key(0.01, _fd=0)
     assert result is None
+
+
+def test_read_key_oserror_returns_none(monkeypatch):
+    """os.read raising (fd gone) is swallowed → None, never a crash in the loop."""
+    import os as _os
+    import select as _select
+
+    track = load_module("track")
+    monkeypatch.setattr(_select, "select", lambda *a, **kw: ([0], [], []))
+
+    def _boom(fd: int, n: int) -> bytes:
+        raise OSError
+
+    monkeypatch.setattr(_os, "read", _boom)
+    assert track._read_key(0.01, _fd=0) is None
+
+
+def test_read_key_empty_burst_returns_none(monkeypatch):
+    """A ready fd that reads zero bytes (EOF) → None."""
+    import os as _os
+    import select as _select
+
+    track = load_module("track")
+    monkeypatch.setattr(_select, "select", lambda *a, **kw: ([0], [], []))
+    monkeypatch.setattr(_os, "read", lambda fd, n: b"")
+    assert track._read_key(0.01, _fd=0) is None
+
+
+def test_read_key_undecodable_returns_none(monkeypatch):
+    """A non-UTF-8 byte is swallowed → None, never a UnicodeDecodeError."""
+    import os as _os
+    import select as _select
+
+    track = load_module("track")
+    monkeypatch.setattr(_select, "select", lambda *a, **kw: ([0], [], []))
+    monkeypatch.setattr(_os, "read", lambda fd, n: b"\xff")
+    assert track._read_key(0.01, _fd=0) is None
+
+
+# ── untested helpers: terminal size, selection, tools, registry, kill, frame ──
+
+
+def test_terminal_size_reads_device(monkeypatch):
+    import os as _os
+
+    track = load_module("track")
+    monkeypatch.setattr(_os, "get_terminal_size", lambda fd: _os.terminal_size((120, 40)))
+    assert track._terminal_size() == (120, 40)
+
+
+def test_terminal_size_fallback_on_oserror(monkeypatch):
+    import os as _os
+
+    track = load_module("track")
+
+    def _boom(fd: int) -> object:
+        raise OSError
+
+    monkeypatch.setattr(_os, "get_terminal_size", _boom)
+    assert track._terminal_size() == (80, 20)
+
+
+def test_selected_clamps_to_range():
+    track = load_module("track")
+    entries = [({"session": "a"}, Path("/a")), ({"session": "b"}, Path("/b"))]
+    assert track._selected(entries, 5)[0]["session"] == "b"
+    assert track._selected(entries, 0)[0]["session"] == "a"
+
+
+def test_tools_delegates_to_stream_tools(tmp_path):
+    track = load_module("track")
+    sd = tmp_path / "s-tools"
+    _write_stream(sd, "session", [_assistant("Read", "Grep")])
+    assert track._tools(sd, limit=10) == ["Read", "Grep"]
+
+
+def test_registry_pairs_records_with_dirs(tmp_path):
+    track = load_module("track")
+    repo_dir = tmp_path / "repo"
+    _write_stream(repo_dir / "implement-a-1", "session", [_assistant("Read")])
+    entries = track._registry(repo_dir, active_only=False)
+    assert entries, "expected the seeded session in the registry"
+    rec, sd = entries[0]
+    assert rec["session"] == "implement-a-1"
+    assert sd == repo_dir / "implement-a-1"
+
+
+def test_on_sigterm_sets_terminate_flag():
+    track = load_module("track")
+    track._TERMINATE = False
+    track._on_sigterm(15, None)
+    assert track._TERMINATE is True
+    track._TERMINATE = False
+
+
+def _seed_spawn(session_dir: Path, worktree: str) -> None:
+    session_dir.mkdir(parents=True, exist_ok=True)
+    row = {"ts": "1", "event": "chunk.spawned", "payload": {"worktree": worktree}}
+    (session_dir / "audit.jsonl").write_text(json.dumps(row) + "\n")
+
+
+def test_kill_removes_worktree_via_git(tmp_path, monkeypatch):
+    track = load_module("track")
+    sd = tmp_path / "s-kill"
+    _seed_spawn(sd, "/wt/x")
+    calls: list[tuple] = []
+    monkeypatch.setattr(track.subprocess, "run", lambda *a, **k: calls.append(a))
+    track._kill(sd)
+    assert calls, "expected a git worktree remove call"
+    assert "/wt/x" in calls[0][0]
+
+
+def test_kill_noop_when_no_worktree(tmp_path, monkeypatch):
+    track = load_module("track")
+    sd = tmp_path / "s-nokill"
+    sd.mkdir()
+    calls: list[tuple] = []
+    monkeypatch.setattr(track.subprocess, "run", lambda *a, **k: calls.append(a))
+    track._kill(sd)
+    assert calls == []
+
+
+def test_kill_swallows_git_error(tmp_path, monkeypatch):
+    track = load_module("track")
+    sd = tmp_path / "s-killerr"
+    _seed_spawn(sd, "/wt/y")
+
+    def _boom(*a, **k):
+        raise OSError("git missing")
+
+    monkeypatch.setattr(track.subprocess, "run", _boom)
+    track._kill(sd)  # must not raise
+
+
+def test_frame_builds_list_view_with_repo_and_hint(tmp_path):
+    track = load_module("track")
+    repo_dir = tmp_path / "repo"
+    _write_stream(repo_dir / "implement-a-1", "session", [_assistant("Read", "Grep")])
+    entries = track._registry(repo_dir, active_only=False)
+    body = "\n".join(track._frame(entries, 0, "myrepo", rows=24))
+    assert "myrepo" in body
+    assert "session(s)" in body
+    assert "move" in body  # the list-view key hint
+
+
+def test_frame_empty_entries_has_no_preview():
+    """The list frame with no sessions still renders the header (0 session(s)), no preview."""
+    track = load_module("track")
+    body = "\n".join(track._frame([], 0, "repo", rows=24))
+    assert "0 session(s)" in body
+
+
+def test_transcript_content_continues_after_tool_row(tmp_path):
+    """Tool row, a non-assistant/non-user stream row (skipped), then a text row —
+    exercises both the outer-loop continue and the neither-branch fall-through."""
+    track = load_module("track")
+    sd = tmp_path / "s-multi"
+    rows = [_assistant("Read"), {"type": "system", "subtype": "init"}, _assistant(text="after")]
+    _write_stream(sd, "session", rows)
+    body = "\n".join(track.render_transcript_lines(sd))
+    assert "Read" in body and "after" in body
+
+
+def test_focus_frame_shows_scroll_affordances():
+    track = load_module("track")
+    record = {"session": "s", "status": "working"}
+    content = [f"line {i}" for i in range(20)]
+    body = "\n".join(track._focus_frame(record, content, scroll_top=5, height=5))
+    assert "more" in body  # both ↑ and ↓ affordances render mid-scroll
+
+
+def test_transcript_content_skips_user_row_without_result(tmp_path):
+    """A user row carrying no tool_result and an empty assistant row → placeholder."""
+    track = load_module("track")
+    sd = tmp_path / "s-noresult"
+    rows = [
+        {"type": "user", "message": {"content": [{"type": "text", "text": "hi"}]}},
+        _assistant(text=""),
+    ]
+    _write_stream(sd, "session", rows)
+    lines = track.render_transcript_lines(sd)
+    assert any("no transcript yet" in ln for ln in lines)
+
+
+# ── entrypoint dispatch (tty branch delegates to the pragma'd I/O shell) ───────
+
+
+def test_view_session_tty_dispatches_to_loop(tmp_path, monkeypatch):
+    track = load_module("track")
+    sd = tmp_path / "s-vt"
+    sd.mkdir()
+    monkeypatch.setattr("sys.stdin", type("FakeStdin", (), {"isatty": lambda self: True})())
+    seen: list[Path] = []
+    monkeypatch.setattr(track, "_view_session_tty", lambda d: seen.append(d))
+    track.view_session(sd)
+    assert seen == [sd]
+
+
+def test_navigate_non_tty_prints_list_and_returns_zero(tmp_path, monkeypatch):
+    track = load_module("track")
+    repo_dir = tmp_path / "repo"
+    _write_stream(repo_dir / "implement-x-1", "session", [_assistant("Read", text="hi")])
+    monkeypatch.setattr("sys.stdin", type("FakeStdin", (), {"isatty": lambda self: False})())
+    out: list[str] = []
+    monkeypatch.setattr("builtins.print", lambda *a, **k: out.append(" ".join(str(x) for x in a)))
+    rc = track.navigate(repo_dir, repo="repo", active_only=False)
+    assert rc == 0
+    assert any("implement-x-1" in ln for ln in out)
+
+
+def test_navigate_tty_dispatches_to_loop(tmp_path, monkeypatch):
+    track = load_module("track")
+    monkeypatch.setattr("sys.stdin", type("FakeStdin", (), {"isatty": lambda self: True})())
+    seen: dict[str, object] = {}
+
+    def _fake(rd, *, repo, active_only):
+        seen.update(repo=repo, active_only=active_only)
+        return 0
+
+    monkeypatch.setattr(track, "_navigate_tty", _fake)
+    rc = track.navigate(tmp_path, repo="r", active_only=True)
+    assert rc == 0
+    assert seen == {"repo": "r", "active_only": True}

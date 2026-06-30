@@ -43,6 +43,9 @@ exclude_also = [
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
+    # sys.path bootstrap idiom in the stdlib-only script layer — the not-in-path
+    # branch never runs once another script has already inserted the root.
+    "if str\\(_AGENTS_ROOT\\) not in sys.path:",
 ]
 
 [tool.ruff]
