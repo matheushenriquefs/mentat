@@ -14,6 +14,14 @@ def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
 
 
+def _ok(stdout: str = "", returncode: int = 0) -> MagicMock:
+    r = MagicMock()
+    r.returncode = returncode
+    r.stdout = stdout
+    r.stderr = ""
+    return r
+
+
 def test_commit_routes_to_container_when_present():
     commit_mod = load_module("commit")
     utils_mod = load_module("identity")
@@ -76,3 +84,39 @@ def test_commit_exits_69_when_bringup_fails():
             rc = commit_mod.cmd_commit(["-m", "msg"])
 
     assert rc == 69
+
+
+# ── commit.py: host identity partial branch (32->29) ──────────────────────────
+
+
+def test_host_identity_skips_unset_key(monkeypatch):
+    """When one git config key is unset, the loop continues without adding it (32->29)."""
+    commit = load_module("commit")
+
+    def fake_run(cmd, **kw):
+        # user.name set, user.email returns empty value (val falsy → skipped).
+        if isinstance(cmd, list) and cmd[-1] == "user.name":
+            return _ok(stdout="Alice\n")
+        return _ok(stdout="\n")  # user.email empty
+
+    monkeypatch.setattr(commit.subprocess, "run", fake_run)
+    args = commit._host_identity()
+
+    assert args == ["-c", "user.name=Alice"]
+
+
+# ── identity.py: container_id_for_cwd delegates to lib.devcontainer ────────────
+
+
+def test_container_id_for_cwd_delegates_to_devcontainer(tmp_path, monkeypatch):
+    """container_id_for_cwd derives the slug from cwd and asks lib.devcontainer."""
+    identity = load_module("identity")
+    monkeypatch.chdir(tmp_path)
+
+    from lib import devcontainer
+
+    with patch.object(devcontainer, "container_id_for_slug", return_value="cid-xyz") as mock:
+        result = identity.container_id_for_cwd()
+
+    assert result == "cid-xyz"
+    mock.assert_called_once_with(tmp_path.name)

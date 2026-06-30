@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -14,6 +15,14 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-git/scri
 
 def _load_worktree():
     return load_script(_SCRIPTS / "worktree.py", "wt_mod")
+
+
+def _ok(stdout: str = "", returncode: int = 0) -> MagicMock:
+    r = MagicMock()
+    r.returncode = returncode
+    r.stdout = stdout
+    r.stderr = ""
+    return r
 
 
 @pytest.fixture
@@ -229,3 +238,175 @@ def test_create_worktree_branch_exists_toctou(repo, monkeypatch):
 
     rc = wt.cmd_worktree_create("feat-toctou-branch")
     assert rc == 0, f"TOCTOU branch-exists must be handled gracefully, got rc={rc}"
+
+
+# ── worktree.py helpers: _main_repo_root / is_main_worktree / _detect_default_branch ──
+
+
+def test_main_repo_root_rev_parse_fails_returns_none(tmp_path, monkeypatch):
+    """_main_repo_root returns None when rev-parse fails (lines 45-49 region)."""
+    wt = _load_worktree()
+    monkeypatch.setattr(wt, "_git", lambda args, *, cwd=None: _ok(returncode=1))
+    assert wt._main_repo_root(tmp_path) is None
+
+
+def test_main_repo_root_common_dir_without_dot_git(tmp_path, monkeypatch):
+    """When --git-common-dir is not named .git, it is returned as-is (line 40)."""
+    wt = _load_worktree()
+    common = tmp_path / "custom-common"
+    monkeypatch.setattr(wt, "_git", lambda args, *, cwd=None: _ok(stdout=f"{common}\n"))
+    assert wt._main_repo_root(tmp_path) == common
+
+
+def test_is_main_worktree_true_when_dirs_match(tmp_path, monkeypatch):
+    """is_main_worktree True when git-common-dir == git-dir (lines 45-49)."""
+    wt = _load_worktree()
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    monkeypatch.setattr(wt, "_git", lambda args, *, cwd=None: _ok(stdout=f"{git_dir}\n"))
+    assert wt.is_main_worktree(tmp_path) is True
+
+
+def test_is_main_worktree_false_on_git_failure(tmp_path, monkeypatch):
+    """is_main_worktree returns False when a rev-parse call fails (line 48)."""
+    wt = _load_worktree()
+    monkeypatch.setattr(wt, "_git", lambda args, *, cwd=None: _ok(returncode=1))
+    assert wt.is_main_worktree(tmp_path) is False
+
+
+def test_detect_default_branch_from_origin_head(tmp_path, monkeypatch):
+    """origin/HEAD with origin/ prefix is stripped (lines 80-84)."""
+    wt = _load_worktree()
+
+    def fake_git(args, *, cwd=None):
+        if args[:2] == ["symbolic-ref", "--short"]:
+            return _ok(stdout="origin/develop\n")
+        return _ok(returncode=1)
+
+    monkeypatch.setattr(wt, "_git", fake_git)
+    assert wt._detect_default_branch(tmp_path) == "develop"
+
+
+def test_detect_default_branch_symbolic_ref_no_prefix(tmp_path, monkeypatch):
+    """symbolic-ref returning a bare ref (no origin/ prefix) is returned as-is (line 84)."""
+    wt = _load_worktree()
+
+    def fake_git(args, *, cwd=None):
+        if args[:2] == ["symbolic-ref", "--short"]:
+            return _ok(stdout="trunk\n")
+        return _ok(returncode=1)
+
+    monkeypatch.setattr(wt, "_git", fake_git)
+    assert wt._detect_default_branch(tmp_path) == "trunk"
+
+
+def test_detect_default_branch_symbolic_ref_empty_falls_through(tmp_path, monkeypatch):
+    """symbolic-ref rc==0 but empty stdout falls through to config (83->86)."""
+    wt = _load_worktree()
+
+    def fake_git(args, *, cwd=None):
+        if args[:2] == ["symbolic-ref", "--short"]:
+            return _ok(stdout="\n")  # rc 0 but empty ref
+        if args[:2] == ["config", "--get"]:
+            return _ok(stdout="cfgbranch\n")
+        return _ok(returncode=1)
+
+    monkeypatch.setattr(wt, "_git", fake_git)
+    assert wt._detect_default_branch(tmp_path) == "cfgbranch"
+
+
+def test_detect_default_branch_from_init_default(tmp_path, monkeypatch):
+    """Falls back to init.defaultBranch config when origin/HEAD absent (line 88)."""
+    wt = _load_worktree()
+
+    def fake_git(args, *, cwd=None):
+        if args[:2] == ["symbolic-ref", "--short"]:
+            return _ok(returncode=1)
+        if args[:2] == ["config", "--get"]:
+            return _ok(stdout="primary\n")
+        return _ok(returncode=1)
+
+    monkeypatch.setattr(wt, "_git", fake_git)
+    assert wt._detect_default_branch(tmp_path) == "primary"
+
+
+def test_create_prunes_stale_admin_record(repo, monkeypatch):
+    """A prunable target triggers `git worktree prune` before idempotency check (line 193)."""
+    wt = _load_worktree()
+    prune_calls: list[list[str]] = []
+
+    monkeypatch.setattr(wt, "_main_repo_root", lambda cwd: repo)
+    monkeypatch.setattr(wt, "_is_prunable_target", lambda main_root, target: True)
+    # After the prune, the target is not registered → falls through to create path.
+    monkeypatch.setattr(wt, "_existing_worktree", lambda main_root, target: False)
+    monkeypatch.setattr(wt, "_branch_exists", lambda main_root, branch: branch != "fresh-slug")
+
+    real_git = wt._git
+
+    def tracking_git(args, *, cwd=None):
+        if args[:2] == ["worktree", "prune"]:
+            prune_calls.append(list(args))
+            return _ok()
+        return real_git(args, cwd=cwd)
+
+    monkeypatch.setattr(wt, "_git", tracking_git)
+    monkeypatch.setattr(wt, "_detect_default_branch", lambda root: "main")
+
+    wt.cmd_worktree_create("fresh-slug", base="main", parent=repo / ".mentat" / "worktrees")
+
+    assert prune_calls, "git worktree prune must run for a prunable target"
+
+
+def test_create_worktree_add_generic_failure_maps_software(repo, monkeypatch):
+    """A non-TOCTOU `git worktree add` failure returns the rc / EX_SOFTWARE (246-247)."""
+    wt = _load_worktree()
+
+    monkeypatch.setattr(wt, "_main_repo_root", lambda cwd: repo)
+    monkeypatch.setattr(wt, "_is_prunable_target", lambda main_root, target: False)
+    monkeypatch.setattr(wt, "_existing_worktree", lambda main_root, target: False)
+    monkeypatch.setattr(wt, "_branch_exists", lambda main_root, branch: branch == "main")
+    monkeypatch.setattr(wt, "_detect_default_branch", lambda root: "main")
+
+    def fake_git(args, *, cwd=None):
+        if args[:2] == ["worktree", "add"]:
+            r = _ok(returncode=128)
+            r.stderr = "fatal: some unexpected git error\n"
+            return r
+        return _ok()
+
+    monkeypatch.setattr(wt, "_git", fake_git)
+
+    rc = wt.cmd_worktree_create("oops-slug", base="main", parent=repo / ".mentat" / "worktrees")
+    assert rc == 128
+
+
+def test_create_toctou_retry_still_fails_maps_conflict(repo, monkeypatch):
+    """TOCTOU retry without -b also fails → fall through to the conflict map (233->236)."""
+    wt = _load_worktree()
+
+    monkeypatch.setattr(wt, "_main_repo_root", lambda cwd: repo)
+    monkeypatch.setattr(wt, "_is_prunable_target", lambda main_root, target: False)
+    monkeypatch.setattr(wt, "_existing_worktree", lambda main_root, target: False)
+    monkeypatch.setattr(wt, "_branch_exists", lambda main_root, branch: branch == "main")
+    monkeypatch.setattr(wt, "_detect_default_branch", lambda root: "main")
+
+    add_calls = [0]
+
+    def fake_git(args, *, cwd=None):
+        if args[:2] == ["worktree", "add"]:
+            add_calls[0] += 1
+            r = _ok(returncode=128)
+            # First add (-b): TOCTOU "a branch named ... already exists" → triggers retry.
+            # Retry (no -b) also fails, but now with a path-conflict message.
+            if add_calls[0] == 1:
+                r.stderr = "fatal: a branch named 'slug' already exists\n"
+            else:
+                r.stderr = "fatal: 'target' already exists\n"
+            return r
+        return _ok()
+
+    monkeypatch.setattr(wt, "_git", fake_git)
+
+    rc = wt.cmd_worktree_create("conflict-slug", base="main", parent=repo / ".mentat" / "worktrees")
+    assert rc == wt.EX_DATAERR  # 65 path conflict
+    assert add_calls[0] == 2, "the -b add and the no-b retry must both run"

@@ -22,9 +22,19 @@ def _container():
     return load_script(SCRIPTS / "container.py", "container")
 
 
+def _ops():
+    return load_script(SCRIPTS / "container_ops.py", "container_ops")
+
+
 class _R:
     returncode = 0
     stdout = ""
+
+
+def test_daemon_down_repr():
+    """DAEMON_DOWN.__repr__ returns the sentinel name (line 36)."""
+    ops = _ops()
+    assert repr(ops.DAEMON_DOWN) == "DAEMON_DOWN"
 
 
 def test_run_host_runtime_executes_on_host(tmp_path):

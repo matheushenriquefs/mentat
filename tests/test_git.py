@@ -109,3 +109,22 @@ def test_main_dispatches_worktree_sweep_force(monkeypatch):
             git.main()
     assert exc.value.code == 0
     mock.assert_called_once_with(dry_run=False)
+
+
+# ── git.py CLI: unknown subcommand combination (67->exit) ─────────────────────
+
+
+def test_git_main_worktree_unknown_combo_falls_through(monkeypatch):
+    """main() with a worktree subcommand that matches no branch falls through (67->exit).
+
+    Patch parse_args to yield a (cmd=worktree, wt_cmd=other) namespace the dispatch
+    ladder does not match, so main() returns without sys.exit.
+    """
+    import argparse
+
+    git = load_script(SCRIPTS / "git.py", "mentat_git_falls_through")
+    ns = argparse.Namespace(cmd="worktree", wt_cmd="other")
+    monkeypatch.setattr(git.argparse.ArgumentParser, "parse_args", lambda self, *a, **k: ns)
+
+    # Must return (None) without raising SystemExit — no branch matched.
+    assert git.main() is None

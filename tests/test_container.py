@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -19,6 +20,24 @@ SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-container
 
 def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
+
+
+def _ok(stdout: str = "", returncode: int = 0) -> MagicMock:
+    r = MagicMock()
+    r.returncode = returncode
+    r.stdout = stdout
+    r.stderr = ""
+    return r
+
+
+def _doctor_capture(container_mod, wt: Path) -> str:
+    import io
+    from contextlib import redirect_stdout
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        container_mod.cmd_doctor(wt)
+    return buf.getvalue()
 
 
 # ── utils ───────────────────────────────────────────────────────────────────
@@ -1012,3 +1031,589 @@ def test_cmd_run_daemon_down_no_up_first_message(tmp_path, monkeypatch, capsys):
     assert rc != 0
     assert "mentat-container up" not in captured.err, "daemon-down path must not say 'run mentat-container up first'"
     assert "daemon" in captured.err.lower() or "docker" in captured.err.lower()
+
+
+# ── _warn_host_runtime_once OSError suppression ───────────────────────────────
+
+
+def test_warn_host_runtime_once_swallows_marker_oserror(tmp_path, capsys):
+    """A failed marker write is best-effort — it must not raise (lines 61-62)."""
+    container = load_module("container")
+
+    with (
+        patch("pathlib.Path.home", return_value=tmp_path),
+        patch("pathlib.Path.mkdir", side_effect=OSError("read-only fs")),
+    ):
+        container._warn_host_runtime_once("some-slug")  # must not raise
+
+    assert "ADR-0004" in capsys.readouterr().err
+
+
+# ── _git_root ─────────────────────────────────────────────────────────────────
+
+
+def test_git_root_returns_toplevel(tmp_path):
+    """_git_root returns the rev-parse toplevel (lines 71-79 success branch)."""
+    container = load_module("container")
+
+    with patch.object(container.subprocess, "run", return_value=_ok(stdout=f"{tmp_path}\n")):
+        result = container._git_root()
+
+    assert result == tmp_path
+
+
+def test_git_root_not_in_worktree_exits(capsys):
+    """_git_root exits when not inside a git worktree (lines 76-78)."""
+    container = load_module("container")
+
+    with patch.object(container.subprocess, "run", return_value=_ok(returncode=1)):
+        with pytest.raises(SystemExit) as exc:
+            container._git_root()
+
+    assert exc.value.code != 0
+    assert "git worktree" in capsys.readouterr().err
+
+
+# ── _git_mount_for_worktree / _main_repo_root_for_wt parsing ──────────────────
+
+
+def test_git_mount_for_worktree_non_gitdir_content_returns_none(tmp_path):
+    """A .git file that is not a gitdir pointer yields None (line 92)."""
+    container = load_module("container")
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    (wt / ".git").write_text("ref: refs/heads/main\n")
+
+    assert container._git_mount_for_worktree(wt) is None
+
+
+def test_main_repo_root_for_wt_returns_repo_root(tmp_path):
+    """_main_repo_root_for_wt walks up three parents from gitdir (lines 107-110)."""
+    container = load_module("container")
+    wt = tmp_path / "my-feature"
+    wt.mkdir()
+    main_git = tmp_path / "main" / ".git"
+    (wt / ".git").write_text(f"gitdir: {main_git}/worktrees/my-feature\n")
+
+    result = container._main_repo_root_for_wt(wt)
+
+    assert result == (tmp_path / "main")
+
+
+def test_main_repo_root_for_wt_non_gitdir_returns_none(tmp_path):
+    """Non-gitdir .git content yields None in _main_repo_root_for_wt (line 107)."""
+    container = load_module("container")
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    (wt / ".git").write_text("ref: refs/heads/main\n")
+
+    assert container._main_repo_root_for_wt(wt) is None
+
+
+# ── _ensure_devcontainer_json mount-only patch (139->148) ─────────────────────
+
+
+def test_ensure_devcontainer_json_adds_mount_only_when_ws_ok(tmp_path):
+    """workspaceFolder already correct but git mount missing → only mount appended.
+
+    Covers the ws_ok-True / mount_ok-False branch (139->148): the workspaceFolder
+    block is skipped, but the git mount is still added.
+    """
+    container = load_module("container")
+    wt = tmp_path / "my-feature"
+    wt.mkdir()
+    main_git = str(tmp_path / "main" / ".git")
+    (wt / ".git").write_text(f"gitdir: {main_git}/worktrees/my-feature\n")
+    dcj = wt / ".devcontainer" / "devcontainer.json"
+    dcj.parent.mkdir()
+    # workspaceFolder already correct, but no mounts key yet.
+    dcj.write_text(json.dumps({"name": "my-feature", "workspaceFolder": "/workspaces/my-feature"}, indent=2))
+
+    container._ensure_devcontainer_json(wt, "my-feature")
+
+    result = json.loads(dcj.read_text())
+    expected_mount = f"source={main_git},target={main_git},type=bind"
+    assert expected_mount in result.get("mounts", [])
+    assert result["workspaceFolder"] == "/workspaces/my-feature"
+
+
+# ── cmd_up running-container fast path (201-202) ──────────────────────────────
+
+
+def test_cmd_up_running_container_ensures_safe_dir(tmp_path, monkeypatch):
+    """When a container is already running, cmd_up just ensures safe.directory."""
+    container = load_module("container")
+    safe_calls: list[str] = []
+
+    monkeypatch.setattr(container, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: "running-cid")
+    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container, "_ensure_safe_directory", lambda ws, cid: safe_calls.append(cid))
+
+    rc = container.cmd_up(tmp_path)
+
+    assert rc == 0
+    assert safe_calls == ["running-cid"]
+
+
+# ── docker start timeout (235-237) ────────────────────────────────────────────
+
+
+def test_cmd_up_docker_start_timeout_returns_unavailable(tmp_path, monkeypatch, capsys):
+    """A docker start timeout returns EX_UNAVAILABLE with a diagnostic."""
+    container = load_module("container")
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and len(cmd) > 1 and cmd[1] == "ps":
+            return _ok(stdout="stale-cid\n")
+        if isinstance(cmd, list) and len(cmd) > 1 and cmd[1] == "start":
+            raise subprocess.TimeoutExpired(cmd, 30)
+        return _ok()
+
+    monkeypatch.setattr(container, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: None)
+    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container.subprocess, "run", fake_run)
+
+    rc = container.cmd_up(tmp_path)
+
+    assert rc == container.EX_UNAVAILABLE
+    assert "docker start timed out" in capsys.readouterr().err
+
+
+# ── cold-start symlink + .env copy (264, 268) ─────────────────────────────────
+
+
+def test_cmd_up_cold_start_symlinks_and_copies_env(tmp_path, monkeypatch):
+    """Cold start symlinks vendor/node_modules and copies .env from the main repo."""
+    container = load_module("container")
+
+    main_repo = tmp_path / "main"
+    main_repo.mkdir()
+    (main_repo / "vendor").mkdir()
+    (main_repo / ".env").write_text("SECRET=1\n")
+
+    wt = tmp_path / "wt"
+    wt.mkdir()
+
+    monkeypatch.setattr(container, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: None)
+    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(container, "_main_repo_root_for_wt", lambda wt: main_repo)
+    monkeypatch.setattr(container.subprocess, "run", lambda cmd, **kw: _ok())
+
+    rc = container.cmd_up(wt)
+
+    assert rc == 0
+    assert (wt / "vendor").is_symlink()
+    assert (wt / ".env").read_text() == "SECRET=1\n"
+
+
+# ── git rev-parse timeout in cold start (279-280) ─────────────────────────────
+
+
+def test_cmd_up_git_dir_timeout_degrades_to_empty(tmp_path, monkeypatch):
+    """A git rev-parse --git-dir timeout leaves git_dir empty (no remote-env args)."""
+    container = load_module("container")
+    devcontainer_cmds: list[list[str]] = []
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and cmd[:2] == ["git", "rev-parse"]:
+            raise subprocess.TimeoutExpired(cmd, 30)
+        if isinstance(cmd, list) and cmd and cmd[0] == "devcontainer":
+            devcontainer_cmds.append(list(cmd))
+        return _ok()
+
+    monkeypatch.setattr(container, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: None)
+    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(container, "_main_repo_root_for_wt", lambda wt: None)
+    monkeypatch.setattr(container.subprocess, "run", fake_run)
+
+    rc = container.cmd_up(tmp_path)
+
+    assert rc == 0
+    assert devcontainer_cmds, "devcontainer up must be invoked"
+    assert "--remote-env" not in devcontainer_cmds[0], "no remote-env when git_dir empty"
+
+
+# ── git_dir present → remote-env + final safe dir (291-292, 314) ──────────────
+
+
+def test_cmd_up_cold_start_adds_remote_env_and_final_safe_dir(tmp_path, monkeypatch):
+    """git_dir present → --remote-env GIT_DIR/GIT_WORK_TREE; final_cid → safe dir."""
+    container = load_module("container")
+    devcontainer_cmds: list[list[str]] = []
+    safe_calls: list[str] = []
+    cid_seq = iter([None, "final-cid"])
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and cmd[:3] == ["git", "rev-parse", "--git-dir"]:
+            return _ok(stdout="/repo/.git\n")
+        if isinstance(cmd, list) and cmd and cmd[0] == "devcontainer":
+            devcontainer_cmds.append(list(cmd))
+        return _ok()
+
+    monkeypatch.setattr(container, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: next(cid_seq))
+    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(container, "_main_repo_root_for_wt", lambda wt: None)
+    monkeypatch.setattr(container, "_ensure_safe_directory", lambda ws, cid: safe_calls.append(cid))
+    monkeypatch.setattr(container.subprocess, "run", fake_run)
+
+    rc = container.cmd_up(tmp_path)
+
+    assert rc == 0
+    flat = " ".join(devcontainer_cmds[0])
+    assert "GIT_DIR=/repo/.git" in flat
+    assert "GIT_WORK_TREE=/workspaces/wt" in flat
+    assert safe_calls == ["final-cid"]
+
+
+# ── _ensure_safe_directory issues a docker exec git config ────────────────────
+
+
+def test_ensure_safe_directory_runs_git_config(monkeypatch):
+    """_ensure_safe_directory execs `git config --global --add safe.directory`."""
+    container = load_module("container")
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(container.subprocess, "run", lambda cmd, **kw: calls.append(list(cmd)) or _ok())
+
+    container._ensure_safe_directory("/workspaces/wt", "cid-1")
+
+    assert calls
+    flat = " ".join(calls[0])
+    assert "safe.directory" in flat
+    assert "/workspaces/wt" in flat
+
+
+# ── cmd_run happy path docker exec (336-351) ──────────────────────────────────
+
+
+def test_cmd_run_execs_command_in_container(tmp_path, monkeypatch):
+    """cmd_run docker-execs the command in the running container and returns its rc."""
+    container = load_module("container")
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(container, "_host_runtime", lambda: False)
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: "run-cid")
+    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container.subprocess, "run", lambda cmd, **kw: calls.append(list(cmd)) or _ok(returncode=7))
+
+    rc = container.cmd_run(tmp_path, "echo hi")
+
+    assert rc == 7
+    flat = " ".join(calls[0])
+    assert "exec" in flat
+    assert "run-cid" in flat
+    assert "echo hi" in flat
+
+
+# ── doctor [container] daemon running + emulation (380-409) ───────────────────
+
+
+def test_doctor_container_running_no_emulation(tmp_path, monkeypatch):
+    """Daemon up + container present + matching arch → emulation 'none'."""
+    container = load_module("container")
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and cmd[:1] == ["uname"]:
+            return _ok(stdout="arm64\n")
+        if isinstance(cmd, list) and len(cmd) > 1 and cmd[1] == "info":
+            return _ok(returncode=0)
+        if isinstance(cmd, list) and len(cmd) > 1 and cmd[1] == "inspect":
+            return _ok(stdout="linux/arm64\n")
+        return _ok(returncode=1)
+
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: "cid-1")
+    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container.subprocess, "run", fake_run)
+
+    output = _doctor_capture(container, tmp_path)
+
+    assert "image platf" in output
+    assert "none" in output  # emulation none
+    assert "linux/arm64" in output
+
+
+def test_doctor_container_running_arch_emulation_warns(tmp_path, monkeypatch):
+    """Daemon up + arm64 host running an amd64 image → qemu emulation warning."""
+    container = load_module("container")
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and cmd[:1] == ["uname"]:
+            return _ok(stdout="arm64\n")
+        if isinstance(cmd, list) and len(cmd) > 1 and cmd[1] == "info":
+            return _ok(returncode=0)
+        if isinstance(cmd, list) and len(cmd) > 1 and cmd[1] == "inspect":
+            return _ok(stdout="linux/amd64\n")
+        return _ok(returncode=1)
+
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: "cid-1")
+    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container.subprocess, "run", fake_run)
+
+    rc = container.cmd_doctor(tmp_path)
+    output = _doctor_capture(container, tmp_path)
+
+    assert "qemu" in output
+    assert rc == container.EX_FAILURE  # arch emulation is a warning → non-zero verdict
+
+
+def test_doctor_container_inspect_timeout_unknown_platform(tmp_path, monkeypatch):
+    """A docker inspect timeout reports image platform 'unknown' (397-398)."""
+    container = load_module("container")
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and cmd[:1] == ["uname"]:
+            return _ok(stdout="arm64\n")
+        if isinstance(cmd, list) and len(cmd) > 1 and cmd[1] == "info":
+            return _ok(returncode=0)
+        if isinstance(cmd, list) and len(cmd) > 1 and cmd[1] == "inspect":
+            raise subprocess.TimeoutExpired(cmd, 30)
+        return _ok(returncode=1)
+
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: "cid-1")
+    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container.subprocess, "run", fake_run)
+
+    output = _doctor_capture(container, tmp_path)
+
+    assert "unknown" in output
+
+
+def test_doctor_uname_timeout_arch_unknown(tmp_path, monkeypatch):
+    """A uname timeout falls back to host_arch 'unknown' (508-509)."""
+    container = load_module("container")
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and cmd[:1] == ["uname"]:
+            raise subprocess.TimeoutExpired(cmd, 30)
+        return _ok(returncode=1)
+
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: None)
+    monkeypatch.setattr(container.subprocess, "run", fake_run)
+
+    output = _doctor_capture(container, tmp_path)
+
+    assert "unknown" in output
+
+
+# ── doctor [harness]/[companions]/[mentat state]/[tests] ──────────────────────
+
+
+def test_doctor_harness_and_state_present(tmp_path, monkeypatch):
+    """Doctor harness/companions/mentat-state branches with everything present."""
+    container = load_module("container")
+
+    home = tmp_path / "home"
+    # harness: ~/.claude with agents + skills, ~/.cursor present
+    claude = home / ".claude"
+    (claude / "agents").mkdir(parents=True)
+    (claude / "agents" / "mentat-foo").mkdir()
+    (claude / "skills").mkdir()
+    (claude / "skills" / "mentat-bar").mkdir()
+    (home / ".cursor").mkdir(parents=True)
+    # companions present
+    (claude / "skills" / "diagnose").mkdir()
+    (claude / "skills" / "diagnose" / "SKILL.md").write_text("x\n")
+    (claude / "plugins" / "marketplaces" / "caveman").mkdir(parents=True)
+    # mentat state: ~/.mentat present with logs dir holding a session
+    mentat = home / ".mentat"
+    (mentat / "logs" / "sess1").mkdir(parents=True)
+
+    plans = home / ".agents" / "plans"
+    plans.mkdir(parents=True)
+    manifest = {"closed": ["a.py", "b.py"], "open": ["b.py"]}
+    (plans / "myplan.tests.json").write_text(json.dumps(manifest))
+
+    monkeypatch.setattr(container.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: None)
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and cmd[:1] == ["uname"]:
+            return _ok(stdout="arm64\n")
+        if isinstance(cmd, list) and cmd[:2] == ["git", "rev-parse"]:
+            return _ok(stdout=str(tmp_path / "repo") + "\n")
+        return _ok(returncode=1)
+
+    monkeypatch.setattr(container.subprocess, "run", fake_run)
+
+    output = _doctor_capture(container, tmp_path)
+
+    assert "claude-code" in output
+    assert "mentat-* subagents linked" in output
+    assert "cursor" in output
+    assert "present" in output  # companions present
+    assert "1 sessions" in output
+    assert "1 ro-mounted, 1 open" in output  # tests manifest parsed
+
+
+def test_doctor_companions_missing_advisory(tmp_path, monkeypatch):
+    """Missing companions add an advisory and missing config a warning (445->447, 461)."""
+    container = load_module("container")
+
+    home = tmp_path / "home"
+    home.mkdir()  # no .claude, no .cursor, no companions, no .mentat
+
+    monkeypatch.setattr(container.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: None)
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and cmd[:1] == ["uname"]:
+            return _ok(stdout="arm64\n")
+        if isinstance(cmd, list) and cmd[:2] == ["git", "rev-parse"]:
+            return _ok(returncode=1)  # not in a repo → repo config skipped
+        return _ok(returncode=1)
+
+    monkeypatch.setattr(container.subprocess, "run", fake_run)
+
+    output = _doctor_capture(container, tmp_path)
+
+    assert "missing — run mentat-install" in output
+    assert "advisory" in output
+    assert "logs dir" in output and "absent" in output
+
+
+def test_doctor_manifest_parse_error_and_repo_config(tmp_path, monkeypatch):
+    """A malformed test manifest is reported, and the repo config branch runs (467)."""
+    container = load_module("container")
+
+    home = tmp_path / "home"
+    plans = home / ".agents" / "plans"
+    plans.mkdir(parents=True)
+    (plans / "broken.tests.json").write_text("not json {{{")
+
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+
+    monkeypatch.setattr(container.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: None)
+
+    # Force config_status to emit a warning for both global and repo.
+    import lib.config as _cfg
+
+    monkeypatch.setattr(_cfg, "config_status", lambda d: ("warn-status", "config drift"))
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and cmd[:1] == ["uname"]:
+            return _ok(stdout="arm64\n")
+        if isinstance(cmd, list) and cmd[:2] == ["git", "rev-parse"]:
+            return _ok(stdout=str(repo_root) + "\n")
+        return _ok(returncode=1)
+
+    monkeypatch.setattr(container.subprocess, "run", fake_run)
+
+    rc = container.cmd_doctor(tmp_path)
+    output = _doctor_capture(container, tmp_path)
+
+    assert "manifest parse error" in output
+    assert "config (repo)" in output
+    assert rc == container.EX_FAILURE  # config warnings → non-zero verdict
+
+
+def test_doctor_no_manifests_no_plans(tmp_path, monkeypatch):
+    """Plans dir with no manifests, then with no plans dir at all (495-498)."""
+    container = load_module("container")
+
+    home = tmp_path / "home"
+    plans = home / ".agents" / "plans"
+    plans.mkdir(parents=True)  # exists but empty → "no test manifests"
+
+    monkeypatch.setattr(container.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: None)
+    monkeypatch.setattr(
+        container.subprocess,
+        "run",
+        lambda cmd, **kw: _ok(stdout="arm64\n") if cmd[:1] == ["uname"] else _ok(returncode=1),
+    )
+
+    output = _doctor_capture(container, tmp_path)
+    assert "no test manifests" in output
+
+
+# ── doctor daemon info raises (380-381) ───────────────────────────────────────
+
+
+def test_doctor_daemon_info_filenotfound_marks_not_running(tmp_path, monkeypatch, capsys):
+    """A docker info FileNotFoundError marks the daemon 'not running' (380-381)."""
+    container = load_module("container")
+
+    def fake_run(cmd, **kw):
+        if isinstance(cmd, list) and cmd[:1] == ["uname"]:
+            return _ok(stdout="arm64\n")
+        if isinstance(cmd, list) and len(cmd) > 1 and cmd[1] == "info":
+            raise FileNotFoundError("docker not installed")
+        return _ok(returncode=1)
+
+    monkeypatch.setattr(container.utils, "container_id_for", lambda slug: None)
+    monkeypatch.setattr(container.subprocess, "run", fake_run)
+
+    output = _doctor_capture(container, tmp_path)
+    assert "not running" in output
+
+
+# ── main() CLI dispatch (535-558) ─────────────────────────────────────────────
+
+
+def test_main_dispatches_up(monkeypatch):
+    container = load_module("container")
+    monkeypatch.setattr("sys.argv", ["container.py", "up"])
+    monkeypatch.setattr(container, "_git_root", lambda: Path("/tmp/wt"))
+    with patch.object(container, "cmd_up", return_value=0) as mock, pytest.raises(SystemExit) as exc:
+        container.main()
+    assert exc.value.code == 0
+    mock.assert_called_once_with(Path("/tmp/wt"))
+
+
+def test_main_dispatches_run(monkeypatch):
+    container = load_module("container")
+    monkeypatch.setattr("sys.argv", ["container.py", "run", "echo", "hi"])
+    monkeypatch.setattr(container, "_git_root", lambda: Path("/tmp/wt"))
+    with patch.object(container, "cmd_run", return_value=3) as mock, pytest.raises(SystemExit) as exc:
+        container.main()
+    assert exc.value.code == 3
+    mock.assert_called_once_with(Path("/tmp/wt"), "echo hi")
+
+
+def test_main_dispatches_down_with_slug(monkeypatch):
+    container = load_module("container")
+    monkeypatch.setattr("sys.argv", ["container.py", "down", "--slug", "my-slug"])
+    with patch.object(container, "cmd_down", return_value=0) as mock, pytest.raises(SystemExit) as exc:
+        container.main()
+    assert exc.value.code == 0
+    mock.assert_called_once_with(slug="my-slug")
+
+
+def test_main_dispatches_down_default_slug(monkeypatch):
+    container = load_module("container")
+    monkeypatch.setattr("sys.argv", ["container.py", "down"])
+    monkeypatch.setattr(container, "_git_root", lambda: Path("/tmp/some-repo"))
+    with patch.object(container, "cmd_down", return_value=0) as mock, pytest.raises(SystemExit) as exc:
+        container.main()
+    assert exc.value.code == 0
+    mock.assert_called_once_with(slug="some-repo")
+
+
+def test_main_dispatches_doctor(monkeypatch, tmp_path):
+    container = load_module("container")
+    monkeypatch.setattr("sys.argv", ["container.py", "doctor"])
+    monkeypatch.setattr(container.Path, "cwd", classmethod(lambda cls: tmp_path))
+    with patch.object(container, "cmd_doctor", return_value=0) as mock, pytest.raises(SystemExit) as exc:
+        container.main()
+    assert exc.value.code == 0
+    mock.assert_called_once_with(tmp_path)
+
+
+def test_main_unknown_cmd_falls_through(monkeypatch):
+    """main() with a cmd matching no branch returns without sys.exit (557->exit)."""
+    import argparse
+
+    container = load_script(SCRIPTS / "container.py", "container_falls_through")
+    ns = argparse.Namespace(cmd="bogus")
+    monkeypatch.setattr(container.argparse.ArgumentParser, "parse_args", lambda self, *a, **k: ns)
+    assert container.main() is None
