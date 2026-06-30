@@ -30,6 +30,21 @@ markers = [
     "e2e: real-subprocess / real-git end-to-end test (run the fast suite with `-m \"not e2e\"`)",
 ]
 
+[tool.coverage.run]
+branch = true
+source = [".agents/lib", ".agents/skills", "tasks"]
+
+[tool.coverage.report]
+show_missing = true
+# Baseline floor — green today. The mentat-hardening-ratchet plan raises this to
+# 100 once every module's backfill has landed.
+fail_under = 82
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 120

@@ -9,6 +9,11 @@ __pycache__/
 .pytest_cache/
 node_modules/
 
+# coverage artifacts (tasks/coverage.py)
+.coverage
+coverage.json
+.DS_Store
+
 # pnpm — npm-only policy per ADR-0008 (promptfoo bootstrap via npm)
 .pnpm-store/
 pnpm-lock.yaml

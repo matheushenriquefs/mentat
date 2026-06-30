@@ -1,9 +1,11 @@
 """coverage: branch-coverage runner — human report + machine-readable JSON.
 
 Usage:
-    python tasks/coverage.py [--source=<sources>] [pytest-args...]
+    python tasks/coverage.py [--source=<sources>] [--fail-under=<n>] [pytest-args...]
 
 Default sources: .agents/lib,.agents/skills,tasks
+`--fail-under=<n>` overrides the `fail_under` in pyproject for this run, so the
+mentat-hardening-ratchet plan can raise the gate without editing config.
 Outputs:
     stdout  — coverage report --show-missing
     cwd     — coverage.json  (machine-readable totals + per-file missing branches)
@@ -17,11 +19,14 @@ import sys
 DEFAULT_SOURCES = ".agents/lib,.agents/skills,tasks"
 
 
-def run(sources: str = DEFAULT_SOURCES, pytest_args: list[str] | None = None) -> int:
+def run(sources: str = DEFAULT_SOURCES, pytest_args: list[str] | None = None, *, fail_under: int | None = None) -> int:
     args = pytest_args or []
+    report_cmd = [sys.executable, "-m", "coverage", "report", "--show-missing"]
+    if fail_under is not None:
+        report_cmd.append(f"--fail-under={fail_under}")
     steps: list[list[str]] = [
         [sys.executable, "-m", "coverage", "run", "--branch", f"--source={sources}", "-m", "pytest", *args],
-        [sys.executable, "-m", "coverage", "report", "--show-missing"],
+        report_cmd,
         [sys.executable, "-m", "coverage", "json"],
     ]
     for cmd in steps:
@@ -34,13 +39,16 @@ def run(sources: str = DEFAULT_SOURCES, pytest_args: list[str] | None = None) ->
 def main() -> None:
     raw = sys.argv[1:]
     sources = DEFAULT_SOURCES
+    fail_under: int | None = None
     remaining: list[str] = []
     for arg in raw:
         if arg.startswith("--source="):
             sources = arg[len("--source=") :]
+        elif arg.startswith("--fail-under="):
+            fail_under = int(arg[len("--fail-under=") :])
         else:
             remaining.append(arg)
-    sys.exit(run(sources=sources, pytest_args=remaining))
+    sys.exit(run(sources=sources, pytest_args=remaining, fail_under=fail_under))
 
 
 if __name__ == "__main__":

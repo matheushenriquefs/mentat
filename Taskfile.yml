@@ -11,6 +11,11 @@ tasks:
     cmds:
       - pytest {{.CLI_ARGS}}
 
+  coverage:
+    desc: Branch-coverage report + JSON, gated by the pyproject fail_under floor
+    cmds:
+      - python tasks/coverage.py {{.CLI_ARGS}}
+
   lint:
     desc: Lint with ruff
     cmds:
