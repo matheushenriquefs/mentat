@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
+
+from tests.conftest import init_git_repo
 
 _LIB = Path(__file__).resolve().parents[1] / ".agents/lib"
 _AGENTS_ROOT = Path(__file__).resolve().parents[1] / ".agents"
@@ -105,6 +108,70 @@ def test_diagnosis_file_under_session_dir(tmp_path, monkeypatch):
     session = _load_session()
     sid = "implement-myplan-1234"
     assert session.diagnosis_file(sid) == session.session_dir(sid) / "diagnosis.md"
+
+
+# ── repo identity stable across worktrees (regression: "couldn't track sessions") ──
+
+
+def test_repo_name_stable_from_worktree(tmp_path, monkeypatch):
+    """repo_name() resolves the main repo basename even when cwd is a linked worktree.
+
+    Regression: a fresh `mentat-session track` shell has no MENTAT_REPO, so the
+    reader fell back to cwd().name. Run from a worktree, that is the slug, not the
+    repo — pointing the registry at an empty log dir ("couldn't track sessions").
+    The writer froze MENTAT_REPO to the repo-root basename at spawn, so the reader
+    must resolve the same name from anywhere inside the repo or its worktrees.
+    """
+    monkeypatch.delenv("MENTAT_REPO", raising=False)
+    repo = tmp_path / "myrepo"
+    repo.mkdir()
+    init_git_repo(repo)
+    worktree = tmp_path / "linked" / "some-slug"
+    worktree.parent.mkdir()
+    subprocess.run(
+        ["git", "worktree", "add", "-b", "some-slug", str(worktree)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+    monkeypatch.chdir(worktree)
+    sys.modules.pop("lib.session", None)
+    session = _load_session()
+    assert session.repo_name() == "myrepo"
+
+
+def test_repo_name_stable_from_subdir(tmp_path, monkeypatch):
+    """repo_name() resolves the repo-root basename from a nested subdir, not the subdir."""
+    monkeypatch.delenv("MENTAT_REPO", raising=False)
+    repo = tmp_path / "myrepo"
+    repo.mkdir()
+    init_git_repo(repo)
+    nested = repo / "a" / "b"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
+    sys.modules.pop("lib.session", None)
+    session = _load_session()
+    assert session.repo_name() == "myrepo"
+
+
+def test_repo_name_env_wins(tmp_path, monkeypatch):
+    """An explicit MENTAT_REPO short-circuits git resolution (writer-frozen identity)."""
+    monkeypatch.setenv("MENTAT_REPO", "frozen")
+    monkeypatch.chdir(tmp_path)
+    sys.modules.pop("lib.session", None)
+    session = _load_session()
+    assert session.repo_name() == "frozen"
+
+
+def test_repo_name_falls_back_to_cwd_outside_git(tmp_path, monkeypatch):
+    """Outside any git repo, repo_name() falls back to the cwd basename."""
+    monkeypatch.delenv("MENTAT_REPO", raising=False)
+    outside = tmp_path / "not-a-repo"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+    sys.modules.pop("lib.session", None)
+    session = _load_session()
+    assert session.repo_name() == "not-a-repo"
 
 
 # ── cross-caller convergence ──────────────────────────────────────────────────

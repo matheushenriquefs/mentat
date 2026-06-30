@@ -14,6 +14,7 @@ are keyed from the first event instead of relying on an emit-time fallback.
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
 
@@ -34,9 +35,49 @@ def log_root() -> Path:
     return Path(os.environ.get("MENTAT_LOG_PATH", str(Path.home() / ".mentat" / "logs")))
 
 
+def _repo_root() -> Path | None:
+    """Absolute path of the repo's main working tree, or None outside a git repo.
+
+    Resolves via the *common* git dir so a linked worktree and a nested subdir
+    both report the same repo the writer froze at the repo root, rather than the
+    worktree/subdir basename.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    raw = result.stdout.strip()
+    if not raw:
+        return None
+    common = Path(raw)
+    if not common.is_absolute():
+        common = Path.cwd() / common
+    return common.resolve().parent
+
+
 def repo_name() -> str:
-    """Repo name. Honors MENTAT_REPO (default cwd basename)."""
-    return os.environ.get("MENTAT_REPO", Path.cwd().name)
+    """Repo name, stable across worktrees and subdirs.
+
+    Honors MENTAT_REPO (the writer freezes it at spawn). Otherwise the basename of
+    the repo's main working tree, so a reader invoked from a worktree or a nested
+    subdir resolves the same name the writer froze at the repo root — without it, a
+    fresh `track` shell fell back to the cwd basename and scanned an empty log dir.
+    Falls back to the cwd basename outside a git repo.
+    """
+    env = os.environ.get("MENTAT_REPO")
+    if env:
+        return env
+    root = _repo_root()
+    if root is not None:
+        return root.name
+    return Path.cwd().name
 
 
 def session_dir(session_id: str) -> Path:
@@ -77,7 +118,7 @@ def ensure_session(role: str, slug: str) -> str:
     # from session.jsonl (frozen to the repo dir here). Exporting it once keeps
     # every later MENTAT_REPO reader pointed at one log dir.
     if not os.environ.get("MENTAT_REPO"):
-        os.environ["MENTAT_REPO"] = Path.cwd().name
+        os.environ["MENTAT_REPO"] = repo_name()
     if not os.environ.get("MENTAT_SESSION_LOG"):
         log = session_log_path(session_id)
         log.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
