@@ -113,3 +113,24 @@ def test_invoke_model_flag(monkeypatch):
     assert "--model" in captured["cmd"]
     idx = captured["cmd"].index("--model")
     assert captured["cmd"][idx + 1] == "claude-opus-4-7"
+
+
+# ── _parse_usage: token summing + malformed/blank/non-result/OSError paths ────
+
+
+def test_parse_usage_sums_input_and_output(tmp_path):
+    cc = load_module("claude_code")
+    log = tmp_path / "s.jsonl"
+    log.write_text(
+        "\n"  # blank line → skip
+        "not-json\n"  # JSONDecodeError → skip
+        '{"type":"system"}\n'  # non-result → loop back
+        '{"type":"assistant"}\n'  # non-result → loop back
+        '{"type":"result","usage":{"input_tokens":10,"output_tokens":5}}\n'
+    )
+    assert cc._parse_usage(log) == 15
+
+
+def test_parse_usage_returns_none_on_oserror(tmp_path):
+    cc = load_module("claude_code")
+    assert cc._parse_usage(tmp_path / "does-not-exist.jsonl") is None
