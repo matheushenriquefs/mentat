@@ -37,3 +37,20 @@ def test_mixed_external_and_in_batch_dep() -> None:
     assert sched.next_ready(["a", "b"]) == "a"
     sched.mark_landed("a")
     assert sched.next_ready(["b"]) == "b"
+
+
+def test_next_ready_skips_already_landed_candidate() -> None:
+    """A landed slug still in the candidate list is skipped, not re-yielded."""
+    a, b = _plan("a"), _plan("b")
+    sched = scheduler.Scheduler([a, b])
+    sched.mark_landed("a")
+    # "a" is landed → skipped; next ready is "b".
+    assert sched.next_ready(["a", "b"]) == "b"
+
+
+def test_next_ready_skips_ejected_candidate() -> None:
+    """An ejected slug still in the candidate list is skipped."""
+    a, b = _plan("a"), _plan("b")
+    sched = scheduler.Scheduler([a, b])
+    sched.mark_ejected("a")
+    assert sched.next_ready(["a", "b"]) == "b"

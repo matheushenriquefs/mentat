@@ -75,3 +75,9 @@ def test_load_plans_does_not_exit_on_empty_blocked_by(tmp_path: Path) -> None:
 
     assert len(plans) == 1
     assert plans[0].slug == "standalone"
+
+
+def test_run_gates_returns_pass_for_none_path() -> None:
+    """plans.run_gates(None) short-circuits to ('pass', '') without invoking the engine."""
+    plans_mod = load_module("plans")
+    assert plans_mod.run_gates(None) == ("pass", "")

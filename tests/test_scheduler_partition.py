@@ -100,3 +100,68 @@ def test_cycle_raises() -> None:
         assert "cycle" in str(e).lower()
     else:
         raise AssertionError("partition did not raise on cycle")
+
+
+def test_topo_sort_tolerates_external_dep_not_in_batch() -> None:
+    """A blocked_by slug absent from the batch is skipped in the topo walk."""
+    a = _plan("a", "AFK", blocked_by=["already-landed-elsewhere"])
+
+    anchored, auto = scheduler.partition([a])
+
+    # No HITL relation and the missing dep never gates → a stays auto.
+    assert anchored == []
+    assert [p.slug for p in auto] == ["a"]
+
+
+def test_transitive_downstream_hitl_promotes_root() -> None:
+    """AFK root whose transitive downstream is HITL anchors (exercises the recursive walk)."""
+    a = _plan("a", "AFK")
+    b = _plan("b", "AFK", blocked_by=["a"])
+    h = _plan("h", "HITL", blocked_by=["b"])
+
+    anchored, auto = scheduler.partition([a, b, h])
+
+    assert {p.slug for p in anchored} == {"a", "b", "h"}
+    assert auto == []
+
+
+def test_downstream_diamond_revisits_shared_node() -> None:
+    """A diamond reverse-dep graph revisits a shared downstream node (visited guard)."""
+    a = _plan("a", "AFK")
+    b = _plan("b", "AFK", blocked_by=["a"])
+    c = _plan("c", "AFK", blocked_by=["a"])
+    d = _plan("d", "AFK", blocked_by=["b", "c"])
+
+    anchored, auto = scheduler.partition([a, b, c, d])
+
+    # No HITL anywhere → everything auto; the walk must still terminate.
+    assert anchored == []
+    assert {p.slug for p in auto} == {"a", "b", "c", "d"}
+
+
+def test_upstream_diamond_revisits_shared_node() -> None:
+    """A diamond forward-dep graph revisits a shared upstream node (visited guard)."""
+    d = _plan("d", "AFK")
+    b = _plan("b", "AFK", blocked_by=["d"])
+    c = _plan("c", "AFK", blocked_by=["d"])
+    a = _plan("a", "AFK", blocked_by=["b", "c"])
+
+    anchored, auto = scheduler.partition([a, b, c, d])
+
+    assert anchored == []
+    assert {p.slug for p in auto} == {"a", "b", "c", "d"}
+
+
+def test_upstream_hitl_walk_returns_false_for_unknown_slug() -> None:
+    """_has_upstream_hitl on a slug absent from the map short-circuits to False."""
+    assert scheduler._has_upstream_hitl("ghost", {}) is False
+
+
+def test_upstream_hitl_skips_external_dep() -> None:
+    """An external (out-of-batch) upstream dep is skipped, not treated as HITL."""
+    a = _plan("a", "AFK", blocked_by=["external"])
+
+    anchored, auto = scheduler.partition([a])
+
+    assert anchored == []
+    assert [p.slug for p in auto] == ["a"]

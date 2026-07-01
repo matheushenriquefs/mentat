@@ -112,3 +112,61 @@ def test_fan_out_track_suggestion_is_bin_form(tmp_path):
     assert "python3" not in output, f"bin form must not contain python3: {output!r}"
     assert "mentat-session track" in output, f"must use bin form; got: {output!r}"
     assert "sess-binform" in output, f"session id missing from track output: {output!r}"
+
+
+# ── _spawn_worktree_subprocess: harness/model/seed argv + env wiring ─────────
+
+
+def test_spawn_worktree_subprocess_wires_harness_model_and_seed(tmp_path, monkeypatch):
+    """harness/model append CLI flags; seed_summary injects MENTAT_SEED_SUMMARY."""
+    fan_out = load_module("fan_out")
+
+    monkeypatch.setattr(fan_out, "mint_session", lambda kind, stem: "sess-wire")
+    monkeypatch.setattr(fan_out, "_log_dir_for", lambda sid: tmp_path)
+
+    captured: dict[str, object] = {}
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["env"] = kwargs.get("env")
+        captured["new_session"] = kwargs.get("start_new_session")
+        return _FakePopen()
+
+    monkeypatch.setattr(fan_out.subprocess, "Popen", fake_popen)
+
+    sid, proc = fan_out._spawn_worktree_subprocess(
+        tmp_path / "p.md", harness="cursor", model="opus", seed_summary="prior ctx"
+    )
+
+    assert sid == "sess-wire"
+    cmd = captured["cmd"]
+    assert "--harness" in cmd and cmd[cmd.index("--harness") + 1] == "cursor"
+    assert "--model" in cmd and cmd[cmd.index("--model") + 1] == "opus"
+    env = captured["env"]
+    assert env["MENTAT_SESSION"] == "sess-wire"
+    assert env["MENTAT_SEED_SUMMARY"] == "prior ctx"
+    assert captured["new_session"] is True
+
+
+def test_spawn_worktree_subprocess_omits_flags_when_unset(tmp_path, monkeypatch):
+    """No harness/model/seed → no flags and no MENTAT_SEED_SUMMARY env key."""
+    fan_out = load_module("fan_out")
+
+    monkeypatch.setattr(fan_out, "mint_session", lambda kind, stem: "sess-bare")
+    monkeypatch.setattr(fan_out, "_log_dir_for", lambda sid: tmp_path)
+
+    captured: dict[str, object] = {}
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["env"] = kwargs.get("env")
+        return _FakePopen()
+
+    monkeypatch.setattr(fan_out.subprocess, "Popen", fake_popen)
+
+    fan_out._spawn_worktree_subprocess(tmp_path / "p.md")
+
+    cmd = captured["cmd"]
+    assert "--harness" not in cmd
+    assert "--model" not in cmd
+    assert "MENTAT_SEED_SUMMARY" not in captured["env"]

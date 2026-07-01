@@ -287,3 +287,38 @@ def test_land_ejects_with_git_error_reason_on_git_failure(tmp_path) -> None:
     assert result["reason"] != "not-ff", "git-error must not be reported as not-ff"
     emitted_reasons = [c.args[1].get("reason") for c in mock_emit.call_args_list if "reason" in c.args[1]]
     assert not any(r == "not-ff" for r in emitted_reasons)
+
+
+# ── drain cascade: downstream already gone from pending is skipped ───────────
+
+
+def test_drain_cascade_skips_downstream_not_in_pending():
+    """A cascaded slug no longer in `pending` is skipped (no duplicate eject verdict)."""
+    lq = load_module("land_queue")
+    a, b = make_chunk("a"), make_chunk("b")
+
+    def fake_land(chunk, *, holding):
+        return {"slug": chunk.slug, "status": "eject", "reason": "gate-failed"}
+
+    def fake_next_ready(pending):
+        return pending[0] if pending else None
+
+    # Cascade names "b" (in pending) and a phantom slug that was never pending.
+    def fake_on_ejected(slug):
+        return ["b", "phantom-slug"]
+
+    with (
+        patch.object(lq, "land", side_effect=fake_land),
+        patch.object(lq, "_teardown_container", lambda _s: None),
+        patch.object(lq, "_emit_event", lambda *a, **k: None),
+    ):
+        results = lq.drain(
+            [a, b],
+            holding="main",
+            on_ejected=fake_on_ejected,
+            next_ready=fake_next_ready,
+        )
+
+    slugs = [r.get("slug") for r in results]
+    assert "a" in slugs and "b" in slugs
+    assert "phantom-slug" not in slugs, "downstream never in pending must not yield a verdict"
