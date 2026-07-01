@@ -80,3 +80,83 @@ def test_compute_plan_is_pure_no_side_effects(tmp_path, monkeypatch):
     plan_mod.compute_plan(home=home, clone_root=None)
     after = set(tmp_path.rglob("*"))
     assert before == after
+
+
+def test_action_repr_round_trips_fields():
+    plan_mod = load_module("plan")
+    a = plan_mod.Action("symlink", Path("/s"), Path("/t"))
+    r = repr(a)
+    assert "symlink" in r
+    assert "/s" in r
+    assert "/t" in r
+
+
+def test_plan_symlink_updates_when_target_points_elsewhere(tmp_path):
+    plan_mod = load_module("plan")
+    home = tmp_path / "home"
+    clone = tmp_path / "clone"
+    (clone / ".agents" / "skills" / "mentat-log").mkdir(parents=True)
+    tgt = home / ".agents" / "skills" / "mentat-log"
+    tgt.parent.mkdir(parents=True)
+    other = tmp_path / "other"
+    other.mkdir()
+    tgt.symlink_to(other)  # existing symlink → different source → update
+    ip = plan_mod.compute_plan(home=home, clone_root=clone)
+    assert any(a.action_type == "symlink" and a.target == tgt for a in ip.update)
+
+
+def test_compute_plan_clone_less_skips_existing_skill_target(tmp_path):
+    plan_mod = load_module("plan")
+    home = tmp_path / "home"
+    existing = home / ".agents" / "skills" / "mentat-log"
+    existing.mkdir(parents=True)  # target exists → no copy action for it
+    ip = plan_mod.compute_plan(home=home, clone_root=None)
+    copy_targets = {a.target for a in ip.add if a.action_type == "copy"}
+    assert existing not in copy_targets
+
+
+def test_plan_symlink_conflict_on_real_file_at_target(tmp_path):
+    plan_mod = load_module("plan")
+    home = tmp_path / "home"
+    clone = tmp_path / "clone"
+    (clone / ".agents" / "skills" / "mentat-log").mkdir(parents=True)
+    tgt = home / ".agents" / "skills" / "mentat-log"
+    tgt.parent.mkdir(parents=True)
+    tgt.write_text("real")  # real file (not symlink) → conflict
+    ip = plan_mod.compute_plan(home=home, clone_root=clone)
+    assert tgt in ip.conflicts
+
+
+def test_plan_symlink_no_update_when_target_already_correct(tmp_path):
+    plan_mod = load_module("plan")
+    home = tmp_path / "home"
+    clone = tmp_path / "clone"
+    src = clone / ".agents" / "skills" / "mentat-log"
+    src.mkdir(parents=True)
+    tgt = home / ".agents" / "skills" / "mentat-log"
+    tgt.parent.mkdir(parents=True)
+    tgt.symlink_to(src)  # already points at the right source → no update
+    ip = plan_mod.compute_plan(home=home, clone_root=clone)
+    assert not any(a.target == tgt for a in ip.update)
+
+
+def test_compute_plan_skips_existing_mentat_subdir(tmp_path):
+    plan_mod = load_module("plan")
+    home = tmp_path / "home"
+    (home / ".mentat" / "logs").mkdir(parents=True)  # logs exists → no mkdir action
+    ip = plan_mod.compute_plan(home=home, clone_root=None)
+    mkdir_targets = {a.target for a in ip.add if a.action_type == "mkdir"}
+    assert home / ".mentat" / "logs" not in mkdir_targets
+
+
+def test_compute_plan_harness_reviewer_symlinks_from_clone(tmp_path):
+    plan_mod = load_module("plan")
+    home = tmp_path / "home"
+    clone = tmp_path / "clone"
+    (clone / ".agents" / "skills").mkdir(parents=True)
+    (clone / ".agents" / "agents").mkdir(parents=True)
+    (clone / ".agents" / "agents" / "mentat-bug-reviewer.md").write_text("")
+    (home / ".claude").mkdir(parents=True)  # harness detected → fanout runs reviewer loop
+    ip = plan_mod.compute_plan(home=home, clone_root=clone)
+    agent_links = [a for a in ip.add + ip.update if "/.claude/agents/" in str(a.target)]
+    assert agent_links

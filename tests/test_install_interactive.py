@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -140,3 +141,49 @@ def test_print_banner_outputs_to_stdout(capsys: pytest.CaptureFixture[str]) -> N
         companions._print_banner()
     out = capsys.readouterr().out
     assert "mentat" in out.lower()
+
+
+class _FakeStdout(io.StringIO):
+    """StringIO that reports as a TTY so the spinner code path runs."""
+
+    def isatty(self) -> bool:
+        return True
+
+
+def test_spinner_loop_writes_one_frame(monkeypatch: pytest.MonkeyPatch) -> None:
+    companions = _load("companions")
+    out = _FakeStdout()
+    monkeypatch.setattr(companions.sys, "stdout", out)
+    sp = companions._Spinner("working")
+    monkeypatch.setattr(companions.time, "sleep", lambda _s: sp._stop.set())  # exit after one frame
+    sp._loop()
+    assert "working" in out.getvalue()
+
+
+def test_spinner_starts_thread_and_clears_on_tty(monkeypatch: pytest.MonkeyPatch) -> None:
+    companions = _load("companions")
+    out = _FakeStdout()
+    monkeypatch.setattr(companions.sys, "stdout", out)
+    # Block the worker until stop is set so is_alive() is True at exit → join runs.
+    monkeypatch.setattr(companions._Spinner, "_loop", lambda self: self._stop.wait())
+    with companions._Spinner("x") as sp:
+        assert sp._thread.is_alive()
+    assert "\r\033[K" in out.getvalue()  # line-clear emitted on TTY exit
+
+
+def test_install_all_iterates_companions_when_tty(monkeypatch: pytest.MonkeyPatch) -> None:
+    companions = _load("companions")
+    import contextlib
+
+    seen: list[str] = []
+    monkeypatch.setattr(companions, "install_one", lambda c, *, tty: seen.append(c["name"]))
+    monkeypatch.setattr(companions, "_print_banner", lambda: None)
+
+    @contextlib.contextmanager
+    def _tty():
+        yield object()  # non-None tty
+
+    monkeypatch.setattr(companions, "open_tty", _tty)
+    rc = companions.install_all(yes=False)
+    assert rc == 0
+    assert len(seen) == len(companions.COMPANIONS)
