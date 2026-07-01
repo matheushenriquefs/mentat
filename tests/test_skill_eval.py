@@ -60,3 +60,26 @@ def test_run_eval_gate_returns_true_when_promptfoo_absent(tmp_path):
     with patch("shutil.which", return_value=None):
         result = eval_mod.run_eval_gate("my-skill", evals_dir=tmp_path)
     assert result is True
+
+
+def test_eval_default_evals_dir_and_missing_file_exits(tmp_path):
+    eval_mod = load_module("eval")
+    with (
+        patch.object(eval_mod._utils, "default_evals_dir", return_value=tmp_path),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        eval_mod.cmd_eval("missing-skill")  # evals_dir=None → default; file absent
+    assert exc_info.value.code == 1
+
+
+def test_run_eval_gate_runs_promptfoo_when_present(tmp_path):
+    eval_mod = load_module("eval")
+    evals_file = tmp_path / "my-skill.json"
+    evals_file.write_text('{"evals":[]}')
+    with (
+        patch("shutil.which", return_value="/usr/bin/promptfoo"),
+        patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
+    ):
+        result = eval_mod.run_eval_gate("my-skill", evals_dir=tmp_path)
+    assert result is True
+    mock_run.assert_called_once()
