@@ -160,6 +160,7 @@ import argparse as _argparse  # noqa: E402
 import os as _os  # noqa: E402
 
 import log as log_mod  # noqa: E402
+import pytest  # noqa: E402
 
 
 def _make_emit_args(agent: str, event: str, payload: str):
@@ -538,3 +539,95 @@ def test_emit_missing_required_key_rejected(tmp_path, monkeypatch):
         assert rc == 1, f"expected rc=1 for {event} with payload {payload}, got {rc}"
         sidecar = tmp_path / "test-repo" / f"sess-rej-{i}" / ".stderr" / "test-agent-test-agent.stderr"
         assert sidecar.exists(), f"sidecar not written for {event}"
+
+
+# ── cmd_validate error-print branch (module-level) ───────────────────────────
+
+
+def test_validate_row_with_errors_prints_and_returns_rc1(tmp_path):
+    import json as _json
+
+    f = tmp_path / "bad.jsonl"
+    row = {"ts": "t", "agent": "a", "session": "s", "event": "plan.started", "payload": {}}  # missing path
+    f.write_text(_json.dumps(row) + "\n")
+    assert log_mod.cmd_validate(_make_validate_args(str(f))) == 1
+
+
+# ── cmd_query skip + filter branches (module-level) ──────────────────────────
+
+
+def test_query_skips_blank_and_malformed_and_filters(tmp_path, monkeypatch):
+    import contextlib
+    import io
+    import json as _json
+
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "r")
+    session_dir = tmp_path / "r" / "s-qf"
+    session_dir.mkdir(parents=True)
+    good = _json.dumps({"ts": "t", "agent": "ag1", "session": "s", "event": "plan.started", "payload": {"path": "/a"}})
+    other = _json.dumps(
+        {"ts": "t", "agent": "ag2", "session": "s", "event": "plan.succeeded", "payload": {"path": "/a"}}
+    )
+    # blank line (201), malformed line (204-205), plus two valid rows
+    (session_dir / "f.jsonl").write_text("\n" + good + "\n" + "malformed{{{\n" + other + "\n")
+
+    # event filter excludes plan.succeeded (207)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        assert log_mod.cmd_query(_make_query_args("s-qf", event="plan.started")) == 0
+    events = {_json.loads(ln)["event"] for ln in buf.getvalue().splitlines() if ln.strip()}
+    assert events == {"plan.started"}
+
+    # agent filter excludes ag2 (209)
+    buf2 = io.StringIO()
+    with contextlib.redirect_stdout(buf2):
+        log_mod.cmd_query(_make_query_args("s-qf", agent="ag1"))
+    agents = {_json.loads(ln)["agent"] for ln in buf2.getvalue().splitlines() if ln.strip()}
+    assert agents == {"ag1"}
+
+
+# ── cmd_prune real prune loop (module-level) ─────────────────────────────────
+
+
+def test_prune_removes_old_session_and_skips_files(tmp_path, monkeypatch):
+    import datetime as _dt
+    import os as _osmod
+    import time
+
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "r")
+    repo_dir = tmp_path / "r"
+    old = repo_dir / "old"
+    new = repo_dir / "new"
+    old.mkdir(parents=True)
+    new.mkdir(parents=True)
+    (repo_dir / "afile").write_text("x")  # non-dir entry → skipped (231-232)
+    old_t = time.time() - 10 * 86400
+    _osmod.utime(old, (old_t, old_t))
+    cutoff = (_dt.date.today() - _dt.timedelta(days=5)).isoformat()
+    assert log_mod.cmd_prune(_make_prune_args(cutoff)) == 0
+    assert not old.exists()
+    assert new.exists()
+
+
+# ── build_parser + main entrypoint ───────────────────────────────────────────
+
+
+def test_build_parser_parses_emit_subcommand():
+    args = log_mod.build_parser().parse_args(["emit", "ag", "plan.started", "{}"])
+    assert args.cmd == "emit"
+    assert args.agent == "ag"
+    assert args.event == "plan.started"
+
+
+def test_main_dispatches_to_command(tmp_path, monkeypatch):
+    import json as _json
+
+    f = tmp_path / "ok.jsonl"
+    row = {"ts": "t", "agent": "a", "session": "s", "event": "plan.started", "payload": {"path": "/x"}}
+    f.write_text(_json.dumps(row) + "\n")
+    monkeypatch.setattr(log_mod.sys, "argv", ["mentat-log", "validate", str(f)])
+    with pytest.raises(SystemExit) as e:
+        log_mod.main()
+    assert e.value.code == 0
