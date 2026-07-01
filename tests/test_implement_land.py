@@ -167,3 +167,40 @@ def test_land_and_review_no_verdicts_key(tmp_path):
         result = impl._land_and_review("slug", tmp_path, "main")
 
     assert "verdicts" not in result, "verdicts key must be absent after B6 removes batch_review"
+
+
+# ── main() --land integration: rc 0 → _land_and_review fires ─────────────────
+
+
+import pytest  # noqa: E402
+
+
+def test_main_land_flag_invokes_land_and_review(tmp_path, monkeypatch):
+    impl = _impl()
+    plan = _write_plan(tmp_path, "landme", "AFK")
+    target = tmp_path / "wt"
+    target.mkdir()
+
+    monkeypatch.setattr(impl.sys, "argv", ["implement.py", "run", str(plan), "--land", "--holding", "hold-x"])
+    monkeypatch.setattr(impl, "resolve_plan_path", lambda _ref: plan)
+    monkeypatch.setattr(impl, "ensure_session", lambda *a, **k: "sess")
+    monkeypatch.setattr(impl, "_prune_worktrees_preflight", lambda: None)
+    monkeypatch.setattr(impl._utils, "default_harness", lambda: "claude-code")
+    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda _h: (0, []))
+    monkeypatch.setattr(impl, "preflight_worktree", lambda _slug: (0, target))
+    monkeypatch.setattr(impl.os, "chdir", lambda _p: None)
+    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda: False)
+    monkeypatch.setattr(impl, "_run_and_doctor", lambda *a, **k: 0)
+
+    calls: dict = {}
+    monkeypatch.setattr(
+        impl, "_land_and_review", lambda slug, worktree, holding: calls.update(slug=slug, wt=worktree, holding=holding)
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        impl.main()
+
+    assert exc.value.code == 0
+    assert calls["slug"] == "landme"
+    assert calls["holding"] == "hold-x"
+    assert calls["wt"] == target

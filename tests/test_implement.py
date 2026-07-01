@@ -653,3 +653,257 @@ def test_implement_diff_suggestion_is_raw_git_diff(tmp_path, monkeypatch, capsys
     captured = capsys.readouterr()
     assert "git diff main..HEAD" in captured.err, f"raw git diff not in stderr: {captured.err!r}"
     assert "diff_tool" not in captured.err, "diff_tool must not appear in suggestion"
+
+
+# ── coverage backfill: bin-layer bootstrap ───────────────────────────────────
+
+
+def test_scripts_dir_bootstrap_inserts_when_absent(monkeypatch):
+    """When the scripts dir is not on sys.path, importing implement.py inserts it."""
+    import sys as _sys
+
+    filtered = [p for p in _sys.path if "mentat-implement/scripts" not in p]
+    monkeypatch.setattr(_sys, "path", filtered)
+    load_script(SCRIPTS / "implement.py", "impl_bootstrap")
+    assert any("mentat-implement/scripts" in p for p in _sys.path)
+
+
+# ── mark_test_writable guards ────────────────────────────────────────────────
+
+
+def test_mark_test_writable_no_manifest_warns(tmp_path, monkeypatch, capsys):
+    impl = load_module("implement")
+    monkeypatch.setattr(impl, "_plans_dir", lambda: tmp_path)  # empty — no manifest
+    impl.mark_test_writable("slug-x", "tests/a.py")
+    assert "no manifest" in capsys.readouterr().err
+
+
+# ── _compaction_threshold ────────────────────────────────────────────────────
+
+
+def test_compaction_threshold_bad_value_returns_none(tmp_path, monkeypatch):
+    impl = load_module("implement")
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('compaction_threshold_tokens = "not-an-int"\n')
+    monkeypatch.setenv("MENTAT_CONFIG", str(cfg))
+    assert impl._compaction_threshold() is None
+
+
+# ── _repo_root_from_worktree fallback ────────────────────────────────────────
+
+
+def test_repo_root_from_worktree_falls_back_on_git_error(tmp_path, monkeypatch):
+    impl = load_module("implement")
+    monkeypatch.setattr(impl.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", "boom"))
+    wt = tmp_path / "a" / "b" / "c" / "d"
+    wt.mkdir(parents=True)
+    assert impl._repo_root_from_worktree(wt) == wt.parents[2]
+
+
+# ── _run_session_cmd + _auto_doctor ──────────────────────────────────────────
+
+
+def test_run_session_cmd_noop_when_script_missing(monkeypatch):
+    impl = load_module("implement")
+    monkeypatch.setattr(impl, "_SESSION_SCRIPT", Path("/nonexistent/session.py"))
+    called: list = []
+    monkeypatch.setattr(impl.subprocess, "run", lambda *a, **k: called.append(a))
+    impl._run_session_cmd("doctor")
+    assert not called
+
+
+def test_auto_doctor_opens_editor_when_set(tmp_path, monkeypatch):
+    impl = load_module("implement")
+    monkeypatch.setattr(impl, "_run_session_cmd", lambda _sub: None)
+    monkeypatch.setenv("EDITOR", "my-editor")
+    monkeypatch.setenv("MENTAT_SESSION", "sess-1")
+    monkeypatch.setattr(impl, "_session_dir_fn", lambda _sid: tmp_path)
+    (tmp_path / "diagnosis.md").write_text("diag")
+    runs: list = []
+    monkeypatch.setattr(impl.subprocess, "run", lambda cmd, **k: runs.append(cmd))
+    impl._auto_doctor()
+    assert runs and runs[0][0] == "my-editor"
+
+
+# ── _is_main_worktree failure modes ──────────────────────────────────────────
+
+
+def test_is_main_worktree_false_when_spec_none(monkeypatch):
+    impl = load_module("implement")
+    monkeypatch.setattr(impl.importlib.util, "spec_from_file_location", lambda *a, **k: None)
+    assert impl._is_main_worktree(Path.cwd()) is False
+
+
+def test_is_main_worktree_false_on_load_error(tmp_path, monkeypatch, capsys):
+    impl = load_module("implement")
+    bad = tmp_path / "worktree.py"
+    bad.write_text("def broken(:\n")  # syntax error → exec_module raises
+    monkeypatch.setattr(impl, "_GIT_WORKTREE_PY", bad)
+    assert impl._is_main_worktree(tmp_path) is False
+    assert "worktree.py load failed" in capsys.readouterr().err
+
+
+# ── preflight_worktree skip when git.py missing ──────────────────────────────
+
+
+def test_preflight_worktree_skips_when_git_script_missing(monkeypatch):
+    impl = load_module("implement")
+    monkeypatch.delenv("MENTAT_SKIP_PREFLIGHT", raising=False)
+    monkeypatch.setattr(impl, "_GIT_SCRIPT", Path("/nonexistent/git.py"))
+    assert impl.preflight_worktree("slug") == (0, None)
+
+
+# ── _load_mod ────────────────────────────────────────────────────────────────
+
+
+def test_load_mod_loads_real_module():
+    impl = load_module("implement")
+    mod = impl._load_mod("hu_probe", SCRIPTS / "harness_utils.py")
+    assert hasattr(mod, "default_harness")
+
+
+def test_load_mod_raises_when_no_loader(tmp_path):
+    impl = load_module("implement")
+    bad = tmp_path / "x.txt"
+    bad.write_text("not python")
+    with pytest.raises(ImportError):
+        impl._load_mod("x", bad)
+
+
+# ── blocked-summary seam helpers ─────────────────────────────────────────────
+
+
+def test_blocked_summary_path_none_without_session(monkeypatch):
+    impl = load_module("implement")
+    monkeypatch.delenv("MENTAT_SESSION", raising=False)
+    assert impl._blocked_summary_path() is None
+
+
+def test_read_summary_at_returns_none_on_oserror(tmp_path, monkeypatch):
+    impl = load_module("implement")
+    p = tmp_path / "summary.md"
+    p.write_text("---\nstatus: blocked\n---\nbody")
+
+    def boom(*a, **k):
+        raise OSError("read failed")
+
+    monkeypatch.setattr(Path, "read_text", boom)
+    assert impl._read_summary_at(p) is None
+
+
+def test_read_blocked_summary_falls_back_to_worktree(tmp_path, monkeypatch):
+    impl = load_module("implement")
+    monkeypatch.delenv("MENTAT_SESSION", raising=False)  # seam is None → worktree fallback
+    (tmp_path / impl.SUMMARY_FILE).write_text("---\nstatus: blocked\n---\nthe blocker text")
+    assert impl._read_blocked_summary(tmp_path) == "the blocker text"
+
+
+def test_promote_blocked_summary_swallows_oserror(monkeypatch):
+    impl = load_module("implement")
+    monkeypatch.setenv("MENTAT_SESSION", "sess-x")
+
+    def boom(*a, **k):
+        raise OSError("mkdir failed")
+
+    monkeypatch.setattr(Path, "mkdir", boom)
+    impl._promote_blocked_summary("body")  # must not raise
+
+
+# ── _veto_agents_dir mapping ─────────────────────────────────────────────────
+
+
+def test_veto_agents_dir_maps_known_and_default_harness():
+    impl = load_module("implement")
+    assert impl._veto_agents_dir("cursor").parts[-2:] == (".cursor", "agents")
+    assert impl._veto_agents_dir("unknown-harness").parts[-2:] == (".claude", "agents")
+
+
+# ── _strip_frontmatter edge cases ────────────────────────────────────────────
+
+
+def test_strip_frontmatter_no_frontmatter_returned_verbatim():
+    impl = load_module("implement")
+    assert impl._strip_frontmatter("plain body, no fm") == "plain body, no fm"
+
+
+def test_strip_frontmatter_unterminated_returned_verbatim():
+    impl = load_module("implement")
+    text = "---\nid: x\nno closing fence"
+    assert impl._strip_frontmatter(text) == text
+
+
+# ── _do_land wrapper ─────────────────────────────────────────────────────────
+
+
+def test_do_land_delegates_to_land_queue():
+    impl = load_module("implement")
+
+    class _FakeLQ:
+        def land(self, chunk, *, holding):
+            return {"status": "success", "tip": "sha1", "holding": holding}
+
+    result = impl._do_land("CHUNK", holding="main", land_queue=_FakeLQ())
+    assert result["status"] == "success"
+    assert result["holding"] == "main"
+
+
+# ── main() early-exit branches ───────────────────────────────────────────────
+
+
+def test_main_multi_plan_refs_exits_1(monkeypatch, capsys):
+    impl = load_module("implement")
+    monkeypatch.setattr(impl.sys, "argv", ["implement.py", "run", "p1", "p2"])
+    with pytest.raises(SystemExit) as exc:
+        impl.main()
+    assert exc.value.code == 1
+    assert "one plan at a time" in capsys.readouterr().err
+
+
+def test_main_plan_not_found_exits_1(monkeypatch, capsys):
+    impl = load_module("implement")
+    monkeypatch.setattr(impl.sys, "argv", ["implement.py", "run", "ghost"])
+    monkeypatch.setattr(impl, "resolve_plan_path", lambda _ref: Path("/nonexistent/ghost.md"))
+    with pytest.raises(SystemExit) as exc:
+        impl.main()
+    assert exc.value.code == 1
+    assert "plan not found" in capsys.readouterr().err
+
+
+def test_main_preflight_veto_failure_names_missing_and_exits(tmp_path, monkeypatch, capsys):
+    impl = load_module("implement")
+    plan = tmp_path / "p.md"
+    plan.write_text("---\nid: p\nclass: AFK\n---\n")
+    monkeypatch.setattr(impl.sys, "argv", ["implement.py", "run", str(plan)])
+    monkeypatch.setattr(impl, "resolve_plan_path", lambda _ref: plan)
+    monkeypatch.setattr(impl, "ensure_session", lambda *a, **k: "sess")
+    monkeypatch.setattr(impl, "_prune_worktrees_preflight", lambda: None)
+    monkeypatch.setattr(impl._utils, "default_harness", lambda: "claude-code")
+    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda _h: (1, ["mentat-bug-reviewer"]))
+    with pytest.raises(SystemExit) as exc:
+        impl.main()
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "PREFLIGHT FAILED" in err
+    assert "mentat-bug-reviewer" in err
+
+
+def test_mark_test_writable_idempotent_when_already_open(tmp_path, monkeypatch):
+    impl = load_module("implement")
+    monkeypatch.setattr(impl, "_plans_dir", lambda: tmp_path)
+    monkeypatch.setattr(impl, "_emit_event", lambda *a, **k: None)
+    manifest = tmp_path / "slug-y.tests.json"
+    manifest.write_text(json.dumps({"closed": ["t/a.py"], "open": ["t/a.py"]}))
+    impl.mark_test_writable("slug-y", "t/a.py")  # already open → no duplicate append
+    assert json.loads(manifest.read_text())["open"] == ["t/a.py"]
+
+
+def test_auto_doctor_editor_set_but_no_diagnosis_file(tmp_path, monkeypatch):
+    impl = load_module("implement")
+    monkeypatch.setattr(impl, "_run_session_cmd", lambda _sub: None)
+    monkeypatch.setenv("EDITOR", "my-editor")
+    monkeypatch.setenv("MENTAT_SESSION", "sess-1")
+    monkeypatch.setattr(impl, "_session_dir_fn", lambda _sid: tmp_path)  # no diagnosis.md written
+    runs: list = []
+    monkeypatch.setattr(impl.subprocess, "run", lambda *a, **k: runs.append(a))
+    impl._auto_doctor()
+    assert not runs, "editor must not open when diagnosis.md is absent"

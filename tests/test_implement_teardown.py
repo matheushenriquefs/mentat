@@ -55,3 +55,44 @@ def test_teardown_dirty_preserves(monkeypatch, tmp_path) -> None:
     # dir untouched (teardown stubbed to preserve), container still downed
     assert target.exists()
     assert down_calls == ["implement-p-2"]
+
+
+# ── main() teardown: implement drops its own worktree on non-zero exit ───────
+
+import pytest  # noqa: E402
+
+_SCRIPTS = REPO_ROOT / ".agents/skills/mentat-implement/scripts"
+
+
+def _write_plan(tmp_path: Path, slug: str = "failme") -> Path:
+    p = tmp_path / f"{slug}.md"
+    p.write_text(f"---\nid: {slug}\nclass: AFK\n---\n# {slug}\n")
+    return p
+
+
+def test_main_tears_down_worktree_on_failure(tmp_path, monkeypatch):
+    impl = _load()
+    plan = _write_plan(tmp_path)
+    target = tmp_path / "wt"
+    target.mkdir()
+
+    monkeypatch.setattr(impl.sys, "argv", ["implement.py", "run", str(plan)])
+    monkeypatch.setattr(impl, "resolve_plan_path", lambda _ref: plan)
+    monkeypatch.setattr(impl, "ensure_session", lambda *a, **k: "sess")
+    monkeypatch.setattr(impl, "_prune_worktrees_preflight", lambda: None)
+    monkeypatch.setattr(impl._utils, "default_harness", lambda: "claude-code")
+    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda _h: (0, []))
+    monkeypatch.setattr(impl, "preflight_worktree", lambda _slug: (0, target))
+    monkeypatch.setattr(impl.os, "chdir", lambda _p: None)
+    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda: False)
+    monkeypatch.setattr(impl, "_run_and_doctor", lambda *a, **k: 1)  # non-preserve failure
+    monkeypatch.setattr(impl, "_repo_root_from_worktree", lambda _t: tmp_path)
+
+    torn: list = []
+    monkeypatch.setattr(impl, "_teardown_worktree", lambda t: torn.append(t))
+
+    with pytest.raises(SystemExit) as exc:
+        impl.main()
+
+    assert exc.value.code == 1
+    assert torn == [target], "clean-up must tear down the implement-owned worktree on failure"

@@ -518,12 +518,12 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     if ro:
         os.environ["MENTAT_RO_MOUNTS"] = json.dumps(ro)
 
+    # Reached only on the AFK path — the HITL early-return above guarantees afk.
     plan_body = _strip_frontmatter(plan_path.read_text())
-    if afk:
-        home_agents = str(Path.home()) + "/.agents/"
-        cwd_agents = str(Path.cwd()) + "/.agents/"
-        if home_agents != cwd_agents and Path(cwd_agents).is_dir():
-            plan_body = plan_body.replace(home_agents, cwd_agents)
+    home_agents = str(Path.home()) + "/.agents/"
+    cwd_agents = str(Path.cwd()) + "/.agents/"
+    if home_agents != cwd_agents and Path(cwd_agents).is_dir():
+        plan_body = plan_body.replace(home_agents, cwd_agents)
     prompt = f"{_AFK_COMMIT_CONTRACT}\n\n{_AFK_AMBIGUITY_CONTRACT}\n\n{plan_body}"
     result = _invoke_harness(harness, prompt, afk=afk, model=model)
 
@@ -533,22 +533,21 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     # and preserve the worktree for the operator. Checked before the generic
     # nonzero-exit branch so a wedge is never misreported as implement-failed
     # (the root cause of silent AFK kills reading as plain failures).
-    if afk:
-        blocker = _read_blocked_summary(Path.cwd())
-        if blocker is not None or _detect_self_answer(result):
-            summary = blocker or "AFK ambiguity — self-answer detected in the session stream."
-            _promote_blocked_summary(summary)
-            _emit_event(
-                "chunk.ejected",
-                ejected_payload(
-                    slug,
-                    EjectReason.HITL_REQUIRED,
-                    str(plan_path.parent),
-                    logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
-                    summary=summary,
-                ),
-            )
-            return EX_HITL_REQUIRED
+    blocker = _read_blocked_summary(Path.cwd())
+    if blocker is not None or _detect_self_answer(result):
+        summary = blocker or "AFK ambiguity — self-answer detected in the session stream."
+        _promote_blocked_summary(summary)
+        _emit_event(
+            "chunk.ejected",
+            ejected_payload(
+                slug,
+                EjectReason.HITL_REQUIRED,
+                str(plan_path.parent),
+                logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
+                summary=summary,
+            ),
+        )
+        return EX_HITL_REQUIRED
 
     if result.returncode != 0:
         _emit_event(
