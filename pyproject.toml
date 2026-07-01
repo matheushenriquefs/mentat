@@ -36,9 +36,10 @@ source = [".agents/lib", ".agents/skills", "tasks"]
 
 [tool.coverage.report]
 show_missing = true
-# Baseline floor — green today. The mentat-hardening-ratchet plan raises this to
-# 100 once every module's backfill has landed.
-fail_under = 82
+# Unit gate: 100% testable-line coverage. Entrypoints and the sys.path bootstrap
+# idiom are omit-listed below; everything else must be exercised. `task coverage`
+# enforces this floor on the fast (`-m "not e2e"`) suite.
+fail_under = 100
 exclude_also = [
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
