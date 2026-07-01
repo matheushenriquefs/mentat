@@ -42,6 +42,17 @@ def test_two_plugins_both_providing_harness_first_wins() -> None:
     assert harness is harness_a
 
 
+def test_resolve_slots_skips_plugin_without_harness() -> None:
+    """A plugin with harness=None is skipped; the loop continues to the next."""
+    real = FakeHarness()
+    real.name = "real"
+    no_harness = MentatPlugin(name="p1")  # harness defaults to None
+    with_harness = MentatPlugin(name="p2", harness=real)
+    builtin_harness = FakeHarness()
+    result = resolve_slots([no_harness, with_harness], [], builtin_harness)
+    assert result is real
+
+
 def test_config_order_controls_first_wins() -> None:
     harness_a = FakeHarness()
     harness_a.name = "a"
@@ -159,3 +170,43 @@ def test_discover_plugins_factory_returns_non_plugin_raises() -> None:
             raise AssertionError("expected RuntimeError")
         except RuntimeError as exc:
             assert "wrong-type-plugin" in str(exc)
+
+
+def test_discover_plugins_valid_plugin_is_appended() -> None:
+    """A well-formed entry-point factory yields a MentatPlugin that is appended + returned."""
+    from plugins import registry
+
+    good_ep = MagicMock()
+    good_ep.name = "good-plugin"
+    good_ep.load.return_value = lambda: MentatPlugin(name="good-plugin")
+
+    with patch("importlib.metadata.entry_points", return_value=[good_ep]):
+        plugins = registry._discover_plugins()
+    assert [p.name for p in plugins] == ["good-plugin"]
+
+
+def test_load_config_order_swallows_config_error(tmp_path, monkeypatch) -> None:
+    """A KeyError/TypeError while reading config is caught → empty order."""
+    from plugins import registry
+
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("[plugins]\n")
+
+    def _boom(_path):
+        raise TypeError("malformed")
+
+    monkeypatch.setattr(registry, "load_config_file", _boom)
+    assert registry._load_config_order(cfg) == []
+
+
+def test_registry_inserts_lib_parent_on_sys_path(monkeypatch) -> None:
+    """The sys.path bootstrap inserts the lib parent when it is absent."""
+    import importlib
+    import sys
+
+    from plugins import registry
+
+    parent = str(registry._LIB_ROOT.parent)
+    monkeypatch.setattr(sys, "path", [p for p in sys.path if p != parent])
+    importlib.reload(registry)
+    assert str(registry._LIB_ROOT.parent) in sys.path
