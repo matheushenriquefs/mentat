@@ -17,3 +17,4 @@ Architecture Decision Records for Mentat.
 | [0011](./0011-compose-aware-container.md) | Compose-aware container bring-up (sidecar detection + dev-service layering + host opt-out) | Accepted |
 | [0012](./0012-code-rules-layer.md) | Code-rules layer | Accepted |
 | [0013](./0013-session-continuity-over-compaction.md) | Session continuity over compaction — checkpoint + respawn, harness-agnostic | Accepted |
+| [0014](./0014-coverage-gate.md) | Coverage gate — 100% unit / 99% e2e, blocking | Accepted |

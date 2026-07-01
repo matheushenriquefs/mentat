@@ -56,6 +56,12 @@ Two enforcement layers, both project-tool-agnostic:
 
 See [ADR-0006](./adr/0006-soft-readonly-test-enforcement.md) and [ADR-0010](./adr/0010-readonly-test-mount.md).
 
+## Coverage gate
+
+Coverage is a blocking gate, run by `task coverage`, in two branch-coverage passes: the fast unit suite (`-m "not e2e"`) over `.agents/lib`, `.agents/skills`, and `tasks` must hit **100% testable-line** (floor in `pyproject.toml` `fail_under`), and the `e2e`-marked journeys over `.agents` must hit **99%**. Entrypoints, `TYPE_CHECKING` blocks, and the stdlib-only `sys.path` bootstrap idiom are omit-listed; raw-tty I/O shells are covered through their extracted pure helpers, not by driving the terminal. A branch that drops below its floor fails the land the same way a red test does.
+
+See [ADR-0014](./adr/0014-coverage-gate.md).
+
 ## AFK vs HITL routing
 
 Each slice carries a `class:` tag in its plan frontmatter:
