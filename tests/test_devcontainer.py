@@ -232,6 +232,156 @@ def test_down_removes_all_matching_containers(monkeypatch):
     assert "cid2" in removed, "second container must be removed"
 
 
+# ── container_id_for_slug error path ──────────────────────────────────────────
+
+
+def test_container_id_for_slug_returns_none_on_docker_error(monkeypatch):
+    """A non-zero docker returncode yields None (line 82)."""
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _cp(1, ""))
+    assert devcontainer.container_id_for_slug("some-slug") is None
+
+
+# ── down error path ───────────────────────────────────────────────────────────
+
+
+def test_down_reports_failure_when_rm_errors(monkeypatch):
+    """A failed `docker rm` flips ok to False (line 107)."""
+
+    def fake_run(argv, **kw):
+        if argv[1] == "ps":
+            return _cp(0, "cid-x\n")
+        if argv[1] == "rm":
+            return _cp(1, "")  # rm failure
+        return _cp(0, "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert devcontainer.down("my-slug") is False
+
+
+# ── up cold-start git rev-parse timeout ───────────────────────────────────────
+
+
+def test_up_cold_start_git_rev_parse_timeout(monkeypatch, tmp_path):
+    """git rev-parse timing out during cold start leaves git_dir empty (lines 138-139)."""
+    import subprocess as _sp
+
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kw):
+        calls.append(list(argv))
+        if argv[0] == "git":
+            raise _sp.TimeoutExpired(argv, 30)
+        if argv[0] == "docker" and argv[1] == "ps":
+            return _cp(0, "")  # no running/stopped container → cold start
+        return _cp(0, "abc123\n")  # devcontainer up + id check
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = devcontainer.up("my-slug", tmp_path)
+
+    assert result is True
+    devcontainer_calls = [c for c in calls if c[0] == "devcontainer"]
+    assert devcontainer_calls, "devcontainer CLI must still run after git timeout"
+    # git_dir empty → no --remote-env flags injected
+    assert "--remote-env" not in devcontainer_calls[0]
+
+
+# ── up devcontainer CLI missing ───────────────────────────────────────────────
+
+
+def test_up_devcontainer_cli_missing_returns_false(monkeypatch, tmp_path, capsys):
+    """devcontainer CLI not on PATH → up() returns False (lines 155-156)."""
+
+    def fake_run(argv, **kw):
+        if argv[0] == "git":
+            return _cp(0, ".git\n")
+        if argv[0] == "docker" and argv[1] == "ps":
+            return _cp(0, "")  # cold start
+        if argv[0] == "devcontainer":
+            raise FileNotFoundError
+        return _cp(0, "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = devcontainer.up("my-slug", tmp_path)
+
+    assert result is False
+    assert capsys.readouterr().err.strip() != "", "expected a stderr advisory"
+
+
+# ── run: no container ─────────────────────────────────────────────────────────
+
+
+def test_run_returns_none_without_container(monkeypatch):
+    """run() returns None when the slug has no running container (line 166)."""
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _cp(0, ""))
+    assert devcontainer.run("absent-slug", "echo hi") is None
+
+
+# ── exec ──────────────────────────────────────────────────────────────────────
+
+
+def test_exec_returns_none_without_container(monkeypatch):
+    """exec() returns None when the slug has no running container."""
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _cp(0, ""))
+    assert devcontainer.exec("absent-slug", ["ls"]) is None
+
+
+def test_exec_injects_workdir_and_user(monkeypatch):
+    """workdir + user flags are injected before the container id (branches 188->190, 190->192)."""
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kw):
+        calls.append(list(argv))
+        if len(argv) > 1 and argv[1] == "ps":
+            return _cp(0, "cid-1\n")
+        return _cp(0, "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    devcontainer.exec("slug", ["ls", "-la"], workdir="/w", user="node")
+
+    exec_calls = [c for c in calls if len(c) > 1 and c[1] == "exec"]
+    assert exec_calls, "docker exec not invoked"
+    argv = exec_calls[0]
+    assert "--workdir" in argv and "/w" in argv
+    assert "-u" in argv and "node" in argv
+    assert argv[-2:] == ["ls", "-la"]
+    assert "cid-1" in argv
+
+
+def test_exec_omits_workdir_and_user_when_none(monkeypatch):
+    """No workdir/user → neither flag appears (the false side of 188->190, 190->192)."""
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kw):
+        calls.append(list(argv))
+        if len(argv) > 1 and argv[1] == "ps":
+            return _cp(0, "cid-1\n")
+        return _cp(0, "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    devcontainer.exec("slug", ["ls"])
+
+    exec_calls = [c for c in calls if len(c) > 1 and c[1] == "exec"]
+    assert exec_calls
+    argv = exec_calls[0]
+    assert "--workdir" not in argv
+    assert "-u" not in argv
+
+
+def test_exec_docker_missing_returns_none(monkeypatch, capsys):
+    """docker binary not on PATH during exec → None (lines 196-198)."""
+
+    def fake_run(argv, **kw):
+        if len(argv) > 1 and argv[1] == "ps":
+            return _cp(0, "cid-1\n")  # container found
+        raise FileNotFoundError  # the exec call itself
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = devcontainer.exec("slug", ["ls"])
+
+    assert result is None
+    assert capsys.readouterr().err.strip() != "", "expected a stderr advisory"
+
+
 # ── stdlib check ──────────────────────────────────────────────────────────────
 
 

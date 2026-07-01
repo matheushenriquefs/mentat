@@ -174,6 +174,42 @@ def test_repo_name_falls_back_to_cwd_outside_git(tmp_path, monkeypatch):
     assert session.repo_name() == "not-a-repo"
 
 
+# ── _repo_root error paths ────────────────────────────────────────────────────
+
+
+def test_repo_name_falls_back_when_git_binary_missing(tmp_path, monkeypatch):
+    """git not on PATH → _repo_root returns None → cwd basename (lines 52-53)."""
+    monkeypatch.delenv("MENTAT_REPO", raising=False)
+    outside = tmp_path / "no-git-here"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+    sys.modules.pop("lib.session", None)
+    session = _load_session()
+
+    def raise_oserror(*a, **k):
+        raise OSError("no git")
+
+    monkeypatch.setattr(subprocess, "run", raise_oserror)
+    assert session.repo_name() == "no-git-here"
+
+
+def test_repo_name_falls_back_when_common_dir_empty(tmp_path, monkeypatch):
+    """git prints empty --git-common-dir → _repo_root returns None → cwd basename (line 58)."""
+    monkeypatch.delenv("MENTAT_REPO", raising=False)
+    outside = tmp_path / "empty-out"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+    sys.modules.pop("lib.session", None)
+    session = _load_session()
+
+    class _Result:
+        returncode = 0
+        stdout = "   \n"
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Result())
+    assert session.repo_name() == "empty-out"
+
+
 # ── cross-caller convergence ──────────────────────────────────────────────────
 
 

@@ -60,6 +60,36 @@ def test_is_managed_by_path(tmp_path) -> None:
     assert not worktrees.is_managed(outside, repo)
 
 
+def test_is_managed_swallows_resolve_oserror(tmp_path) -> None:
+    """A path whose resolve() raises OSError is treated as unmanaged (lines 33-34)."""
+
+    class _BadPath:
+        def resolve(self) -> Path:
+            raise OSError("boom")
+
+    assert worktrees.is_managed(_BadPath(), tmp_path) is False  # type: ignore[arg-type]
+
+
+def test_prune_skips_when_remove_fails(tmp_path, monkeypatch) -> None:
+    """A clean stale worktree whose removal fails is not counted (branch 88->85)."""
+    wt_root = tmp_path / ".mentat" / "worktrees"
+    wt = _make_wt(wt_root, "implement-stuck-1", age_secs=7200)
+
+    def fake_run(cmd, **kw):
+        if "status" in cmd:
+            return _cp(0, "")  # clean
+        if "worktree" in cmd and "remove" in cmd:
+            return _cp(1)  # git remove fails; rmtree fallback also fails below
+        return _cp(0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    # rmtree keeps the dir on disk so _remove returns False (path still exists)
+    monkeypatch.setattr(shutil, "rmtree", lambda *a, **k: None)
+
+    assert worktrees.prune_stale(wt_root, active_slugs=set()) == 0
+    assert wt.exists()
+
+
 def test_prune_is_path_based_not_name_based(tmp_path, monkeypatch) -> None:
     """A clean stale worktree is pruned regardless of its name — including one
     a legacy name-exemption (mentat-manual-*) would have spared."""

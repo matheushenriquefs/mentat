@@ -164,6 +164,18 @@ def test_main_no_subcommand_exits_1(tmp_path):
     assert result.returncode != 0
 
 
+def test_main_no_subcommand_prints_help_in_process(monkeypatch, capsys):
+    """main() with no subcommand prints help and exits 1 (in-process, for coverage)."""
+    plan_mod = load_module("plan")
+    monkeypatch.setattr("sys.argv", ["plan.py"])
+    try:
+        plan_mod.main()
+        raise AssertionError("expected SystemExit")
+    except SystemExit as exc:
+        assert exc.code == 1
+    assert "usage" in capsys.readouterr().out.lower()
+
+
 def test_main_resolve_slug_prints_path(tmp_path, monkeypatch, capsys):
     """main() with resolve-slug cmd prints canonical path."""
     plan_mod = load_module("plan")

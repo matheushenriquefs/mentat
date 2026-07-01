@@ -32,7 +32,10 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-source = [".agents/lib", ".agents/skills", "tasks"]
+# Shipped runtime only. The `tasks/` dir is dev tooling (coverage runner, docs
+# sync, release) — out of the shipped surface and its runner can't self-measure,
+# so it stays out of the 100% gate. Its behavior is still tested (test_coverage_runner).
+source = [".agents/lib", ".agents/skills"]
 
 [tool.coverage.report]
 show_missing = true

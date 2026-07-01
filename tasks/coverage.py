@@ -3,7 +3,7 @@
 Usage:
     python tasks/coverage.py [--source=<sources>] [--fail-under=<n>] [pytest-args...]
 
-Default sources: .agents/lib,.agents/skills,tasks
+Default sources: .agents/lib,.agents/skills (shipped runtime; dev tooling in tasks/ is out of the gate)
 `--fail-under=<n>` overrides the `fail_under` in pyproject for this run, so the
 mentat-hardening-ratchet plan can raise the gate without editing config.
 Outputs:
@@ -16,7 +16,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
-DEFAULT_SOURCES = ".agents/lib,.agents/skills,tasks"
+DEFAULT_SOURCES = ".agents/lib,.agents/skills"
 
 
 def run(sources: str = DEFAULT_SOURCES, pytest_args: list[str] | None = None, *, fail_under: int | None = None) -> int:

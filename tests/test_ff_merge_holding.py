@@ -156,6 +156,45 @@ def test_ff_merge_not_checked_out_not_ff_returns_not_ff(tmp_path: Path) -> None:
     assert _branch_sha(main_repo, "holding") == holding_tip, "holding must not advance"
 
 
+def _cp(returncode: int = 0, stdout: str = "") -> subprocess.CompletedProcess:  # type: ignore[type-arg]
+    r: subprocess.CompletedProcess = subprocess.CompletedProcess.__new__(subprocess.CompletedProcess)
+    r.returncode, r.stdout, r.stderr, r.args = returncode, stdout, "", []
+    return r
+
+
+def test_ff_merge_empty_worktree_list_returns_git_error(tmp_path: Path, monkeypatch) -> None:
+    """An empty worktree list (e.g. a corrupt repo) → 'git-error' (line 125)."""
+    calls = {"n": 0}
+
+    def fake_run(args, **kw):
+        # First call is rev-parse HEAD (succeeds); worktree list returns nothing.
+        calls["n"] += 1
+        if args[:2] == ["rev-parse", "HEAD"]:
+            return _cp(0, "deadbeef\n")
+        if args[:2] == ["worktree", "list"]:
+            return _cp(0, "")  # empty → entries == []
+        return _cp(0, "")
+
+    monkeypatch.setattr(git_lib, "_run", fake_run)
+    assert git_lib.ff_merge(tmp_path, "holding") == "git-error"
+
+
+def test_ff_merge_holding_checked_out_missing_tip_returns_git_error(tmp_path: Path, monkeypatch) -> None:
+    """holding checked out but its ref rev-parse fails → 'git-error' (line 140)."""
+
+    def fake_run(args, **kw):
+        if args[:2] == ["rev-parse", "HEAD"]:
+            return _cp(0, "deadbeef\n")
+        if args[:2] == ["worktree", "list"]:
+            return _cp(0, "worktree /main\nbranch refs/heads/holding\n")
+        if args[:1] == ["rev-parse"] and args[1] == "refs/heads/holding":
+            return _cp(128, "")  # tip lookup fails
+        return _cp(0, "")
+
+    monkeypatch.setattr(git_lib, "_run", fake_run)
+    assert git_lib.ff_merge(tmp_path, "holding") == "git-error"
+
+
 def test_ff_merge_not_checked_out_missing_ref_returns_git_error(tmp_path: Path) -> None:
     """holding not checked out and holding ref missing → ff_merge returns 'git-error'."""
     main_repo = tmp_path / "main"
