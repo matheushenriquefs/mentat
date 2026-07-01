@@ -39,10 +39,10 @@ source = [".agents/lib", ".agents/skills"]
 
 [tool.coverage.report]
 show_missing = true
-# Unit gate: 100% testable-line coverage. Entrypoints and the sys.path bootstrap
-# idiom are omit-listed below; everything else must be exercised. `task coverage`
-# enforces this floor on the fast (`-m "not e2e"`) suite.
-fail_under = 100
+# No `fail_under` here on purpose: the unit gate (100%) and the e2e journey gate
+# (a lower floor) each pass their own `--fail-under` via `task coverage`. A shared
+# config default would collide with the per-pass override. Entrypoints and the
+# sys.path bootstrap idiom are omit-listed below; everything else must be exercised.
 exclude_also = [
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",

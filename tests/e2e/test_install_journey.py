@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import load_script
+
 pytestmark = pytest.mark.e2e
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +35,12 @@ def _run_install(home: Path) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
     )
+
+
+def _repo_install(repo: Path) -> int:
+    """Run the real per-repo scaffold (`do_repo_install`) in-process for one repo path."""
+    install = load_script(INSTALL_PY, "e2e_install")
+    return install.do_repo_install(repo_path=repo)
 
 
 def _symlink_farm(home: Path) -> dict[str, str]:
@@ -69,3 +77,36 @@ def test_install_is_idempotent(tmp_path):
 
     # Idempotent: the symlink farm is byte-for-byte identical after the re-run.
     assert _symlink_farm(home) == farm_after_first, "re-install must not change the symlink farm"
+
+
+def test_repo_install_scaffolds_config_and_gitignore(tmp_path, capsys):
+    repo = tmp_path / "myrepo"
+    repo.mkdir()
+    (repo / ".gitignore").write_text("*.pyc\n")
+
+    assert _repo_install(repo) == 0
+
+    cfg = repo / ".mentat" / "config.toml"
+    assert cfg.exists(), "repo install must scaffold .mentat/config.toml"
+    gi_lines = (repo / ".gitignore").read_text().splitlines()
+    assert ".mentat/" in gi_lines, "repo install must append .mentat/ to an existing .gitignore"
+    assert "*.pyc" in gi_lines, "existing .gitignore entries must be preserved"
+
+    body_before = cfg.read_text()
+    capsys.readouterr()
+
+    # Re-run: existing config is a clean no-op skip, gitignore not double-appended.
+    assert _repo_install(repo) == 0
+    assert "already exists" in capsys.readouterr().out
+    assert cfg.read_text() == body_before, "re-run must not rewrite the config"
+    assert (repo / ".gitignore").read_text().splitlines().count(".mentat/") == 1
+
+
+def test_repo_install_creates_gitignore_when_absent(tmp_path):
+    repo = tmp_path / "bare"
+    repo.mkdir()
+
+    assert _repo_install(repo) == 0
+    gi = repo / ".gitignore"
+    assert gi.exists(), "repo install must create .gitignore when absent"
+    assert gi.read_text().splitlines() == [".mentat/"]

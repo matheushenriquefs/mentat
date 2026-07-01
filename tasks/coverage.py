@@ -4,8 +4,9 @@ Usage:
     python tasks/coverage.py [--source=<sources>] [--fail-under=<n>] [pytest-args...]
 
 Default sources: .agents/lib,.agents/skills (shipped runtime; dev tooling in tasks/ is out of the gate)
-`--fail-under=<n>` overrides the `fail_under` in pyproject for this run, so the
-mentat-hardening-ratchet plan can raise the gate without editing config.
+`--fail-under=<n>` sets the floor for this run. Each gate passes its own value
+(unit 100, e2e journey floor) — pyproject sets no shared default, so the two
+passes never collide over one config value.
 Outputs:
     stdout  — coverage report --show-missing
     cwd     — coverage.json  (machine-readable totals + per-file missing branches)
