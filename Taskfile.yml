@@ -12,9 +12,12 @@ tasks:
       - pytest {{.CLI_ARGS}}
 
   coverage:
-    desc: Branch-coverage report + JSON, gated by the pyproject fail_under floor
+    desc: Coverage gate — unit 100% (fast suite) then e2e 99% (.agents)
     cmds:
-      - python tasks/coverage.py {{.CLI_ARGS}}
+      # Unit gate: 100% testable-line branch coverage on the fast suite.
+      - python tasks/coverage.py {{.CLI_ARGS}} -- -m "not e2e"
+      # E2E gate: 99% branch coverage of .agents from the e2e journeys.
+      - python tasks/coverage.py --source=.agents --fail-under=99 -- -m e2e
 
   lint:
     desc: Lint with ruff
