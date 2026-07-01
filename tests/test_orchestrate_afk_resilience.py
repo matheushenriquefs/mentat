@@ -426,3 +426,106 @@ def test_prune_stale_containers_runs_even_with_dirty_worktree(tmp_path, monkeypa
     orch._prune_stale_containers()
 
     assert prune_calls[0] == 1, "devcontainer.prune must be called even when dirty worktrees exist"
+
+
+# ── _chunk_timeout: non-integer env + config fall through to default ─────────
+
+
+def test_chunk_timeout_bad_env_falls_through_to_config(monkeypatch):
+    """Non-integer MENTAT_CHUNK_TIMEOUT is ignored; config value wins."""
+    orch = load_module("orchestrate")
+    monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "not-a-number")
+    monkeypatch.setattr(orch._utils, "read_config", lambda: {"chunk_timeout": 900})
+    assert orch._chunk_timeout() == 900
+
+
+def test_chunk_timeout_bad_config_falls_through_to_default(monkeypatch):
+    """Non-integer config chunk_timeout falls back to the 1800s default."""
+    orch = load_module("orchestrate")
+    monkeypatch.delenv("MENTAT_CHUNK_TIMEOUT", raising=False)
+    monkeypatch.setattr(orch._utils, "read_config", lambda: {"chunk_timeout": "lots"})
+    assert orch._chunk_timeout() == 1800
+
+
+# ── _kill_tree: process-group resolution + SIGTERM-then-return path ──────────
+
+
+class _WaitablePopen:
+    """Popen double with a real-looking pid; wait() returns without timeout."""
+
+    def __init__(self, pid: int = 4242) -> None:
+        self.pid = pid
+        self.returncode = 0
+        self.terminated = False
+        self.killed = False
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+    def kill(self) -> None:
+        self.killed = True
+
+    def wait(self, timeout=None) -> int:
+        return 0
+
+
+def test_kill_tree_signals_process_group_then_returns(monkeypatch):
+    """With a resolvable pgid, _kill_tree killpg's the group and returns after wait."""
+    orch = load_module("orchestrate")
+    proc = _WaitablePopen(pid=4242)
+
+    monkeypatch.setattr(orch.os, "getpgid", lambda _pid: 4242)
+    killpg_calls: list[tuple[int, int]] = []
+    monkeypatch.setattr(orch.os, "killpg", lambda pgid, sig: killpg_calls.append((pgid, sig)))
+
+    orch._kill_tree(proc, grace_s=0.01)
+
+    # SIGTERM sent to the group; wait() returned cleanly so no SIGKILL follows.
+    assert killpg_calls == [(4242, orch.signal.SIGTERM)]
+    assert not proc.terminated, "group signalling must not fall back to proc.terminate()"
+
+
+# ── _fan_out_plans supervisor + throttle reap of overdue children ────────────
+
+
+class _ReapablePopen:
+    """Popen double: live (poll None) until _kill_tree kills it, then rc=-9."""
+
+    pid = None  # no real pid → _kill_tree uses the proc.terminate/kill fallback
+
+    def __init__(self) -> None:
+        self.returncode: int | None = None
+
+    def poll(self) -> int | None:
+        return self.returncode
+
+    def terminate(self) -> None:  # SIGTERM — child still alive, returncode unset
+        pass
+
+    def kill(self) -> None:
+        self.returncode = -9
+
+    def wait(self, timeout: float | None = None) -> int:
+        if timeout is not None and self.returncode is None:
+            raise subprocess.TimeoutExpired("cmd", timeout)
+        return self.returncode or 0
+
+
+def test_fan_out_plans_reaps_overdue_in_throttle_and_supervisor(monkeypatch, tmp_path):
+    """cap=1 with two hung children: the spawn-throttle reaps the first overdue
+    child before it lets the second spawn, and the supervisor reaps the second."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plans = [routing.Plan(slug=f"h{i}", class_="AFK", blocked_by=[], path=tmp_path / f"h{i}.md") for i in range(2)]
+
+    monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 1, "chunk_timeout": 1})
+    monkeypatch.delenv("MENTAT_CHUNK_TIMEOUT", raising=False)
+    procs = [_ReapablePopen(), _ReapablePopen()]
+    it = iter(procs)
+    monkeypatch.setattr(orch._fan_out, "spawn_with_proc", lambda p, **k: (f"sess-{p.slug}", next(it)))
+    monkeypatch.setattr(orch.time, "sleep", lambda _s: None)
+
+    results = orch._fan_out_plans(plans, harness=None, model=None)
+
+    assert [p.slug for p, _ in results] == ["h0", "h1"]
+    assert all(rc == -9 for _p, rc in results), f"both hung children must be killed: {results}"

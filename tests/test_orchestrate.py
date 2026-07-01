@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import io
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from tests.conftest import load_script
 
@@ -353,6 +356,16 @@ def test_raising_doctor_does_not_change_rc(tmp_path):
     assert rc is None or rc != 0, "batch rc must remain non-zero regardless of doctor"
 
 
+def test_spawn_batch_doctor_noop_when_session_script_missing():
+    """No session.py on disk → _spawn_batch_doctor returns without spawning."""
+    orch = load_module("orchestrate")
+
+    with patch("pathlib.Path.exists", return_value=False):
+        with patch.object(orch.subprocess, "Popen", side_effect=AssertionError("must not spawn")) as mock_popen:
+            orch._spawn_batch_doctor()  # must not raise, must not spawn
+    mock_popen.assert_not_called()
+
+
 def test_spawn_batch_doctor_swallows_os_error():
     """_spawn_batch_doctor must not raise when Popen raises OSError."""
     orch = load_module("orchestrate")
@@ -390,3 +403,243 @@ def test_run_orchestrate_diff_suggestion_is_raw_git_diff(tmp_path, capsys):
     captured = capsys.readouterr()
     assert "git diff my-holding..HEAD" in captured.err, f"raw git diff not in stderr: {captured.err!r}"
     assert "diff_tool" not in captured.err, "diff_tool config path must not appear in suggestion"
+
+
+# ── _land_all dep-aware path (plans is not None) ─────────────────────────────
+
+
+def test_land_all_no_plans_iterates_input_order(tmp_path):
+    """`_land_all` without plans drains chunks in input order (no scheduler)."""
+    orch = load_module("orchestrate")
+
+    with (
+        patch.object(orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / s),
+        patch.object(orch._land_queue, "drain", return_value=[{"slug": "a", "status": "success"}]) as mock_drain,
+    ):
+        out = orch._land_all(["a"], holding="main")
+
+    assert out == [{"slug": "a", "status": "success"}]
+    # No scheduler callbacks when plans is None.
+    _, kwargs = mock_drain.call_args
+    assert "on_landed" not in kwargs
+
+
+def test_land_all_with_plans_wires_scheduler_callbacks(tmp_path):
+    """`_land_all` with plans builds a Scheduler and passes its callbacks to drain."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plan_obj = routing.Plan(slug="a", class_="AFK", blocked_by=[], path=tmp_path / "a.md")
+
+    with (
+        patch.object(orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / s),
+        patch.object(orch._land_queue, "drain", return_value=[]) as mock_drain,
+    ):
+        orch._land_all(["a"], holding="main", plans=[plan_obj])
+
+    _, kwargs = mock_drain.call_args
+    assert callable(kwargs["on_landed"])
+    assert callable(kwargs["on_ejected"])
+    assert callable(kwargs["next_ready"])
+
+
+# ── eject summary: drain-carried eject reasons are named on stderr ───────────
+
+
+def test_run_orchestrate_prints_drain_eject_reasons(tmp_path, capsys):
+    """A land-queue eject verdict in drain_results is printed as `slug — reason`."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+
+    fail = _make_plan_file(tmp_path, "p-fail", "AFK")
+    land = _make_plan_file(tmp_path, "p-land", "AFK")
+    fail_obj = routing.Plan(slug="p-fail", class_="AFK", blocked_by=[], path=fail)
+    land_obj = routing.Plan(slug="p-land", class_="AFK", blocked_by=[], path=land)
+
+    drain_out = [{"slug": "p-land", "status": "eject", "reason": "gate-failed"}]
+
+    with (
+        patch.object(orch, "_fan_out_plans", return_value=[(fail_obj, 1), (land_obj, 0)]),
+        patch.object(orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / s),
+        patch.object(orch._land_queue, "drain", return_value=drain_out),
+        patch.object(orch, "_prune_stale_containers", lambda: None),
+        patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
+        patch.object(orch._utils, "emit_event", lambda *a, **k: None),
+        patch.object(orch, "_emit_event", lambda *a, **k: None),
+        patch.object(orch, "_spawn_batch_doctor", lambda: None),
+    ):
+        rc = orch.run_orchestrate(
+            holding="main",
+            plan_paths=[fail, land],
+            harness=None,
+            model=None,
+            dry_run=False,
+        )
+
+    assert rc == 1
+    err = capsys.readouterr().err
+    # drain-carried eject → slug + reason line
+    assert "ejected p-land — gate-failed" in err, err
+    # partition-ejected slug (not in drain) → bare slug line
+    assert "ejected p-fail" in err, err
+
+
+# ── anchored cascade victims are emitted as UPSTREAM_EJECTED ──────────────────
+
+
+def test_run_orchestrate_emits_upstream_ejected_for_anchored_cascade(tmp_path):
+    """When an auto upstream ejects, an anchored downstream victim is emitted."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+
+    # Y (auto) — no HITL relation.  Z (HITL, anchored).  X (AFK, blocked_by Y+Z)
+    # → anchored via upstream-HITL.  Ejecting Y cascades onto anchored X.
+    y = routing.Plan(slug="y", class_="AFK", blocked_by=[], path=tmp_path / "y.md")
+    z = routing.Plan(slug="z", class_="HITL", blocked_by=[], path=tmp_path / "z.md")
+    x = routing.Plan(slug="x", class_="AFK", blocked_by=["y", "z"], path=tmp_path / "x.md")
+
+    emitted: list[tuple[str, dict]] = []
+
+    with (
+        patch.object(orch, "_load_plans", return_value=[y, z, x]),
+        patch.object(orch, "_emit_anchored_chunks", lambda *a, **k: []),
+        patch.object(orch, "_fan_out_plans", return_value=[(y, 1)]),
+        patch.object(orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / s),
+        patch.object(orch._land_queue, "drain", return_value=[]),
+        patch.object(orch, "_prune_stale_containers", lambda: None),
+        patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
+        patch.object(orch._utils, "emit_event", lambda *a, **k: None),
+        patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))),
+        patch.object(orch, "_spawn_batch_doctor", lambda: None),
+    ):
+        rc = orch.run_orchestrate(
+            holding="main",
+            plan_paths=[tmp_path / "batch.md"],
+            harness=None,
+            model=None,
+            dry_run=False,
+        )
+
+    assert rc == 1
+    upstream = [p for ev, p in emitted if ev == "chunk.ejected" and p.get("reason") == "upstream_ejected"]
+    assert any(p["slug"] == "x" for p in upstream), f"anchored victim x not emitted: {emitted}"
+
+
+# ── build_parser + main() dispatch ───────────────────────────────────────────
+
+
+def test_build_parser_accepts_all_subcommands():
+    orch = load_module("orchestrate")
+    parser = orch.build_parser()
+
+    assert parser.parse_args(["run", "main", "slug-a"]).cmd == "run"
+    assert parser.parse_args(["fan-out", "slug-a"]).cmd == "fan-out"
+    assert parser.parse_args(["land-queue", "main"]).cmd == "land-queue"
+    assert parser.parse_args(["batch-review", "sess-1"]).cmd == "batch-review"
+
+
+def test_main_run_dispatches_to_run_orchestrate(monkeypatch, tmp_path):
+    orch = load_module("orchestrate")
+    plan = _make_plan_file(tmp_path, "run-plan", "AFK")
+
+    monkeypatch.setattr(orch.sys, "argv", ["mentat-orchestrate", "run", "main", str(plan)])
+    monkeypatch.setattr(orch._utils, "resolve_plan_ref", lambda r: Path(r))
+
+    seen: dict[str, object] = {}
+
+    def fake_run(holding, plan_paths, *, harness, model, dry_run):
+        seen.update(holding=holding, plans=plan_paths, harness=harness, model=model, dry_run=dry_run)
+        return 0
+
+    with patch.object(orch, "run_orchestrate", side_effect=fake_run):
+        with pytest.raises(SystemExit) as exc:
+            orch.main()
+
+    assert exc.value.code == 0
+    assert seen["holding"] == "main"
+
+
+def test_main_fan_out_spawns_each_plan(monkeypatch, tmp_path):
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plan_obj = routing.Plan(slug="fo", class_="AFK", blocked_by=[], path=tmp_path / "fo.md")
+
+    monkeypatch.setattr(orch.sys, "argv", ["mentat-orchestrate", "fan-out", "fo"])
+    monkeypatch.setattr(orch._utils, "resolve_plan_ref", lambda r: tmp_path / f"{r}.md")
+
+    spawned: list[str] = []
+    with (
+        patch.object(orch, "_load_plans", return_value=[plan_obj]),
+        patch.object(orch._fan_out, "spawn", side_effect=lambda p: spawned.append(p.slug)),
+    ):
+        orch.main()
+
+    assert spawned == ["fo"]
+
+
+def test_main_land_queue_reads_stdin_and_prints_json(monkeypatch, capsys):
+    orch = load_module("orchestrate")
+
+    monkeypatch.setattr(orch.sys, "argv", ["mentat-orchestrate", "land-queue", "main"])
+    monkeypatch.setattr(orch.sys, "stdin", io.StringIO("slug-a\n\nslug-b\n"))
+    # slugs resolve to non-existent paths → lq_plans falls back to None.
+    monkeypatch.setattr(orch._utils, "resolve_plan_ref", lambda s: Path(f"/nonexistent/{s}.md"))
+
+    with patch.object(orch, "_land_all", return_value=[{"slug": "slug-a", "status": "success"}]) as mock_land:
+        orch.main()
+
+    args, kwargs = mock_land.call_args
+    assert args[0] == ["slug-a", "slug-b"]
+    assert kwargs["plans"] is None
+    out = capsys.readouterr().out
+    assert '"slug-a"' in out and '"success"' in out
+
+
+def test_main_land_queue_resolves_existing_plans(monkeypatch, tmp_path):
+    orch = load_module("orchestrate")
+    existing = _make_plan_file(tmp_path, "real-slug", "AFK")
+
+    monkeypatch.setattr(orch.sys, "argv", ["mentat-orchestrate", "land-queue", "main"])
+    monkeypatch.setattr(orch.sys, "stdin", io.StringIO("real-slug\n"))
+    monkeypatch.setattr(orch._utils, "resolve_plan_ref", lambda s: existing)
+
+    captured: dict[str, object] = {}
+    with (
+        patch.object(orch, "_load_plans", return_value=["PLAN"]) as mock_load,
+        patch.object(
+            orch, "_land_all", side_effect=lambda slugs, *, holding, plans: captured.update(plans=plans) or []
+        ),
+    ):
+        orch.main()
+
+    mock_load.assert_called_once()
+    assert captured["plans"] == ["PLAN"]
+
+
+def test_main_unknown_cmd_falls_through_cleanly(monkeypatch):
+    """A cmd matching no branch falls through main() without dispatching or raising."""
+    orch = load_module("orchestrate")
+
+    class _Args:
+        cmd = "mystery"
+
+    class _Parser:
+        def parse_args(self):
+            return _Args()
+
+    monkeypatch.setattr(orch, "build_parser", lambda: _Parser())
+    # No dispatch branch should fire.
+    with patch.object(orch, "run_orchestrate", side_effect=AssertionError("must not run")):
+        orch.main()  # must return without error
+
+
+def test_main_batch_review_emits_event(monkeypatch):
+    orch = load_module("orchestrate")
+
+    monkeypatch.setattr(orch.sys, "argv", ["mentat-orchestrate", "batch-review", "sess-xyz"])
+
+    events: list[tuple] = []
+    with patch.object(orch._utils, "emit_event", side_effect=lambda ev, p: events.append((ev, p))):
+        orch.main()
+
+    assert events and events[0][0] == "batch.reviewed"
+    assert events[0][1]["session"] == "sess-xyz"
