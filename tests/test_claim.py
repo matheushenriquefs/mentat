@@ -68,6 +68,19 @@ def test_claim_already_claimed_exits_nonzero(task_file: Path) -> None:
     assert not task_file.read_text().__contains__("agent-b")
 
 
+def test_claim_mutate_failure_releases_lock(task_file: Path) -> None:
+    """If frontmatter.mutate raises after the lock is taken, the lock is cleaned up."""
+    t = _reload("tasks")
+    with (
+        patch("lib.events._spawn"),
+        patch.object(t.frontmatter, "mutate", side_effect=OSError("boom")),
+        pytest.raises(OSError),
+    ):
+        t.main(["claim", str(task_file), "agent-a", "600"])
+    lock = task_file.with_suffix(".md.lock")
+    assert not lock.exists()
+
+
 def test_claim_atomicity_under_race(task_file: Path) -> None:
     t = _reload("tasks")
     results: list[int] = []

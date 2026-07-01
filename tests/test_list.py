@@ -64,6 +64,23 @@ def test_list_shows_id_status_class_claimed_by(td: Path, capsys: pytest.CaptureF
     assert cols[3] == ""
 
 
+def test_list_missing_dir_returns_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    tasks = tmp_path / "tasks-absent"  # not created → cmd_list returns 0 early
+    monkeypatch.setenv("MENTAT_TASKS_DIR", str(tasks))
+    t = _reload("tasks")
+    t.main(["list"])
+    assert capsys.readouterr().out.strip() == ""
+
+
+def test_list_skips_non_numeric_task_stem(td: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    _make_task(td, "T001", "alpha", "todo")
+    (td / "Tabc-bad.md").write_text("---\nid: Tabc\nstatus: todo\n---\n# bad\n")
+    t = _reload("tasks")
+    t.main(["list"])
+    ids = [line.split("\t")[0] for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert ids == ["T001"]  # non-numeric stem skipped
+
+
 def test_list_filter_status(td: Path, capsys: pytest.CaptureFixture[str]) -> None:
     _make_task(td, "T001", "alpha", "todo")
     _make_task(td, "T002", "beta", "done")

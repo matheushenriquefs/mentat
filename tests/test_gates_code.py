@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 from tests.conftest import load_script
 
@@ -167,6 +168,87 @@ def test_precommit_missing_jq_blocks(tmp_path, monkeypatch):
     assert "cannot verify" in msg
 
 
+# ── command class + real interpreters + advisory/error branches ──────────────
+
+
+def test_precommit_command_md_missing_frontmatter_blocks(tmp_path):
+    pre = _load_precommit()
+    cmds = tmp_path / "commands"
+    cmds.mkdir()
+    (cmds / "do-thing.md").write_text("# no frontmatter here\n")
+    verdict, msg = pre.run(tmp_path)
+    assert verdict == "block"
+    assert "frontmatter" in msg
+
+
+def test_precommit_valid_shell_passes(tmp_path):
+    pre = _load_precommit()
+    (tmp_path / "ok.sh").write_text("#!/bin/bash\necho hi\n")
+    verdict, _ = pre.run(tmp_path)
+    assert verdict == "pass"
+
+
+def test_precommit_invalid_shell_blocks(tmp_path):
+    pre = _load_precommit()
+    (tmp_path / "bad.sh").write_text("#!/bin/bash\nif [ -z x ]; then\n")  # missing fi
+    verdict, msg = pre.run(tmp_path)
+    assert verdict == "block"
+    assert "syntax error" in msg
+
+
+def test_precommit_valid_jq_passes(tmp_path):
+    pre = _load_precommit()
+    (tmp_path / "filter.jq").write_text(".x\n")
+    verdict, _ = pre.run(tmp_path)
+    assert verdict == "pass"
+
+
+def test_precommit_invalid_jq_blocks(tmp_path):
+    pre = _load_precommit()
+    (tmp_path / "filter.jq").write_text("!!BAD!!\n")
+    verdict, msg = pre.run(tmp_path)
+    assert verdict == "block"
+    assert "jq parse fail" in msg
+
+
+def test_precommit_shell_advisory_is_collected(tmp_path):
+    pre = _load_precommit()
+    (tmp_path / "ok.sh").write_text("#!/bin/bash\necho hi\n")
+    with patch.object(pre, "_gate_shell", return_value=(None, "shell advisory")):
+        verdict, msg = pre.run(tmp_path)
+    assert verdict == "advise"
+    assert "shell advisory" in msg
+
+
+def test_precommit_jq_advisory_is_collected(tmp_path):
+    pre = _load_precommit()
+    (tmp_path / "filter.jq").write_text(".x\n")
+    with patch.object(pre, "_gate_jq", return_value=(None, "jq advisory")):
+        verdict, msg = pre.run(tmp_path)
+    assert verdict == "advise"
+    assert "jq advisory" in msg
+
+
+def test_precommit_check_unknown_class_returns_empty(tmp_path):
+    pre = _load_precommit()
+    f = tmp_path / "x.txt"
+    f.write_text("hi")
+    blocks, advisories = pre._check(f, "mystery-class")
+    assert blocks == []
+    assert advisories == []
+
+
+def test_precommit_read_error_becomes_advisory(tmp_path):
+    pre = _load_precommit()
+    agents = tmp_path / "agents"
+    agents.mkdir()
+    (agents / "mentat-x.md").write_text("---\nname: x\n---\nbody\n")
+    with patch.object(pre, "_check", side_effect=OSError("boom")):
+        verdict, msg = pre.run(tmp_path)
+    assert verdict == "advise"
+    assert "read error" in msg
+
+
 # ── smells gate ──────────────────────────────────────────────────────────
 
 
@@ -244,3 +326,13 @@ def test_smells_skips_venv(tmp_path):
         "def long():\n" + "\n".join(f"    x{i} = {i}" for i in range(50)) + "\n"
     )
     assert sm.run(tmp_path) == ("pass", "")
+
+
+def test_smells_non_integer_env_tunable_falls_back_to_default(tmp_path, monkeypatch):
+    sm = _load_smells()
+    monkeypatch.setenv("SMELL_LONG_METHOD_LINES", "not-a-number")  # ValueError → default 30
+    body = "\n".join(f"    x{i} = {i}" for i in range(35))
+    (tmp_path / "big.py").write_text(f"def huge():\n{body}\n    return None\n")
+    verdict, msg = sm.run(tmp_path)
+    assert verdict == "advise"
+    assert "long-method" in msg

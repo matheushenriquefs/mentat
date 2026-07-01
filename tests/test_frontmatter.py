@@ -79,6 +79,32 @@ def test_mutate_quoted_values(tmp_path: Path):
     assert fm["status"] == "done"
 
 
+def test_parse_skips_non_matching_line_inside_block():
+    # A non-indented line with no `key:` shape must be skipped (m is None → loop continues).
+    text = "---\nname: x\nthis line has no colon\n---\n# body\n"
+    fm, offset = frontmatter.parse(text)
+    assert fm == {"name": "x"}
+    assert offset == 4
+
+
+def test_write_atomic_cleans_up_tmp_on_failure(tmp_path: Path, monkeypatch):
+    from unittest.mock import patch
+
+    p = tmp_path / "task.md"
+    p.write_text("---\nid: T001\n---\n# body\n", encoding="utf-8")
+
+    with patch.object(frontmatter, "encode", side_effect=RuntimeError("boom")):
+        try:
+            frontmatter.mutate(p, status="done")
+            raise AssertionError("expected RuntimeError")
+        except RuntimeError as exc:
+            assert "boom" in str(exc)
+
+    assert not list(tmp_path.glob("*.tmp")), "temp file must be removed on failure"
+    # Original file untouched
+    assert "T001" in p.read_text(encoding="utf-8")
+
+
 def test_frontmatter_stdlib_only():
     src = (_LIB / "frontmatter.py").read_text(encoding="utf-8")
     tree = ast.parse(src)

@@ -92,3 +92,74 @@ def test_create_rejects_existing_file(td: Path, monkeypatch: pytest.MonkeyPatch)
     with patch("lib.events._spawn"), pytest.raises(SystemExit) as exc_info:
         t.main(["create", "my-slug"])
     assert exc_info.value.code != 0
+
+
+# --- next-id command dispatch ---
+
+
+def test_next_id_command_missing_dir_prints_t001(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    tasks = tmp_path / "tasks-absent"  # not created
+    monkeypatch.setenv("MENTAT_TASKS_DIR", str(tasks))
+    t = _reload("tasks")
+    assert t.cmd_next_id(None) == 0
+    assert capsys.readouterr().out.strip() == "T001"
+
+
+def test_next_id_command_existing_dir_prints_next(td: Path, capsys) -> None:
+    (td / "T005-x.md").touch()
+    t = _reload("tasks")
+    assert t.cmd_next_id(None) == 0
+    assert capsys.readouterr().out.strip() == "T006"
+
+
+# --- create cleans up tmp on write failure ---
+
+
+def test_create_cleans_tmp_on_write_failure(td: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.stdin", StringIO("# body\n"))
+    t = _reload("tasks")
+    with (
+        patch("lib.events._spawn"),
+        patch.object(t.os, "replace", side_effect=OSError("disk full")),
+        pytest.raises(OSError),
+    ):
+        t.main(["create", "boom-slug"])
+    assert not list(td.glob("*.tmp")), "temp file must be cleaned up"
+
+
+# --- main with no subcommand ---
+
+
+def test_main_no_subcommand_exits_usage() -> None:
+    t = _reload("tasks")
+    with pytest.raises(SystemExit) as exc_info:
+        t.main([])
+    assert exc_info.value.code == t.EX_USAGE
+
+
+# --- sys.path bootstrap ---
+
+
+def test_tasks_inserts_agents_dir_on_sys_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    t = _reload("tasks")
+    parent = str(t._AGENTS_DIR)
+    monkeypatch.setattr(sys, "path", [p for p in sys.path if p != parent])
+    reloaded = _reload("tasks")  # re-exec bootstrap with parent absent
+    assert str(reloaded._AGENTS_DIR) in sys.path
+
+
+# --- lifecycle: default tasks_dir + non-numeric stem skip ---
+
+
+def test_tasks_dir_defaults_to_cwd_mentat(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    u = _reload("lifecycle")
+    monkeypatch.delenv("MENTAT_TASKS_DIR", raising=False)
+    monkeypatch.chdir(tmp_path)
+    assert u.tasks_dir() == tmp_path / ".mentat" / "tasks"
+
+
+def test_next_id_skips_non_numeric_stem(td: Path) -> None:
+    u = _reload("lifecycle")
+    (td / "T001-a.md").touch()
+    (td / "Tbad-x.md").touch()  # glob-matches but stem not T+digits → skipped
+    assert u.next_id(td) == "T002"

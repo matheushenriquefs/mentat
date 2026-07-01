@@ -350,3 +350,89 @@ def test_main_violation_returns_1(tmp_path):
     body = CLEAN_THIN + "\n" * 50
     p = _thin_skill(tmp_path, body)
     assert lint.main([str(p)]) == 1
+
+
+def test_main_skips_non_file_args(tmp_path):
+    # A path that is not a file → the `if p.is_file()` guard skips it (138->136).
+    assert lint.main([str(tmp_path / "does-not-exist.md")]) == 0
+
+
+# ── _load_skill_voices table parsing ────────────────────────────────────────
+
+
+_VOICE_TABLE = textwrap.dedent("""\
+    # Preamble heading
+
+    ## Voice-Mapping Table
+
+    | Path pattern | Voice |
+    | --- | --- |
+    | `skills/mentat-foo/SKILL.md` | thin |
+    | `skills/mentat-bar/SKILL.md` | full |
+    | `skills/mentat-{a,b}/SKILL.md` | thin |
+    | `skills/mentat-brace{/SKILL.md` | full |
+    | `skills/mentat-baz/SKILL.md` | medium |
+    | onlyonecol |
+    | `no-skill-pattern-here` | thin |
+
+    plain trailing prose, no heading
+""")
+
+
+def test_load_skill_voices_missing_file_returns_empty(tmp_path):
+    thin, full = lint._load_skill_voices(tmp_path / "no-such-STYLE.md")
+    assert thin == set()
+    assert full == set()
+
+
+def test_load_skill_voices_parses_table_variants(tmp_path):
+    style = tmp_path / "STYLE.md"
+    style.write_text(_VOICE_TABLE)
+    thin, full = lint._load_skill_voices(style)
+    # brace expansion → mentat-a, mentat-b; plain thin → mentat-foo
+    assert {"mentat-foo", "mentat-a", "mentat-b"} <= thin
+    # plain full → mentat-bar; unmatched-brace kept raw → mentat-brace{
+    assert "mentat-bar" in full
+    assert "mentat-brace{" in full
+    # medium voice → neither set; malformed rows ignored
+    assert "mentat-baz" not in thin
+    assert "mentat-baz" not in full
+
+
+def test_load_skill_voices_breaks_on_next_heading(tmp_path):
+    # A `#` heading after the table breaks the loop early (covers the break arc).
+    style = tmp_path / "STYLE.md"
+    style.write_text(
+        "## Voice-Mapping Table\n\n"
+        "| Path pattern | Voice |\n| --- | --- |\n"
+        "| `skills/mentat-foo/SKILL.md` | thin |\n"
+        "# Next Section\n"
+        "| `skills/mentat-after/SKILL.md` | full |\n"
+    )
+    thin, full = lint._load_skill_voices(style)
+    assert "mentat-foo" in thin
+    assert "mentat-after" not in full  # after the break, not parsed
+
+
+def test_classify_skill_md_unknown_parent_returns_none(tmp_path):
+    # SKILL.md whose parent dir is neither thin nor full → falls through to None.
+    d = tmp_path / ".agents" / "skills" / "not-a-known-skill"
+    d.mkdir(parents=True)
+    p = d / "SKILL.md"
+    p.write_text("---\nname: x\n---\nbody\n")
+    assert lint._classify(p) is None
+
+
+def test_lint_file_unclassified_returns_empty(tmp_path):
+    p = tmp_path / "random.md"
+    p.write_text("just some prose\n")
+    assert lint.lint_file(p) == []
+
+
+def test_lint_module_inserts_lib_on_sys_path(monkeypatch):
+    import sys
+
+    parent = str(lint._LIB)
+    monkeypatch.setattr(sys, "path", [p for p in sys.path if p != parent])
+    reloaded = load_script(LIB, "lint_reload")  # re-exec bootstrap with parent absent
+    assert str(reloaded._LIB) in sys.path
