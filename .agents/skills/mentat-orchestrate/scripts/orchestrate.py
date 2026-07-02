@@ -4,13 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import os
 import re
 import signal
 import subprocess
 import sys
-import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -27,6 +27,7 @@ from lib.events import bind as _bind  # noqa: E402
 from lib.exits import EX_DATAERR, EX_HITL_REQUIRED, EX_NOINPUT, EX_UNAVAILABLE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 from lib.session import ensure_session  # noqa: E402
+from lib.session import session_dir as _session_dir
 from lib.session import summary_file as _summary_file
 
 _utils = load_sibling(__file__, "plans")
@@ -152,40 +153,30 @@ def _chunk_timeout() -> int:
 _emit_event = _bind("mentat-orchestrate")
 
 
-def _kill_tree(proc: subprocess.Popen, grace_s: float) -> None:
-    """SIGTERM, then (after grace_s) SIGKILL the child's whole process group.
+def _kill_proc_group(proc: object) -> None:
+    """SIGKILL the child's whole process group.
 
     fan_out spawns the child with ``start_new_session=True``, so it leads its own
     process group and the harness grandchild inherits it. Signalling the group —
     not just ``proc.pid`` — reaps the grandchild that otherwise orphans (reparents
     to init) and keeps mutating the worktree / holding the container (Bug A).
 
-    Group resolution / signalling is guarded: a child already reaped (or a test
-    double without a real pid) falls back to ``proc.terminate()``/``proc.kill()``.
-    Every wait is bounded by grace_s so a stuck child cannot hang the supervisor.
+    Guarded: a child already reaped (ProcessLookupError) or a test double without a
+    real pid falls back to ``proc.kill()``.
     """
     pid = getattr(proc, "pid", None)
-    pgid: int | None = None
-    if pid is not None:
-        with contextlib.suppress(ProcessLookupError, OSError):
-            pgid = os.getpgid(pid)
-
-    def _signal(sig: int, fallback: Callable[[], None]) -> None:
-        with contextlib.suppress(ProcessLookupError):
-            if pgid is not None:
-                os.killpg(pgid, sig)
-            else:
-                fallback()
-
-    _signal(signal.SIGTERM, proc.terminate)
-    try:
-        proc.wait(timeout=grace_s)
+    if pid is None:
+        with contextlib.suppress(Exception):
+            proc.kill()  # type: ignore[attr-defined]
         return
-    except subprocess.TimeoutExpired:
-        pass
-    _signal(signal.SIGKILL, proc.kill)
-    with contextlib.suppress(subprocess.TimeoutExpired):
-        proc.wait(timeout=grace_s)
+    try:
+        pgid = os.getpgid(pid)
+    except (ProcessLookupError, OSError):
+        with contextlib.suppress(Exception):
+            proc.kill()  # type: ignore[attr-defined]
+        return
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(pgid, signal.SIGKILL)
 
 
 def _read_chunk_seed(session_id: str) -> str | None:
@@ -194,89 +185,93 @@ def _read_chunk_seed(session_id: str) -> str | None:
     return sf.read_text() if sf.exists() else None
 
 
-def _fan_out_plans(
+async def _await_chunk(proc: object, deadline_s: float, plan: _scheduler.Plan) -> int | None:
+    """Await ``proc`` up to ``deadline_s``; on overrun group-kill and reap.
+
+    Uses ``communicate()`` (not ``wait()``) so a child that ever writes to a pipe
+    cannot dead-lock on a full buffer. The returncode is read AFTER the kill
+    signal, so a chunk that exits in the overdue→kill gap is recorded with its
+    real rc, not misreported as killed.
+    """
+    grace_s = 5
+    try:
+        async with asyncio.timeout(deadline_s):
+            await proc.communicate()  # type: ignore[attr-defined]
+    except TimeoutError:
+        print(
+            f"mentat-orchestrate: chunk {plan.slug} timed out after {deadline_s}s — killing",
+            file=sys.stderr,
+        )
+        try:
+            _kill_proc_group(proc)
+        finally:
+            with contextlib.suppress(TimeoutError):
+                async with asyncio.timeout(grace_s):
+                    await proc.wait()  # type: ignore[attr-defined]
+    return getattr(proc, "returncode", None)
+
+
+async def _supervise_fanout(
     plans: list[_scheduler.Plan], *, harness: str | None, model: str | None
-) -> list[tuple[_scheduler.Plan, int]]:
-    """Spawn AFK plans headless, capped at the configured concurrency.
+) -> list[tuple[_scheduler.Plan, int | None, str | None]]:
+    """asyncio fan-out supervisor: one task per plan, throttled by a Semaphore.
 
-    Blocks the loop when `cap` subprocesses are still alive — waits for one to
-    exit via Popen.poll() before spawning the next plan. The cap defaults to 3
-    (ADR-0004) and can be overridden via ~/.mentat/config.toml `concurrency`.
+    Each task acquires a slot (``asyncio.Semaphore(cap)``), spawns its chunk,
+    and awaits it under an independent per-chunk ``asyncio.timeout(deadline)`` —
+    so a slow-but-healthy sibling never shrinks another chunk's budget and a hung
+    chunk is killed at *its* deadline, freeing the slot for a queued chunk. Harvest
+    is an ``asyncio.gather(return_exceptions=True)`` so the result order is exactly
+    the submission order (deterministic indexed harvest).
 
-    Each chunk owns an **independent** wall-clock deadline measured from its own
-    spawn: a single supervisor loop polls every live child and kills only the
-    ones past `spawn_time + deadline_s`. A child within its own budget is never
-    killed no matter how long a sibling runs (Bug B — the old serial wait phase
-    blocked on each chunk's full deadline in turn, so later chunks inherited a
-    shrunken budget). The same deadline is enforced while waiting for a spawn-cap
-    slot, so a chunk that hangs during fan-out cannot stall further spawns.
-
-    Returns each plan paired with its child exit code, so the caller can route a
-    ``EX_HITL_REQUIRED`` (42) child away from landing — a wedged AFK self-ejected
-    and left its worktree for the operator; landing it would false-merge empty or
-    partial work.
-
-    After each chunk exits, reads its summary.md and seeds the next
-    spawn so context survives across chunk boundaries.
+    Returns each plan paired with (returncode, logs_path). A chunk's summary.md is
+    read on exit and seeds the next spawn so context survives chunk boundaries.
     """
     cap = _concurrency_cap()
     deadline_s = _chunk_timeout()
-    grace_s = 5
-    live: list[tuple[_scheduler.Plan, subprocess.Popen, str, float]] = []
-    seed_summary: str | None = None
-    seeded: set[str] = set()  # session IDs already harvested — avoid re-reading stale entries
+    sem = asyncio.Semaphore(cap)
+    shared: dict[str, str | None] = {"seed": None}
 
-    def _reap_if_overdue(plan: _scheduler.Plan, proc: subprocess.Popen, spawn_time: float) -> None:
-        """Group-kill `proc` if it is alive and past its own deadline."""
-        if proc.poll() is None and (time.monotonic() - spawn_time) >= deadline_s:
-            print(
-                f"mentat-orchestrate: chunk {plan.slug} timed out after {deadline_s}s — killing",
-                file=sys.stderr,
-            )
-            _kill_tree(proc, grace_s)
+    async def _run_one(plan: _scheduler.Plan) -> tuple[_scheduler.Plan, int | None, str | None]:
+        async with sem:
+            seed = shared["seed"]
+            session_id, proc = await _fan_out.spawn_async(plan, harness=harness, model=model, seed_summary=seed)
+            rc = await _await_chunk(proc, deadline_s, plan)
+            summary = _read_chunk_seed(session_id)
+            if summary:
+                shared["seed"] = summary
+            return (plan, rc, str(_session_dir(session_id)))
 
-    for plan in plans:
-        # Throttle to the concurrency cap. While waiting for a slot, kill any
-        # already-live child past its own deadline so a hung chunk cannot stall
-        # new spawns (latent throttle bug).
-        while sum(1 for _, p, _, _ in live if p.poll() is None) >= cap:
-            for _plan, p, _sid, spawn_time in live:
-                _reap_if_overdue(_plan, p, spawn_time)
-            time.sleep(0.1)
-        # Harvest seeds from newly-finished chunks only (skip already-seeded IDs so
-        # a chunk that finished in an earlier round cannot overwrite a newer seed).
-        for _plan, p, sid, _ in live:
-            if sid not in seeded and p.poll() is not None:
-                seed_summary = _read_chunk_seed(sid) or seed_summary
-                seeded.add(sid)
-        _session_id, proc = _fan_out.spawn_with_proc(plan, harness=harness, model=model, seed_summary=seed_summary)
-        live.append((plan, proc, _session_id, time.monotonic()))
+    tasks = [asyncio.create_task(_run_one(p)) for p in plans]
+    gathered = await asyncio.gather(*tasks, return_exceptions=True)
+    results: list[tuple[_scheduler.Plan, int | None, str | None]] = []
+    for plan, res in zip(plans, gathered, strict=True):
+        if isinstance(res, BaseException):
+            # A spawn/await crash: record a dead worker (negative rc), no logs.
+            results.append((plan, -1, None))
+        else:
+            results.append(res)
+    return results
 
-    # Supervisor: poll all live children until each exits or passes its own
-    # deadline. Killing happens per-child against its own spawn_time, so a slow
-    # sibling never shrinks another chunk's budget.
-    returncodes: dict[int, int | None] = {}
-    pending = list(enumerate(live))
-    while pending:
-        still: list[tuple[int, tuple[_scheduler.Plan, subprocess.Popen, str, float]]] = []
-        for idx, (plan, p, _sid, spawn_time) in pending:
-            rc = p.poll()
-            if rc is not None:
-                returncodes[idx] = rc
-                continue
-            if (time.monotonic() - spawn_time) >= deadline_s:
-                _reap_if_overdue(plan, p, spawn_time)
-                returncodes[idx] = p.returncode
-                continue
-            still.append((idx, (plan, p, _sid, spawn_time)))
-        pending = still
-        if pending:
-            time.sleep(0.1)
-    return [(live[i][0], returncodes[i]) for i in range(len(live))]
+
+def _fan_out_plans(
+    plans: list[_scheduler.Plan], *, harness: str | None, model: str | None
+) -> list[tuple[_scheduler.Plan, int | None, str | None]]:
+    """Spawn AFK plans headless via the asyncio supervisor, capped at concurrency.
+
+    Sync wrapper over ``_supervise_fanout`` (which owns the throttle + per-chunk
+    deadline + kill logic). The cap defaults to 3 (ADR-0004), overridable via
+    ~/.mentat/config.toml `concurrency`; the deadline defaults to 1800s,
+    overridable via MENTAT_CHUNK_TIMEOUT / config `chunk_timeout`.
+
+    Returns each plan paired with (child exit code, logs_path). The caller routes
+    an ``EX_HITL_REQUIRED`` (42) child away from landing and uses logs_path to make
+    a worker-died ejection self-describing (ADR-0007 payload extension).
+    """
+    return asyncio.run(_supervise_fanout(plans, harness=harness, model=model))
 
 
 def _partition_fanout(
-    results: list[tuple[_scheduler.Plan, int]],
+    results: list[tuple[_scheduler.Plan, int | None, str | None]],
     *,
     mark_ejected: Callable[[str], list[str]],
 ) -> tuple[list[_land_queue.Chunk], set[str]]:
@@ -289,11 +284,13 @@ def _partition_fanout(
     """
     chunks = []
     hitl: set[str] = set()
-    for plan, rc in results:
+    for item in results:
+        plan, rc = item[0], item[1]
         worktree = _worktree_for_slug(plan.slug)
-        if rc < 0 or rc >= _SIGNAL_EXIT_BASE:
-            # Signal kill (rc<0 from Popen) or shell-reported signal exit (128+signum).
-            # A dead worker produced no verdict — landing it would false-merge.
+        if rc is None or rc < 0 or rc >= _SIGNAL_EXIT_BASE:
+            # Timeout group-kill (rc<0), a crashed supervise task (rc None), or a
+            # shell-reported signal exit (128+signum). A dead worker produced no
+            # verdict — landing it would false-merge.
             _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.WORKER_DIED, str(worktree)))
             mark_ejected(plan.slug)
         elif rc == EX_HITL_REQUIRED:

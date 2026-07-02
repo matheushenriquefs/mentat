@@ -184,23 +184,32 @@ def test_orchestrate_harness_flag_overrides_config(tmp_path):
 # ── concurrency cap (ADR-0004) ──────────────────────────────────────────────
 
 
-class _ScriptedPopen:
-    """Popen stand-in whose poll() returns None for `live_ticks` calls, then 0."""
+class _CountingAsyncProc:
+    """asyncio.subprocess.Process double that tracks peak concurrency.
 
-    def __init__(self, live_ticks: int) -> None:
-        self._remaining = live_ticks
+    On spawn it bumps a shared live-counter; communicate() yields to the loop a
+    few times (so siblings interleave) then exits 0, decrementing the counter.
+    """
+
+    def __init__(self, live: dict, watermark: dict) -> None:
+        self.pid = None
+        self.returncode: int | None = None
+        self._live = live
+        self._watermark = watermark
+
+    async def communicate(self):
+        import asyncio as _a
+
+        self._live["n"] += 1
+        self._watermark["n"] = max(self._watermark["n"], self._live["n"])
+        for _ in range(3):
+            await _a.sleep(0)
+        self._live["n"] -= 1
         self.returncode = 0
+        return (b"", b"")
 
-    def poll(self):
-        if self._remaining > 0:
-            self._remaining -= 1
-            return None
-        return 0
-
-    def wait(self, timeout=None):
-        self._remaining = 0
-        self.returncode = 0
-        return 0
+    async def wait(self):
+        return self.returncode
 
 
 def test_concurrency_cap_defaults_to_3_when_config_missing(monkeypatch):
@@ -230,33 +239,27 @@ def test_concurrency_cap_rejects_bad_value(monkeypatch):
 
 
 def test_fan_out_plans_blocks_until_slot_free(monkeypatch, tmp_path):
-    """With cap=2 and 4 plans, _fan_out_plans must NOT spawn plans 3+ while 2 are live."""
+    """With cap=2 and 4 plans, the asyncio semaphore must keep at most 2 chunks
+    running concurrently — the peak live count never exceeds the cap."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
 
-    monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 2})
+    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 2)
+    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 5.0)
 
     plans = [routing.Plan(slug=f"p{i}", class_="AFK", blocked_by=[], path=tmp_path / f"p{i}.md") for i in range(4)]
 
-    # Track concurrent live count at spawn time. Each fake Popen reports "live"
-    # for 2 polls then exits — so the cap must throttle at plans 3 and 4.
-    live: list = []
+    live = {"n": 0}
     high_watermark = {"n": 0}
 
-    def fake_spawn(plan, harness=None, model=None, seed_summary=None):
-        n_live = sum(1 for p in live if p._remaining > 0)
-        high_watermark["n"] = max(high_watermark["n"], n_live + 1)
-        proc = _ScriptedPopen(live_ticks=2)
-        live.append(proc)
-        return (f"sess-{plan.slug}", proc)
+    async def fake_spawn(plan, *, harness=None, model=None, seed_summary=None):
+        return (f"sess-{plan.slug}", _CountingAsyncProc(live, high_watermark))
 
-    monkeypatch.setattr(orch._fan_out, "spawn_with_proc", fake_spawn)
-    # Avoid sleeping 100ms × N — patch time.sleep to no-op.
-    monkeypatch.setattr(orch.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(orch._fan_out, "spawn_async", fake_spawn)
 
     results = orch._fan_out_plans(plans, harness=None, model=None)
-    assert [p.slug for p, _rc in results] == ["p0", "p1", "p2", "p3"]
-    assert all(rc == 0 for _p, rc in results)
+    assert [p.slug for p, *_ in results] == ["p0", "p1", "p2", "p3"]
+    assert all(rc == 0 for _p, rc, *_ in results)
     assert high_watermark["n"] <= 2, f"cap=2 was breached; saw {high_watermark['n']} concurrent live subprocesses"
 
 

@@ -165,27 +165,47 @@ def test_partition_fanout_rc_69_reason_is_worker_died(tmp_path):
 # ── Slice 2: per-chunk wall-clock deadline ────────────────────────────────────
 
 
-class _HangingPopen:
-    """Popen stub that never exits (simulates a wedged child)."""
+class FakeAsyncProc:
+    """asyncio.subprocess.Process double for supervisor tests.
 
-    returncode: int | None = None
+    pid=None by default so ``_kill_proc_group`` uses the ``proc.kill()`` fallback
+    (no real syscall against a bystander pid). ``hang=True`` makes communicate()
+    never return, forcing the per-chunk ``asyncio.timeout`` to fire.
+    """
 
-    def poll(self) -> int | None:
-        return None  # never exits during poll
+    def __init__(self, *, sleep: float = 0.0, rc: int = 0, hang: bool = False, pid: int | None = None) -> None:
+        self.pid = pid
+        self.returncode: int | None = None
+        self._sleep = sleep
+        self._rc = rc
+        self._hang = hang
 
-    def wait(self, timeout: float | None = None) -> int:
-        if timeout is not None:
-            raise subprocess.TimeoutExpired("cmd", timeout)
-        import time
+    async def communicate(self):
+        import asyncio as _a
 
-        time.sleep(9999)
-        return 0  # unreachable in test
+        if self._hang:
+            await _a.sleep(3600)
+        else:
+            await _a.sleep(self._sleep)
+        self.returncode = self._rc
+        return (b"", b"")
 
-    def terminate(self) -> None:
-        self.returncode = -15  # SIGTERM
+    async def wait(self):
+        return self.returncode
 
     def kill(self) -> None:
-        self.returncode = -9  # SIGKILL
+        if self.returncode is None:  # a finish-in-the-gap exit is not overwritten
+            self.returncode = -9
+
+
+def _async_spawner(procs: list[FakeAsyncProc]):
+    """Return an async spawn_async fake yielding one FakeAsyncProc per plan."""
+    it = iter(procs)
+
+    async def spawn_async(plan, *, harness=None, model=None, seed_summary=None):
+        return (f"sess-{plan.slug}", next(it))
+
+    return spawn_async
 
 
 def test_chunk_timeout_default_is_1800(monkeypatch):
@@ -225,18 +245,57 @@ def test_fan_out_plans_kills_hung_child_within_deadline(monkeypatch, tmp_path):
     routing = load_module("scheduler")
 
     plan = routing.Plan(slug="hung", class_="AFK", blocked_by=[], path=tmp_path / "hung.md")
-    fake_proc = _HangingPopen()
 
-    monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 1, "chunk_timeout": 1})
-    monkeypatch.delenv("MENTAT_CHUNK_TIMEOUT", raising=False)
-    monkeypatch.setattr(orch._fan_out, "spawn_with_proc", lambda *a, **k: ("sess-hung", fake_proc))
-    monkeypatch.setattr(orch.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
+    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)]))
 
     results = orch._fan_out_plans([plan], harness=None, model=None)
 
     assert len(results) == 1
-    _p, rc = results[0]
+    _p, rc = results[0][0], results[0][1]
     assert rc is not None and rc < 0, f"hung child must be killed (rc<0), got rc={rc}"
+
+
+def test_fan_out_plans_records_rc_for_finish_in_the_gap(monkeypatch, tmp_path):
+    """A chunk that exits in the overdue→kill gap → its real rc is recorded, not
+    a kill. FakeAsyncProc hangs (timeout fires) but its returncode was already
+    set to 0 by the (simulated) transport, so the kill is a no-op and 0 sticks."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+
+    plan = routing.Plan(slug="gap", class_="AFK", blocked_by=[], path=tmp_path / "gap.md")
+    proc = FakeAsyncProc(hang=True)
+    proc.returncode = 0  # exited just as the deadline fired
+
+    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
+    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([proc]))
+
+    results = orch._fan_out_plans([plan], harness=None, model=None)
+    _p, rc = results[0][0], results[0][1]
+    assert rc == 0, f"finish-in-the-gap must record real rc, got {rc}"
+
+
+def test_fan_out_plans_harvest_order_matches_submission(monkeypatch, tmp_path):
+    """N jobs, cap C<N, one hangs → harvest order == submission order; the hung
+    chunk is killed at its deadline while the others complete."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+
+    plans = [routing.Plan(slug=f"p{i}", class_="AFK", blocked_by=[], path=tmp_path / f"p{i}.md") for i in range(3)]
+    procs = [FakeAsyncProc(sleep=0.02, rc=0), FakeAsyncProc(hang=True), FakeAsyncProc(sleep=0.01, rc=0)]
+
+    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.1)
+    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 2)
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner(procs))
+
+    results = orch._fan_out_plans(plans, harness=None, model=None)
+
+    assert [p.slug for p, *_ in results] == ["p0", "p1", "p2"], "harvest must be in submission order"
+    rc_by = {p.slug: rc for p, rc, *_ in results}
+    assert rc_by["p1"] is not None and rc_by["p1"] < 0, f"hung p1 must be killed: {rc_by}"
+    assert rc_by["p0"] == 0 and rc_by["p2"] == 0, f"healthy chunks must complete: {rc_by}"
 
 
 def test_fan_out_plans_killed_child_ejects_worker_died(monkeypatch, tmp_path):
@@ -447,85 +506,60 @@ def test_chunk_timeout_bad_config_falls_through_to_default(monkeypatch):
     assert orch._chunk_timeout() == 1800
 
 
-# ── _kill_tree: process-group resolution + SIGTERM-then-return path ──────────
+# ── _kill_proc_group: process-group resolution + SIGKILL ─────────────────────
 
 
-class _WaitablePopen:
-    """Popen double with a real-looking pid; wait() returns without timeout."""
-
-    def __init__(self, pid: int = 4242) -> None:
-        self.pid = pid
-        self.returncode = 0
-        self.terminated = False
-        self.killed = False
-
-    def terminate(self) -> None:
-        self.terminated = True
-
-    def kill(self) -> None:
-        self.killed = True
-
-    def wait(self, timeout=None) -> int:
-        return 0
-
-
-def test_kill_tree_signals_process_group_then_returns(monkeypatch):
-    """With a resolvable pgid, _kill_tree killpg's the group and returns after wait."""
+def test_kill_proc_group_signals_the_group(monkeypatch):
+    """With a resolvable pgid, _kill_proc_group killpg's the whole group."""
     orch = load_module("orchestrate")
-    proc = _WaitablePopen(pid=4242)
+
+    class _P:
+        pid = 4242
 
     monkeypatch.setattr(orch.os, "getpgid", lambda _pid: 4242)
     killpg_calls: list[tuple[int, int]] = []
     monkeypatch.setattr(orch.os, "killpg", lambda pgid, sig: killpg_calls.append((pgid, sig)))
 
-    orch._kill_tree(proc, grace_s=0.01)
+    orch._kill_proc_group(_P())
 
-    # SIGTERM sent to the group; wait() returned cleanly so no SIGKILL follows.
-    assert killpg_calls == [(4242, orch.signal.SIGTERM)]
-    assert not proc.terminated, "group signalling must not fall back to proc.terminate()"
+    assert killpg_calls == [(4242, orch.signal.SIGKILL)]
 
 
-# ── _fan_out_plans supervisor + throttle reap of overdue children ────────────
+def test_kill_proc_group_falls_back_when_no_pid(monkeypatch):
+    """A proc without a real pid falls back to proc.kill() (no killpg)."""
+    orch = load_module("orchestrate")
+
+    killed = {"n": 0}
+
+    class _P:
+        pid = None
+
+        def kill(self):
+            killed["n"] += 1
+
+    monkeypatch.setattr(orch.os, "killpg", lambda *a: (_ for _ in ()).throw(AssertionError("must not killpg")))
+
+    orch._kill_proc_group(_P())
+    assert killed["n"] == 1
 
 
-class _ReapablePopen:
-    """Popen double: live (poll None) until _kill_tree kills it, then rc=-9."""
-
-    pid = None  # no real pid → _kill_tree uses the proc.terminate/kill fallback
-
-    def __init__(self) -> None:
-        self.returncode: int | None = None
-
-    def poll(self) -> int | None:
-        return self.returncode
-
-    def terminate(self) -> None:  # SIGTERM — child still alive, returncode unset
-        pass
-
-    def kill(self) -> None:
-        self.returncode = -9
-
-    def wait(self, timeout: float | None = None) -> int:
-        if timeout is not None and self.returncode is None:
-            raise subprocess.TimeoutExpired("cmd", timeout)
-        return self.returncode or 0
+# ── supervisor throttle: cap<N with a hung early chunk frees a slot ──────────
 
 
-def test_fan_out_plans_reaps_overdue_in_throttle_and_supervisor(monkeypatch, tmp_path):
-    """cap=1 with two hung children: the spawn-throttle reaps the first overdue
-    child before it lets the second spawn, and the supervisor reaps the second."""
+def test_fan_out_plans_hung_chunk_frees_slot_for_queued(monkeypatch, tmp_path):
+    """cap=1 + a hung first chunk: the semaphore only frees once the hung chunk
+    is killed at its deadline, so the queued chunk still runs to completion."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
     plans = [routing.Plan(slug=f"h{i}", class_="AFK", blocked_by=[], path=tmp_path / f"h{i}.md") for i in range(2)]
 
-    monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 1, "chunk_timeout": 1})
-    monkeypatch.delenv("MENTAT_CHUNK_TIMEOUT", raising=False)
-    procs = [_ReapablePopen(), _ReapablePopen()]
-    it = iter(procs)
-    monkeypatch.setattr(orch._fan_out, "spawn_with_proc", lambda p, **k: (f"sess-{p.slug}", next(it)))
-    monkeypatch.setattr(orch.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
+    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
+    procs = [FakeAsyncProc(hang=True), FakeAsyncProc(sleep=0.01, rc=0)]
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner(procs))
 
     results = orch._fan_out_plans(plans, harness=None, model=None)
 
-    assert [p.slug for p, _ in results] == ["h0", "h1"]
-    assert all(rc == -9 for _p, rc in results), f"both hung children must be killed: {results}"
+    rc_by = {p.slug: rc for p, rc, *_ in results}
+    assert rc_by["h0"] is not None and rc_by["h0"] < 0, f"hung h0 must be killed: {rc_by}"
+    assert rc_by["h1"] == 0, f"h1 must run once h0's slot frees: {rc_by}"

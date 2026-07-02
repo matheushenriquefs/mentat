@@ -16,7 +16,7 @@ eject summary) with the spawn/land seams stubbed.
 
 from __future__ import annotations
 
-import subprocess
+import asyncio
 import sys
 import time
 from pathlib import Path
@@ -46,14 +46,17 @@ def load_module(name: str):
 
 
 def _spawner(tmp_path: Path, behavior: dict[str, tuple[float, int]]):
-    """spawn_with_proc fake launching a real child per slug: slug -> (sleep_s, exit)."""
+    """spawn_async fake launching a real child per slug: slug -> (sleep_s, exit)."""
     child_script = tmp_path / "child.py"
     child_script.write_text(_CHILD_SRC)
 
-    def fake_spawn(plan, *, harness=None, model=None, seed_summary=None):
+    async def fake_spawn(plan, *, harness=None, model=None, seed_summary=None):
         sleep_s, code = behavior[plan.slug]
-        proc = subprocess.Popen(
-            [sys.executable, str(child_script), str(sleep_s), str(code)],
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            str(child_script),
+            str(sleep_s),
+            str(code),
             start_new_session=True,
         )
         return f"sess-{plan.slug}", proc
@@ -83,13 +86,13 @@ def test_throttle_wait_drains_healthy_chunk_before_spawning_next(monkeypatch, tm
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "10")
     monkeypatch.setattr(
         orch._fan_out,
-        "spawn_with_proc",
+        "spawn_async",
         _spawner(tmp_path, {"a": (0.4, 0), "b": (0.1, 0)}),
     )
 
     results = orch._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
 
-    by_slug = {plan.slug: rc for plan, rc in results}
+    by_slug = {plan.slug: rc for plan, rc, *_ in results}
     assert by_slug == {"a": 0, "b": 0}
 
 
@@ -105,7 +108,7 @@ def test_throttle_wait_kills_hung_chunk_to_free_a_slot(monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "1")
     monkeypatch.setattr(
         orch._fan_out,
-        "spawn_with_proc",
+        "spawn_async",
         _spawner(tmp_path, {"a": (30.0, 0), "b": (0.3, 0)}),
     )
 
@@ -113,7 +116,7 @@ def test_throttle_wait_kills_hung_chunk_to_free_a_slot(monkeypatch, tmp_path):
     results = orch._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
     elapsed = time.monotonic() - started
 
-    by_slug = {plan.slug: rc for plan, rc in results}
+    by_slug = {plan.slug: rc for plan, rc, *_ in results}
     assert by_slug["a"] is not None and by_slug["a"] < 0, f"hung A must be killed (rc<0), got {by_slug['a']}"
     assert by_slug["b"] == 0, f"B must run once A's slot frees, got {by_slug['b']}"
     # A was reaped ~1s in, not left to run its full 30s sleep.

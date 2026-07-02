@@ -216,24 +216,24 @@ def test_fan_out_plans_seeds_next_chunk_from_completed_summary(tmp_path: Path, m
     session_counter = [0]
 
     class FakeProc:
-        returncode = 0
+        """asyncio process double that exits 0 immediately."""
 
         def __init__(self):
-            self._done = False
+            self.returncode = None
+            self.pid = None
 
-        def poll(self):
-            return 0 if self._done else None
+        async def communicate(self):
+            self.returncode = 0
+            return (b"", b"")
 
-        def wait(self, timeout=None):
-            self._done = True
+        async def wait(self):
+            return self.returncode
 
-    def fake_spawn_with_proc(plan, *, harness=None, model=None, seed_summary=None):
+    async def fake_spawn_async(plan, *, harness=None, model=None, seed_summary=None):
         session_counter[0] += 1
         sid = f"implement-{plan.slug}-{session_counter[0]}"
         spawn_calls.append({"slug": plan.slug, "seed_summary": seed_summary, "session_id": sid})
-        proc = FakeProc()
-        proc._done = True
-        return sid, proc
+        return sid, FakeProc()
 
     # Write a summary file for plan-a's session after plan-a "completes"
     # We must know the session_id ahead of time to pre-write the file — use the first sid
@@ -244,7 +244,10 @@ def test_fan_out_plans_seeds_next_chunk_from_completed_summary(tmp_path: Path, m
     sf.parent.mkdir(parents=True, exist_ok=True)
     sf.write_text("---\nstatus: succeeded\n---\nCheckpoint summary from plan-a.\n")
 
-    with patch.object(orch._fan_out, "spawn_with_proc", fake_spawn_with_proc):
+    # Pin cap=1 so seeding is deterministic: plan-a runs fully (writing its
+    # summary into the shared seed) before plan-b spawns.
+    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
+    with patch.object(orch._fan_out, "spawn_async", fake_spawn_async):
         orch._fan_out_plans(plans, harness=None, model=None)
 
     assert len(spawn_calls) == 2, f"Expected 2 spawns, got {len(spawn_calls)}"

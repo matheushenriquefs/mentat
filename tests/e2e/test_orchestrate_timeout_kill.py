@@ -2,16 +2,16 @@
 
 fan_out spawns the implement child with ``start_new_session=True`` so the harness
 grandchild inherits the child's process group. On a chunk timeout, orchestrate's
-``_kill_tree`` group-kills that pgid. This test proves the grandchild — which
-ignores SIGTERM and would otherwise orphan and keep running — is reaped by the
-escalation to SIGKILL, and that the dead worker ejects ``worker-died`` with its
-worktree left in place.
+``_kill_proc_group`` group-kills that pgid with SIGKILL. This test proves the
+grandchild — which ignores SIGTERM and would otherwise orphan and keep running —
+is reaped by the group SIGKILL, and that the dead worker ejects ``worker-died``
+with its worktree left in place.
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -74,15 +74,17 @@ def test_timeout_group_kill_reaps_grandchild(monkeypatch, tmp_path):
 
     plan = scheduler.Plan(slug="hung", class_="AFK", blocked_by=[], path=tmp_path / "hung.md")
 
-    def fake_spawn(_plan, *, harness=None, model=None, seed_summary=None):
-        proc = subprocess.Popen(
-            [sys.executable, str(child_script), str(pidfile)],
+    async def fake_spawn(_plan, *, harness=None, model=None, seed_summary=None):
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            str(child_script),
+            str(pidfile),
             start_new_session=True,
         )
         return "sess-hung", proc
 
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "1")
-    monkeypatch.setattr(orch._fan_out, "spawn_with_proc", fake_spawn)
+    monkeypatch.setattr(orch._fan_out, "spawn_async", fake_spawn)
 
     results = orch._fan_out_plans([plan], harness=None, model=None)
 
@@ -102,7 +104,7 @@ def test_timeout_group_kill_reaps_grandchild(monkeypatch, tmp_path):
 
     # The dead worker returns a negative rc → partition ejects worker-died.
     assert len(results) == 1
-    _plan, rc = results[0]
+    _plan, rc = results[0][0], results[0][1]
     assert rc is not None and rc < 0, f"killed worker must report a signal rc, got {rc}"
 
     worktree = tmp_path / "worktree"

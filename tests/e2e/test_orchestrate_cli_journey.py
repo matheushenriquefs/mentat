@@ -193,48 +193,35 @@ def test_chunk_timeout_config_missing_defaults(orch, monkeypatch):
     assert orch._chunk_timeout() == 1800
 
 
-# ── _kill_tree ────────────────────────────────────────────────────────────────
+# ── _kill_proc_group ──────────────────────────────────────────────────────────
 
 
 class _FakeProc:
-    """Popen double: no real pid, records terminate/kill, scripts wait outcomes."""
+    """asyncio process double: no real pid, records kill()."""
 
-    def __init__(self, *, pid=None, wait_raises_first=False):
+    def __init__(self, *, pid=None):
         self.pid = pid
-        self.returncode = 0
-        self.terminated = False
+        self.returncode = None
         self.killed = False
-        self._wait_raises_first = wait_raises_first
-        self._wait_calls = 0
-
-    def terminate(self):
-        self.terminated = True
 
     def kill(self):
         self.killed = True
 
-    def wait(self, timeout=None):
-        self._wait_calls += 1
-        if self._wait_raises_first and self._wait_calls == 1:
-            raise orch_mod.subprocess.TimeoutExpired(cmd="x", timeout=timeout)
-        return self.returncode
 
-
-orch_mod = load_script(ORCH_PY, "orch_killtree_helper")
-
-
-def test_kill_tree_no_pgid_escalates_to_kill(orch):
-    proc = _FakeProc(pid=None, wait_raises_first=True)
-    orch._kill_tree(proc, grace_s=0.01)
-    # SIGTERM fallback → terminate(); wait times out → SIGKILL fallback → kill().
-    assert proc.terminated is True
+def test_kill_proc_group_no_pid_falls_back_to_kill(orch):
+    proc = _FakeProc(pid=None)
+    orch._kill_proc_group(proc)
+    # No resolvable pgid → fall back to proc.kill().
     assert proc.killed is True
 
 
-def test_kill_tree_exits_after_sigterm_when_wait_returns(orch):
-    proc = _FakeProc(pid=None, wait_raises_first=False)
-    orch._kill_tree(proc, grace_s=0.01)
-    assert proc.terminated is True
+def test_kill_proc_group_signals_group_when_pgid_resolves(orch, monkeypatch):
+    proc = _FakeProc(pid=4242)
+    calls: list[tuple[int, int]] = []
+    monkeypatch.setattr(orch.os, "getpgid", lambda _pid: 4242)
+    monkeypatch.setattr(orch.os, "killpg", lambda pg, sig: calls.append((pg, sig)))
+    orch._kill_proc_group(proc)
+    assert calls == [(4242, orch.signal.SIGKILL)]
     assert proc.killed is False
 
 

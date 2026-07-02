@@ -12,6 +12,7 @@ tip (init → a → b-rebased-on-a) and that two ``chunk.landed`` events are rec
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 import sys
 from contextlib import ExitStack, contextmanager
@@ -68,15 +69,15 @@ def _write_plan(plans_dir: Path, slug: str) -> Path:
 def _fake_spawn(worktrees: dict[str, Path]):
     """Harness stand-in: commit the slice's distinct file on its branch, then a no-op child."""
 
-    def spawn_with_proc(plan, *, harness=None, model=None, seed_summary=None):
+    async def spawn_async(plan, *, harness=None, model=None, seed_summary=None):
         wt = worktrees[plan.slug]
         (wt / f"{plan.slug}.txt").write_text(f"{plan.slug}\n")
         _git(["add", f"{plan.slug}.txt"], cwd=wt)
         _git(["commit", "-m", f"feat: {plan.slug}"], cwd=wt)
-        proc = subprocess.Popen([sys.executable, "-c", ""])
+        proc = await asyncio.create_subprocess_exec(sys.executable, "-c", "")
         return f"orchestrate-{plan.slug}", proc
 
-    return spawn_with_proc
+    return spawn_async
 
 
 def _landed_events(log_root: Path) -> list[dict]:
@@ -122,7 +123,7 @@ def test_orchestrate_run_lands_both_chunks_onto_holding(tmp_path, monkeypatch):
         stack.enter_context(_patch_attr(orch, "_prune_stale_worktrees", lambda preserve=None: None))
         stack.enter_context(_patch_attr(orch, "_spawn_batch_doctor", lambda: None))
         # Harness spawn boundary: the fake agent does the real per-slice commit.
-        stack.enter_context(_patch_attr(orch._fan_out, "spawn_with_proc", _fake_spawn({"a": wt_a, "b": wt_b})))
+        stack.enter_context(_patch_attr(orch._fan_out, "spawn_async", _fake_spawn({"a": wt_a, "b": wt_b})))
         # Land-queue gate passes; container teardown is a no-op (no docker).
         stack.enter_context(_patch_attr(orch._land_queue, "_run_gates", lambda chunk: ("pass", "")))
         stack.enter_context(_patch_attr(orch._land_queue, "_teardown_container", lambda slug: None))

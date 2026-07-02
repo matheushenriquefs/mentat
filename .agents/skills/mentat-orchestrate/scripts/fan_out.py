@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 import sys
@@ -35,24 +36,21 @@ def _log_dir_for(session_id: str) -> Path:
     return _session_dir_fn(session_id)
 
 
-def _spawn_worktree_subprocess(
+def _build_spawn_cmd(
     plan_path: Path,
     *,
     harness: str | None = None,
     model: str | None = None,
     seed_summary: str | None = None,
-) -> tuple[str, subprocess.Popen]:
-    """Spawn a headless mentat-implement in a new worktree.
+) -> tuple[str, list[str], dict[str, str]]:
+    """Mint a child session and build its (session_id, argv, env).
 
     Generates a deterministic session id, creates ~/.mentat/logs/<repo>/<sid>/
-    with mode 0o700, and exports MENTAT_SESSION + MENTAT_SESSION_LOG to the
-    child so the harness adapter can redirect stream-json into the log file.
-
-    seed_summary — when set, injects MENTAT_SEED_SUMMARY into child env so the
-    harness adapter seeds the new session with prior context.
-
-    Returns (session_id, Popen). The caller may use the Popen to throttle
-    concurrent spawns via Popen.poll().
+    with mode 0o700, and populates MENTAT_SESSION + MENTAT_SESSION_LOG in the
+    child env so the harness adapter can redirect stream-json into the log file.
+    seed_summary — when set — injects MENTAT_SEED_SUMMARY so the harness adapter
+    seeds the new session with prior context. Pure builder shared by the sync
+    (``spawn_with_proc``) and async (``spawn_async``) spawn paths.
     """
     # The child is an implement run — mint a fresh implement session per child
     # (overriding any inherited orchestrate id in the child env below).
@@ -73,10 +71,24 @@ def _spawn_worktree_subprocess(
     }
     if seed_summary:
         env["MENTAT_SEED_SUMMARY"] = seed_summary
-    # start_new_session=True puts the child in its own process group / session,
-    # which the harness grandchild (implement.py -> harness) inherits. On a
-    # timeout, orchestrate group-kills that pgid so the grandchild is reaped too
-    # instead of orphaning and continuing to mutate the worktree (Bug A).
+    return session_id, cmd, env
+
+
+def _spawn_worktree_subprocess(
+    plan_path: Path,
+    *,
+    harness: str | None = None,
+    model: str | None = None,
+    seed_summary: str | None = None,
+) -> tuple[str, subprocess.Popen]:
+    """Spawn a headless mentat-implement in a new worktree. Returns (session_id, Popen).
+
+    start_new_session=True puts the child in its own process group / session,
+    which the harness grandchild (implement.py -> harness) inherits. On a
+    timeout, orchestrate group-kills that pgid so the grandchild is reaped too
+    instead of orphaning and continuing to mutate the worktree (Bug A).
+    """
+    session_id, cmd, env = _build_spawn_cmd(plan_path, harness=harness, model=model, seed_summary=seed_summary)
     proc = subprocess.Popen(cmd, env=env, start_new_session=True)
     return session_id, proc
 
@@ -87,8 +99,29 @@ _emit_event = bind("mentat-orchestrate")
 def spawn_with_proc(
     plan: _PlanLike, *, harness: str | None = None, model: str | None = None, seed_summary: str | None = None
 ) -> tuple[str, subprocess.Popen]:
-    """Spawn plan headless. Print track command immediately. Return (session_id, Popen)."""
+    """Spawn plan headless (sync Popen). Print track command immediately. Return (session_id, Popen)."""
     session_id, proc = _spawn_worktree_subprocess(plan.path, harness=harness, model=model, seed_summary=seed_summary)
+    _emit_event(
+        "chunk.spawned",
+        spawned_payload(plan.slug, str(plan.path), harness=harness or "default", worktree=str(Path.cwd())),
+    )
+    print(f"mentat-session track {session_id}")
+    print(session_id)
+    return session_id, proc
+
+
+async def spawn_async(
+    plan: _PlanLike, *, harness: str | None = None, model: str | None = None, seed_summary: str | None = None
+) -> tuple[str, asyncio.subprocess.Process]:
+    """Spawn plan headless under asyncio. Emit chunk.spawned, print track command,
+    return (session_id, Process).
+
+    The asyncio supervisor (orchestrate._fan_out_plans) awaits the returned
+    Process via communicate() and enforces the per-chunk deadline. As with the
+    sync path, start_new_session=True makes the child a group leader so a timeout
+    group-kill reaps the harness grandchild too (Bug A)."""
+    session_id, cmd, env = _build_spawn_cmd(plan.path, harness=harness, model=model, seed_summary=seed_summary)
+    proc = await asyncio.create_subprocess_exec(*cmd, env=env, start_new_session=True)
     _emit_event(
         "chunk.spawned",
         spawned_payload(plan.slug, str(plan.path), harness=harness or "default", worktree=str(Path.cwd())),

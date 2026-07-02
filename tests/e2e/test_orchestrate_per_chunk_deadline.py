@@ -10,7 +10,7 @@ shrinks another chunk's budget. These tests drive real subprocesses through
 
 from __future__ import annotations
 
-import subprocess
+import asyncio
 import sys
 from pathlib import Path
 from textwrap import dedent
@@ -39,17 +39,20 @@ def load_module(name: str):
 
 
 def _spawner(tmp_path: Path, behavior: dict[str, tuple[float, int]]):
-    """Return a spawn_with_proc fake that launches a real child per plan slug.
+    """Return a spawn_async fake that launches a real child per plan slug.
 
     behavior maps slug -> (sleep_seconds, exit_code).
     """
     child_script = tmp_path / "child.py"
     child_script.write_text(_CHILD_SRC)
 
-    def fake_spawn(plan, *, harness=None, model=None, seed_summary=None):
+    async def fake_spawn(plan, *, harness=None, model=None, seed_summary=None):
         sleep_s, code = behavior[plan.slug]
-        proc = subprocess.Popen(
-            [sys.executable, str(child_script), str(sleep_s), str(code)],
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            str(child_script),
+            str(sleep_s),
+            str(code),
             start_new_session=True,
         )
         return f"sess-{plan.slug}", proc
@@ -74,13 +77,13 @@ def test_healthy_sibling_not_killed_by_slow_sibling(monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "5")
     monkeypatch.setattr(
         orch._fan_out,
-        "spawn_with_proc",
+        "spawn_async",
         _spawner(tmp_path, {"a": (3.5, 5), "b": (2.0, 0)}),
     )
 
     results = orch._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
 
-    by_slug = {plan.slug: rc for plan, rc in results}
+    by_slug = {plan.slug: rc for plan, rc, *_ in results}
     assert by_slug == {"a": 5, "b": 0}, f"both must return true exit codes, neither killed: {by_slug}"
 
 
@@ -92,12 +95,12 @@ def test_only_overdue_chunk_killed(monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "2")
     monkeypatch.setattr(
         orch._fan_out,
-        "spawn_with_proc",
+        "spawn_async",
         _spawner(tmp_path, {"a": (30.0, 0), "b": (0.5, 0)}),
     )
 
     results = orch._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
-    by_slug = {plan.slug: rc for plan, rc in results}
+    by_slug = {plan.slug: rc for plan, rc, *_ in results}
     assert by_slug["a"] is not None and by_slug["a"] < 0, f"overdue A must be killed (rc<0), got {by_slug['a']}"
     assert by_slug["b"] == 0, f"healthy B must exit 0, got {by_slug['b']}"
 
