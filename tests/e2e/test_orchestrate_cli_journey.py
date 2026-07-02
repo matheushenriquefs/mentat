@@ -258,7 +258,7 @@ def test_partition_fanout_routes_each_returncode(orch, monkeypatch, tmp_path):
         (_plan(orch, "infra"), orch.EX_UNAVAILABLE),
         (_plan(orch, "impl"), 1),
     ]
-    chunks, hitl = orch._partition_fanout(results, mark_ejected=lambda s: ejected.append(s))
+    chunks, hitl, transient = orch._partition_fanout(results, mark_ejected=lambda s: ejected.append(s))
 
     # rc == 0 is the only landable chunk.
     assert [c.slug for c in chunks] == ["ok"]
@@ -271,8 +271,10 @@ def test_partition_fanout_routes_each_returncode(orch, monkeypatch, tmp_path):
     assert reasons["infra"] == orch.EjectReason.WORKER_DIED
     assert reasons["impl"] == orch.EjectReason.IMPLEMENT_FAILED
 
-    # every non-landable slug was marked ejected.
-    assert set(ejected) == {"sig", "shell-sig", "hitl", "infra", "impl"}
+    # Transient (worker-died) ejects are RETURNED for the recovery engine, not
+    # mark_ejected'd inside partition; only terminal ejects are marked.
+    assert transient == {"sig", "shell-sig", "infra"}
+    assert set(ejected) == {"hitl", "impl"}
 
 
 # ── _prune_stale_containers ───────────────────────────────────────────────────

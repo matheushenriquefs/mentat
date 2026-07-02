@@ -33,7 +33,7 @@ def _run_partition(orch, routing, tmp_path, rc):
     with patch.object(orch, "_emit_event", side_effect=lambda ev, p: emitted.append((ev, p))):
         with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
             sched = routing.Scheduler([plan])
-            chunks, hitl = orch._partition_fanout([(plan, rc)], mark_ejected=sched.mark_ejected)
+            chunks, hitl, _transient = orch._partition_fanout([(plan, rc)], mark_ejected=sched.mark_ejected)
     return chunks, hitl, emitted
 
 

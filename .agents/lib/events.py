@@ -80,6 +80,25 @@ EJECT_REASONS: frozenset[str] = frozenset(
     }
 )
 
+# Transient ejections are worth re-attempting — the chunk's *code* was never
+# proven bad, only its environment failed it: a deadline/container kill
+# (worker-died) or a merge that raced out of fast-forward (not-ff). The recovery
+# engine consumes this set to decide what to respawn. Every other reason is
+# terminal: the code itself failed a gate, wedged on a design call, or refused to
+# run — respawning it unchanged would just fail again.
+TRANSIENT_EJECT_REASONS: frozenset[str] = frozenset(
+    {
+        EjectReason.WORKER_DIED,
+        EjectReason.NOT_FF,
+    }
+)
+
+
+def is_transient_eject(reason: str) -> bool:
+    """True iff `reason` is worth re-attempting (environment failed, not the code)."""
+    return reason in TRANSIENT_EJECT_REASONS
+
+
 # The one report-back filename: implement reads it as the AFK wedge marker, the
 # AFK prompt tells the agent to write it, doctor writes the success summary to
 # it. Shared so the cross-skill contract has a single source.

@@ -198,7 +198,7 @@ def test_partition_fanout_excludes_hitl_children_from_landing():
 
     with patch.object(orch, "_emit_event", side_effect=lambda e, p: emitted.append((e, p))):
         with patch.object(orch, "_worktree_for_slug", side_effect=lambda s: Path(f"/wt/{s}")):
-            chunks, hitl = orch._partition_fanout(
+            chunks, hitl, _transient = orch._partition_fanout(
                 [(plan_a, 0), (plan_b, orch.EX_HITL_REQUIRED)],
                 mark_ejected=ejected_slugs.append,
             )
@@ -217,7 +217,7 @@ def test_partition_fanout_all_clean_lands_all():
     plans = [sched.Plan(slug=s, class_="AFK", blocked_by=[], path=Path(f"/p/{s}.md")) for s in ("x", "y")]
     with patch.object(orch, "_emit_event", lambda e, p: None):
         with patch.object(orch, "_worktree_for_slug", side_effect=lambda s: Path(f"/wt/{s}")):
-            chunks, hitl = orch._partition_fanout(
+            chunks, hitl, _transient = orch._partition_fanout(
                 [(plans[0], 0), (plans[1], 0)],
                 mark_ejected=lambda s: None,
             )

@@ -54,7 +54,7 @@ def _run_partition(tmp_path, rc: int) -> tuple[list, set]:
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda *a, **k: None):
-            chunks, hitl = orch._partition_fanout(
+            chunks, hitl, _transient = orch._partition_fanout(
                 [(plan, rc)],
                 mark_ejected=lambda slug: ejected.append(slug) or [],
             )
@@ -351,7 +351,7 @@ def test_fan_out_plans_killed_child_ejects_worker_died(monkeypatch, tmp_path):
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-            chunks, _ = orch._partition_fanout(
+            chunks, _hitl, _transient = orch._partition_fanout(
                 [(plan, -9)],
                 mark_ejected=lambda slug: [],
             )
@@ -359,6 +359,74 @@ def test_fan_out_plans_killed_child_ejects_worker_died(monkeypatch, tmp_path):
     assert len(chunks) == 0
     eject = [p for ev, p in emitted if ev == "chunk.ejected"]
     assert eject and eject[0]["reason"] == "worker-died"
+
+
+# ── S3: _partition_fanout returns the transient (retryable) set ──────────────
+
+
+def test_partition_fanout_worker_died_is_in_transient_set(tmp_path):
+    """A worker-died chunk (timeout / container-down) is returned in the transient
+    set — the engine seam — not silently swallowed."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="td", class_="AFK", blocked_by=[], path=tmp_path / "td.md")
+
+    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch, "_emit_event", lambda *a, **k: None):
+            chunks, hitl, transient = orch._partition_fanout(
+                [(plan, -9, "/logs/td")],
+                mark_ejected=lambda slug: [],
+            )
+
+    assert "td" in transient, "worker-died must be in the transient set"
+
+
+def test_partition_fanout_container_down_is_transient(tmp_path):
+    """A container-down chunk (rc69) is transient too."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="cd", class_="AFK", blocked_by=[], path=tmp_path / "cd.md")
+
+    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch, "_emit_event", lambda *a, **k: None):
+            _c, _h, transient = orch._partition_fanout(
+                [(plan, 69, "/logs/cd")],
+                mark_ejected=lambda slug: [],
+            )
+    assert "cd" in transient
+
+
+def test_partition_fanout_implement_failed_stays_terminal(tmp_path):
+    """A terminal eject (rc=1 implement-failed) must NOT be in the transient set."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="tf", class_="AFK", blocked_by=[], path=tmp_path / "tf.md")
+
+    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch, "_emit_event", lambda *a, **k: None):
+            _c, _h, transient = orch._partition_fanout(
+                [(plan, 1, "/logs/tf")],
+                mark_ejected=lambda slug: [],
+            )
+    assert "tf" not in transient, "implement-failed is terminal, not transient"
+
+
+def test_partition_fanout_transient_chunks_not_marked_ejected_by_partition(tmp_path):
+    """Transient ejects are RETURNED for the caller, not mark_ejected'd inside
+    partition — that is the seam the recovery engine owns."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="wd", class_="AFK", blocked_by=[], path=tmp_path / "wd.md")
+    marked: list[str] = []
+
+    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch, "_emit_event", lambda *a, **k: None):
+            _c, _h, transient = orch._partition_fanout(
+                [(plan, -9, "/logs/wd")],
+                mark_ejected=lambda slug: marked.append(slug) or [],
+            )
+    assert "wd" in transient
+    assert marked == [], "partition must not mark_ejected transient chunks"
 
 
 # ── Slice 3: doctor handoff argv parses cleanly ───────────────────────────────

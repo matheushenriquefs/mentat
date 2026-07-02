@@ -274,16 +274,23 @@ def _partition_fanout(
     results: list[tuple[_scheduler.Plan, int | None, str | None]],
     *,
     mark_ejected: Callable[[str], list[str]],
-) -> tuple[list[_land_queue.Chunk], set[str]]:
-    """Split fan-out (plan, returncode) results into (landable_chunks, hitl_slugs).
+) -> tuple[list[_land_queue.Chunk], set[str], set[str]]:
+    """Split fan-out results into (landable_chunks, hitl_slugs, transient_slugs).
 
     A child that exited EX_HITL_REQUIRED is a wedge: self-ejected, worktree
     preserved. Mirrored as chunk.ejected{reason:hitl-required} so the operator
-    sees it without reading the child's log, cascaded through the scheduler so
-    blocked downstream chunks are skipped, kept out of the land queue.
+    sees it without reading the child's log, kept out of the land queue.
+
+    A **transient** death (worker-died: timeout kill or container-down) is not
+    mark_ejected here — its slug is RETURNED in the third set instead. That set is
+    the seam the recovery engine consumes to decide what to respawn; the caller
+    (run_orchestrate) marks them ejected once no respawn is pending. Terminal
+    ejects (hitl-required, implement-failed) are mark_ejected inline as before —
+    respawning them unchanged would just fail again.
     """
     chunks = []
     hitl: set[str] = set()
+    transient: set[str] = set()
     for item in results:
         plan, rc = item[0], item[1]
         logs_path = item[2] if len(item) > 2 else None
@@ -294,11 +301,12 @@ def _partition_fanout(
             # verdict — landing it would false-merge. Self-describe it as timed_out
             # with its own logs so the operator (and the recovery engine) can tell a
             # deadline kill from other deaths without reading the child's stream.
+            # Transient → returned, not marked (see docstring).
             _emit_event(
                 "chunk.ejected",
                 ejected_payload(plan.slug, EjectReason.WORKER_DIED, str(worktree), logs_path=logs_path, timed_out=True),
             )
-            mark_ejected(plan.slug)
+            transient.add(plan.slug)
         elif rc == EX_HITL_REQUIRED:
             hitl.add(plan.slug)
             _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.HITL_REQUIRED, str(worktree)))
@@ -306,6 +314,7 @@ def _partition_fanout(
         elif rc == EX_UNAVAILABLE:
             # Container/infra failure — the worker never ran, no code produced.
             # killed_by names the downed container so the death is self-describing.
+            # Transient → returned, not marked (see docstring).
             _emit_event(
                 "chunk.ejected",
                 ejected_payload(
@@ -316,14 +325,14 @@ def _partition_fanout(
                     killed_by="container-down",
                 ),
             )
-            mark_ejected(plan.slug)
+            transient.add(plan.slug)
         elif rc != 0:
-            # Any other non-zero exit: implement or gate failure.
+            # Any other non-zero exit: implement or gate failure. Terminal.
             _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.IMPLEMENT_FAILED, str(worktree)))
             mark_ejected(plan.slug)
         else:
             chunks.append(_land_queue.Chunk(slug=plan.slug, worktree=worktree))
-    return chunks, hitl
+    return chunks, hitl, transient
 
 
 def _prune_stale_containers() -> None:
@@ -433,8 +442,14 @@ def run_orchestrate(
     hitl_slugs: set[str] = set()
 
     results = _fan_out_plans(auto, harness=harness, model=model)
-    chunks, hitl = _partition_fanout(results, mark_ejected=sched.mark_ejected)
+    chunks, hitl, transient = _partition_fanout(results, mark_ejected=sched.mark_ejected)
     hitl_slugs.update(hitl)
+    # Transient (worker-died) ejects are the recovery engine's seam: partition
+    # returns them rather than marking them. Absent a respawn engine in this
+    # invocation, mark them ejected here so the cascade + non-zero batch exit are
+    # unchanged from before the seam existed.
+    for slug in transient:
+        sched.mark_ejected(slug)
 
     drain_results = _land_queue.drain(
         chunks,

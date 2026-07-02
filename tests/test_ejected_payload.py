@@ -57,6 +57,23 @@ def test_builder_includes_timed_out_and_killed_by_only_when_set() -> None:
     assert p["killed_by"] == "container-down"
 
 
+def test_transient_reasons_are_environment_failures() -> None:
+    """worker-died + not-ff are transient (retryable); gate/hitl/implement are terminal."""
+    assert events.is_transient_eject(events.EjectReason.WORKER_DIED)
+    assert events.is_transient_eject(events.EjectReason.NOT_FF)
+    for terminal in (
+        events.EjectReason.GATE_FAILED,
+        events.EjectReason.HITL_REQUIRED,
+        events.EjectReason.IMPLEMENT_FAILED,
+        events.EjectReason.MAIN_TREE_REFUSED,
+    ):
+        assert not events.is_transient_eject(terminal), f"{terminal} must be terminal"
+
+
+def test_transient_set_is_subset_of_all_reasons() -> None:
+    assert events.TRANSIENT_EJECT_REASONS <= events.EJECT_REASONS
+
+
 def test_catalog_declares_optional_fields() -> None:
     sys.path.insert(0, str(SKILLS / "mentat-log/scripts"))
     import log
