@@ -192,6 +192,11 @@ async def _await_chunk(proc: object, deadline_s: float, plan: _scheduler.Plan) -
     cannot dead-lock on a full buffer. The returncode is read AFTER the kill
     signal, so a chunk that exits in the overdue→kill gap is recorded with its
     real rc, not misreported as killed.
+
+    The host group-kill cannot reach the in-container agent (it lives in the
+    container's PID namespace), so the reaper also ``devcontainer.down``s the
+    chunk's slug to stop that container — otherwise the agent survives and keeps
+    mutating its worktree after the timeout.
     """
     grace_s = 5
     try:
@@ -205,6 +210,8 @@ async def _await_chunk(proc: object, deadline_s: float, plan: _scheduler.Plan) -
         try:
             _kill_proc_group(proc)
         finally:
+            with contextlib.suppress(Exception):
+                _devcontainer.down(plan.slug)
             with contextlib.suppress(TimeoutError):
                 async with asyncio.timeout(grace_s):
                     await proc.wait()  # type: ignore[attr-defined]
@@ -270,6 +277,19 @@ def _fan_out_plans(
     return asyncio.run(_supervise_fanout(plans, harness=harness, model=model))
 
 
+def _teardown_ejected(slug: str) -> None:
+    """Stop + remove a partition-ejected chunk's container and record it.
+
+    A chunk ejected at partition time never reaches the land queue (which is what
+    normally tears containers down), so its container would otherwise leak. Mirror
+    the land-queue behaviour: ``devcontainer.down`` then emit chunk.teardown.
+    Best-effort — a docker failure must not abort partitioning."""
+    ok = False
+    with contextlib.suppress(Exception):
+        ok = _devcontainer.down(slug)
+    _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
+
+
 def _partition_fanout(
     results: list[tuple[_scheduler.Plan, int | None, str | None]],
     *,
@@ -307,10 +327,12 @@ def _partition_fanout(
                 ejected_payload(plan.slug, EjectReason.WORKER_DIED, str(worktree), logs_path=logs_path, timed_out=True),
             )
             transient.add(plan.slug)
+            _teardown_ejected(plan.slug)
         elif rc == EX_HITL_REQUIRED:
             hitl.add(plan.slug)
             _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.HITL_REQUIRED, str(worktree)))
             mark_ejected(plan.slug)
+            _teardown_ejected(plan.slug)
         elif rc == EX_UNAVAILABLE:
             # Container/infra failure — the worker never ran, no code produced.
             # killed_by names the downed container so the death is self-describing.
@@ -326,10 +348,12 @@ def _partition_fanout(
                 ),
             )
             transient.add(plan.slug)
+            _teardown_ejected(plan.slug)
         elif rc != 0:
             # Any other non-zero exit: implement or gate failure. Terminal.
             _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.IMPLEMENT_FAILED, str(worktree)))
             mark_ejected(plan.slug)
+            _teardown_ejected(plan.slug)
         else:
             chunks.append(_land_queue.Chunk(slug=plan.slug, worktree=worktree))
     return chunks, hitl, transient
@@ -364,6 +388,20 @@ def _prune_stale_worktrees(preserve: set[str] | None = None) -> None:
     active = set(_devcontainer.list_active_slugs()) | (preserve or set())
     removed = _worktrees.prune_stale(wt_root, active_slugs=active)
     _utils.emit_event("session.prune", {"reclaimed_bytes": None, "worktrees_removed": removed})
+
+
+def _gc_preserved_worktrees(preserve: set[str] | None = None) -> None:
+    """Reclaim long-abandoned preserved (ejected/dirty) worktrees.
+
+    ``_prune_stale_worktrees`` never touches a dirty worktree, so ejected trees
+    accumulate unbounded and keep their secrets around. This GCs any worktree far
+    older than the clean-prune cutoff (``worktrees.DEFAULT_GC_SECONDS``) regardless
+    of dirty state, sparing still-active + freshly-preserved (hitl) slugs.
+    """
+    wt_root = Path.cwd() / ".mentat" / "worktrees"
+    active = set(_devcontainer.list_active_slugs()) | (preserve or set())
+    reclaimed = _worktrees.gc_preserved(wt_root, active_slugs=active)
+    _utils.emit_event("session.prune", {"reclaimed_bytes": None, "worktrees_gc": reclaimed})
 
 
 def _spawn_batch_doctor() -> None:
@@ -429,81 +467,88 @@ def run_orchestrate(
 
     _prune_stale_containers()
 
-    if anchored:
-        _emit_anchored_chunks(anchored, harness=harness, model=model)
-
-    # Build Scheduler from ALL plans (anchored + auto) so cross-partition
-    # blocked_by edges are tracked.  auto chunks are the only spawn candidates
-    # (they never appear in `next_ready` as anchored slugs), so anchored plans
-    # act as "known but not-yet-landed" deps that gate auto dependents correctly.
-    # mark_ejected then cascades across the full plan graph, including HITL
-    # downstream — fixing the silent cascade miss when an auto upstream dies.
-    sched = _scheduler.Scheduler(anchored + auto)
+    # hitl_slugs is defined before the try so the crash-safe finally can preserve
+    # wedged worktrees even if the batch body raises mid-run.
     hitl_slugs: set[str] = set()
+    try:
+        if anchored:
+            _emit_anchored_chunks(anchored, harness=harness, model=model)
 
-    results = _fan_out_plans(auto, harness=harness, model=model)
-    chunks, hitl, transient = _partition_fanout(results, mark_ejected=sched.mark_ejected)
-    hitl_slugs.update(hitl)
-    # Transient (worker-died) ejects are the recovery engine's seam: partition
-    # returns them rather than marking them. Absent a respawn engine in this
-    # invocation, mark them ejected here so the cascade + non-zero batch exit are
-    # unchanged from before the seam existed.
-    for slug in transient:
-        sched.mark_ejected(slug)
+        # Build Scheduler from ALL plans (anchored + auto) so cross-partition
+        # blocked_by edges are tracked.  auto chunks are the only spawn candidates
+        # (they never appear in `next_ready` as anchored slugs), so anchored plans
+        # act as "known but not-yet-landed" deps that gate auto dependents correctly.
+        # mark_ejected then cascades across the full plan graph, including HITL
+        # downstream — fixing the silent cascade miss when an auto upstream dies.
+        sched = _scheduler.Scheduler(anchored + auto)
 
-    drain_results = _land_queue.drain(
-        chunks,
-        holding=holding,
-        on_landed=sched.mark_landed,
-        on_ejected=sched.mark_ejected,
-        next_ready=sched.next_ready,
-    )
-    stalled = [r for r in drain_results if r.get("status") == "stalled"]
-    if stalled:
-        pending = stalled[0].get("pending", [])
-        print(f"mentat-orchestrate: stalled — pending chunks: {pending}", file=sys.stderr)
+        results = _fan_out_plans(auto, harness=harness, model=model)
+        chunks, hitl, transient = _partition_fanout(results, mark_ejected=sched.mark_ejected)
+        hitl_slugs.update(hitl)
+        # Transient (worker-died) ejects are the recovery engine's seam: partition
+        # returns them rather than marking them. Absent a respawn engine in this
+        # invocation, mark them ejected here so the cascade + non-zero batch exit are
+        # unchanged from before the seam existed.
+        for slug in transient:
+            sched.mark_ejected(slug)
 
-    # Emit cascade ejection events for anchored plans whose upstream was ejected.
-    # The drain loop only processes auto chunks, so anchored cascade victims are
-    # silently in sched.ejected_slugs() but never emitted — fix that here so the
-    # operator sees them in the audit log and skips implementing them.
-    anchored_slugs = {p.slug for p in anchored}
-    for slug in sched.ejected_slugs():
-        if slug in anchored_slugs:
-            plan_obj = next((p for p in anchored if p.slug == slug), None)
-            where = str(plan_obj.path.parent) if plan_obj else str(Path.cwd())
-            _emit_event(
-                "chunk.ejected",
-                ejected_payload(slug, EjectReason.UPSTREAM_EJECTED, where),
-            )
+        drain_results = _land_queue.drain(
+            chunks,
+            holding=holding,
+            on_landed=sched.mark_landed,
+            on_ejected=sched.mark_ejected,
+            next_ready=sched.next_ready,
+        )
+        stalled = [r for r in drain_results if r.get("status") == "stalled"]
+        if stalled:
+            pending = stalled[0].get("pending", [])
+            print(f"mentat-orchestrate: stalled — pending chunks: {pending}", file=sys.stderr)
 
-    _utils.emit_event(
-        "batch.reviewed",
-        {"session": session_id, "summary": f"batch review for session {session_id} — advisory"},
-    )
+        # Emit cascade ejection events for anchored plans whose upstream was ejected.
+        # The drain loop only processes auto chunks, so anchored cascade victims are
+        # silently in sched.ejected_slugs() but never emitted — fix that here so the
+        # operator sees them in the audit log and skips implementing them.
+        anchored_slugs = {p.slug for p in anchored}
+        for slug in sched.ejected_slugs():
+            if slug in anchored_slugs:
+                plan_obj = next((p for p in anchored if p.slug == slug), None)
+                where = str(plan_obj.path.parent) if plan_obj else str(Path.cwd())
+                _emit_event(
+                    "chunk.ejected",
+                    ejected_payload(slug, EjectReason.UPSTREAM_EJECTED, where),
+                )
 
-    _prune_stale_worktrees(preserve=hitl_slugs)
+        _utils.emit_event(
+            "batch.reviewed",
+            {"session": session_id, "summary": f"batch review for session {session_id} — advisory"},
+        )
 
-    rc = 1 if sched.has_ejections() or hitl_slugs or stalled else 0
-    if rc != 0:
-        # Print named eject summary so operator knows which slugs failed and why.
-        # Drain results carry land-queue eject reasons; partition-ejected chunks
-        # appear in sched.ejected_slugs() but not in drain_results.
-        drain_eject_slugs = {r.get("slug") for r in drain_results if r.get("status") == "eject"}
-        for v in drain_results:
-            if v.get("status") == "eject":
-                slug = v.get("slug", "?")
-                reason = v.get("reason", "?")
-                print(f"mentat-orchestrate: ejected {slug} — {reason}", file=sys.stderr)
-        for slug in sorted(sched.ejected_slugs()):
-            if slug not in drain_eject_slugs and slug not in hitl_slugs:
-                print(f"mentat-orchestrate: ejected {slug}", file=sys.stderr)
-        for slug in sorted(hitl_slugs):
-            print(f"mentat-orchestrate: ejected {slug} — hitl-required", file=sys.stderr)
-        _spawn_batch_doctor()
-    else:
-        print(f"mentat-orchestrate: review the diff with `git diff {holding}..HEAD`", file=sys.stderr)
-    return rc
+        rc = 1 if sched.has_ejections() or hitl_slugs or stalled else 0
+        if rc != 0:
+            # Print named eject summary so operator knows which slugs failed and why.
+            # Drain results carry land-queue eject reasons; partition-ejected chunks
+            # appear in sched.ejected_slugs() but not in drain_results.
+            drain_eject_slugs = {r.get("slug") for r in drain_results if r.get("status") == "eject"}
+            for v in drain_results:
+                if v.get("status") == "eject":
+                    slug = v.get("slug", "?")
+                    reason = v.get("reason", "?")
+                    print(f"mentat-orchestrate: ejected {slug} — {reason}", file=sys.stderr)
+            for slug in sorted(sched.ejected_slugs()):
+                if slug not in drain_eject_slugs and slug not in hitl_slugs:
+                    print(f"mentat-orchestrate: ejected {slug}", file=sys.stderr)
+            for slug in sorted(hitl_slugs):
+                print(f"mentat-orchestrate: ejected {slug} — hitl-required", file=sys.stderr)
+            _spawn_batch_doctor()
+        else:
+            print(f"mentat-orchestrate: review the diff with `git diff {holding}..HEAD`", file=sys.stderr)
+        return rc
+    finally:
+        # Crash-safe teardown: reclaim clean stale worktrees + GC long-abandoned
+        # preserved ones on every exit — including an exception mid-batch — so a
+        # crash never leaks worktrees or containers. hitl worktrees are held back.
+        _prune_stale_worktrees(preserve=hitl_slugs)
+        _gc_preserved_worktrees(preserve=hitl_slugs)
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -724,22 +724,25 @@ def main() -> None:
 
     rc = _run_and_doctor(plan_path, harness=args.harness, model=args.model)
 
-    if rc == 0 and getattr(args, "land", False):
-        holding = getattr(args, "holding", None) or "main"
-        worktree = target if target is not None else Path.cwd()
-        _land_and_review(slug, worktree, holding)
-
-    # Implement owns the worktree it created: on its own failure drop it if
-    # clean, preserve if dirty. Signal exits and a hitl-required wedge are
-    # preserved unconditionally — the wedge worktree holds work the operator
+    # Own-worktree teardown lives in a finally so it is crash-safe: it runs on a
+    # normal failure exit AND if the land/review body below raises. Implement owns
+    # the worktree it created — on its own failure it drops a clean one, preserves
+    # a dirty one (holds un-landed work). Signal exits and a hitl-required wedge
+    # are preserved unconditionally — the wedge worktree holds work the operator
     # must resume once the design call is made. Doctor already ran inside
     # _run_and_doctor and writes to ~/.mentat/logs, so teardown loses nothing.
-    if rc == 0:
-        print("mentat-implement: review the diff with `git diff main..HEAD`", file=sys.stderr)
+    try:
+        if rc == 0 and getattr(args, "land", False):
+            holding = getattr(args, "holding", None) or "main"
+            worktree = target if target is not None else Path.cwd()
+            _land_and_review(slug, worktree, holding)
 
-    if rc != 0 and rc not in _PRESERVE_WORKTREE_EXITS and target is not None:
-        os.chdir(_repo_root_from_worktree(target))
-        _teardown_worktree(target)
+        if rc == 0:
+            print("mentat-implement: review the diff with `git diff main..HEAD`", file=sys.stderr)
+    finally:
+        if rc != 0 and rc not in _PRESERVE_WORKTREE_EXITS and target is not None:
+            os.chdir(_repo_root_from_worktree(target))
+            _teardown_worktree(target)
     sys.exit(rc)
 
 

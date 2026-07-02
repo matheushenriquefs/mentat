@@ -398,6 +398,80 @@ def test_container_prune_runs_even_with_dirty_worktree(tmp_path, monkeypatch):
     assert prune_calls == [1], f"devcontainer.prune must be called even when dirty worktrees exist; got {prune_calls}"
 
 
+# ── S4: crash-safe teardown + preserved-worktree GC ──────────────────────────
+
+
+def test_run_orchestrate_prunes_worktrees_even_on_exception(tmp_path, monkeypatch):
+    """A mid-batch exception must still run the end-of-batch prune + GC (finally)."""
+    orchestrate = _load("orchestrate")
+    _load("land_queue")
+    _load("scheduler")
+
+    calls: list[str] = []
+    monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)
+    monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: calls.append("prune"))
+    monkeypatch.setattr(orchestrate, "_gc_preserved_worktrees", lambda **kw: calls.append("gc"))
+    monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
+
+    def boom(plans, **kw):
+        raise RuntimeError("fan-out blew up mid-batch")
+
+    monkeypatch.setattr(orchestrate, "_fan_out_plans", boom)
+
+    import pytest
+
+    with pytest.raises(RuntimeError):
+        orchestrate.run_orchestrate("holding", _make_plans(tmp_path), harness=None, model=None, dry_run=False)
+
+    assert "prune" in calls, "worktree prune must run even when the batch raises"
+    assert "gc" in calls, "preserved-worktree GC must run even when the batch raises"
+
+
+def test_gc_preserved_reclaims_old_dirty_worktree(tmp_path):
+    """worktrees.gc_preserved force-removes a dirty worktree older than the GC age."""
+    from lib import worktrees
+
+    wt_root = tmp_path / ".mentat" / "worktrees"
+    wt = _make_wt(wt_root, "mentat-ejected-old", age_secs=8 * 24 * 3600)  # 8 days
+    (wt / "dirty.txt").write_text("un-landed work\n")
+    os.utime(wt, (_time.time() - 8 * 24 * 3600, _time.time() - 8 * 24 * 3600))
+
+    reclaimed = worktrees.gc_preserved(wt_root, gc_seconds=7 * 24 * 3600)
+
+    assert reclaimed == 1
+    assert not wt.exists(), "abandoned dirty worktree past the GC age must be reclaimed"
+
+
+def test_gc_preserved_keeps_recent_dirty_worktree(tmp_path):
+    """A dirty worktree younger than the GC age is preserved (operator may resume it)."""
+    from lib import worktrees
+
+    wt_root = tmp_path / ".mentat" / "worktrees"
+    wt = _make_wt(wt_root, "mentat-ejected-fresh", age_secs=3600)  # 1h
+    (wt / "dirty.txt").write_text("un-landed work\n")
+    os.utime(wt, (_time.time() - 3600, _time.time() - 3600))
+
+    reclaimed = worktrees.gc_preserved(wt_root, gc_seconds=7 * 24 * 3600)
+
+    assert reclaimed == 0
+    assert wt.exists(), "a recent preserved worktree must survive the GC"
+
+
+def test_gc_preserved_spares_active_slug(tmp_path):
+    """An old worktree whose slug is active is never GC'd."""
+    from lib import worktrees
+
+    wt_root = tmp_path / ".mentat" / "worktrees"
+    slug = "mentat-active-old"
+    wt = _make_wt(wt_root, slug, age_secs=8 * 24 * 3600)
+    os.utime(wt, (_time.time() - 8 * 24 * 3600, _time.time() - 8 * 24 * 3600))
+
+    reclaimed = worktrees.gc_preserved(wt_root, active_slugs={slug}, gc_seconds=7 * 24 * 3600)
+
+    assert reclaimed == 0
+    assert wt.exists(), "active worktree must not be GC'd"
+
+
 def test_prune_failure_does_not_abort(tmp_path, monkeypatch):
     orchestrate = _load("orchestrate")
     _load("land_queue")

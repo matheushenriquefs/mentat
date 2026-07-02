@@ -205,6 +205,45 @@ def test_partition_fanout_container_down_payload_names_killer(tmp_path):
     assert "timed_out" not in p, "container-down is not a timeout"
 
 
+# ── S4: partition tears down ejected containers; reaper stops on timeout ──────
+
+
+def test_partition_fanout_tears_down_ejected_container(tmp_path):
+    """A partition-ejected chunk → devcontainer.down(slug) + chunk.teardown emitted
+    (it never reaches the land queue that normally tears containers down)."""
+    orch = load_module("orchestrate")
+    plan = _make_plan_obj(tmp_path, "ej")
+    down_calls: list[str] = []
+    emitted: list[tuple] = []
+
+    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._devcontainer, "down", lambda slug: down_calls.append(slug) or True):
+            with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+                orch._partition_fanout([(plan, -9, "/logs/ej")], mark_ejected=lambda s: [])
+
+    assert down_calls == ["ej"], f"ejected chunk container must be torn down: {down_calls}"
+    teardowns = [p for ev, p in emitted if ev == "chunk.teardown"]
+    assert teardowns and teardowns[0]["slug"] == "ej"
+
+
+def test_supervisor_stops_container_on_timeout(monkeypatch, tmp_path):
+    """The reaper docker-stops the slug container on a deadline kill so the
+    in-container agent (in its own PID namespace) dies."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="hung-c", class_="AFK", blocked_by=[], path=tmp_path / "hung-c.md")
+
+    down_calls: list[str] = []
+    monkeypatch.setattr(orch._devcontainer, "down", lambda slug: down_calls.append(slug) or True)
+    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
+    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)]))
+
+    orch._fan_out_plans([plan], harness=None, model=None)
+
+    assert "hung-c" in down_calls, f"reaper must docker-stop the timed-out slug: {down_calls}"
+
+
 # ── Slice 2: per-chunk wall-clock deadline ────────────────────────────────────
 
 

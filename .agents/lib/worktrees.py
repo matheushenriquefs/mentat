@@ -18,6 +18,10 @@ from pathlib import Path
 
 WORKTREES_SUBPATH = (".mentat", "worktrees")
 DEFAULT_CUTOFF_SECONDS = 3600
+# Preserved (dirty / ejected) worktrees are reclaimed only once this much older —
+# far past the clean-prune cutoff — so a still-relevant leftover survives while an
+# abandoned one cannot leak disk or leave its secrets in a stale tree forever.
+DEFAULT_GC_SECONDS = 7 * 24 * 3600
 
 
 def worktrees_root(repo_root: Path) -> Path:
@@ -84,6 +88,32 @@ def prune_stale(
     removed = 0
     for child in _stale_children(wt_root, cutoff_seconds):
         if child.name in active or is_dirty(child):
+            continue
+        if _remove(child):
+            removed += 1
+    return removed
+
+
+def gc_preserved(
+    wt_root: Path,
+    *,
+    active_slugs: set[str] | None = None,
+    gc_seconds: int = DEFAULT_GC_SECONDS,
+) -> int:
+    """Reclaim *preserved* (typically dirty / ejected) worktrees older than
+    ``gc_seconds``. Returns count.
+
+    ``prune_stale`` deliberately keeps every dirty worktree forever — it holds
+    un-landed work. That is right in the short term but unbounded in the long
+    term: ejected worktrees accumulate and leave secrets in stale trees. This
+    force-removes any worktree older than the (much longer) GC age regardless of
+    dirty state, except still-active slugs. A clean stale worktree is already
+    ``prune_stale``'s job; in practice this reaps the long-abandoned dirty ones.
+    """
+    active = active_slugs or set()
+    removed = 0
+    for child in _stale_children(wt_root, gc_seconds):
+        if child.name in active:
             continue
         if _remove(child):
             removed += 1
