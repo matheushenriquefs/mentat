@@ -106,6 +106,69 @@ def test_verdict_for_chunk_ejected_hitl_required(tmp_path):
     assert "hitl" in verdict.lower() or "ambiguity" in verdict.lower() or "self-answered" in verdict.lower()
 
 
+def test_verdict_for_worker_died_names_slug_and_reason(tmp_path):
+    """A worker-died eject must attribute the dead chunk by slug + reason, never
+    fall through to an "Unknown reason" suspect (S5)."""
+    doctor_mod = load_module("doctor")
+    session_dir = tmp_path / "sess-1"
+    _write_log(
+        session_dir,
+        "mentat-orchestrate",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "event": "chunk.ejected",
+                "payload": {"slug": "dead-chunk", "reason": "worker-died", "where": "/tmp/wt"},
+            },
+        ],
+    )
+    verdict = doctor_mod.build_verdict(session_dir)
+    assert "worker-died" in verdict
+    assert "dead-chunk" in verdict
+    assert "Unknown reason" not in verdict
+    assert "Suspect: None" not in verdict
+
+
+def test_verdict_worker_died_not_masked_by_later_land(tmp_path):
+    """Batch session, two chunks: one lands, another's worker died earlier. The
+    reversed-by-ts scan must not report 'chunk.landed / Suspect: None' and bury
+    the dead worker — the eject is the story doctor exists to tell (S5)."""
+    doctor_mod = load_module("doctor")
+    session_dir = tmp_path / "sess-1"
+    _write_log(
+        session_dir,
+        "mentat-orchestrate-dead",
+        [
+            {
+                "ts": "2026-01-01T00:00:01+00:00",
+                "event": "chunk.spawned",
+                "payload": {"slug": "dead-chunk", "plan": "dead.md", "harness": "cc", "worktree": "/tmp/wt"},
+            },
+            {
+                "ts": "2026-01-01T00:00:02+00:00",
+                "event": "chunk.ejected",
+                "payload": {"slug": "dead-chunk", "reason": "worker-died", "where": "/tmp/wt"},
+            },
+        ],
+    )
+    _write_log(
+        session_dir,
+        "mentat-orchestrate-good",
+        [
+            {
+                "ts": "2026-01-01T00:00:03+00:00",
+                "event": "chunk.landed",
+                "payload": {"slug": "good-chunk", "sha": "abc123", "holding": "main"},
+            },
+        ],
+    )
+    verdict = doctor_mod.build_verdict(session_dir)
+    assert "Reason: chunk.landed" not in verdict
+    assert "Suspect: None" not in verdict
+    assert "worker-died" in verdict
+    assert "dead-chunk" in verdict
+
+
 def test_doctor_writes_diagnosis_in_session_dir(tmp_path):
     doctor_mod = load_module("doctor")
     session_dir = tmp_path / "sess-1"
