@@ -1,11 +1,13 @@
 """E2E: the track journey over a real ~/.mentat/logs tree (guards the motivating bug).
 
 The "couldn't track sessions" regression was a reader invoked outside the writer's
-cwd scanning an empty log dir and showing nothing. This is its real-subprocess twin:
-seed a live + an idle + a stale session under a temp log root, run the actual
-``mentat-session`` CLI non-interactively (``track --all`` one-shot path and ``list``),
-and assert every seeded session surfaces with the status its tail rows imply. If the
-tracker ever stops finding seeded sessions again, this test goes red.
+cwd scanning an empty log dir and showing nothing. ``track`` now reads the fixed-path
+sqlite projection instead of a cwd-relative dir scan, so that failure mode can't recur.
+This is its real-subprocess twin: project a live + two terminal sessions into the db,
+seed the same tree on disk for ``list`` (still a dir scan), run the actual
+``mentat-session`` CLI non-interactively (``track --all`` and ``list``), and assert
+every seeded session surfaces. If the tracker ever stops finding sessions again, this
+test goes red.
 """
 
 from __future__ import annotations
@@ -20,6 +22,11 @@ from pathlib import Path
 import pytest
 
 pytestmark = pytest.mark.e2e
+
+_AGENTS = Path(__file__).resolve().parents[2] / ".agents"
+if str(_AGENTS) not in sys.path:
+    sys.path.insert(0, str(_AGENTS))
+from lib import state  # noqa: E402
 
 SESSION_PY = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-session/scripts/session.py"
 
@@ -79,15 +86,19 @@ def _run(args: list[str], log_root: Path, repo: str) -> str:
     return proc.stdout
 
 
-def test_track_all_lists_every_seeded_session(tmp_path):
+def test_track_all_lists_every_seeded_session(tmp_path, monkeypatch):
     repo = "trackrepo"
     log_root = tmp_path / "logs"
-    _seed_tree(log_root, repo)
+    db = tmp_path / "state.db"
+    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+    # track reads the sqlite projection: a live (running) session plus two terminal ones.
+    for uuid, event in (("live-sess", "chunk.spawned"), ("done-sess", "chunk.landed"), ("failed-sess", "plan.failed")):
+        state.project({"MENTAT_SESSION": uuid, "MENTAT_REPO": repo}, event, now=100.0)
 
     out = _run(["track", "--all"], log_root, repo)
 
-    # Every seeded session surfaces with the status its tail implies.
-    for session, status in (("live-sess", "working"), ("idle-sess", "idle"), ("stale-sess", "?")):
+    # Every projected session surfaces with its projected status.
+    for session, status in (("live-sess", "running"), ("done-sess", "landed"), ("failed-sess", "failed")):
         line = next((ln for ln in out.splitlines() if session in ln), None)
         assert line is not None, f"{session} missing from track --all output:\n{out}"
         assert status in line, f"{session} wrong status (want {status!r}):\n{line!r}"

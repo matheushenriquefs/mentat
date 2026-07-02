@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -20,6 +21,11 @@ import pytest
 from tests.conftest import load_script
 
 pytestmark = pytest.mark.e2e
+
+_AGENTS = Path(__file__).resolve().parents[2] / ".agents"
+if str(_AGENTS) not in sys.path:
+    sys.path.insert(0, str(_AGENTS))
+from lib import state  # noqa: E402
 
 SESSION_DIR = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-session/scripts"
 SESSION_PY = SESSION_DIR / "session.py"
@@ -51,17 +57,29 @@ def _write_events(session_dir: Path, events: list[dict], *, age: float = 0.0) ->
 
 
 _LANDED = [
-    {"ts": "2026-06-30T00:00:00Z", "event": "chunk.spawned",
-     "payload": {"slug": "s1", "plan": "s1.md", "harness": "claude-code", "worktree": "/tmp/wt"}},
-    {"ts": "2026-06-30T00:00:02Z", "event": "chunk.landed",
-     "payload": {"slug": "s1", "sha": "deadbeef", "holding": "main"}},
+    {
+        "ts": "2026-06-30T00:00:00Z",
+        "event": "chunk.spawned",
+        "payload": {"slug": "s1", "plan": "s1.md", "harness": "claude-code", "worktree": "/tmp/wt"},
+    },
+    {
+        "ts": "2026-06-30T00:00:02Z",
+        "event": "chunk.landed",
+        "payload": {"slug": "s1", "sha": "deadbeef", "holding": "main"},
+    },
 ]
 
 _EJECTED = [
-    {"ts": "2026-06-30T00:00:00Z", "event": "chunk.spawned",
-     "payload": {"slug": "s2", "plan": "s2.md", "harness": "claude-code", "worktree": "/tmp/wt2"}},
-    {"ts": "2026-06-30T00:00:03Z", "event": "chunk.ejected",
-     "payload": {"slug": "s2", "reason": "gate-failed", "where": "land"}},
+    {
+        "ts": "2026-06-30T00:00:00Z",
+        "event": "chunk.spawned",
+        "payload": {"slug": "s2", "plan": "s2.md", "harness": "claude-code", "worktree": "/tmp/wt2"},
+    },
+    {
+        "ts": "2026-06-30T00:00:03Z",
+        "event": "chunk.ejected",
+        "payload": {"slug": "s2", "reason": "gate-failed", "where": "land"},
+    },
 ]
 
 
@@ -114,12 +132,22 @@ def test_doctor_verdict_hitl_eject_cites_blocker(repo_log, capsys):
     log_root, repo = repo_log
     s = _session()
     sd = log_root / repo / "orchestrate-main-hitl"
-    _write_events(sd, [
-        {"ts": "2026-06-30T00:00:00Z", "event": "plan.started", "payload": {"path": "tiny.md"}},
-        {"ts": "2026-06-30T00:00:01Z", "event": "chunk.ejected",
-         "payload": {"slug": "tiny", "reason": "hitl-required", "where": "/wt",
-                     "summary": "needs a design call on the API shape"}},
-    ])
+    _write_events(
+        sd,
+        [
+            {"ts": "2026-06-30T00:00:00Z", "event": "plan.started", "payload": {"path": "tiny.md"}},
+            {
+                "ts": "2026-06-30T00:00:01Z",
+                "event": "chunk.ejected",
+                "payload": {
+                    "slug": "tiny",
+                    "reason": "hitl-required",
+                    "where": "/wt",
+                    "summary": "needs a design call on the API shape",
+                },
+            },
+        ],
+    )
 
     assert s.cmd_doctor("orchestrate-main-hitl") == 0
     out = capsys.readouterr().out
@@ -198,9 +226,10 @@ def test_track_single_session_view(repo_log, capsys):
     _write_events(sd, _LANDED)
     # A harness stream so the transcript renderer produces real content.
     (sd / "session.jsonl").write_text(
-        json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "working on it"}]}}) + "\n"
-        + json.dumps({"type": "assistant",
-                      "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {}}]}}) + "\n"
+        json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "working on it"}]}})
+        + "\n"
+        + json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {}}]}})
+        + "\n"
     )
 
     # A named track target renders the one-session transcript view (non-tty one-shot path).
@@ -212,11 +241,13 @@ def test_track_single_session_view(repo_log, capsys):
     assert "not found" in capsys.readouterr().err
 
 
-def test_track_navigator_oneshot_lists_registry(repo_log, capsys):
+def test_track_navigator_oneshot_lists_registry(repo_log, capsys, monkeypatch, tmp_path):
     log_root, repo = repo_log
     s = _session()
-    _write_events(log_root / repo / "orchestrate-main-6", _LANDED)
-    _write_events(log_root / repo / "orchestrate-main-7", _EJECTED)
+    # The navigator registry reads the sqlite projection, not the log dir scan.
+    monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "state.db"))
+    state.project({"MENTAT_SESSION": "orchestrate-main-6", "MENTAT_REPO": repo}, "chunk.spawned", now=100.0)
+    state.project({"MENTAT_SESSION": "orchestrate-main-7", "MENTAT_REPO": repo}, "chunk.ejected", now=100.0)
 
     # cmd_track(None) → navigate(); stdin is not a tty → one-shot registry list print.
     assert s.cmd_track(None, all_sessions=True) == 0
@@ -231,11 +262,20 @@ def test_track_render_helpers_over_real_streams(repo_log):
     sd = log_root / repo / "orchestrate-main-8"
     _write_events(sd, _EJECTED)
     (sd / "session.jsonl").write_text(
-        json.dumps({"type": "assistant",
-                    "message": {"content": [{"type": "text", "text": "hello"},
-                                            {"type": "tool_use", "name": "AskUserQuestion", "input": {}}]}}) + "\n"
-        + json.dumps({"type": "user",
-                      "message": {"content": [{"type": "tool_result", "content": "done"}]}}) + "\n"
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "text", "text": "hello"},
+                        {"type": "tool_use", "name": "AskUserQuestion", "input": {}},
+                    ]
+                },
+            }
+        )
+        + "\n"
+        + json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "content": "done"}]}})
+        + "\n"
     )
 
     transcript = track.render_transcript_lines(sd)

@@ -17,7 +17,7 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import harness_stream as _hs  # noqa: E402
-from lib import tui  # noqa: E402
+from lib import state, tui  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
 _sessions = load_sibling(__file__, "sessions")
@@ -568,8 +568,15 @@ def _navigate_tty(repo_dir: Path, *, repo: str, active_only: bool) -> int:  # pr
 
 
 def _registry(repo_dir: Path, *, active_only: bool = True) -> list[Entry]:
-    """Registry status records paired with each session's absolute dir (for preview/kill)."""
-    rows = cast("list[dict[str, object]]", _sessions.list_sessions(repo_dir, active_only=active_only))
+    """Registry status records from the sqlite projection, paired with each session's
+    absolute dir (for preview/kill).
+
+    One indexed query keyed on the repo — no repo-dir scan, no per-session tail reduce,
+    no recency window (which used to hide live-but-idle sessions). The db path is fixed
+    (`MENTAT_STATE_DB` / `~/.mentat/state.db`), so a reader invoked outside the writer's
+    cwd can't false-empty against populated state — the motivating "couldn't track" bug.
+    """
+    rows = state.list_sessions(repo_dir.name, active_only=active_only)
     return [(r, repo_dir / str(r["session"])) for r in rows]
 
 

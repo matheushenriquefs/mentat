@@ -66,6 +66,47 @@ def _connect(path: Path) -> sqlite3.Connection:
     return conn
 
 
+def list_sessions(repo: str, *, now: float | None = None, active_only: bool = True) -> list[dict[str, object]]:
+    """One repo's session rows from the projection — a single indexed query, no dir scan.
+
+    Each record: ``{session, status, mtime, age, last_event}`` where ``session`` is the
+    session uuid and ``mtime``/``age`` derive from ``last_event_at``. ``last_event``
+    mirrors ``status`` — the projection records the outcome the last event implied, not
+    the raw event name (the reader no longer reduces the log for it).
+
+    ``active_only`` (default) keeps only non-terminal (``running``) sessions — a live or
+    silently-crashed chunk — with no recency window, so an idle-but-incomplete session
+    never false-empties out; ``active_only=False`` returns the full history. Running
+    sessions sort ahead of terminal ones, then newest activity first.
+
+    Best-effort read: an unopenable/absent db yields ``[]`` (the NDJSON log is the truth).
+    """
+    clock = time.time() if now is None else now
+    sql = "SELECT uuid, status, last_event_at FROM sessions WHERE repo = ?"
+    params: tuple[object, ...] = (repo,)
+    if active_only:
+        sql += " AND status = 'running'"
+    sql += " ORDER BY (status = 'running') DESC, last_event_at DESC"
+    try:
+        conn = _connect(db_path())
+        try:
+            rows = conn.execute(sql, params).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return []
+    return [
+        {
+            "session": uuid,
+            "status": status,
+            "mtime": last_event_at,
+            "age": max(0.0, clock - last_event_at),
+            "last_event": status,
+        }
+        for uuid, status, last_event_at in rows
+    ]
+
+
 def project(env: dict[str, str], event: str, *, now: float | None = None) -> None:
     """Upsert the ``sessions`` row implied by ``env`` + ``event``.
 

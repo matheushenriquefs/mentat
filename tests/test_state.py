@@ -166,6 +166,62 @@ def test_state_is_stdlib_only():
             assert top in stdlib or node.module.startswith("lib"), f"non-stdlib from-import: {node.module}"
 
 
+# ── S3: state.list_sessions — the reader's one indexed query ──────────────────
+
+
+def test_list_sessions_lists_running_newest_first(monkeypatch, tmp_path):
+    """A live + an idle-but-incomplete session both list (both non-terminal);
+    ordered newest-activity first."""
+    db = tmp_path / "state.db"
+    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+
+    state.project(_env("live", MENTAT_REPO="r"), "chunk.spawned", now=100.0)
+    state.project(_env("idle", MENTAT_REPO="r"), "gate.evaluated", now=50.0)
+
+    rows = state.list_sessions("r", now=200.0)
+    assert [r["session"] for r in rows] == ["live", "idle"]
+    assert rows[0]["status"] == "running"
+    assert rows[0]["age"] == 100.0  # 200 - last_event_at(100)
+
+
+def test_list_sessions_no_recency_window_keeps_ancient_running(monkeypatch, tmp_path):
+    """The recency window that hid live-but-idle sessions is gone: an ancient
+    still-running session must never false-empty out of the active view."""
+    db = tmp_path / "state.db"
+    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+
+    state.project(_env("ancient", MENTAT_REPO="r"), "chunk.spawned", now=0.0)
+
+    rows = state.list_sessions("r", now=10 * 86400.0)  # 10 days later
+    assert [r["session"] for r in rows] == ["ancient"]
+
+
+def test_list_sessions_active_only_excludes_terminal(monkeypatch, tmp_path):
+    db = tmp_path / "state.db"
+    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+
+    state.project(_env("live", MENTAT_REPO="r"), "chunk.spawned", now=100.0)
+    state.project(_env("done", MENTAT_REPO="r"), "chunk.landed", now=100.0)
+
+    assert [r["session"] for r in state.list_sessions("r", now=200.0)] == ["live"]
+    assert {r["session"] for r in state.list_sessions("r", now=200.0, active_only=False)} == {"live", "done"}
+
+
+def test_list_sessions_filters_by_repo(monkeypatch, tmp_path):
+    db = tmp_path / "state.db"
+    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+
+    state.project(_env("a", MENTAT_REPO="r1"), "chunk.spawned", now=1.0)
+    state.project(_env("b", MENTAT_REPO="r2"), "chunk.spawned", now=1.0)
+
+    assert [r["session"] for r in state.list_sessions("r1", now=2.0)] == ["a"]
+
+
+def test_list_sessions_missing_db_returns_empty(monkeypatch, tmp_path):
+    monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "never-written.db"))
+    assert state.list_sessions("r", now=1.0) == []
+
+
 def test_emit_projects_session_row(monkeypatch, tmp_path):
     """The red: a confirmed emit projects a queryable row with correct status."""
     import subprocess
