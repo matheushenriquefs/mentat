@@ -248,3 +248,122 @@ def test_partition_fanout_stalled_kill_names_killer(tmp_path):
     assert p["killed_by"] == "stalled"
     assert "timed_out" not in p, "a stall is not a wall timeout"
     assert "st" in transient
+
+
+# ── S3: circuit breaker on shared deps ────────────────────────────────────────
+
+
+def test_breaker_opens_after_threshold_consecutive_failures():
+    """N consecutive failures OPEN the breaker; further allow() short-circuits."""
+    orch = load_module("orchestrate")
+    b = orch._CircuitBreaker(threshold=3, cooldown_s=1000.0)  # long cooldown → stays open
+    assert b.allow() is True
+    b.record_failure()
+    b.record_failure()
+    assert b.state != "open", "must not open before the threshold"
+    b.record_failure()
+    assert b.state == "open", "threshold reached → open"
+    assert b.allow() is False, "open breaker must short-circuit (no spawn)"
+    assert b.allow() is False, "still short-circuits while cooling down"
+
+
+def test_breaker_success_resets_consecutive_count():
+    """A success between failures resets the count — non-consecutive failures never trip."""
+    orch = load_module("orchestrate")
+    b = orch._CircuitBreaker(threshold=3, cooldown_s=1000.0)
+    b.record_failure()
+    b.record_failure()
+    b.record_success()
+    b.record_failure()
+    assert b.state == "closed", "count reset by success → not open"
+
+
+def test_breaker_half_open_probe_closes_on_success():
+    """After cooldown the breaker half-opens, admits ONE probe; success re-CLOSEs."""
+    orch = load_module("orchestrate")
+    b = orch._CircuitBreaker(threshold=2, cooldown_s=0.0)  # cooldown elapsed immediately
+    b.record_failure()
+    b.record_failure()
+    assert b.state == "open"
+    assert b.allow() is True, "cooldown elapsed → admit one probe"
+    assert b.allow() is False, "the in-flight probe blocks siblings"
+    b.record_success()
+    assert b.state == "closed"
+    assert b.allow() is True
+
+
+def test_breaker_probe_failure_reopens():
+    """A failed probe re-OPENs the breaker (backend still sick)."""
+    orch = load_module("orchestrate")
+    b = orch._CircuitBreaker(threshold=1, cooldown_s=0.0)
+    b.record_failure()
+    assert b.state == "open"
+    assert b.allow() is True  # probe
+    b.record_failure()  # probe failed
+    assert b.state == "open", "failed probe must re-open"
+
+
+def test_supervisor_short_circuits_when_breaker_open(monkeypatch, tmp_path):
+    """An open breaker → the chunk is NOT launched (spawn_async never called) and
+    is ejected as a retryable 'breaker-open' transient."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="sc", class_="AFK", blocked_by=[], path=tmp_path / "sc.md")
+
+    opened = orch._CircuitBreaker(threshold=1, cooldown_s=1000.0)
+    opened.record_failure()  # now open, cooldown far off
+    monkeypatch.setattr(orch, "_make_breaker", lambda: opened)
+    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
+
+    launches: list[str] = []
+
+    async def spy_spawn(plan, *, harness=None, model=None, seed_summary=None):
+        launches.append(plan.slug)
+        return (f"sess-{plan.slug}", FakeAsyncProc(rc=0))
+
+    monkeypatch.setattr(orch._fan_out, "spawn_async", spy_spawn)
+
+    results = orch._fan_out_plans([plan], harness=None, model=None)
+
+    assert launches == [], f"open breaker must not launch a spawn: {launches}"
+    _p, rc, _logs, reason = results[0]
+    assert rc == orch.EX_UNAVAILABLE, f"short-circuit must report EX_UNAVAILABLE, got {rc}"
+    assert reason == "breaker-open"
+
+
+def test_supervisor_records_rc69_as_breaker_failure(monkeypatch, tmp_path):
+    """A live spawn returning rc69 feeds the breaker a failure; enough of them open it."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plans = [routing.Plan(slug=f"c{i}", class_="AFK", blocked_by=[], path=tmp_path / f"c{i}.md") for i in range(2)]
+
+    b = orch._CircuitBreaker(threshold=2, cooldown_s=1000.0)
+    monkeypatch.setattr(orch, "_make_breaker", lambda: b)
+    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)  # sequential → consecutive
+    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 5.0)
+    monkeypatch.setattr(orch, "_stall_timeout", lambda: 0)  # disable stall watchdog
+    monkeypatch.setattr(orch._devcontainer, "down", lambda slug: True)
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(rc=69), FakeAsyncProc(rc=69)]))
+
+    orch._fan_out_plans(plans, harness=None, model=None)
+
+    assert b.state == "open", "two consecutive rc69 spawns must open the breaker"
+
+
+def test_partition_fanout_breaker_open_names_killer(tmp_path):
+    """A breaker short-circuit (rc69 + reason 'breaker-open') → killed_by:'breaker-open'."""
+    orch = load_module("orchestrate")
+    plan = _make_plan_obj(tmp_path, "bo")
+    emitted: list[tuple] = []
+
+    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._devcontainer, "down", lambda slug: True):
+            with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+                _c, _h, transient = orch._partition_fanout(
+                    [(plan, orch.EX_UNAVAILABLE, None, "breaker-open")],
+                    mark_ejected=lambda slug: [],
+                )
+
+    p = [p for ev, p in emitted if ev == "chunk.ejected"][0]
+    assert p["killed_by"] == "breaker-open"
+    assert "bo" in transient

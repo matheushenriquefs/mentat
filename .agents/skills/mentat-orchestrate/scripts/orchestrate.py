@@ -211,6 +211,81 @@ def _stall_timeout() -> int:
         return 300
 
 
+class _CircuitBreaker:
+    """Nygard circuit breaker over a shared backend (devcontainer daemon / model API).
+
+    Repeated container-down (rc69) / API-overload spawns across chunks are a sign
+    the shared backend is sick, not that each chunk is individually bad. Spawning
+    harder against it is a restart-storm that deepens the outage. The breaker
+    counts *consecutive* backend failures; at ``threshold`` it OPENS and further
+    ``allow()`` calls short-circuit (no spawn) until a ``cooldown_s`` window
+    passes, after which it HALF-OPENs and lets exactly one probe through. A probe
+    success CLOSEs it (backend recovered); a probe failure re-OPENs it.
+
+    Single-threaded: the asyncio supervisor drives it cooperatively, so no lock.
+    ``clock`` is injectable for deterministic tests.
+    """
+
+    def __init__(
+        self, threshold: int, *, cooldown_s: float = 30.0, clock: Callable[[], float] = time.monotonic
+    ) -> None:
+        self.threshold = max(1, threshold)
+        self.cooldown_s = cooldown_s
+        self._clock = clock
+        self.state = "closed"
+        self.consecutive_failures = 0
+        self._opened_at = 0.0
+        self._probe_inflight = False
+
+    def allow(self) -> bool:
+        """True iff a spawn may proceed now. Transitions open→half-open on cooldown."""
+        if self.state == "closed":
+            return True
+        if self.state == "open":
+            if self._clock() - self._opened_at >= self.cooldown_s:
+                self.state = "half_open"
+                self._probe_inflight = True
+                return True  # single probe
+            return False  # short-circuit: backend still cooling down
+        # half_open: only the one in-flight probe runs; siblings short-circuit
+        return not self._probe_inflight
+
+    def record_success(self) -> None:
+        self.consecutive_failures = 0
+        self._probe_inflight = False
+        self.state = "closed"
+
+    def record_failure(self) -> None:
+        self.consecutive_failures += 1
+        self._probe_inflight = False
+        if self.consecutive_failures >= self.threshold:
+            self.state = "open"
+            self._opened_at = self._clock()
+
+
+def _breaker_threshold() -> int:
+    """Consecutive backend-failure count that trips the breaker. Default 3."""
+    raw = _utils.read_config().get("breaker_threshold", 3)
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return 3
+
+
+def _breaker_cooldown() -> float:
+    """Seconds the breaker stays open before half-opening for a probe. Default 30."""
+    raw = _utils.read_config().get("breaker_cooldown", 30)
+    try:
+        return max(0.0, float(raw))
+    except (TypeError, ValueError):
+        return 30.0
+
+
+def _make_breaker() -> _CircuitBreaker:
+    """Build the run's shared breaker from config. Patch point for tests."""
+    return _CircuitBreaker(_breaker_threshold(), cooldown_s=_breaker_cooldown())
+
+
 def _event_age(session_id: str) -> float | None:
     """Seconds since the chunk's session log was last written, or None if absent.
 
@@ -346,10 +421,20 @@ async def _supervise_fanout(
     deadline_s = _chunk_timeout()
     stall_s = _stall_timeout()
     sem = asyncio.Semaphore(cap)
+    breaker = _make_breaker()
     shared: dict[str, str | None] = {"seed": None}
 
     async def _run_one(plan: _scheduler.Plan) -> tuple[_scheduler.Plan, int | None, str | None, str | None]:
         async with sem:
+            if not breaker.allow():
+                # Backend (container daemon / model API) is tripped — short-circuit
+                # WITHOUT spawning so we don't storm a sick dependency. Reported as a
+                # container-down-shaped transient eject (retryable) named 'breaker-open'.
+                print(
+                    f"mentat-orchestrate: circuit breaker open — short-circuiting {plan.slug}",
+                    file=sys.stderr,
+                )
+                return (plan, EX_UNAVAILABLE, None, "breaker-open")
             if not _load_headroom_ok():
                 print(
                     f"mentat-orchestrate: host load high — spawning {plan.slug} into a saturated box",
@@ -358,6 +443,14 @@ async def _supervise_fanout(
             seed = shared["seed"]
             session_id, proc = await _fan_out.spawn_async(plan, harness=harness, model=model, seed_summary=seed)
             rc, killed_reason = await _await_chunk(proc, deadline_s, plan, session_id=session_id, stall_s=stall_s)
+            # rc69 == the shared backend failed the spawn → a breaker failure. Any
+            # verdict-producing exit (rc>=0, != 69) proves the backend is up → success.
+            # A supervisor kill (rc<0/None) is our own deadline, not the backend — leave
+            # the breaker untouched.
+            if rc == EX_UNAVAILABLE:
+                breaker.record_failure()
+            elif rc is not None and rc >= 0:
+                breaker.record_success()
             summary = _read_chunk_seed(session_id)
             if summary:
                 shared["seed"] = summary
@@ -457,8 +550,9 @@ def _partition_fanout(
             _teardown_ejected(plan.slug)
         elif rc == EX_UNAVAILABLE:
             # Container/infra failure — the worker never ran, no code produced.
-            # killed_by names the downed container so the death is self-describing.
-            # Transient → returned, not marked (see docstring).
+            # killed_by names the killer so the death is self-describing: a breaker
+            # short-circuit ('breaker-open', never launched) vs. a genuine downed
+            # container. Transient → returned, not marked (see docstring).
             _emit_event(
                 "chunk.ejected",
                 ejected_payload(
@@ -466,7 +560,7 @@ def _partition_fanout(
                     EjectReason.WORKER_DIED,
                     str(worktree),
                     logs_path=logs_path,
-                    killed_by="container-down",
+                    killed_by=killed_reason if killed_reason == "breaker-open" else "container-down",
                 ),
             )
             transient.add(plan.slug)
