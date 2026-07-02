@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -51,6 +52,15 @@ def _teardown_container(slug: str) -> None:
 
     ok = devcontainer.down(slug)
     _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
+
+
+def _speculative_land_enabled() -> bool:
+    """Config flag ``speculative_land`` (default False).
+
+    OFF ships by default; serial rebase-per-chunk stays the safe path. ON opts
+    an independent batch into speculative-parallel gating (see ``_drain_speculative``).
+    """
+    return bool(_utils.read_config().get("speculative_land", False))
 
 
 def land(chunk: Chunk, *, holding: str) -> dict[str, object]:
@@ -112,6 +122,74 @@ def land(chunk: Chunk, *, holding: str) -> dict[str, object]:
     }
 
 
+def _drain_serial(chunks: list[Chunk], *, holding: str) -> list[dict[str, object]]:
+    """Land chunks one-by-one in input order (rebase → gate → FF-merge each).
+
+    The safe path: every chunk is rebased onto the live holding tip and gated
+    against it, so a red chunk ejects with its real reason and never blocks a
+    sibling. Also the fallback target when a speculative wave collides.
+    """
+    results: list[dict[str, object]] = []
+    for chunk in chunks:
+        verdict = land(chunk, holding=holding)
+        results.append(verdict)
+        _teardown_container(chunk.slug)
+    return results
+
+
+def _speculative_gate(chunk: Chunk, holding: str) -> tuple[Chunk, bool]:
+    """Rebase chunk onto holding + run gates (no merge). Returns (chunk, passed).
+
+    A rebase conflict or a blocking gate verdict counts as not-passed; the caller
+    abandons speculation and re-drains serially so the failure ejects cleanly.
+    """
+    _tip, err = _rebase_chunk(chunk, holding)
+    if err is not None:
+        return (chunk, False)
+    verdict, _message = _run_gates(chunk)
+    return (chunk, verdict != "block")
+
+
+def _drain_speculative(chunks: list[Chunk], *, holding: str) -> list[dict[str, object]]:
+    """Speculative-parallel land (bors batch / Zuul speculative).
+
+    Assume the whole batch lands: gate every chunk *concurrently* against the
+    current holding tip. This is sound only for an independent batch — the
+    ``next_ready is None`` path, which carries no cross-chunk deps — so a chunk's
+    gate result never depends on a sibling's changes.
+
+    If every candidate passes, FF-merge serially, re-rebasing each onto the
+    advancing tip (the merge is cheap; the gate was the expensive part, already
+    paid in parallel). Any gate or merge failure abandons the optimistic path and
+    falls back to a serial re-drain of the not-yet-landed chunks, so ejects land
+    with their real reasons. Serial stays the safe path; this only cuts the O(N)
+    gate latency for large independent batches.
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(chunks)) as ex:
+        futures = [ex.submit(_speculative_gate, chunk, holding) for chunk in chunks]
+        gated = [f.result() for f in futures]
+
+    if any(not passed for _chunk, passed in gated):
+        return _drain_serial(chunks, holding=holding)
+
+    results: list[dict[str, object]] = []
+    for i, chunk in enumerate(chunks):
+        tip, err = _rebase_chunk(chunk, holding)
+        ff_err = _ff_merge(chunk, holding) if err is None else None
+        if err is not None or ff_err is not None:
+            # Speculative merge collided with the advancing tip — re-drain this
+            # chunk and everything after it serially for correct ejects.
+            results.extend(_drain_serial(chunks[i:], holding=holding))
+            return results
+        _emit_event(
+            "chunk.landed",
+            {"slug": chunk.slug, "sha": tip or "", "holding": holding},
+        )
+        results.append({"slug": chunk.slug, "status": "success", "tip": tip})
+        _teardown_container(chunk.slug)
+    return results
+
+
 def drain(
     chunks: list[Chunk],
     *,
@@ -119,29 +197,34 @@ def drain(
     on_landed: Callable[[str], None] | None = None,
     on_ejected: Callable[[str], list[str]] | None = None,
     next_ready: Callable[[list[str]], str | None] | None = None,
+    speculative: bool | None = None,
 ) -> list[dict[str, object]]:
     """Land all chunks serially.
 
-    Without `next_ready`: iterate chunks in input order (no-dep path).
+    Without `next_ready`: iterate chunks in input order (no-dep path). When the
+    `speculative_land` config flag is on (or `speculative=True` is forced), this
+    independent batch is gated in parallel and FF-merged (see
+    `_drain_speculative`); serial stays the safe fallback.
 
     With `next_ready`: pull the next chunk whose plan deps are wholly landed
     via `next_ready(candidates)`. Land it, call on_landed / on_ejected,
-    repeat until pending empty or no chunk ready (stalled verdict).
+    repeat until pending empty or no chunk ready (stalled verdict). Speculation
+    never applies here — a live dep graph forbids the "assume 1..N-1 land"
+    optimism.
     """
     _on_landed = on_landed or (lambda _: None)
     _on_ejected = on_ejected or (lambda _: [])
 
     if next_ready is None:
-        results: list[dict[str, object]] = []
-        for chunk in chunks:
-            verdict = land(chunk, holding=holding)
-            results.append(verdict)
-            _teardown_container(chunk.slug)
-        return results
+        if speculative is None:
+            speculative = _speculative_land_enabled()
+        if speculative and chunks:
+            return _drain_speculative(chunks, holding=holding)
+        return _drain_serial(chunks, holding=holding)
 
     by_slug: dict[str, Chunk] = {c.slug: c for c in chunks}
     pending: list[str] = [c.slug for c in chunks]
-    results = []
+    results: list[dict[str, object]] = []
 
     while pending:
         ready = next_ready(pending)
