@@ -43,5 +43,5 @@ def test_coverage_task_wires_e2e_gate() -> None:
     """
     joined = " ".join(str(c) for c in _tasks()["coverage"]["cmds"])
     assert "--source=.agents" in joined, "e2e gate must source .agents"
-    assert "--fail-under=70" in joined, "e2e gate must gate at the journey floor (70)"
+    assert "--fail-under=90" in joined, "e2e gate must gate at the journey floor (90)"
     assert "-m e2e" in joined, "e2e gate must select the e2e journeys"
