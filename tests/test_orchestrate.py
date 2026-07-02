@@ -215,17 +215,20 @@ class _CountingAsyncProc:
 def test_concurrency_cap_defaults_to_3_when_config_missing(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {})
+    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)  # headroom well above the default
     assert orch._concurrency_cap() == 3
 
 
 def test_concurrency_cap_reads_config_jsonc(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 7})
+    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)  # headroom above config → no clamp
     assert orch._concurrency_cap() == 7
 
 
 def test_concurrency_cap_clamps_to_min_1(monkeypatch):
     orch = load_module("orchestrate")
+    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 0})
     assert orch._concurrency_cap() == 1
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": -5})
@@ -235,6 +238,7 @@ def test_concurrency_cap_clamps_to_min_1(monkeypatch):
 def test_concurrency_cap_rejects_bad_value(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": "lots"})
+    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)
     assert orch._concurrency_cap() == 3
 
 

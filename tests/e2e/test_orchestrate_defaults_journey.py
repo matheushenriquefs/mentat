@@ -47,6 +47,7 @@ def test_default_concurrency_cap_is_three(monkeypatch):
     """Default AFK concurrency is 3 — raising it silently is what starved the
     round2 batch. A change must be a conscious edit here."""
     orch = _orch(monkeypatch)
+    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)  # headroom above the default → no clamp
     assert orch._concurrency_cap() == _DEFAULT_CONCURRENCY
 
 

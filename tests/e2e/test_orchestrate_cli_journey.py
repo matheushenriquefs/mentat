@@ -148,21 +148,25 @@ def test_emit_anchored_chunks_emits_spawned_per_plan(orch, monkeypatch):
 
 def test_concurrency_cap_reads_config(orch, monkeypatch):
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 5})
+    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)  # headroom above config → no clamp
     assert orch._concurrency_cap() == 5
 
 
 def test_concurrency_cap_bad_value_falls_back_to_default(orch, monkeypatch):
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": "bad"})
+    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)
     assert orch._concurrency_cap() == 3
 
 
 def test_concurrency_cap_missing_key_defaults(orch, monkeypatch):
     monkeypatch.setattr(orch._utils, "read_config", lambda: {})
+    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)
     assert orch._concurrency_cap() == 3
 
 
 def test_concurrency_cap_zero_floored_to_one(orch, monkeypatch):
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 0})
+    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)
     assert orch._concurrency_cap() == 1
 
 

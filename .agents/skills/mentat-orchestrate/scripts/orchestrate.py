@@ -122,12 +122,48 @@ def _emit_anchored_chunks(plans: list[_scheduler.Plan], *, harness: str | None, 
 
 
 def _concurrency_cap() -> int:
-    """Max parallel AFK chunk processes. Honors ADR-0004: default 3, tunable via config."""
+    """Max parallel AFK chunk processes, clamped to machine headroom.
+
+    Honors ADR-0004 (config default 3) but CLAMPS the configured value to
+    ``min(config, max(1, cpu_count // 2))``. One heavy agent per core is the
+    timeout root-cause: when the number of concurrent chunks equals the core
+    count, every agent starves for CPU and trips its wall/stall deadline on a
+    live-but-slow build. Halving the cores reserves headroom for the supervisor,
+    the devcontainers, and the host. The clamp is logged so an operator seeing
+    an effective cap below their configured ``concurrency`` knows why.
+    """
     raw = _utils.read_config().get("concurrency", 3)
     try:
-        return max(1, int(raw))
+        want = max(1, int(raw))
     except (TypeError, ValueError):
-        return 3
+        want = 3
+    cores = os.cpu_count() or 1
+    ceiling = max(1, cores // 2)
+    effective = min(want, ceiling)
+    if effective < want:
+        print(
+            f"mentat-orchestrate: concurrency clamped {want}→{effective} "
+            f"(cpu_count={cores}, headroom=cores//2) — config asked {want}",
+            file=sys.stderr,
+        )
+    return effective
+
+
+def _load_headroom_ok() -> bool:
+    """Best-effort advisory: True when the 1-min load average leaves a spare core.
+
+    Consulted before opening an asyncio slot as a second line behind the cap
+    clamp — if the host is already saturated (load-per-core >= 1.0), spawning
+    another heavy agent only deepens the contention that trips deadlines. It
+    never blocks (the clamp is the real guard); an unavailable ``getloadavg``
+    (not all platforms expose it) degrades to permissive.
+    """
+    try:
+        load1 = os.getloadavg()[0]
+    except (OSError, AttributeError):
+        return True
+    cores = os.cpu_count() or 1
+    return load1 < cores
 
 
 def _chunk_timeout() -> int:
@@ -240,6 +276,11 @@ async def _supervise_fanout(
 
     async def _run_one(plan: _scheduler.Plan) -> tuple[_scheduler.Plan, int | None, str | None]:
         async with sem:
+            if not _load_headroom_ok():
+                print(
+                    f"mentat-orchestrate: host load high — spawning {plan.slug} into a saturated box",
+                    file=sys.stderr,
+                )
             seed = shared["seed"]
             session_id, proc = await _fan_out.spawn_async(plan, harness=harness, model=model, seed_summary=seed)
             rc = await _await_chunk(proc, deadline_s, plan)
