@@ -30,13 +30,33 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # ── mint_session ─────────────────────────────────────────────────────────────
 
 
-def test_mint_session_with_explicit_pid_builds_role_slug_pid():
-    assert session.mint_session("implement", "my-plan", pid=123) == "implement-my-plan-123"
+def test_mint_session_is_opaque_uuid():
+    import re
+
+    sid = session.mint_session("implement", "my-plan", pid=123)
+    assert re.fullmatch(r"[0-9a-f]{32}", sid), f"expected uuid, got {sid!r}"
+    # role/slug/pid are fields, never encoded into the id.
+    assert "implement" not in sid and "my-plan" not in sid and "123" not in sid
 
 
-def test_mint_session_defaults_pid_to_current_process():
-    # pid is None branch (23->25) → real os.getpid() suffix.
-    assert session.mint_session("orchestrate", "hold") == f"orchestrate-hold-{os.getpid()}"
+def test_mint_session_is_unique_per_call():
+    assert session.mint_session("orchestrate", "hold") != session.mint_session("orchestrate", "hold")
+
+
+def test_current_branch_inside_real_repo(monkeypatch, tmp_path):
+    repo = tmp_path / "proj"
+    repo.mkdir()
+    init_git_repo(repo, initial_branch="trunk")
+    monkeypatch.chdir(repo)
+    assert session.current_branch() == "trunk"
+
+
+def test_current_branch_outside_repo_returns_none(monkeypatch, tmp_path):
+    outside = tmp_path / "bare"
+    outside.mkdir()
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+    monkeypatch.chdir(outside)
+    assert session.current_branch() is None
 
 
 # ── log_root ─────────────────────────────────────────────────────────────────
@@ -174,11 +194,18 @@ def test_ensure_session_mints_and_exports_from_clean_env(monkeypatch, tmp_path):
     init_git_repo(repo)
     monkeypatch.chdir(repo)
 
+    for k in ("MENTAT_SESSION_ROLE", "MENTAT_SESSION_SLUG", "MENTAT_SESSION_PID", "MENTAT_SESSION_BRANCH"):
+        monkeypatch.delenv(k, raising=False)
+
     sid = session.ensure_session("implement", "the-plan")
 
-    assert sid == f"implement-the-plan-{os.getpid()}"
+    import re
+
+    assert re.fullmatch(r"[0-9a-f]{32}", sid), f"expected uuid, got {sid!r}"
     assert os.environ["MENTAT_SESSION"] == sid
     assert os.environ["MENTAT_REPO"] == "workrepo"
+    assert os.environ["MENTAT_SESSION_ROLE"] == "implement"
+    assert os.environ["MENTAT_SESSION_SLUG"] == "the-plan"
     log = Path(os.environ["MENTAT_SESSION_LOG"])
     assert log.name == "session.jsonl"
     assert log.parent.is_dir()

@@ -183,8 +183,10 @@ def test_explicit_slug_overrides_fallback(monkeypatch):
     assert log_mod._agent_slug() == "my-custom-slug"
 
 
-def test_session_fallback_is_mentat_manual(tmp_path, monkeypatch):
+def test_session_fallback_is_opaque_uuid(tmp_path, monkeypatch):
+    """Unkeyed emit → a real uuid session dir, never an orphan-session-*/pid id."""
     import json as _json
+    import re as _re
 
     monkeypatch.delenv("MENTAT_SESSION", raising=False)
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
@@ -197,9 +199,9 @@ def test_session_fallback_is_mentat_manual(tmp_path, monkeypatch):
     repo_dir = tmp_path / "test-repo"
     session_dirs = [d for d in repo_dir.iterdir() if d.is_dir()]
     assert len(session_dirs) == 1
-    assert session_dirs[0].name.startswith("orphan-session-"), (
-        f"expected orphan-session- prefix, got {session_dirs[0].name!r}"
-    )
+    name = session_dirs[0].name
+    assert not name.startswith("orphan-session-"), f"orphan fallback reached: {name!r}"
+    assert _re.fullmatch(r"[0-9a-f]{32}", name), f"expected uuid session dir, got {name!r}"
 
 
 def test_emit_chunk_teardown_accepted(tmp_path, monkeypatch):

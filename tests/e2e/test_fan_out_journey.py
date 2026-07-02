@@ -9,6 +9,7 @@ Log dirs are isolated by pointing ``MENTAT_LOG_PATH`` at a tmp dir and freezing
 
 from __future__ import annotations
 
+import re
 import types
 from pathlib import Path
 
@@ -72,7 +73,7 @@ def test_log_dir_for_lands_under_tmp_log_root(isolate_logs):
 def test_spawn_worktree_session_id_shape(isolate_logs, tmp_path):
     plan = _plan_file(tmp_path)
     session_id, _proc = fan_out._spawn_worktree_subprocess(plan)
-    assert session_id.startswith("implement-widget-")
+    assert re.fullmatch(r"[0-9a-f]{32}", session_id), f"expected uuid session id, got {session_id!r}"
 
 
 def test_spawn_worktree_creates_log_dir_0700(isolate_logs, tmp_path):
@@ -185,4 +186,4 @@ def test_spawn_returns_only_session_id(isolate_logs, tmp_path, monkeypatch):
     monkeypatch.setattr(fan_out, "_emit_event", lambda name, payload: None)
     result = fan_out.spawn(_fake_plan(tmp_path))
     assert isinstance(result, str)
-    assert result.startswith("implement-widget-")
+    assert re.fullmatch(r"[0-9a-f]{32}", result), f"expected uuid session id, got {result!r}"

@@ -55,7 +55,9 @@ def test_fan_out_creates_log_dir_and_exports_env(tmp_path, monkeypatch):
 
     session_id, proc = fan_out._spawn_worktree_subprocess(plan_path)
 
-    assert session_id.startswith("implement-afk-plan-")
+    import re
+
+    assert re.fullmatch(r"[0-9a-f]{32}", session_id), f"expected uuid session id, got {session_id!r}"
     expected_dir = tmp_path / "logs" / "fake-repo" / session_id
     assert expected_dir.is_dir(), f"log dir not created: {expected_dir}"
     mode = stat.S_IMODE(expected_dir.stat().st_mode)

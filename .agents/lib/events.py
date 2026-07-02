@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from collections.abc import Callable
 
 from lib import paths
+from lib.session import mint_session
 
 # Events where a failed emit must not be silently swallowed — the orchestration
 # state machine cannot proceed correctly without a confirmed log write.
@@ -15,10 +17,17 @@ _TERMINAL_EVENTS: frozenset[str] = frozenset({"chunk.landed", "chunk.ejected"})
 
 
 def _spawn(skill: str, event: str, payload: dict[str, object]) -> bool:
+    # Guarantee a session id reaches log.py: mint an opaque uuid into the child
+    # env when none is set (never mutating our own os.environ), so log.py's
+    # last-resort fallback is unreachable and no unkeyed `orphan-` dir is born.
+    env = dict(os.environ)
+    if not env.get("MENTAT_SESSION"):
+        env["MENTAT_SESSION"] = mint_session(skill, "adhoc")
     r = subprocess.run(
         ["python3", str(paths.LOG_SCRIPT), "emit", skill, event, json.dumps(payload)],
         capture_output=True,
         text=True,
+        env=env,
     )
     if r.returncode != 0:
         tail = (r.stderr or "").strip().splitlines()[-1:] or ["(no stderr)"]

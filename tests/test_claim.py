@@ -143,7 +143,9 @@ def test_release_emits_task_released(task_file: Path) -> None:
 
 
 def test_cmd_create_sets_session_when_unset(td: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Without MENTAT_SESSION, tasks calls ensure_session → MENTAT_SESSION set to mentat-tasks-*."""
+    """Without MENTAT_SESSION, tasks calls ensure_session → MENTAT_SESSION set to an opaque uuid."""
+    import re
+
     monkeypatch.delenv("MENTAT_SESSION", raising=False)
     monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
@@ -153,7 +155,7 @@ def test_cmd_create_sets_session_when_unset(td: Path, monkeypatch: pytest.Monkey
         t.main(["create", "test-task"])
     session = os.environ.get("MENTAT_SESSION")
     assert session is not None, "MENTAT_SESSION not set; ensure_session not called"
-    assert session.startswith("mentat-tasks-"), f"unexpected session prefix: {session!r}"
+    assert re.fullmatch(r"[0-9a-f]{32}", session), f"expected uuid session, got {session!r}"
 
 
 def test_cmd_create_inherits_parent_session_unchanged(td: Path, monkeypatch: pytest.MonkeyPatch) -> None:

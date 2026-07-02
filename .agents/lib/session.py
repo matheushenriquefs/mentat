@@ -1,28 +1,57 @@
 """Canonical mentat session-id minting + propagation.
 
-One format for every entrypoint: ``<role>-<slug>-<pid>``.
+The session id is an opaque ``uuid`` — stable, collision-free, and *never*
+derived from repo/branch/pid path structure. ``role`` (∈ {implement,
+orchestrate, …}), ``slug`` (plan stem / holding branch), ``branch``, and ``pid``
+are recorded as *fields* (env now, sqlite projection downstream), so a
+``/``-bearing branch, a reused pid, or a repo rename can neither collide two
+sessions nor split one across dirs — killing the orphan-session, slash-mismatch,
+and repo-bucket bug classes at the id root.
 
-  role  ∈ {implement, orchestrate} — which entrypoint owns the session.
-  slug  = plan stem (implement) or holding branch (orchestrate); always present.
-  pid   = os.getpid() — tiebreaks concurrent same-slug runs.
-
-``ensure_session`` exports ``MENTAT_SESSION`` + ``MENTAT_SESSION_LOG`` into the
-environment *before any harness spawn*, so events and ``session.jsonl`` capture
-are keyed from the first event instead of relying on an emit-time fallback.
+``ensure_session`` exports ``MENTAT_SESSION`` + ``MENTAT_SESSION_LOG`` (plus the
+``MENTAT_SESSION_{ROLE,SLUG,BRANCH,PID}`` fields) into the environment *before
+any harness spawn*, so events and ``session.jsonl`` capture are keyed from the
+first event instead of relying on an emit-time fallback.
 """
 
 from __future__ import annotations
 
 import os
 import subprocess
+import uuid
 from pathlib import Path
 
 
 def mint_session(role: str, slug: str, *, pid: int | None = None) -> str:
-    """Return the canonical session id ``<role>-<slug>-<pid>``."""
-    if pid is None:
-        pid = os.getpid()
-    return f"{role}-{slug}-{pid}"
+    """Return a fresh opaque session id — a ``uuid4`` hex.
+
+    ``role``/``slug``/``pid`` are accepted for call-site symmetry (and recorded
+    as projection fields by ``ensure_session``) but are deliberately *not*
+    encoded into the id: a session keyed by a ``uuid`` has no slash to mismatch,
+    no pid to collide, and no repo bucket to strand it.
+    """
+    return uuid.uuid4().hex
+
+
+def current_branch() -> str | None:
+    """Current git branch name, or None outside a repo / when detached.
+
+    Recorded as a session *field* so a ``/``-bearing branch (``feat/x``) is a
+    value, never a path segment that would nest the session dir.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    branch = result.stdout.strip()
+    return branch or None
 
 
 # ── session-log-path seam ────────────────────────────────────────────────────
@@ -119,6 +148,17 @@ def ensure_session(role: str, slug: str) -> str:
     # every later MENTAT_REPO reader pointed at one log dir.
     if not os.environ.get("MENTAT_REPO"):
         os.environ["MENTAT_REPO"] = repo_name()
+    # Freeze the session fields the sqlite projection reads at emit time. The id
+    # is opaque; role/slug/branch/pid live here so a reader can attribute a uuid
+    # session back to what it is. setdefault so a child inheriting a parent's
+    # MENTAT_SESSION doesn't clobber fields the parent already froze.
+    os.environ.setdefault("MENTAT_SESSION_ROLE", role)
+    os.environ.setdefault("MENTAT_SESSION_SLUG", slug)
+    os.environ.setdefault("MENTAT_SESSION_PID", str(os.getpid()))
+    if "MENTAT_SESSION_BRANCH" not in os.environ:
+        branch = current_branch()
+        if branch:
+            os.environ["MENTAT_SESSION_BRANCH"] = branch
     if not os.environ.get("MENTAT_SESSION_LOG"):
         log = session_log_path(session_id)
         log.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

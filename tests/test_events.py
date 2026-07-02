@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -42,6 +43,38 @@ def test_emit_invokes_log_script_with_skill_name():
     mock_run.assert_called_once()
     argv = mock_run.call_args[0][0]
     assert argv == ["python3", str(paths.LOG_SCRIPT), "emit", "mentat-foo", "foo.started", '{"x": 1}']
+
+
+def test_emit_mints_session_into_child_env_when_unset(monkeypatch):
+    """bind()'s guarantee: log.py always receives a MENTAT_SESSION — an opaque
+    uuid minted into the child env when none is set, so its orphan fallback is
+    unreachable. os.environ itself is never mutated."""
+    import re
+    import subprocess
+
+    events = _import_events()
+    monkeypatch.delenv("MENTAT_SESSION", raising=False)
+
+    with patch.object(subprocess, "run") as mock_run:
+        mock_run.return_value.returncode = 0
+        events.bind("mentat-foo")("foo.started", {})
+
+    child_env = mock_run.call_args.kwargs["env"]
+    assert re.fullmatch(r"[0-9a-f]{32}", child_env["MENTAT_SESSION"])
+    assert "MENTAT_SESSION" not in os.environ  # global env untouched
+
+
+def test_emit_preserves_existing_session_in_child_env(monkeypatch):
+    import subprocess
+
+    events = _import_events()
+    monkeypatch.setenv("MENTAT_SESSION", "abc123")
+
+    with patch.object(subprocess, "run") as mock_run:
+        mock_run.return_value.returncode = 0
+        events.bind("mentat-foo")("foo.started", {})
+
+    assert mock_run.call_args.kwargs["env"]["MENTAT_SESSION"] == "abc123"
 
 
 def test_emit_failure_prints_to_stderr_nonblocking(capsys):
