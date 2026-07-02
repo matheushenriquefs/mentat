@@ -162,6 +162,49 @@ def test_partition_fanout_rc_69_reason_is_worker_died(tmp_path):
     assert reason == "worker-died", f"rc=69 reason must be worker-died, got {reason!r}"
 
 
+# ── S2: worker-died is self-describing (timed_out / killed_by + logs_path) ────
+
+
+def test_partition_fanout_timeout_kill_payload_is_self_describing(tmp_path):
+    """A timeout-killed chunk (rc<0) → payload timed_out:true + logs_path at its
+    own session dir."""
+    orch = load_module("orchestrate")
+    plan = _make_plan_obj(tmp_path, "slug-t")
+    emitted: list[tuple] = []
+
+    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+            orch._partition_fanout(
+                [(plan, -9, "/logs/sess-t")],
+                mark_ejected=lambda slug: [],
+            )
+
+    p = [p for ev, p in emitted if ev == "chunk.ejected"][0]
+    assert p["reason"] == "worker-died"
+    assert p["timed_out"] is True
+    assert p["logs_path"] == "/logs/sess-t"
+
+
+def test_partition_fanout_container_down_payload_names_killer(tmp_path):
+    """A container-down chunk (rc69) → payload killed_by:'container-down' + logs_path."""
+    orch = load_module("orchestrate")
+    plan = _make_plan_obj(tmp_path, "slug-cd")
+    emitted: list[tuple] = []
+
+    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+            orch._partition_fanout(
+                [(plan, 69, "/logs/sess-cd")],
+                mark_ejected=lambda slug: [],
+            )
+
+    p = [p for ev, p in emitted if ev == "chunk.ejected"][0]
+    assert p["reason"] == "worker-died"
+    assert p["killed_by"] == "container-down"
+    assert p["logs_path"] == "/logs/sess-cd"
+    assert "timed_out" not in p, "container-down is not a timeout"
+
+
 # ── Slice 2: per-chunk wall-clock deadline ────────────────────────────────────
 
 

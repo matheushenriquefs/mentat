@@ -105,15 +105,20 @@ def ejected_payload(
     preflight_exit: int | None = None,
     upstream: str | None = None,
     summary: str | None = None,
+    killed_by: str | None = None,
+    timed_out: bool | None = None,
 ) -> dict[str, object]:
     """Build the one canonical ``chunk.ejected`` payload.
 
     Base shape ``{slug, reason, where}`` for every ejection regardless of caller;
     the optional fields (``logs_path``, ``preflight_exit``, ``upstream``,
-    ``summary``) are included only when set. ``summary`` carries the operator-
-    facing blocker text on a ``hitl-required`` ejection. These optionals are
-    declared in mentat-log's ``EVENT_OPTIONAL_FIELDS`` — a payload extension, not
-    a new event type (the 9-event catalog is unchanged).
+    ``summary``, ``killed_by``, ``timed_out``) are included only when set.
+    ``summary`` carries the operator-facing blocker text on a ``hitl-required``
+    ejection; ``timed_out``/``killed_by`` make a ``worker-died`` ejection
+    self-describing (a chunk killed at its deadline vs. one lost to a downed
+    container). These optionals are declared in mentat-log's
+    ``EVENT_OPTIONAL_FIELDS`` — a payload extension, not a new event type (the
+    event catalog is unchanged).
     """
     payload: dict[str, object] = {"slug": slug, "reason": reason, "where": where}
     if logs_path is not None:
@@ -124,4 +129,8 @@ def ejected_payload(
         payload["upstream"] = upstream
     if summary is not None:
         payload["summary"] = summary
+    if killed_by is not None:
+        payload["killed_by"] = killed_by
+    if timed_out is not None:
+        payload["timed_out"] = timed_out
     return payload

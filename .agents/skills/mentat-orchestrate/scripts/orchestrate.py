@@ -286,12 +286,18 @@ def _partition_fanout(
     hitl: set[str] = set()
     for item in results:
         plan, rc = item[0], item[1]
+        logs_path = item[2] if len(item) > 2 else None
         worktree = _worktree_for_slug(plan.slug)
         if rc is None or rc < 0 or rc >= _SIGNAL_EXIT_BASE:
             # Timeout group-kill (rc<0), a crashed supervise task (rc None), or a
             # shell-reported signal exit (128+signum). A dead worker produced no
-            # verdict — landing it would false-merge.
-            _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.WORKER_DIED, str(worktree)))
+            # verdict — landing it would false-merge. Self-describe it as timed_out
+            # with its own logs so the operator (and the recovery engine) can tell a
+            # deadline kill from other deaths without reading the child's stream.
+            _emit_event(
+                "chunk.ejected",
+                ejected_payload(plan.slug, EjectReason.WORKER_DIED, str(worktree), logs_path=logs_path, timed_out=True),
+            )
             mark_ejected(plan.slug)
         elif rc == EX_HITL_REQUIRED:
             hitl.add(plan.slug)
@@ -299,7 +305,17 @@ def _partition_fanout(
             mark_ejected(plan.slug)
         elif rc == EX_UNAVAILABLE:
             # Container/infra failure — the worker never ran, no code produced.
-            _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.WORKER_DIED, str(worktree)))
+            # killed_by names the downed container so the death is self-describing.
+            _emit_event(
+                "chunk.ejected",
+                ejected_payload(
+                    plan.slug,
+                    EjectReason.WORKER_DIED,
+                    str(worktree),
+                    logs_path=logs_path,
+                    killed_by="container-down",
+                ),
+            )
             mark_ejected(plan.slug)
         elif rc != 0:
             # Any other non-zero exit: implement or gate failure.
