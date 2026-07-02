@@ -11,6 +11,7 @@ import re
 import signal
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -186,6 +187,45 @@ def _chunk_timeout() -> int:
         return 1800
 
 
+def _stall_timeout() -> int:
+    """No-progress window per chunk in seconds. Default 300 (5 min); ``<=0`` disables.
+
+    Distinct from the wall deadline (``_chunk_timeout``): the wall kills a chunk
+    that runs *too long*; the stall window kills one that goes *silent* — no new
+    audit event for the whole window while the wall clock still has budget. That
+    catches an agent looping or hung on a dead socket (OpenHands' StuckDetector /
+    a K8s liveness probe) instead of burning the full 30-min wall on a corpse.
+
+    Reads ``MENTAT_STALL_TIMEOUT`` env first, then config key ``stall_timeout``.
+    """
+    env_val = os.environ.get("MENTAT_STALL_TIMEOUT")
+    if env_val is not None:
+        try:
+            return int(env_val)
+        except ValueError:
+            pass
+    raw = _utils.read_config().get("stall_timeout", 300)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 300
+
+
+def _event_age(session_id: str) -> float | None:
+    """Seconds since the chunk's session log was last written, or None if absent.
+
+    The chunk's ``session.jsonl`` is appended to on every audit event / harness
+    stream chunk, so its mtime is a proxy for liveness. None (no log yet) means
+    "no progress signal" — the caller must not treat that as a stall, since a
+    just-spawned chunk may not have written its first line.
+    """
+    log = _session_dir(session_id) / "session.jsonl"
+    try:
+        return max(0.0, time.time() - log.stat().st_mtime)
+    except OSError:
+        return None
+
+
 _emit_event = _bind("mentat-orchestrate")
 
 
@@ -221,26 +261,59 @@ def _read_chunk_seed(session_id: str) -> str | None:
     return sf.read_text() if sf.exists() else None
 
 
-async def _await_chunk(proc: object, deadline_s: float, plan: _scheduler.Plan) -> int | None:
-    """Await ``proc`` up to ``deadline_s``; on overrun group-kill and reap.
+async def _await_chunk(
+    proc: object,
+    deadline_s: float,
+    plan: _scheduler.Plan,
+    *,
+    session_id: str | None = None,
+    stall_s: float = 0.0,
+) -> tuple[int | None, str | None]:
+    """Await ``proc`` up to ``deadline_s``; kill on wall overrun OR no-progress stall.
 
     Uses ``communicate()`` (not ``wait()``) so a child that ever writes to a pipe
     cannot dead-lock on a full buffer. The returncode is read AFTER the kill
     signal, so a chunk that exits in the overdue→kill gap is recorded with its
     real rc, not misreported as killed.
 
+    Two independent kill triggers, both returning ``rc`` plus a ``killed_reason``
+    the caller turns into a self-describing ``chunk.ejected``:
+
+    * ``timed_out`` — the wall ``asyncio.timeout(deadline_s)`` fired: ran too long.
+    * ``stalled`` — with ``stall_s > 0`` and a ``session_id``, the chunk emitted
+      no audit event (its ``session.jsonl`` mtime did not advance) for a whole
+      ``stall_s`` window while the wall still had budget. A chunk that keeps
+      writing events resets the window and runs on.
+
     The host group-kill cannot reach the in-container agent (it lives in the
     container's PID namespace), so the reaper also ``devcontainer.down``s the
     chunk's slug to stop that container — otherwise the agent survives and keeps
-    mutating its worktree after the timeout.
+    mutating its worktree after the kill.
     """
     grace_s = 5
+    killed_reason: str | None = None
+    comm = asyncio.ensure_future(proc.communicate())  # type: ignore[attr-defined]
     try:
         async with asyncio.timeout(deadline_s):
-            await proc.communicate()  # type: ignore[attr-defined]
+            if stall_s > 0 and session_id is not None:
+                while True:
+                    try:
+                        await asyncio.wait_for(asyncio.shield(comm), timeout=stall_s)
+                        break  # chunk finished on its own
+                    except TimeoutError:
+                        age = _event_age(session_id)
+                        # None (no log yet) → can't prove a stall; keep waiting.
+                        # age below the window → progress was made; keep waiting.
+                        if age is not None and age >= stall_s:
+                            killed_reason = "stalled"
+                            break
+            else:
+                await comm
     except TimeoutError:
+        killed_reason = "timed_out"
+    if killed_reason is not None:
         print(
-            f"mentat-orchestrate: chunk {plan.slug} timed out after {deadline_s}s — killing",
+            f"mentat-orchestrate: chunk {plan.slug} {killed_reason} — killing",
             file=sys.stderr,
         )
         try:
@@ -251,12 +324,12 @@ async def _await_chunk(proc: object, deadline_s: float, plan: _scheduler.Plan) -
             with contextlib.suppress(TimeoutError):
                 async with asyncio.timeout(grace_s):
                     await proc.wait()  # type: ignore[attr-defined]
-    return getattr(proc, "returncode", None)
+    return getattr(proc, "returncode", None), killed_reason
 
 
 async def _supervise_fanout(
     plans: list[_scheduler.Plan], *, harness: str | None, model: str | None
-) -> list[tuple[_scheduler.Plan, int | None, str | None]]:
+) -> list[tuple[_scheduler.Plan, int | None, str | None, str | None]]:
     """asyncio fan-out supervisor: one task per plan, throttled by a Semaphore.
 
     Each task acquires a slot (``asyncio.Semaphore(cap)``), spawns its chunk,
@@ -271,10 +344,11 @@ async def _supervise_fanout(
     """
     cap = _concurrency_cap()
     deadline_s = _chunk_timeout()
+    stall_s = _stall_timeout()
     sem = asyncio.Semaphore(cap)
     shared: dict[str, str | None] = {"seed": None}
 
-    async def _run_one(plan: _scheduler.Plan) -> tuple[_scheduler.Plan, int | None, str | None]:
+    async def _run_one(plan: _scheduler.Plan) -> tuple[_scheduler.Plan, int | None, str | None, str | None]:
         async with sem:
             if not _load_headroom_ok():
                 print(
@@ -283,19 +357,19 @@ async def _supervise_fanout(
                 )
             seed = shared["seed"]
             session_id, proc = await _fan_out.spawn_async(plan, harness=harness, model=model, seed_summary=seed)
-            rc = await _await_chunk(proc, deadline_s, plan)
+            rc, killed_reason = await _await_chunk(proc, deadline_s, plan, session_id=session_id, stall_s=stall_s)
             summary = _read_chunk_seed(session_id)
             if summary:
                 shared["seed"] = summary
-            return (plan, rc, str(_session_dir(session_id)))
+            return (plan, rc, str(_session_dir(session_id)), killed_reason)
 
     tasks = [asyncio.create_task(_run_one(p)) for p in plans]
     gathered = await asyncio.gather(*tasks, return_exceptions=True)
-    results: list[tuple[_scheduler.Plan, int | None, str | None]] = []
+    results: list[tuple[_scheduler.Plan, int | None, str | None, str | None]] = []
     for plan, res in zip(plans, gathered, strict=True):
         if isinstance(res, BaseException):
             # A spawn/await crash: record a dead worker (negative rc), no logs.
-            results.append((plan, -1, None))
+            results.append((plan, -1, None, None))
         else:
             results.append(res)
     return results
@@ -303,7 +377,7 @@ async def _supervise_fanout(
 
 def _fan_out_plans(
     plans: list[_scheduler.Plan], *, harness: str | None, model: str | None
-) -> list[tuple[_scheduler.Plan, int | None, str | None]]:
+) -> list[tuple[_scheduler.Plan, int | None, str | None, str | None]]:
     """Spawn AFK plans headless via the asyncio supervisor, capped at concurrency.
 
     Sync wrapper over ``_supervise_fanout`` (which owns the throttle + per-chunk
@@ -355,18 +429,25 @@ def _partition_fanout(
     for item in results:
         plan, rc = item[0], item[1]
         logs_path = item[2] if len(item) > 2 else None
+        killed_reason = item[3] if len(item) > 3 else None
         worktree = _worktree_for_slug(plan.slug)
         if rc is None or rc < 0 or rc >= _SIGNAL_EXIT_BASE:
-            # Timeout group-kill (rc<0), a crashed supervise task (rc None), or a
-            # shell-reported signal exit (128+signum). A dead worker produced no
-            # verdict — landing it would false-merge. Self-describe it as timed_out
-            # with its own logs so the operator (and the recovery engine) can tell a
-            # deadline kill from other deaths without reading the child's stream.
+            # Timeout/stall group-kill (rc<0), a crashed supervise task (rc None), or
+            # a shell-reported signal exit (128+signum). A dead worker produced no
+            # verdict — landing it would false-merge. Self-describe it so the operator
+            # (and the recovery engine) can tell a wall-deadline kill from a
+            # no-progress stall kill without reading the child's stream: a ``stalled``
+            # reason names the killer, otherwise it defaults to a wall timeout.
             # Transient → returned, not marked (see docstring).
-            _emit_event(
-                "chunk.ejected",
-                ejected_payload(plan.slug, EjectReason.WORKER_DIED, str(worktree), logs_path=logs_path, timed_out=True),
-            )
+            if killed_reason == "stalled":
+                payload = ejected_payload(
+                    plan.slug, EjectReason.WORKER_DIED, str(worktree), logs_path=logs_path, killed_by="stalled"
+                )
+            else:
+                payload = ejected_payload(
+                    plan.slug, EjectReason.WORKER_DIED, str(worktree), logs_path=logs_path, timed_out=True
+                )
+            _emit_event("chunk.ejected", payload)
             transient.add(plan.slug)
             _teardown_ejected(plan.slug)
         elif rc == EX_HITL_REQUIRED:
