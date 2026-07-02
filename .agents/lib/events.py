@@ -8,7 +8,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 
-from lib import paths
+from lib import paths, state
 from lib.session import mint_session
 
 # Events where a failed emit must not be silently swallowed — the orchestration
@@ -33,6 +33,9 @@ def _spawn(skill: str, event: str, payload: dict[str, object]) -> bool:
         tail = (r.stderr or "").strip().splitlines()[-1:] or ["(no stderr)"]
         print(f"{skill}: emit {event!r} failed rc={r.returncode}: {tail[0]}", file=sys.stderr)
         return False
+    # Log write confirmed → project the derived read model from the same env the
+    # child logged under. Best-effort inside project(): never fails an emit.
+    state.project(env, event)
     return True
 
 

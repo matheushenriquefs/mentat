@@ -49,6 +49,13 @@ def init_git_repo(path: Path, *, initial_branch: str = "main") -> None:
     subprocess.run(["git", "commit", "-m", "init"], cwd=path, check=True, capture_output=True)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_state_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Redirect the sqlite projection to a throwaway path for every test so an
+    emit never writes the operator's real ``~/.mentat/state.db``."""
+    monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "state.db"))
+
+
 @pytest.fixture
 def mentat_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Set MENTAT_LOG_PATH and MENTAT_CONFIG to tmp dirs. Return the tmp root."""
