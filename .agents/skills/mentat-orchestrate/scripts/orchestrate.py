@@ -336,6 +336,39 @@ def _read_chunk_seed(session_id: str) -> str | None:
     return sf.read_text() if sf.exists() else None
 
 
+def _group_teardown(children: dict[str, object]) -> None:
+    """Group-kill + container-down + chunk.teardown for every still-live child.
+
+    The signal-shutdown counterpart to ``_await_chunk``'s per-chunk reaper: when
+    the supervisor itself is killed (SIGINT/SIGTERM) it must not leave the fleet's
+    child harnesses orphaned (reparented to init, still mutating worktrees) or
+    their devcontainers running. Kills each child's process group, stops its
+    container, and emits ``chunk.teardown`` so the shutdown is auditable. Every
+    step is best-effort — one child's docker hiccup must not strand the others —
+    and each slug is popped so a re-entrant signal can't double-tear-down.
+    """
+    for slug, proc in list(children.items()):
+        with contextlib.suppress(Exception):
+            _kill_proc_group(proc)
+        ok = False
+        with contextlib.suppress(Exception):
+            ok = bool(_devcontainer.down(slug))
+        _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
+        children.pop(slug, None)
+
+
+def _install_signal_handlers(loop: asyncio.AbstractEventLoop, handler: Callable[[str], None]) -> None:
+    """Wire SIGINT/SIGTERM on the running loop to ``handler(signame)``.
+
+    Best-effort: ``add_signal_handler`` is unavailable off the main thread and on
+    some platforms — those cases are swallowed (the process still dies on the
+    signal's default disposition, just without the graceful group teardown).
+    """
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        with contextlib.suppress(NotImplementedError, RuntimeError, ValueError):
+            loop.add_signal_handler(sig, handler, sig.name)
+
+
 async def _await_chunk(
     proc: object,
     deadline_s: float,
@@ -423,6 +456,9 @@ async def _supervise_fanout(
     sem = asyncio.Semaphore(cap)
     breaker = _make_breaker()
     shared: dict[str, str | None] = {"seed": None}
+    # slug → live child proc, so a supervisor SIGINT/SIGTERM can group-tear-down
+    # the whole fleet instead of orphaning containers/worktrees (S4).
+    live: dict[str, object] = {}
 
     async def _run_one(plan: _scheduler.Plan) -> tuple[_scheduler.Plan, int | None, str | None, str | None]:
         async with sem:
@@ -442,7 +478,11 @@ async def _supervise_fanout(
                 )
             seed = shared["seed"]
             session_id, proc = await _fan_out.spawn_async(plan, harness=harness, model=model, seed_summary=seed)
-            rc, killed_reason = await _await_chunk(proc, deadline_s, plan, session_id=session_id, stall_s=stall_s)
+            live[plan.slug] = proc
+            try:
+                rc, killed_reason = await _await_chunk(proc, deadline_s, plan, session_id=session_id, stall_s=stall_s)
+            finally:
+                live.pop(plan.slug, None)
             # rc69 == the shared backend failed the spawn → a breaker failure. Any
             # verdict-producing exit (rc>=0, != 69) proves the backend is up → success.
             # A supervisor kill (rc<0/None) is our own deadline, not the backend — leave
@@ -457,6 +497,18 @@ async def _supervise_fanout(
             return (plan, rc, str(_session_dir(session_id)), killed_reason)
 
     tasks = [asyncio.create_task(_run_one(p)) for p in plans]
+
+    def _on_signal(signame: str) -> None:
+        print(
+            f"mentat-orchestrate: {signame} — tearing down {len(live)} live chunk(s)",
+            file=sys.stderr,
+        )
+        _group_teardown(live)
+        for t in tasks:
+            t.cancel()
+
+    _install_signal_handlers(asyncio.get_running_loop(), _on_signal)
+
     gathered = await asyncio.gather(*tasks, return_exceptions=True)
     results: list[tuple[_scheduler.Plan, int | None, str | None, str | None]] = []
     for plan, res in zip(plans, gathered, strict=True):

@@ -14,6 +14,7 @@ from unittest.mock import patch
 from tests.conftest import load_script
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
+LIB = Path(__file__).resolve().parents[1] / ".agents/lib"
 
 
 def load_module(name: str):
@@ -367,3 +368,126 @@ def test_partition_fanout_breaker_open_names_killer(tmp_path):
     p = [p for ev, p in emitted if ev == "chunk.ejected"][0]
     assert p["killed_by"] == "breaker-open"
     assert "bo" in transient
+
+
+# ── S4: signal-clean shutdown + capped backoff-with-jitter helper ─────────────
+
+
+class _KillTrackingProc:
+    """A child proc double that records kill() calls (pid=None → kill() path)."""
+
+    pid = None
+
+    def __init__(self) -> None:
+        self.killed = 0
+
+    def kill(self) -> None:
+        self.killed += 1
+
+
+def test_group_teardown_kills_downs_and_emits_for_every_child():
+    """_group_teardown group-kills each live child, stops its container, emits
+    chunk.teardown, and clears the registry (no double teardown)."""
+    orch = load_module("orchestrate")
+    p0, p1 = _KillTrackingProc(), _KillTrackingProc()
+    live = {"c0": p0, "c1": p1}
+    down: list[str] = []
+    emitted: list[tuple] = []
+
+    with patch.object(orch._devcontainer, "down", lambda slug: down.append(slug) or True):
+        with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+            orch._group_teardown(live)
+
+    assert p0.killed == 1 and p1.killed == 1, "every child's group must be killed"
+    assert set(down) == {"c0", "c1"}, f"every child's container must be downed: {down}"
+    teardowns = [p["slug"] for ev, p in emitted if ev == "chunk.teardown"]
+    assert set(teardowns) == {"c0", "c1"}, f"chunk.teardown per child: {teardowns}"
+    assert live == {}, "registry must be cleared so a re-entrant signal won't re-tear-down"
+
+
+def test_install_signal_handlers_registers_sigint_and_sigterm():
+    """Both SIGINT and SIGTERM are wired on the loop to the teardown handler."""
+    orch = load_module("orchestrate")
+    registered: list = []
+
+    class _FakeLoop:
+        def add_signal_handler(self, sig, cb, *args):
+            registered.append(sig)
+
+    orch._install_signal_handlers(_FakeLoop(), lambda name: None)
+
+    assert orch.signal.SIGINT in registered
+    assert orch.signal.SIGTERM in registered
+
+
+def test_supervisor_installs_signal_handlers(monkeypatch, tmp_path):
+    """_supervise_fanout wires the signal handlers on its running loop (so a
+    SIGTERM tears the fleet down) — verified via a spy on _install_signal_handlers."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="s", class_="AFK", blocked_by=[], path=tmp_path / "s.md")
+
+    captured: dict = {}
+
+    def spy_install(loop, handler):
+        captured["handler"] = handler
+
+    monkeypatch.setattr(orch, "_install_signal_handlers", spy_install)
+    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 5.0)
+    monkeypatch.setattr(orch, "_stall_timeout", lambda: 0)
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(rc=0)]))
+
+    orch._fan_out_plans([plan], harness=None, model=None)
+
+    assert callable(captured.get("handler")), "supervisor must install a signal handler"
+
+
+def test_install_signal_handlers_swallows_unsupported():
+    """A loop that can't add signal handlers (off-main-thread) is tolerated."""
+    orch = load_module("orchestrate")
+
+    class _BadLoop:
+        def add_signal_handler(self, *a):
+            raise NotImplementedError
+
+    orch._install_signal_handlers(_BadLoop(), lambda name: None)  # must not raise
+
+
+# ── S4: full-jitter backoff helper ────────────────────────────────────────────
+
+
+def load_backoff():
+    return load_script(LIB / "backoff.py", "backoff")
+
+
+def test_full_jitter_never_exceeds_cap():
+    backoff = load_backoff()
+    # rng() at its max (→1.0) still must stay under the cap.
+    for attempt in range(0, 20):
+        delay = backoff.full_jitter(attempt, base=0.5, cap=10.0, rng=lambda: 0.9999)
+        assert 0.0 <= delay <= 10.0, f"attempt {attempt} exceeded cap: {delay}"
+
+
+def test_full_jitter_jitters_successive_calls():
+    """Two calls at the same attempt differ — the whole point of jitter."""
+    backoff = load_backoff()
+    a = backoff.full_jitter(5, base=0.5, cap=30.0)
+    b = backoff.full_jitter(5, base=0.5, cap=30.0)
+    assert a != b, f"successive jittered delays must differ: {a} == {b}"
+
+
+def test_full_jitter_ceiling_grows_with_attempt():
+    """Higher attempt → higher ceiling (until capped). With rng fixed at 1.0 the
+    returned delay equals the ceiling, so it is monotonic then flat at cap."""
+    backoff = load_backoff()
+    d0 = backoff.full_jitter(0, base=1.0, cap=100.0, rng=lambda: 1.0)
+    d1 = backoff.full_jitter(1, base=1.0, cap=100.0, rng=lambda: 1.0)
+    d2 = backoff.full_jitter(2, base=1.0, cap=100.0, rng=lambda: 1.0)
+    assert d0 < d1 < d2, f"ceiling must grow: {d0}, {d1}, {d2}"
+
+
+def test_full_jitter_negative_attempt_floored():
+    backoff = load_backoff()
+    delay = backoff.full_jitter(-3, base=1.0, cap=100.0, rng=lambda: 1.0)
+    assert delay == 1.0, f"negative attempt must floor to 0 (ceiling=base): {delay}"
