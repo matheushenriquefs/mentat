@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import ast
+import datetime
+import json
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -220,6 +223,136 @@ def test_list_sessions_filters_by_repo(monkeypatch, tmp_path):
 def test_list_sessions_missing_db_returns_empty(monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "never-written.db"))
     assert state.list_sessions("r", now=1.0) == []
+
+
+# ── S4: state.rebuild — regenerate the db from the durable NDJSON log ─────────
+
+
+def _iso(y: int, mo: int, d: int, h: int = 12) -> str:
+    return datetime.datetime(y, mo, d, h, tzinfo=datetime.UTC).isoformat()
+
+
+def _epoch(iso: str) -> float:
+    return datetime.datetime.fromisoformat(iso).timestamp()
+
+
+def _write_log(log_root: Path, repo: str, session: str, rows: list[dict]) -> Path:
+    """Write ``rows`` as one agent's NDJSON file under log_root/repo/session/."""
+    d = log_root / repo / session
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / "agent-a.jsonl"
+    f.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    return d
+
+
+def _row(ts: str, event: str, session: str, **payload) -> dict:
+    return {"ts": ts, "agent": "mentat-orchestrate", "session": session, "event": event, "payload": payload}
+
+
+def test_rebuild_reduces_log_to_db(monkeypatch, tmp_path):
+    """Replay NDJSON → one row per session: status from the latest event,
+    started_at = earliest ts, last_event_at = latest ts. branch/pid are live-only
+    enrichment absent from the durable log, so they rebuild null."""
+    db = tmp_path / "state.db"
+    log_root = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+
+    t1, t2 = _iso(2026, 7, 1, 10), _iso(2026, 7, 1, 11)
+    _write_log(log_root, "mentat", "sess1", [_row(t1, "chunk.spawned", "sess1"), _row(t2, "chunk.landed", "sess1")])
+    t3 = _iso(2026, 7, 1, 9)
+    _write_log(log_root, "mentat", "sess2", [_row(t3, "chunk.spawned", "sess2")])
+
+    state.rebuild(log_root)
+
+    rows = {r[0]: r for r in _rows(db)}
+    assert rows["sess1"] == ("sess1", "mentat", None, None, "landed", _epoch(t1), _epoch(t2))
+    assert rows["sess2"] == ("sess2", "mentat", None, None, "running", _epoch(t3), _epoch(t3))
+
+
+def test_rebuild_delete_then_rebuild_is_identical(monkeypatch, tmp_path):
+    """The Kleppmann invariant: delete the throwaway db, rebuild from the log,
+    get byte-identical rows."""
+    db = tmp_path / "state.db"
+    log_root = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+
+    _write_log(
+        log_root,
+        "mentat",
+        "sess1",
+        [_row(_iso(2026, 7, 1, 10), "chunk.spawned", "sess1"), _row(_iso(2026, 7, 1, 11), "chunk.landed", "sess1")],
+    )
+
+    state.rebuild(log_root)
+    before = _rows(db)
+
+    db.unlink()
+    state.rebuild(log_root)
+    assert _rows(db) == before
+
+
+def test_rebuild_is_fresh_not_additive(monkeypatch, tmp_path):
+    """Rebuild starts from an empty table: a session whose dir no longer exists
+    must not survive a rebuild as a stale row."""
+    db = tmp_path / "state.db"
+    log_root = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+
+    d = _write_log(log_root, "mentat", "gone", [_row(_iso(2026, 7, 1, 10), "chunk.spawned", "gone")])
+    state.rebuild(log_root)
+    assert {r[0] for r in _rows(db)} == {"gone"}
+
+    import shutil
+
+    shutil.rmtree(d)
+    state.rebuild(log_root)
+    assert _rows(db) == []
+
+
+def test_rebuild_prunes_old_orphan_keeps_fresh(monkeypatch, tmp_path):
+    """One-shot: a stale session dir older than the cutoff is pruned from disk and
+    never projected; a fresh session is kept and projected."""
+    db = tmp_path / "state.db"
+    log_root = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+
+    old_dir = _write_log(log_root, "mentat", "orphan", [_row(_iso(2020, 1, 1), "chunk.spawned", "orphan")])
+    ancient = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC).timestamp()
+    os.utime(old_dir, (ancient, ancient))
+
+    fresh_dir = _write_log(log_root, "mentat", "fresh", [_row(_iso(2026, 7, 1), "chunk.spawned", "fresh")])
+    recent = datetime.datetime(2026, 7, 1, tzinfo=datetime.UTC).timestamp()
+    os.utime(fresh_dir, (recent, recent))
+
+    result = state.rebuild(log_root, prune_before=datetime.date(2026, 1, 1))
+
+    assert not old_dir.exists()
+    assert fresh_dir.exists()
+    assert {r[0] for r in _rows(db)} == {"fresh"}
+    assert result == {"projected": 1, "pruned": 1}
+
+
+def test_rebuild_skips_empty_and_unparseable_dirs(monkeypatch, tmp_path):
+    """A session dir with no valid rows projects nothing — no phantom row."""
+    db = tmp_path / "state.db"
+    log_root = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+
+    d = log_root / "mentat" / "empty"
+    d.mkdir(parents=True)
+    (d / "agent-a.jsonl").write_text("not json\n\n")
+
+    state.rebuild(log_root)
+    assert _rows(db) == []
+
+
+def test_rebuild_missing_log_root_yields_empty_db(monkeypatch, tmp_path):
+    db = tmp_path / "state.db"
+    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+
+    result = state.rebuild(tmp_path / "does-not-exist")
+    assert result == {"projected": 0, "pruned": 0}
+    assert _rows(db) == []
 
 
 def test_emit_projects_session_row(monkeypatch, tmp_path):

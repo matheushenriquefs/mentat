@@ -15,6 +15,7 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib import state as _state  # noqa: E402
 from lib.events import EJECT_REASONS as _EJECT_REASONS  # noqa: E402
 from lib.session import log_root as _log_root  # noqa: E402
 from lib.session import mint_session as _mint_session
@@ -241,6 +242,25 @@ def cmd_prune(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rebuild(args: argparse.Namespace) -> int:
+    """Regenerate state.db from the NDJSON log; optionally prune stale dirs first.
+
+    The log is durable and authoritative (ADR-0007); state.db is a throwaway read
+    model rebuilt from it (Kleppmann). ``--prune-before`` runs the one-shot sweep
+    that reclaims orphan session dirs older than the cutoff before projecting."""
+    prune_before = None
+    if args.prune_before is not None:
+        try:
+            prune_before = datetime.date.fromisoformat(args.prune_before)
+        except ValueError:
+            print(f"mentat-log: invalid date {args.prune_before!r}, expected YYYY-MM-DD", file=sys.stderr)
+            return 1
+
+    counts = _state.rebuild(_log_root(), prune_before=prune_before)
+    print(f"mentat-log: rebuilt projection — {counts['projected']} session(s) projected, {counts['pruned']} pruned")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="mentat-log", description="Mentat audit log tool")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -261,13 +281,27 @@ def build_parser() -> argparse.ArgumentParser:
     prune_p = sub.add_parser("prune", help="Delete old session dirs")
     prune_p.add_argument("--before", required=True, metavar="YYYY-MM-DD", help="Delete dirs older than this date")
 
+    rebuild_p = sub.add_parser("rebuild-projection", help="Regenerate state.db from the NDJSON log")
+    rebuild_p.add_argument(
+        "--prune-before",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="One-shot: prune session dirs older than this date before projecting",
+    )
+
     return p
 
 
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    dispatch = {"emit": cmd_emit, "validate": cmd_validate, "query": cmd_query, "prune": cmd_prune}
+    dispatch = {
+        "emit": cmd_emit,
+        "validate": cmd_validate,
+        "query": cmd_query,
+        "prune": cmd_prune,
+        "rebuild-projection": cmd_rebuild,
+    }
     sys.exit(dispatch[args.cmd](args))
 
 

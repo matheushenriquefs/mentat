@@ -10,10 +10,15 @@ deleted and rebuilt from the log at any time.
 
 from __future__ import annotations
 
+import contextlib
+import datetime
+import json
 import os
+import shutil
 import sqlite3
 import time
 from pathlib import Path
+from typing import cast
 
 # Coarse session status implied by the event that last touched the session. The
 # log is the truth; this is a liveness projection for readers, not a state
@@ -105,6 +110,106 @@ def list_sessions(repo: str, *, now: float | None = None, active_only: bool = Tr
         }
         for uuid, status, last_event_at in rows
     ]
+
+
+def _reduce_session(session_dir: Path) -> tuple[str, str, float, float] | None:
+    """Reduce one session dir's NDJSON events → ``(uuid, status, started_at,
+    last_event_at)``, or ``None`` if the dir holds no parseable event.
+
+    ``started_at`` is the earliest event ts, ``last_event_at`` the latest, and
+    ``status`` the outcome the *latest* event implies — the same liveness rule
+    ``project`` applies incrementally, applied here in one pass over the log."""
+    uuid: str | None = None
+    first_ts: float | None = None
+    last_ts: float | None = None
+    last_event: str | None = None
+    for log_file in sorted(session_dir.glob("*.jsonl")):
+        for line in log_file.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                parsed = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(parsed, dict) or "ts" not in parsed or "event" not in parsed:
+                continue
+            row = cast("dict[str, object]", parsed)
+            try:
+                ts = datetime.datetime.fromisoformat(str(row["ts"])).timestamp()
+            except (ValueError, TypeError):
+                continue
+            session = row.get("session")
+            if session is not None:
+                uuid = str(session)
+            if first_ts is None or ts < first_ts:
+                first_ts = ts
+            if last_ts is None or ts >= last_ts:
+                last_ts = ts
+                last_event = str(row["event"])
+    if uuid is None or first_ts is None or last_ts is None or last_event is None:
+        return None
+    return uuid, status_for(last_event), first_ts, last_ts
+
+
+def rebuild(log_root: Path, *, prune_before: datetime.date | None = None) -> dict[str, int]:
+    """Regenerate ``state.db`` from the durable NDJSON log — the log is the source
+    of truth, the db a disposable read model (Kleppmann). Returns
+    ``{"projected": M, "pruned": N}``.
+
+    The db is dropped and rebuilt from scratch (not upserted into), so a session
+    whose dir no longer exists leaves no stale row. Each surviving session dir is
+    reduced to one row; ``repo`` comes from the dir's parent, timestamps and status
+    from its event stream. ``branch``/``pid`` are live-only enrichment absent from
+    the durable log, so they rebuild ``NULL`` — no reader selects them.
+
+    When ``prune_before`` is given, a session dir whose mtime predates that date is
+    removed from disk and never projected (the one-shot orphan-dir sweep); a fresh
+    dir is kept and projected.
+    """
+    db = db_path()
+    for suffix in ("", "-wal", "-shm"):
+        with contextlib.suppress(OSError):
+            Path(str(db) + suffix).unlink(missing_ok=True)
+
+    conn = _connect(db)
+    projected = 0
+    pruned = 0
+    try:
+        if log_root.exists():
+            for repo_dir in sorted(log_root.iterdir()):
+                if not repo_dir.is_dir():
+                    continue
+                for session_dir in sorted(repo_dir.iterdir()):
+                    if not session_dir.is_dir():
+                        continue
+                    if prune_before is not None:
+                        mtime = datetime.date.fromtimestamp(session_dir.stat().st_mtime)
+                        if mtime < prune_before:
+                            shutil.rmtree(session_dir)
+                            pruned += 1
+                            continue
+                    reduced = _reduce_session(session_dir)
+                    if reduced is None:
+                        continue
+                    uuid, status, started_at, last_event_at = reduced
+                    conn.execute(
+                        """
+                        INSERT INTO sessions
+                            (uuid, repo, branch, pid, status, started_at, last_event_at)
+                        VALUES (?, ?, NULL, NULL, ?, ?, ?)
+                        ON CONFLICT(uuid) DO UPDATE SET
+                            status        = excluded.status,
+                            started_at    = excluded.started_at,
+                            last_event_at = excluded.last_event_at
+                        """,
+                        (uuid, repo_dir.name, status, started_at, last_event_at),
+                    )
+                    projected += 1
+        conn.commit()
+    finally:
+        conn.close()
+    return {"projected": projected, "pruned": pruned}
 
 
 def project(env: dict[str, str], event: str, *, now: float | None = None) -> None:

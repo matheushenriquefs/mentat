@@ -633,3 +633,55 @@ def test_main_dispatches_to_command(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as e:
         log_mod.main()
     assert e.value.code == 0
+
+
+# ── rebuild-projection (module-level) ─────────────────────────────────────────
+
+
+def test_build_parser_parses_rebuild_projection():
+    args = log_mod.build_parser().parse_args(["rebuild-projection", "--prune-before", "2026-01-01"])
+    assert args.cmd == "rebuild-projection"
+    assert args.prune_before == "2026-01-01"
+
+
+def test_build_parser_rebuild_projection_prune_optional():
+    args = log_mod.build_parser().parse_args(["rebuild-projection"])
+    assert args.prune_before is None
+
+
+def test_cmd_rebuild_replays_log_to_db(tmp_path, monkeypatch):
+    """rebuild-projection regenerates state.db from the NDJSON log."""
+    import json as _json
+    import sqlite3 as _sqlite
+
+    db = tmp_path / "state.db"
+    log_root = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
+    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+
+    d = log_root / "mentat" / "sess1"
+    d.mkdir(parents=True)
+    row = {
+        "ts": "2026-07-01T10:00:00+00:00",
+        "agent": "mentat-orchestrate",
+        "session": "sess1",
+        "event": "chunk.landed",
+        "payload": {"slug": "x", "sha": "a", "holding": "h"},
+    }
+    (d / "agent-a.jsonl").write_text(_json.dumps(row) + "\n")
+
+    ns = _argparse.Namespace(prune_before=None)
+    assert log_mod.cmd_rebuild(ns) == 0
+
+    conn = _sqlite.connect(str(db))
+    try:
+        got = conn.execute("SELECT uuid, repo, status FROM sessions").fetchall()
+    finally:
+        conn.close()
+    assert got == [("sess1", "mentat", "landed")]
+
+
+def test_cmd_rebuild_invalid_date_returns_rc1(tmp_path, monkeypatch):
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "state.db"))
+    assert log_mod.cmd_rebuild(_argparse.Namespace(prune_before="not-a-date")) == 1
