@@ -26,6 +26,76 @@ class Plan(NamedTuple):
     class_: str
     blocked_by: list[str]
     path: Path
+    touches: tuple[str, ...] = ()
+
+
+def _norm_touch(path: str) -> str:
+    """Normalize a declared touch-path for overlap comparison.
+
+    Strips surrounding whitespace and a trailing slash so ``src/api/`` and
+    ``src/api`` compare equal. Paths are treated as ``/``-separated regardless
+    of host separator — plan write-sets are declared repo-relative POSIX.
+    """
+    return path.strip().rstrip("/")
+
+
+def _paths_overlap(a: str, b: str) -> bool:
+    """True if two touch-paths write the same file or nested tree.
+
+    Overlap is: equality, or one path being a directory ancestor of the other
+    (``src/api`` ⊃ ``src/api/routes.py``). Prefix checks respect component
+    boundaries so ``src/api`` does not match ``src/api_v2.py``.
+    """
+    a, b = _norm_touch(a), _norm_touch(b)
+    if a == b:
+        return True
+    lo, hi = sorted((a, b), key=len)
+    return hi.startswith(lo + "/")
+
+
+def _plans_conflict(p: Plan, q: Plan) -> bool:
+    """True if any declared touch-path of `p` overlaps one of `q`."""
+    return any(_paths_overlap(pt, qt) for pt in p.touches for qt in q.touches)
+
+
+def write_conflicts(plans: list[Plan]) -> list[tuple[str, str]]:
+    """Report plan pairs whose declared write-sets overlap.
+
+    Returns ``(earlier_slug, later_slug)`` tuples in declaration order — the
+    detector half of the marge-bot check. An empty result means every plan's
+    write-set is disjoint and the batch can fan out fully in parallel.
+    """
+    conflicts: list[tuple[str, str]] = []
+    for i, p in enumerate(plans):
+        for q in plans[i + 1 :]:
+            if _plans_conflict(p, q):
+                conflicts.append((p.slug, q.slug))
+    return conflicts
+
+
+def serialize_conflicts(plans: list[Plan]) -> list[Plan]:
+    """Return `plans` with implied `blocked_by` edges that serialize write conflicts.
+
+    Shared serializer consumed by both the land queue's Scheduler and the
+    engine's spawn-gating: for each plan, the nearest earlier plan sharing a
+    touch-path is added to its `blocked_by`. This chains a whole conflict set in
+    declaration order (a ← b ← c) so at most one conflicting chunk is ever in
+    flight — the parallel rebase collision (the routes.py failure) cannot occur.
+
+    Plans with disjoint write-sets are returned unchanged. Existing dependencies
+    are preserved and never duplicated.
+    """
+    result: list[Plan] = []
+    for i, p in enumerate(plans):
+        prior = next(
+            (plans[j].slug for j in range(i - 1, -1, -1) if _plans_conflict(p, plans[j])),
+            None,
+        )
+        if prior is None or prior in p.blocked_by:
+            result.append(p)
+        else:
+            result.append(p._replace(blocked_by=[*p.blocked_by, prior]))
+    return result
 
 
 def _topo_sort(plans: list[Plan]) -> list[Plan]:
