@@ -1,15 +1,18 @@
-"""slice-3: ejecting an upstream chunk cascades to downstream chunks.
+"""S1: NNFI re-test-behind after an eject — not a blind cascade (Zuul).
 
-G3 — when chunk A ejects (gate-failed, rebase-conflicted, not-ff), every
-downstream chunk that transitively depends on A is preemptively ejected
-with `chunk.ejected{reason:"upstream_ejected", upstream:<A>}` and is
-never rebased / gated.
+When chunk A ejects, its declared-downstream chunks are NOT preemptively
+ejected. The land queue re-evaluates each against the new holding tip:
 
-Sibling chunks (no dep on the ejected one) are unaffected — regression
-guard for the independent-AFK path.
+  - a downstream that builds *without* the ejected change still lands
+    (the NNFI win — declared dep ≠ hard dep);
+  - a downstream that genuinely can't build ejects on its own merit
+    (rebase-conflicted / gate-failed) as the re-test surfaces it.
 
-ADR-0007: the eject envelope is reused; only the payload extends with
-`reason="upstream_ejected"` and `upstream:<slug>`. No new event names.
+The blind cascade survives only for *anchored* downstream — plans the land
+queue never re-tests (HITL, or AFK anchored via a HITL relation). They run
+in-session, so a dead upstream must still block them.
+
+ADR-0007: no new event names — chunk.ejected / chunk.landed / chunk.teardown.
 """
 
 from __future__ import annotations
@@ -20,10 +23,10 @@ import land_queue
 import scheduler
 
 
-def _plan(slug: str, blocked_by: list[str] | None = None) -> scheduler.Plan:
+def _plan(slug: str, blocked_by: list[str] | None = None, class_: str = "AFK") -> scheduler.Plan:
     return scheduler.Plan(
         slug=slug,
-        class_="AFK",
+        class_=class_,
         blocked_by=blocked_by or [],
         path=Path(f"/tmp/{slug}.md"),
     )
@@ -41,10 +44,13 @@ def _install_stubs(
     rebase_calls: list[str],
     gate_calls: list[str],
     gate_block: set[str] | None = None,
+    rebase_conflict: set[str] | None = None,
     emitted: list[tuple[str, dict]] | None = None,
 ) -> None:
     def fake_rebase(chunk, holding):
         rebase_calls.append(chunk.slug)
+        if rebase_conflict and chunk.slug in rebase_conflict:
+            return (None, f"merge conflict in {chunk.slug}")
         return (f"sha-{chunk.slug}", None)
 
     def fake_gates(chunk):
@@ -68,7 +74,21 @@ def _install_stubs(
     monkeypatch.setattr(land_queue, "_teardown_container", lambda slug: None)
 
 
-def test_upstream_eject_cascades_downstream(tmp_path, monkeypatch) -> None:
+def _drain(chunks, sched, holding="holding"):
+    return land_queue.drain(
+        chunks,
+        holding=holding,
+        on_landed=sched.mark_landed,
+        on_ejected=sched.mark_ejected,
+        next_ready=sched.next_ready,
+    )
+
+
+# ── NNFI: soft downstream is re-tested and lands ──────────────────────────────
+
+
+def test_soft_downstream_retested_and_lands(tmp_path, monkeypatch) -> None:
+    """A ejects; B(blocked_by=A) and C(blocked_by=B) build without A → both land."""
     a, b, c = _plan("a"), _plan("b", blocked_by=["a"]), _plan("c", blocked_by=["b"])
     sched = scheduler.Scheduler([a, b, c])
 
@@ -77,40 +97,51 @@ def test_upstream_eject_cascades_downstream(tmp_path, monkeypatch) -> None:
     rebase_calls: list[str] = []
     gate_calls: list[str] = []
     emitted: list[tuple[str, dict]] = []
-    _install_stubs(
-        monkeypatch,
-        ff_calls,
-        rebase_calls,
-        gate_calls,
-        gate_block={"a"},
-        emitted=emitted,
-    )
+    _install_stubs(monkeypatch, ff_calls, rebase_calls, gate_calls, gate_block={"a"}, emitted=emitted)
 
-    results = land_queue.drain(
-        chunks,
-        holding="holding",
-        on_landed=sched.mark_landed,
-        on_ejected=sched.mark_ejected,
-        next_ready=sched.next_ready,
-    )
+    results = _drain(chunks, sched)
 
-    assert ff_calls == [], f"no chunk should land; ff_calls={ff_calls}"
-    assert rebase_calls == ["a"], f"only a should rebase; rebase_calls={rebase_calls}"
+    # A blind cascade would never rebase/land b or c. NNFI re-tests them.
+    assert ff_calls == ["b", "c"], f"b and c must land after re-test; ff_calls={ff_calls}"
+    assert rebase_calls == ["a", "b", "c"], f"all three re-evaluated; rebase_calls={rebase_calls}"
+
+    statuses = {r.get("slug"): r.get("status") for r in results if r.get("slug")}
+    assert statuses == {"a": "eject", "b": "success", "c": "success"}
 
     ejections = [p for e, p in emitted if e == "chunk.ejected"]
-    by_slug = {p.get("slug"): p for p in ejections}
-    assert by_slug.get("a", {}).get("reason") == "gate-failed"
-    assert by_slug.get("b", {}).get("reason") == "upstream_ejected"
-    assert by_slug.get("c", {}).get("reason") == "upstream_ejected"
-    assert "upstream" in by_slug["b"], "b's eject payload must carry upstream slug"
-    assert "upstream" in by_slug["c"], "c's eject payload must carry upstream slug"
+    assert [p["slug"] for p in ejections] == ["a"], f"only a ejects; got {ejections}"
+    assert ejections[0]["reason"] == "gate-failed"
 
+
+def test_hard_downstream_cannot_build_ejects_on_merit(tmp_path, monkeypatch) -> None:
+    """A ejects; B genuinely can't build (gate fails) → B ejects on its own merit.
+
+    C(blocked_by=B) is then re-tested too and also can't build → ejects.
+    """
+    a, b, c = _plan("a"), _plan("b", blocked_by=["a"]), _plan("c", blocked_by=["b"])
+    sched = scheduler.Scheduler([a, b, c])
+
+    chunks = [_chunk("a", tmp_path), _chunk("b", tmp_path), _chunk("c", tmp_path)]
+    ff_calls: list[str] = []
+    rebase_calls: list[str] = []
+    gate_calls: list[str] = []
+    emitted: list[tuple[str, dict]] = []
+    _install_stubs(monkeypatch, ff_calls, rebase_calls, gate_calls, gate_block={"a", "b", "c"}, emitted=emitted)
+
+    results = _drain(chunks, sched)
+
+    assert ff_calls == [], f"nothing lands; ff_calls={ff_calls}"
     statuses = {r.get("slug"): r.get("status") for r in results if r.get("slug")}
     assert statuses == {"a": "eject", "b": "eject", "c": "eject"}
 
+    # Honest reasons from the re-test surface the real failure, not a synthetic tag.
+    reasons = {p["slug"]: p["reason"] for e, p in emitted if e == "chunk.ejected"}
+    assert reasons == {"a": "gate-failed", "b": "gate-failed", "c": "gate-failed"}
 
-def test_sibling_eject_does_not_cascade(tmp_path, monkeypatch) -> None:
-    a, b = _plan("a"), _plan("b")
+
+def test_hard_downstream_rebase_conflict_ejects(tmp_path, monkeypatch) -> None:
+    """B's commits stacked on A won't rebase onto A-less holding → rebase-conflicted."""
+    a, b = _plan("a"), _plan("b", blocked_by=["a"])
     sched = scheduler.Scheduler([a, b])
 
     chunks = [_chunk("a", tmp_path), _chunk("b", tmp_path)]
@@ -124,88 +155,75 @@ def test_sibling_eject_does_not_cascade(tmp_path, monkeypatch) -> None:
         rebase_calls,
         gate_calls,
         gate_block={"a"},
+        rebase_conflict={"b"},
         emitted=emitted,
     )
 
-    land_queue.drain(
-        chunks,
-        holding="holding",
-        on_landed=sched.mark_landed,
-        on_ejected=sched.mark_ejected,
-        next_ready=sched.next_ready,
-    )
+    _drain(chunks, sched)
 
-    assert "b" in rebase_calls, "sibling b must still attempt rebase"
-    assert "b" in gate_calls, "sibling b must still run gates"
-    assert "b" in ff_calls, "sibling b must still FF-merge"
-
-    ejections = [p for e, p in emitted if e == "chunk.ejected"]
-    b_eject = [p for p in ejections if p.get("slug") == "b"]
-    assert b_eject == [], f"sibling b must not be cascade-ejected; got {b_eject}"
+    assert "b" in rebase_calls, "b must be re-tested (rebased), not blind-ejected"
+    assert ff_calls == [], "b's conflicted rebase blocks the land"
+    reasons = {p["slug"]: p["reason"] for e, p in emitted if e == "chunk.ejected"}
+    assert reasons == {"a": "gate-failed", "b": "rebase-conflicted"}
 
 
-def test_rebase_conflict_cascades(tmp_path, monkeypatch) -> None:
-    """Rebase-conflict eject (not gate fail) also cascades downstream."""
-    a, b = _plan("a"), _plan("b", blocked_by=["a"])
+def test_sibling_eject_does_not_cascade(tmp_path, monkeypatch) -> None:
+    """Independent sibling (no dep on the ejected chunk) still lands."""
+    a, b = _plan("a"), _plan("b")
     sched = scheduler.Scheduler([a, b])
 
     chunks = [_chunk("a", tmp_path), _chunk("b", tmp_path)]
+    ff_calls: list[str] = []
     rebase_calls: list[str] = []
+    gate_calls: list[str] = []
     emitted: list[tuple[str, dict]] = []
+    _install_stubs(monkeypatch, ff_calls, rebase_calls, gate_calls, gate_block={"a"}, emitted=emitted)
 
-    def fake_rebase(chunk, holding):
-        rebase_calls.append(chunk.slug)
-        if chunk.slug == "a":
-            return (None, "merge conflict in foo.py")
-        return (f"sha-{chunk.slug}", None)
+    _drain(chunks, sched)
 
-    def fake_emit(event, payload):
-        emitted.append((event, payload))
-
-    monkeypatch.setattr(land_queue, "_rebase_chunk", fake_rebase)
-    monkeypatch.setattr(land_queue, "_run_gates", lambda c: ("pass", ""))
-    monkeypatch.setattr(land_queue, "_ff_merge", lambda c, h: None)
-    monkeypatch.setattr(land_queue, "_emit_event", fake_emit)
-    monkeypatch.setattr(land_queue, "_teardown_container", lambda slug: None)
-
-    land_queue.drain(
-        chunks,
-        holding="holding",
-        on_landed=sched.mark_landed,
-        on_ejected=sched.mark_ejected,
-        next_ready=sched.next_ready,
-    )
-
-    assert rebase_calls == ["a"], f"b must not rebase after a conflicts; rebase_calls={rebase_calls}"
-    ejections = {p.get("slug"): p for e, p in emitted if e == "chunk.ejected"}
-    assert ejections["a"]["reason"] == "rebase-conflicted"
-    assert ejections["b"]["reason"] == "upstream_ejected"
-    assert ejections["b"].get("upstream") == "a"
+    assert "b" in ff_calls, "sibling b must land"
+    b_eject = [p for e, p in emitted if e == "chunk.ejected" and p.get("slug") == "b"]
+    assert b_eject == [], f"sibling b must not be ejected; got {b_eject}"
 
 
-def test_eject_event_envelope_unchanged(tmp_path, monkeypatch) -> None:
-    """ADR-0007 guard: only the chunk.ejected event name is used; no new event."""
+def test_event_envelope_unchanged(tmp_path, monkeypatch) -> None:
+    """ADR-0007 guard: only catalog event names appear (no synthetic cascade event)."""
     a, b = _plan("a"), _plan("b", blocked_by=["a"])
     sched = scheduler.Scheduler([a, b])
 
     chunks = [_chunk("a", tmp_path), _chunk("b", tmp_path)]
     emitted: list[tuple[str, dict]] = []
-    _install_stubs(
-        monkeypatch,
-        [],
-        [],
-        [],
-        gate_block={"a"},
-        emitted=emitted,
-    )
+    _install_stubs(monkeypatch, [], [], [], gate_block={"a"}, emitted=emitted)
 
-    land_queue.drain(
-        chunks,
-        holding="holding",
-        on_landed=sched.mark_landed,
-        on_ejected=sched.mark_ejected,
-        next_ready=sched.next_ready,
-    )
+    _drain(chunks, sched)
 
     event_names = {e for e, _ in emitted}
-    assert event_names <= {"chunk.ejected", "chunk.teardown"}, f"unexpected events; got {event_names}"
+    assert event_names <= {"chunk.ejected", "chunk.landed", "chunk.teardown"}, f"unexpected events; got {event_names}"
+
+
+# ── scheduler-level: cascade targets anchored downstream, spares auto ─────────
+
+
+def test_cascade_targets_anchored_not_auto() -> None:
+    """mark_ejected cascades to HITL/anchored downstream, never to auto downstream."""
+    a = _plan("a", class_="AFK")
+    b = _plan("b", blocked_by=["a"], class_="HITL")  # anchored downstream
+    c = _plan("c", blocked_by=["a"], class_="AFK")  # auto downstream — re-test candidate
+    sched = scheduler.Scheduler([a, b, c])
+
+    cascaded = sched.mark_ejected("a")
+
+    assert "b" in cascaded, "anchored HITL downstream must cascade"
+    assert "c" not in cascaded, "auto downstream must be left for land-queue re-test"
+    assert "b" in sched.ejected_slugs()
+    assert "c" not in sched.ejected_slugs()
+
+
+def test_ejected_dep_unblocks_auto_downstream() -> None:
+    """next_ready treats an ejected dep as resolved so the auto downstream re-tests."""
+    a, b = _plan("a"), _plan("b", blocked_by=["a"])
+    sched = scheduler.Scheduler([a, b])
+
+    assert sched.next_ready(["b"]) is None, "b gated while a is neither landed nor ejected"
+    sched.mark_ejected("a")
+    assert sched.next_ready(["b"]) == "b", "ejected a must unblock b for re-test"

@@ -109,8 +109,10 @@ class Scheduler:
 
     `mark_landed` / `mark_ejected` are the only state mutations. They are
     additive: once a slug enters either set, it stays put. Ejection cascade
-    walks the reverse-dep graph and pushes downstream slugs into `ejected`
-    so they get skipped, not stalled.
+    walks the reverse-dep graph and pushes only *anchored* downstream slugs
+    into `ejected` (NNFI); auto downstream stay pending and, because an ejected
+    dep counts as resolved in `next_ready`, are re-evaluated against the new
+    holding tip rather than blind-ejected.
     """
 
     def __init__(self, plans: list[Plan]) -> None:
@@ -126,13 +128,27 @@ class Scheduler:
             if plan is None:
                 return slug
             deps = set(plan.blocked_by) & self._plans.keys()
-            if deps - self._landed:
+            # NNFI (Zuul): an *ejected* upstream is treated as resolved, not
+            # blocking. A declared-downstream auto chunk is re-evaluated against
+            # the new holding tip rather than blind-cascaded — it lands if it
+            # builds without the ejected change, and only ejects on its own
+            # merit if it genuinely can't (rebase-conflicted / gate-failed).
+            if deps - self._landed - self._ejected:
                 continue
             return slug
         return None
 
     def mark_landed(self, slug: str) -> None:
         self._landed.add(slug)
+
+    def _is_anchored(self, slug: str) -> bool:
+        """True if `slug`'s plan is anchored (runs in-session, never re-tested
+        by the land queue). Mirrors the `partition` rule so the eject cascade
+        targets exactly the plans the land queue can't re-evaluate."""
+        plan = self._plans.get(slug)
+        if plan is None:
+            return False
+        return plan.class_ == "HITL" or _has_downstream_hitl(slug, self._plans) or _has_upstream_hitl(slug, self._plans)
 
     def has_ejections(self) -> bool:
         """True if any slug has been ejected (includes cascade victims)."""
@@ -143,16 +159,27 @@ class Scheduler:
         return frozenset(self._ejected)
 
     def mark_ejected(self, slug: str) -> list[str]:
-        """Eject slug + cascade to every downstream slug. Return cascaded list."""
+        """Eject slug + cascade to anchored downstream. Return cascaded list.
+
+        NNFI (Zuul): the cascade reaches only *anchored* downstream — plans the
+        land queue never re-tests (HITL, or AFK anchored via a HITL relation).
+        They run in-session, so a dead upstream must block them or the operator
+        would land them on a missing change. *Auto* downstream are deliberately
+        left un-ejected: the land queue re-evaluates each against the new
+        holding tip and lands the ones that build without the ejected change.
+        """
         self._ejected.add(slug)
         cascaded: list[str] = []
-        # Walk reverse-dep graph: any plan that lists an ejected slug in
-        # blocked_by also gets ejected; repeat until fixed-point.
+        # Walk reverse-dep graph: an anchored plan that lists an ejected slug in
+        # blocked_by also gets ejected; repeat until fixed-point. Auto plans are
+        # skipped — they are the land queue's re-test candidates, not victims.
         changed = True
         while changed:
             changed = False
             for other_slug, other in self._plans.items():
                 if other_slug in self._ejected:
+                    continue
+                if not self._is_anchored(other_slug):
                     continue
                 if any(dep in self._ejected for dep in other.blocked_by):
                     self._ejected.add(other_slug)

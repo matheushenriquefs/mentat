@@ -32,8 +32,8 @@ def test_partition_anchors_hitl_and_its_neighbors():
     # graph: ui(AFK) blocks-on api(HITL); infra(AFK) standalone.
     plans = [
         _plan(m, "api", cls="HITL"),
-        _plan(m, "ui", cls="AFK", blocked_by=["api"]),   # upstream HITL → anchored
-        _plan(m, "infra", cls="AFK"),                     # standalone AFK → auto
+        _plan(m, "ui", cls="AFK", blocked_by=["api"]),  # upstream HITL → anchored
+        _plan(m, "infra", cls="AFK"),  # standalone AFK → auto
     ]
     anchored, auto = m.partition(plans)
     anchored_slugs = {p.slug for p in anchored}
@@ -91,17 +91,27 @@ def test_scheduler_unknown_slug_is_immediately_ready():
     assert sched.next_ready(["ad-hoc"]) == "ad-hoc", "chunks with no loaded plan never block"
 
 
-def test_scheduler_cascade_ejects_transitive_dependents():
+def test_scheduler_cascade_ejects_only_anchored_dependents():
+    """NNFI: the eject cascade reaches anchored downstream (never re-tested),
+    while auto downstream are left pending for re-evaluation against the new tip.
+
+    root(AFK) ← mid(HITL, anchored) ← leaf(AFK, anchored via upstream HITL);
+    auto_dep(AFK) blocks-on root but has no HITL relation → auto.
+    """
     m = _sched()
-    sched = m.Scheduler([
-        _plan(m, "root"),
-        _plan(m, "mid", blocked_by=["root"]),
-        _plan(m, "leaf", blocked_by=["mid"]),
-        _plan(m, "island"),
-    ])
+    sched = m.Scheduler(
+        [
+            _plan(m, "root"),
+            _plan(m, "mid", cls="HITL", blocked_by=["root"]),
+            _plan(m, "leaf", blocked_by=["mid"]),  # anchored: upstream HITL
+            _plan(m, "auto_dep", blocked_by=["root"]),
+            _plan(m, "island"),
+        ]
+    )
     cascaded = sched.mark_ejected("root")
-    assert set(cascaded) == {"mid", "leaf"}, "ejection cascades transitively"
+    assert set(cascaded) == {"mid", "leaf"}, "cascade reaches anchored dependents only"
     assert sched.has_ejections()
     assert sched.ejected_slugs() == frozenset({"root", "mid", "leaf"})
-    # An ejected slug is never handed out as ready.
-    assert sched.next_ready(["mid", "leaf", "island"]) == "island"
+    # auto_dep is NOT ejected — its ejected dep counts as resolved, so it is
+    # handed out for a re-test against the new holding tip. island has no deps.
+    assert sched.next_ready(["mid", "leaf", "auto_dep", "island"]) == "auto_dep"
