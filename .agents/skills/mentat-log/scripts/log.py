@@ -45,6 +45,9 @@ EVENT_CATALOG: dict[str, list[str]] = {
 # new event type. chunk.ejected carries them via lib.events.ejected_payload.
 EVENT_OPTIONAL_FIELDS: dict[str, list[str]] = {
     "chunk.ejected": ["logs_path", "preflight_exit", "upstream", "summary", "killed_by", "timed_out"],
+    # Recovery respawn (ADR-0015): a chunk.spawned with trigger:"recovery" carries
+    # the 1-based attempt number. Payload extension, not a new event type.
+    "chunk.spawned": ["trigger", "attempt"],
 }
 
 

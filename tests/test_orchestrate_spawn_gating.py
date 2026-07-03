@@ -93,6 +93,26 @@ def test_shared_write_set_chunks_never_spawn_concurrently(tmp_path, monkeypatch)
     assert sorted(s for w in waves for s in w) == ["a", "b"], f"both must eventually spawn; got {waves}"
 
 
+def test_run_batch_stalls_when_dep_never_resolves(monkeypatch):
+    """Anti-hang guard: a pending auto plan whose known dep never lands → stalled row,
+    loop breaks (no infinite spin). Driven at the _run_batch seam with a dep (A) that
+    is in known_slugs but not among the fanned auto plans, so it never resolves."""
+    orchestrate = _load("orchestrate")
+    scheduler = _load("scheduler")
+
+    A = scheduler.Plan(slug="A", class_="HITL", blocked_by=[], path=Path("/tmp/A.md"))
+    B = scheduler.Plan(slug="B", class_="AFK", blocked_by=["A"], path=Path("/tmp/B.md"))
+    sched = scheduler.Scheduler([A, B])
+
+    monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [(p, 0) for p in plans])
+    monkeypatch.setattr(orchestrate._land_queue, "drain", lambda chunks, **kw: [])
+
+    results, hitl, transient = orchestrate._run_batch(
+        [B], holding="h", harness=None, model=None, sched=sched, known_slugs={"A", "B"}
+    )
+    assert any(r.get("status") == "stalled" and r.get("pending") == ["B"] for r in results)
+
+
 def test_independent_chunks_fan_out_in_one_wave(tmp_path, monkeypatch):
     """No deps, disjoint write-sets → both spawn together (no needless serialization)."""
     orchestrate = _load("orchestrate")

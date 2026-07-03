@@ -19,6 +19,7 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib import backoff as _backoff  # noqa: E402
 from lib import devcontainer as _devcontainer  # noqa: E402
 from lib import git as _git  # noqa: E402
 from lib import paths  # noqa: E402
@@ -35,6 +36,7 @@ _utils = load_sibling(__file__, "plans")
 _scheduler = load_sibling(__file__, "scheduler")
 _fan_out = load_sibling(__file__, "fan_out")
 _land_queue = load_sibling(__file__, "land_queue")
+_recover = load_sibling(__file__, "recover")
 
 _SIGNAL_EXIT_BASE = 128  # Shell-reported signal exit: 128 + signum
 
@@ -674,16 +676,43 @@ def _gc_preserved_worktrees(preserve: set[str] | None = None) -> None:
 
 
 def _spawn_batch_doctor() -> None:
-    """Non-blocking doctor spawn after a failed batch. Swallows all errors."""
+    """Non-blocking doctor spawn after a failed batch. Swallows all errors.
+
+    Scoped to THIS batch's session (from ``MENTAT_SESSION``, exported by
+    ``ensure_session``) so the diagnosis covers the failed run's chunks, and its
+    output is captured to ``<session>/doctor.out`` — not DEVNULL — so the operator
+    can read the verdict after the fact. subprocess dups the file fd into the
+    child, so closing the parent handle after Popen is safe (the child keeps its
+    own reference)."""
     _session_script = paths.SKILLS_DIR / "mentat-session/scripts/session.py"
     if not _session_script.exists():
         return
+    session_id = os.environ.get("MENTAT_SESSION")
+    cmd = ["python3", str(_session_script), "doctor"]
+    if session_id:
+        cmd.append(session_id)
     with contextlib.suppress(OSError):
-        subprocess.Popen(
-            ["python3", str(_session_script), "doctor"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        if session_id:
+            out_path = _session_dir(session_id) / "doctor.out"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            with out_path.open("wb") as out:
+                subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT)
+        else:
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _rebuild_projection() -> None:
+    """Rebuild the disposable sqlite read model from the durable NDJSON log.
+
+    Run at end-of-batch so track/doctor readers reflect the batch's final terminal
+    states (landed/ejected/recovered) without scanning the log dir. The log is the
+    source of truth (ADR-0007); the projection is derived. Best-effort — never
+    raises."""
+    with contextlib.suppress(Exception):
+        from lib import session as _session_lib
+        from lib import state as _state
+
+        _state.rebuild(_session_lib.log_root())
 
 
 def _worktree_for_slug(slug: str) -> Path:
@@ -799,6 +828,157 @@ def _run_batch(
     return drain_results, hitl_slugs, transient_slugs
 
 
+def _recovery_diff(worktree: Path, holding: str) -> str:
+    """Best-effort partial diff of the chunk's worktree vs the holding tip.
+
+    Handed to the recovery agent so it can see what the dead chunk produced before
+    it died. Truncated to keep the prompt bounded; any git failure yields ""."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(worktree), "diff", holding],
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return ""
+    return result.stdout[:4000] if result.returncode == 0 else ""
+
+
+def _recovery_context(plan: _scheduler.Plan, attempt: int, cap: int, *, holding: str) -> dict[str, object]:
+    """Build the failure context handed to the recovery agent."""
+    worktree = _worktree_for_slug(plan.slug)
+    diag = worktree / "summary.md"
+    diagnosis = diag.read_text() if diag.exists() else ""
+    return {
+        "slug": plan.slug,
+        "reason": EjectReason.WORKER_DIED,
+        "worktree": str(worktree),
+        "holding": holding,
+        "attempt": attempt,
+        "cap": cap,
+        "diagnosis": diagnosis,
+        "diff": _recovery_diff(worktree, holding),
+    }
+
+
+def _spawn_implement_in_worktree(plan_path: Path, worktree: Path, *, harness: str | None, model: str | None) -> int:
+    """Run mentat-implement inside an EXISTING worktree and return its exit code.
+
+    ``MENTAT_SKIP_PREFLIGHT`` makes implement reuse the preserved worktree/branch
+    instead of ``worktree create`` (rc65 on an existing branch) — the idempotent
+    re-land the recovery contract requires."""
+    cmd = ["python3", str(_fan_out._IMPLEMENT_SCRIPT), str(plan_path)]
+    if harness:
+        cmd += ["--harness", harness]
+    if model:
+        cmd += ["--model", model]
+    env = {**os.environ, "MENTAT_SKIP_PREFLIGHT": "1"}
+    proc = subprocess.Popen(cmd, cwd=str(worktree), env=env, start_new_session=True)
+    return proc.wait()
+
+
+def _recovery_respawn(
+    plan: _scheduler.Plan, attempt: int, *, holding: str, harness: str | None, model: str | None
+) -> list[dict[str, object]]:
+    """retry action: rebase the preserved worktree onto holding, re-run implement, land."""
+    worktree = _worktree_for_slug(plan.slug)
+    # mentat-container up dirties .devcontainer/ in every worktree; discard so the
+    # rebase does not refuse on unstaged changes (mirrors land_queue._rebase_chunk).
+    _git.discard_path(worktree, ".devcontainer/")
+    _git.rebase_ff_only(worktree, holding)
+    rc = _spawn_implement_in_worktree(plan.path, worktree, harness=harness, model=model)
+    if rc != 0:
+        _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.IMPLEMENT_FAILED, str(worktree)))
+        return [{"slug": plan.slug, "status": "eject", "reason": EjectReason.IMPLEMENT_FAILED}]
+    return _land_queue.drain([_land_queue.Chunk(slug=plan.slug, worktree=worktree)], holding=holding)
+
+
+def _reslice_agent(plan: _scheduler.Plan, *, invoke: Callable[[str], str] | None = None) -> list[Path]:
+    """Ask the model to re-plan a too-big chunk into smaller sibling slice files.
+
+    The agent writes ``<slug>-r<N>.md`` slice files next to the original plan; this
+    returns the ones that appeared. No files produced → empty list (the caller
+    escalates rather than looping)."""
+    invoke = invoke or _recover._invoke_claude
+    prompt = (
+        f"The plan at {plan.path} was too large to finish in one deadline. Re-plan it into "
+        f"2-4 smaller vertical-slice plan files named {plan.path.stem}-r1.md, {plan.path.stem}-r2.md, "
+        f"... in the same directory ({plan.path.parent}). Each must be independently implementable. "
+        "Write the files, then reply 'done'."
+    )
+    invoke(prompt)
+    return sorted(plan.path.parent.glob(f"{plan.path.stem}-r*.md"))
+
+
+def _recovery_reslice(
+    plan: _scheduler.Plan, attempt: int, *, holding: str, harness: str | None, model: str | None
+) -> list[dict[str, object]]:
+    """reslice action: re-plan into sub-slices JIT and re-fan them through the staged coordinator."""
+    sub_paths = _reslice_agent(plan)
+    if not sub_paths:
+        return [{"slug": plan.slug, "status": "eject", "reason": EjectReason.IMPLEMENT_FAILED, "note": "reslice-empty"}]
+    sub_plans = _scheduler.serialize_conflicts(_load_plans(sub_paths))
+    sched = _scheduler.Scheduler(sub_plans)
+    known = {p.slug for p in sub_plans}
+    results, _hitl, _transient = _run_batch(
+        sub_plans, holding=holding, harness=harness, model=model, sched=sched, known_slugs=known
+    )
+    return results
+
+
+def _run_recovery(
+    transient: set[str],
+    *,
+    plans_by_slug: dict[str, _scheduler.Plan],
+    holding: str,
+    session_id: str,
+    harness: str | None,
+    model: str | None,
+) -> tuple[set[str], set[str]]:
+    """Run the JIT recovery pass over transient AFK ejects. Returns (recovered_ok, dead_lettered).
+
+    Delegates the decide/apply loop to ``recover.recover`` with the real spawn / land /
+    re-plan primitives bound in. ``recovered_ok`` are slugs a retry/reslice landed;
+    ``dead_lettered`` are slugs escalated to HITL (abandon / cap breach) — both feed the
+    batch exit code."""
+
+    def _dead_letter(plan: _scheduler.Plan, rationale: str) -> None:
+        _emit_event(
+            "chunk.ejected",
+            ejected_payload(
+                plan.slug, EjectReason.HITL_REQUIRED, str(_worktree_for_slug(plan.slug)), summary=rationale
+            ),
+        )
+
+    outcomes = _recover.recover(
+        transient,
+        plans_by_slug=plans_by_slug,
+        holding=holding,
+        session_id=session_id,
+        harness=harness,
+        is_afk=lambda s: plans_by_slug[s].class_ == "AFK",
+        context_builder=lambda plan, attempt, cap: _recovery_context(plan, attempt, cap, holding=holding),
+        teardown=_teardown_ejected,
+        respawn=lambda plan, attempt: _recovery_respawn(plan, attempt, holding=holding, harness=harness, model=model),
+        reslice=lambda plan, attempt: _recovery_reslice(plan, attempt, holding=holding, harness=harness, model=model),
+        dead_letter=_dead_letter,
+        backoff=lambda i: _backoff.full_jitter(i),
+    )
+
+    recovered_ok: set[str] = set()
+    dead_lettered: set[str] = set()
+    for outcome in outcomes:
+        slug = str(outcome.get("slug", ""))
+        kind = outcome.get("recovery")
+        if kind in (_recover.RETRY, _recover.RESLICE):
+            results = outcome.get("results") or []
+            if any(isinstance(r, dict) and r.get("status") == "success" for r in results):
+                recovered_ok.add(slug)
+        elif kind in (_recover.ABANDON, "dead-lettered"):
+            dead_lettered.add(slug)
+    return recovered_ok, dead_lettered
+
+
 def run_orchestrate(
     holding: str,
     plan_paths: list[Path],
@@ -848,7 +1028,7 @@ def run_orchestrate(
 
         # Staged fan-out: spawn is dep-gated on landing, not fired all-at-once. A
         # chunk whose blocked_by upstream has not landed waits for a later wave.
-        drain_results, hitl, _transient = _run_batch(
+        drain_results, hitl, transient = _run_batch(
             auto,
             holding=holding,
             harness=harness,
@@ -857,6 +1037,20 @@ def run_orchestrate(
             known_slugs=known_slugs,
         )
         hitl_slugs.update(hitl)
+
+        # Recovery pass (ADR-0015): after the drain settles, attempt JIT recovery of
+        # transient-ejected AFK chunks — serially, spaced by backoff, so a recovering
+        # fleet never re-storms the box. A recovered_ok slug no longer counts against
+        # the batch; a dead-lettered slug escalates to HITL (never a silent eject).
+        recovered_ok, dead_lettered = _run_recovery(
+            transient,
+            plans_by_slug={p.slug: p for p in (anchored + auto)},
+            holding=holding,
+            session_id=session_id,
+            harness=harness,
+            model=model,
+        )
+        hitl_slugs.update(dead_lettered)
         stalled = [r for r in drain_results if r.get("status") == "stalled"]
         if stalled:
             pending = stalled[0].get("pending", [])
@@ -881,7 +1075,10 @@ def run_orchestrate(
             {"session": session_id, "summary": f"batch review for session {session_id} — advisory"},
         )
 
-        rc = 1 if sched.has_ejections() or hitl_slugs or stalled else 0
+        # A recovered chunk landed on a later attempt — drop it from the ejection
+        # tally so a fully-salvaged batch exits 0.
+        unrecovered = sched.ejected_slugs() - recovered_ok
+        rc = 1 if unrecovered or hitl_slugs or stalled else 0
         if rc != 0:
             # Print named eject summary so operator knows which slugs failed and why.
             # Drain results carry land-queue eject reasons; partition-ejected chunks
@@ -907,6 +1104,9 @@ def run_orchestrate(
         # crash never leaks worktrees or containers. hitl worktrees are held back.
         _prune_stale_worktrees(preserve=hitl_slugs)
         _gc_preserved_worktrees(preserve=hitl_slugs)
+        # Refresh the disposable read model from the durable log so post-batch
+        # readers (track/doctor) see the final terminal + recovered states.
+        _rebuild_projection()
 
 
 def build_parser() -> argparse.ArgumentParser:

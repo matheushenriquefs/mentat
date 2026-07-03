@@ -109,10 +109,29 @@ SUMMARY_FILE = "summary.md"
 HITL_IN_SESSION = "hitl-in-session"
 
 
-def spawned_payload(slug: str, plan: str, *, harness: str, worktree: str) -> dict[str, object]:
+def spawned_payload(
+    slug: str,
+    plan: str,
+    *,
+    harness: str,
+    worktree: str,
+    trigger: str | None = None,
+    attempt: int | None = None,
+) -> dict[str, object]:
     """The one canonical ``chunk.spawned`` payload — shared by fan_out (headless
-    AFK spawn) and the in-session HITL emitters in implement/orchestrate."""
-    return {"slug": slug, "plan": plan, "harness": harness, "worktree": worktree}
+    AFK spawn) and the in-session HITL emitters in implement/orchestrate.
+
+    ``trigger``/``attempt`` are set only by the recovery engine's respawn: a
+    ``trigger:"recovery"`` spawn carries the 1-based ``attempt`` number so the
+    outcome (chunk.landed / chunk.ejected) attributes to a recovery pass and the
+    per-slug attempt count is replayable from the durable log. Payload-only —
+    declared in mentat-log's ``EVENT_OPTIONAL_FIELDS``, not a new event type."""
+    payload: dict[str, object] = {"slug": slug, "plan": plan, "harness": harness, "worktree": worktree}
+    if trigger is not None:
+        payload["trigger"] = trigger
+    if attempt is not None:
+        payload["attempt"] = attempt
+    return payload
 
 
 def ejected_payload(
