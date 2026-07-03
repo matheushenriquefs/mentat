@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
@@ -55,13 +56,98 @@ class _PlanLike(Protocol):
     path: Path
 
 
+DEFAULT_MAX_RESTARTS = 3
+DEFAULT_RESTART_WINDOW = 60.0
+
+
+def _int_config(key: str, default: int, *, minimum: int = 1) -> int:
+    raw = _config.read_config().get(key, default)
+    try:
+        return max(minimum, int(raw))
+    except (TypeError, ValueError):
+        return default
+
+
 def recovery_attempts() -> int:
     """Per-slug recovery attempt cap. Config ``recovery_attempts`` (default 2, min 1)."""
-    raw = _config.read_config().get("recovery_attempts", DEFAULT_ATTEMPTS)
+    return _int_config("recovery_attempts", DEFAULT_ATTEMPTS)
+
+
+def recovery_max_restarts() -> int:
+    """Batch-wide restart-storm intensity: max respawns per window. Config
+    ``recovery_max_restarts`` (default 3, min 1) — the OTP supervisor ``MaxR``."""
+    return _int_config("recovery_max_restarts", DEFAULT_MAX_RESTARTS)
+
+
+def recovery_restart_window() -> float:
+    """The storm window in seconds — the OTP ``MaxT``. Config
+    ``recovery_restart_window`` (default 60)."""
+    raw = _config.read_config().get("recovery_restart_window", DEFAULT_RESTART_WINDOW)
     try:
-        return max(1, int(raw))
+        return max(0.0, float(raw))
     except (TypeError, ValueError):
-        return DEFAULT_ATTEMPTS
+        return DEFAULT_RESTART_WINDOW
+
+
+def recovery_budget() -> float | None:
+    """Accumulated recovery-cost ceiling for the batch, or None (unlimited). Config
+    ``recovery_budget`` — a soft OpenHands-style cost cap (unit-agnostic: respawns
+    by default; a caller may charge tokens/wall instead)."""
+    raw = _config.read_config().get("recovery_budget")
+    if raw is None:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except (TypeError, ValueError):
+        return None
+
+
+class StormGuard:
+    """OTP-style restart-intensity limiter (Erlang ``MaxR``/``MaxT``).
+
+    Allows at most ``max_restarts`` respawns within any ``window_s`` sliding window
+    across the whole batch. When the window is saturated the batch stops recovering
+    and escalates the remainder rather than restart-storming a sick box — the same
+    "give up, don't loop" contract an OTP supervisor enforces on its children.
+    ``clock`` is injectable for deterministic tests."""
+
+    def __init__(self, max_restarts: int, window_s: float, *, clock: Callable[[], float] = time.monotonic) -> None:
+        self.max_restarts = max(1, max_restarts)
+        self.window_s = window_s
+        self._clock = clock
+        self._stamps: list[float] = []
+
+    def allow(self) -> bool:
+        now = self._clock()
+        self._stamps = [t for t in self._stamps if now - t <= self.window_s]
+        return len(self._stamps) < self.max_restarts
+
+    def record(self) -> None:
+        self._stamps.append(self._clock())
+
+
+class Budget:
+    """Accumulated-cost ceiling for a batch's recovery (OpenHands-style).
+
+    ``allow(cost)`` gates the next respawn; ``spend(cost)`` accrues. ``total`` None
+    means unlimited. Cost is unit-agnostic — the caller decides whether one unit is
+    one respawn, N tokens, or N seconds."""
+
+    def __init__(self, total: float | None = None) -> None:
+        self.total = total
+        self.spent = 0.0
+
+    def allow(self, cost: float = 1.0) -> bool:
+        return self.total is None or self.spent + cost <= self.total
+
+    def spend(self, cost: float = 1.0) -> None:
+        self.spent += cost
+
+
+def _notify(message: str) -> None:
+    """Surface an escalation to the operator. Stderr today (audit is the durable
+    record); a single seam so a future push/notify backend has one call site."""
+    print(f"mentat-recover: ESCALATE — {message}", file=sys.stderr)
 
 
 def attempt_count(session_id: str, slug: str) -> int:
@@ -198,21 +284,34 @@ def recover(
     decide: Callable[[dict[str, object]], dict[str, str]] | None = None,
     cap: int | None = None,
     backoff: Callable[[int], None] | None = None,
+    storm_guard: StormGuard | None = None,
+    budget: Budget | None = None,
+    notify: Callable[[str], None] | None = None,
 ) -> list[dict[str, object]]:
     """Run the recovery pass over the transient-ejected set. Returns per-slug outcomes.
 
     Serial by construction (one slug at a time, spaced by ``backoff``) so a recovering
     fleet never re-storms the box under live contention. Each recoverable AFK slug
     within cap gets a fresh worktree/container teardown, a model decision, and the
-    matching action; a HITL slug or a cap breach is escalated, never blindly retried.
+    matching action.
+
+    Three guardrails escalate to HITL (dead-letter + notify) instead of blind-retrying:
+    a per-slug attempt cap, a batch-wide restart-storm intensity cap (``StormGuard``),
+    and an accumulated-cost ceiling (``Budget``). A storm or budget breach stops the
+    whole pass and escalates every not-yet-recovered slug — the OTP "give up, don't
+    loop" contract — so a sick box is never hammered.
     """
     cap = cap if cap is not None else recovery_attempts()
     # Resolve the decider at call time (via the module namespace) so a test — or a
     # caller — can monkeypatch ``decide`` without the def-time default freezing it.
     decider = decide if decide is not None else globals()["decide"]
+    storm = storm_guard if storm_guard is not None else StormGuard(recovery_max_restarts(), recovery_restart_window())
+    bud = budget if budget is not None else Budget(recovery_budget())
+    notifier = notify if notify is not None else _notify
     outcomes: list[dict[str, object]] = []
 
-    for i, slug in enumerate(sorted(transient_slugs)):
+    ordered = sorted(transient_slugs)
+    for i, slug in enumerate(ordered):
         plan = plans_by_slug.get(slug)
         if plan is None:
             # Ad-hoc / external slug with no loaded plan — nothing to recover from.
@@ -226,17 +325,33 @@ def recover(
         attempt = attempt_count(session_id, slug) + 1
         if attempt > cap:
             dead_letter(plan, f"recovery attempt cap ({cap}) exhausted")
+            notifier(f"{slug}: attempt cap ({cap}) exhausted — handed to HITL")
             outcomes.append({"slug": slug, "recovery": "dead-lettered", "reason": "attempt-cap"})
             continue
 
+        # Batch-wide give-up rungs: a storm-intensity or budget breach escalates this
+        # slug AND every remaining one, then stops — never keep restarting a sick box.
+        if not storm.allow() or not bud.allow():
+            breach = "restart-storm cap" if not storm.allow() else "recovery budget"
+            for rest in ordered[i:]:
+                rest_plan = plans_by_slug.get(rest)
+                if rest_plan is not None and is_afk(rest):
+                    dead_letter(rest_plan, f"{breach} reached — recovery halted")
+                    outcomes.append({"slug": rest, "recovery": "dead-lettered", "reason": breach})
+            notifier(f"{breach} reached after {i} respawn(s) — escalating {len(ordered[i:])} chunk(s) to HITL")
+            break
+
         if backoff is not None:
             backoff(i)
+        storm.record()
+        bud.spend()
         teardown(slug)
         decision = decider(context_builder(plan, attempt, cap))
         action = decision.get("action", ABANDON)
 
         if action == ABANDON:
             dead_letter(plan, decision.get("rationale", ""))
+            notifier(f"{slug}: recovery agent chose abandon — handed to HITL")
             outcomes.append({"slug": slug, "recovery": ABANDON, "rationale": decision.get("rationale", "")})
             continue
 

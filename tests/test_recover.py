@@ -346,6 +346,185 @@ def test_recover_unknown_slug_is_unrecoverable(recover, monkeypatch, tmp_path):
     assert out[0]["recovery"] == "unrecoverable"
 
 
+# ── S3 guardrails: storm cap, budget, escalate rung ───────────────────────────
+
+
+def test_storm_guard_allows_within_cap(recover):
+    clock = [0.0]
+    g = recover.StormGuard(2, 60.0, clock=lambda: clock[0])
+    assert g.allow()
+    g.record()
+    assert g.allow()
+    g.record()
+    assert not g.allow()  # 2 within window → third blocked
+
+
+def test_storm_guard_window_expiry_reallows(recover):
+    clock = [0.0]
+    g = recover.StormGuard(1, 10.0, clock=lambda: clock[0])
+    g.record()
+    assert not g.allow()
+    clock[0] = 11.0  # window passed
+    assert g.allow()
+
+
+def test_budget_unlimited_when_none(recover):
+    b = recover.Budget(None)
+    b.spend(1000)
+    assert b.allow(1e9)
+
+
+def test_budget_blocks_over_total(recover):
+    b = recover.Budget(2.0)
+    assert b.allow(1.0)
+    b.spend(2.0)
+    assert not b.allow(1.0)
+
+
+def test_recovery_max_restarts_config(recover, monkeypatch):
+    monkeypatch.setattr(recover._config, "read_config", lambda: {})
+    assert recover.recovery_max_restarts() == 3
+    monkeypatch.setattr(recover._config, "read_config", lambda: {"recovery_max_restarts": 7})
+    assert recover.recovery_max_restarts() == 7
+
+
+def test_recovery_restart_window_config(recover, monkeypatch):
+    monkeypatch.setattr(recover._config, "read_config", lambda: {})
+    assert recover.recovery_restart_window() == 60.0
+    monkeypatch.setattr(recover._config, "read_config", lambda: {"recovery_restart_window": 30})
+    assert recover.recovery_restart_window() == 30.0
+    monkeypatch.setattr(recover._config, "read_config", lambda: {"recovery_restart_window": "bad"})
+    assert recover.recovery_restart_window() == 60.0
+
+
+def test_recovery_budget_config(recover, monkeypatch):
+    monkeypatch.setattr(recover._config, "read_config", lambda: {})
+    assert recover.recovery_budget() is None
+    monkeypatch.setattr(recover._config, "read_config", lambda: {"recovery_budget": 100})
+    assert recover.recovery_budget() == 100.0
+    monkeypatch.setattr(recover._config, "read_config", lambda: {"recovery_budget": "bad"})
+    assert recover.recovery_budget() is None
+
+
+def test_recover_storm_cap_escalates_remaining(recover, monkeypatch, tmp_path):
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    calls: dict = {}
+    prim = _wire(recover, monkeypatch, calls=calls)
+    notes: list = []
+    plans = {s: _Plan(s) for s in ("a", "b", "c")}
+    # StormGuard that allows exactly one respawn, then blocks → b, c escalated.
+    storm = recover.StormGuard(1, 60.0, clock=lambda: 0.0)
+    out = recover.recover(
+        {"a", "b", "c"},
+        plans_by_slug=plans,
+        holding="hold",
+        session_id="s1",
+        harness=None,
+        is_afk=lambda s: True,
+        context_builder=_ctx_builder,
+        decide=lambda ctx: {"action": "retry"},
+        storm_guard=storm,
+        notify=notes.append,
+        cap=5,
+        **prim,
+    )
+    assert calls.get("respawn") == [("a", 1)]  # only the first got through
+    escalated = {o["slug"] for o in out if o["recovery"] == "dead-lettered"}
+    assert escalated == {"b", "c"}
+    assert notes  # operator was notified
+
+
+def test_recover_budget_exhausted_halts(recover, monkeypatch, tmp_path):
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    calls: dict = {}
+    prim = _wire(recover, monkeypatch, calls=calls)
+    notes: list = []
+    plans = {s: _Plan(s) for s in ("a", "b")}
+    out = recover.recover(
+        {"a", "b"},
+        plans_by_slug=plans,
+        holding="hold",
+        session_id="s1",
+        harness=None,
+        is_afk=lambda s: True,
+        context_builder=_ctx_builder,
+        decide=lambda ctx: {"action": "retry"},
+        budget=recover.Budget(1.0),  # one respawn, then halt
+        notify=notes.append,
+        cap=5,
+        **prim,
+    )
+    assert calls.get("respawn") == [("a", 1)]
+    assert {o["slug"] for o in out if o["recovery"] == "dead-lettered"} == {"b"}
+    assert any("budget" in n for n in notes)
+
+
+def test_recover_abandon_notifies(recover, monkeypatch, tmp_path):
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    calls: dict = {}
+    prim = _wire(recover, monkeypatch, calls=calls)
+    notes: list = []
+    recover.recover(
+        {"a"},
+        plans_by_slug={"a": _Plan("a")},
+        holding="hold",
+        session_id="s1",
+        harness=None,
+        is_afk=lambda s: True,
+        context_builder=_ctx_builder,
+        decide=lambda ctx: {"action": "abandon", "rationale": "no"},
+        notify=notes.append,
+        **prim,
+    )
+    assert any("abandon" in n for n in notes)
+
+
+def test_recover_attempt_cap_notifies(recover, monkeypatch, tmp_path):
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    _write_recovery_spawn(tmp_path / "repo" / "s1", "a")
+    _write_recovery_spawn(tmp_path / "repo" / "s1", "a")
+    calls: dict = {}
+    prim = _wire(recover, monkeypatch, calls=calls)
+    notes: list = []
+    recover.recover(
+        {"a"},
+        plans_by_slug={"a": _Plan("a")},
+        holding="hold",
+        session_id="s1",
+        harness=None,
+        is_afk=lambda s: True,
+        context_builder=_ctx_builder,
+        decide=lambda ctx: {"action": "retry"},
+        cap=2,
+        notify=notes.append,
+        **prim,
+    )
+    assert any("attempt cap" in n for n in notes)
+
+
+def test_recover_notify_defaults_to_module_notifier(recover, monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    calls: dict = {}
+    prim = _wire(recover, monkeypatch, calls=calls)
+    recover.recover(
+        {"a"},
+        plans_by_slug={"a": _Plan("a")},
+        holding="hold",
+        session_id="s1",
+        harness=None,
+        is_afk=lambda s: True,
+        context_builder=_ctx_builder,
+        decide=lambda ctx: {"action": "abandon", "rationale": "no"},
+        **prim,
+    )
+    assert "ESCALATE" in capsys.readouterr().err
+
+
 def test_recover_default_cap_from_config(recover, monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "repo")
