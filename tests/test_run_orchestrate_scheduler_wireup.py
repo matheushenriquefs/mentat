@@ -42,13 +42,22 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
         return [(p, 0) for p in plans]
 
     captured: dict[str, object] = {}
+    captured["chunks"] = []
 
     def fake_drain(chunks, *, holding, on_landed=None, on_ejected=None, next_ready=None, **kw):
-        captured["chunks"] = list(chunks)
+        # Staged fan-out lands each dep wave before the next spawns, so drain is
+        # called once per wave (b's wave only forms after a lands). Accumulate the
+        # chunks across waves and land each so the scheduler advances.
+        captured["chunks"].extend(chunks)  # type: ignore[attr-defined]
         captured["on_landed"] = on_landed
         captured["on_ejected"] = on_ejected
         captured["next_ready"] = next_ready
-        return [{"slug": c.slug, "status": "success", "tip": "abc"} for c in chunks]
+        results = []
+        for c in chunks:
+            if on_landed is not None:
+                on_landed(c.slug)
+            results.append({"slug": c.slug, "status": "success", "tip": "abc"})
+        return results
 
     monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out_plans)
     monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)

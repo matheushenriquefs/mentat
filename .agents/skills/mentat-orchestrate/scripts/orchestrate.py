@@ -79,6 +79,7 @@ def _load_plans(paths: list[Path], *, _expanding: bool = False) -> list[_schedul
                     class_=fm.get("class", "HITL"),
                     blocked_by=blocked_by,
                     path=path,
+                    touches=tuple(_parse_list_field(fm.get("touches", ""))),
                 )
             )
 
@@ -710,6 +711,94 @@ def _land_all(
     )
 
 
+def _spawn_ready(pending: list[_scheduler.Plan], *, known_slugs: set[str], resolved: set[str]) -> list[_scheduler.Plan]:
+    """Auto plans whose declared deps are all resolved — the next spawn wave.
+
+    Mirrors ``scheduler.next_ready``'s readiness rule (NNFI: an ejected upstream
+    counts as resolved, an unknown/external dep is treated as already-landed) but
+    returns EVERY spawnable plan so the coordinator fans a whole wave out at once.
+    Gating SPAWN — not just land — keeps a chunk with an un-landed ``blocked_by``
+    upstream from branching a worktree off a base that lacks the upstream's change.
+    """
+    wave: list[_scheduler.Plan] = []
+    for plan in pending:
+        deps = set(plan.blocked_by) & known_slugs
+        if deps - resolved:
+            continue
+        wave.append(plan)
+    return wave
+
+
+def _run_batch(
+    auto: list[_scheduler.Plan],
+    *,
+    holding: str,
+    harness: str | None,
+    model: str | None,
+    sched: _scheduler.Scheduler,
+    known_slugs: set[str],
+) -> tuple[list[dict[str, object]], set[str], set[str]]:
+    """Staged fan-out coordinator: spawn a dep-ready wave, land it, repeat.
+
+    Each iteration fans out only the auto plans whose ``blocked_by`` upstreams have
+    landed (or NNFI-ejected), lands that wave through the dep-aware drain, then
+    re-evaluates the remaining plans against the advanced holding tip. Independent,
+    write-set-disjoint plans still form a single wave (no needless serialization);
+    a dep or shared-touch-path edge (added upstream by ``serialize_conflicts``)
+    defers a plan to a later wave. Returns ``(drain_results, hitl_slugs,
+    transient_slugs)`` accumulated across all waves — the transient set is the seam
+    the recovery engine (S2) consumes; here it is marked ejected.
+    """
+    resolved: set[str] = set()
+
+    def _on_landed(slug: str) -> None:
+        sched.mark_landed(slug)
+        resolved.add(slug)
+
+    def _on_ejected(slug: str) -> list[str]:
+        cascaded = sched.mark_ejected(slug)
+        resolved.add(slug)
+        resolved.update(cascaded)
+        return cascaded
+
+    pending = list(auto)
+    drain_results: list[dict[str, object]] = []
+    hitl_slugs: set[str] = set()
+    transient_slugs: set[str] = set()
+
+    while pending:
+        wave = _spawn_ready(pending, known_slugs=known_slugs, resolved=resolved)
+        if not wave:
+            # No pending plan's deps are resolved — a dep never landed. The land
+            # queue's own stalled verdict already fired for the landable set; emit
+            # one here so the un-spawnable remainder is visible to the operator.
+            drain_results.append({"slug": None, "status": "stalled", "pending": [p.slug for p in pending]})
+            break
+
+        results = _fan_out_plans(wave, harness=harness, model=model)
+        chunks, hitl, transient = _partition_fanout(results, mark_ejected=_on_ejected)
+        hitl_slugs.update(hitl)
+        # Transient (worker-died) ejects: the recovery engine's seam. Absent a
+        # respawn engine in this slice, mark them ejected so the cascade + non-zero
+        # batch exit are unchanged (S2 replaces this with the recovery pass).
+        for slug in transient:
+            _on_ejected(slug)
+        transient_slugs.update(transient)
+
+        wave_results = _land_queue.drain(
+            chunks,
+            holding=holding,
+            on_landed=_on_landed,
+            on_ejected=_on_ejected,
+            next_ready=sched.next_ready,
+        )
+        drain_results.extend(wave_results)
+        for plan in wave:
+            pending.remove(plan)
+
+    return drain_results, hitl_slugs, transient_slugs
+
+
 def run_orchestrate(
     holding: str,
     plan_paths: list[Path],
@@ -742,6 +831,12 @@ def run_orchestrate(
         if anchored:
             _emit_anchored_chunks(anchored, harness=harness, model=model)
 
+        # Serialize write-set conflicts: two auto plans that declare the same
+        # touch-path get an implied blocked_by edge (nearest earlier conflictor)
+        # so they never fan out concurrently and rebase-collide (the routes.py
+        # failure). Disjoint write-sets are returned unchanged.
+        auto = _scheduler.serialize_conflicts(auto)
+
         # Build Scheduler from ALL plans (anchored + auto) so cross-partition
         # blocked_by edges are tracked.  auto chunks are the only spawn candidates
         # (they never appear in `next_ready` as anchored slugs), so anchored plans
@@ -749,24 +844,19 @@ def run_orchestrate(
         # mark_ejected then cascades across the full plan graph, including HITL
         # downstream — fixing the silent cascade miss when an auto upstream dies.
         sched = _scheduler.Scheduler(anchored + auto)
+        known_slugs = {p.slug for p in (anchored + auto)}
 
-        results = _fan_out_plans(auto, harness=harness, model=model)
-        chunks, hitl, transient = _partition_fanout(results, mark_ejected=sched.mark_ejected)
-        hitl_slugs.update(hitl)
-        # Transient (worker-died) ejects are the recovery engine's seam: partition
-        # returns them rather than marking them. Absent a respawn engine in this
-        # invocation, mark them ejected here so the cascade + non-zero batch exit are
-        # unchanged from before the seam existed.
-        for slug in transient:
-            sched.mark_ejected(slug)
-
-        drain_results = _land_queue.drain(
-            chunks,
+        # Staged fan-out: spawn is dep-gated on landing, not fired all-at-once. A
+        # chunk whose blocked_by upstream has not landed waits for a later wave.
+        drain_results, hitl, _transient = _run_batch(
+            auto,
             holding=holding,
-            on_landed=sched.mark_landed,
-            on_ejected=sched.mark_ejected,
-            next_ready=sched.next_ready,
+            harness=harness,
+            model=model,
+            sched=sched,
+            known_slugs=known_slugs,
         )
+        hitl_slugs.update(hitl)
         stalled = [r for r in drain_results if r.get("status") == "stalled"]
         if stalled:
             pending = stalled[0].get("pending", [])

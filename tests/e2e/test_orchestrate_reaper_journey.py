@@ -133,11 +133,17 @@ def test_run_orchestrate_failing_batch_reports_stall_cascade_and_ejects(monkeypa
     orch = load_module("orchestrate")
     scheduler = load_module("scheduler")
 
+    # A realistic cascade: `core` is genuinely auto (fanned out), and `ui` is
+    # anchored via its OWN upstream HITL (`gate`), not by being downstream of
+    # core — an auto chunk with a HITL *downstream* would itself be anchored by
+    # the partition rule, so it would never fan out. When core's chunk fails,
+    # mark_ejected cascades to the anchored ui (which also blocks on core).
+    gate = scheduler.Plan(slug="gate", class_="HITL", blocked_by=[], path=tmp_path / "gate.md")
     core = scheduler.Plan(slug="core", class_="AFK", blocked_by=[], path=tmp_path / "core.md")
-    ui = scheduler.Plan(slug="ui", class_="HITL", blocked_by=["core"], path=tmp_path / "ui.md")
+    ui = scheduler.Plan(slug="ui", class_="AFK", blocked_by=["core", "gate"], path=tmp_path / "ui.md")
 
     monkeypatch.setattr(orch, "ensure_session", lambda role, slug: "sess-x")
-    monkeypatch.setattr(orch, "_load_plans", lambda paths: [core, ui])
+    monkeypatch.setattr(orch, "_load_plans", lambda paths: [gate, core, ui])
     monkeypatch.setattr(orch, "_prune_stale_containers", lambda: None)
     monkeypatch.setattr(orch, "_prune_stale_worktrees", lambda *, preserve=None: None)
     monkeypatch.setattr(orch, "_spawn_batch_doctor", lambda: None)
