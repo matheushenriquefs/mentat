@@ -338,5 +338,73 @@ def test_spawn_batch_doctor_captures_to_session_dir(monkeypatch, tmp_path):
     assert captured["stdout_named"] and captured["stdout_named"].endswith("doctor.out")
 
 
+def test_spawn_batch_doctor_without_session_uses_devnull(monkeypatch, tmp_path):
+    """No MENTAT_SESSION → the doctor runs unscoped, cmd carries no session id, and
+    output goes to DEVNULL rather than a session dir (orchestrate.py 707->709,
+    710->716, 716)."""
+    orch = _load("orchestrate")
+    monkeypatch.delenv("MENTAT_SESSION", raising=False)
+    captured = {}
+
+    class _P:
+        pass
+
+    def fake_popen(cmd, *, stdout=None, stderr=None):
+        captured["cmd"] = cmd
+        captured["stdout"] = stdout
+        return _P()
+
+    monkeypatch.setattr(orch.subprocess, "Popen", fake_popen)
+    orch._spawn_batch_doctor()
+
+    assert captured["cmd"][-1] == "doctor", "no session id appended when unscoped"
+    assert captured["stdout"] is orch.subprocess.DEVNULL
+
+
+def test_run_recovery_retry_without_success_not_marked_recovered(monkeypatch, tmp_path):
+    """A retry whose respawn lands nothing (all ejected) is neither recovered nor
+    dead-lettered — the success scan finds no landing (orchestrate.py 1000->995)."""
+    orch = _load("orchestrate")
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path)
+    monkeypatch.setattr(orch, "_teardown_ejected", lambda s: None)
+    monkeypatch.setattr(orch, "_recovery_context", lambda p, a, c, *, holding: {"slug": p.slug, "worktree": "w"})
+    monkeypatch.setattr(orch._recover, "decide", lambda ctx: {"action": "retry", "rationale": "env"})
+    monkeypatch.setattr(
+        orch, "_recovery_respawn", lambda p, a, **k: [{"slug": p.slug, "status": "eject", "reason": "gate-failed"}]
+    )
+    monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
+    plan = _plan(orch, "core")
+
+    ok, dead = orch._run_recovery(
+        {"core"}, plans_by_slug={"core": plan}, holding="hold", session_id="s1", harness=None, model=None
+    )
+
+    assert ok == set() and dead == set()
+
+
+def test_spawn_implement_in_worktree_omits_harness_and_model(monkeypatch, tmp_path):
+    """No harness/model → neither flag is appended to the implement argv
+    (orchestrate.py 886->888, 888->890)."""
+    orch = _load("orchestrate")
+    captured = {}
+
+    class _P:
+        def wait(self):
+            return 0
+
+    def fake_popen(cmd, *, cwd=None, env=None, start_new_session=None):
+        captured["cmd"] = cmd
+        return _P()
+
+    monkeypatch.setattr(orch.subprocess, "Popen", fake_popen)
+    rc = orch._spawn_implement_in_worktree(Path("/tmp/core.md"), tmp_path, harness=None, model=None)
+
+    assert rc == 0
+    assert "--harness" not in captured["cmd"]
+    assert "--model" not in captured["cmd"]
+
+
 def _plan_at(orch, slug, path):
     return orch._scheduler.Plan(slug=slug, class_="AFK", blocked_by=[], path=path)

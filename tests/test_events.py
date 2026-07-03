@@ -127,6 +127,25 @@ def test_non_terminal_emit_failure_is_best_effort(capsys):
     assert "failed" in captured.err
 
 
+def test_spawned_payload_omits_recovery_fields_by_default():
+    events = _import_events()
+    payload = events.spawned_payload("slug", "plan.md", harness="claude-code", worktree="/wt")
+    assert payload == {"slug": "slug", "plan": "plan.md", "harness": "claude-code", "worktree": "/wt"}
+    assert "trigger" not in payload
+    assert "attempt" not in payload
+
+
+def test_spawned_payload_carries_recovery_trigger_and_attempt():
+    """A recovery respawn stamps trigger + 1-based attempt so the outcome
+    attributes to a recovery pass (events.py:131,133 true branches)."""
+    events = _import_events()
+    payload = events.spawned_payload(
+        "slug", "plan.md", harness="claude-code", worktree="/wt", trigger="recovery", attempt=2
+    )
+    assert payload["trigger"] == "recovery"
+    assert payload["attempt"] == 2
+
+
 def test_emit_is_stdlib_only():
     src = (Path(__file__).resolve().parents[1] / ".agents/lib/events.py").read_text()
     tree = ast.parse(src)

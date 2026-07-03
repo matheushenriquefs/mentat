@@ -457,6 +457,23 @@ def test_gc_preserved_keeps_recent_dirty_worktree(tmp_path):
     assert wt.exists(), "a recent preserved worktree must survive the GC"
 
 
+def test_gc_preserved_not_counted_when_remove_fails(tmp_path, monkeypatch):
+    """An old worktree whose removal fails is not counted — the loop continues
+    past it rather than incrementing (worktrees.py branch 118->115)."""
+    from lib import worktrees
+
+    wt_root = tmp_path / ".mentat" / "worktrees"
+    wt = _make_wt(wt_root, "mentat-ejected-stuck", age_secs=8 * 24 * 3600)
+    (wt / "dirty.txt").write_text("un-landed work\n")
+    os.utime(wt, (_time.time() - 8 * 24 * 3600, _time.time() - 8 * 24 * 3600))
+
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", ""))
+    monkeypatch.setattr(shutil, "rmtree", lambda *a, **k: None)  # dir stays → _remove returns False
+
+    assert worktrees.gc_preserved(wt_root, gc_seconds=7 * 24 * 3600) == 0
+    assert wt.exists()
+
+
 def test_gc_preserved_spares_active_slug(tmp_path):
     """An old worktree whose slug is active is never GC'd."""
     from lib import worktrees

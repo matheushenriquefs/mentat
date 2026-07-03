@@ -435,6 +435,36 @@ def test_recover_storm_cap_escalates_remaining(recover, monkeypatch, tmp_path):
     assert notes  # operator was notified
 
 
+def test_recover_storm_escalation_skips_non_afk_remaining(recover, monkeypatch, tmp_path):
+    """The batch-wide give-up loop dead-letters only AFK remainders — a HITL slug
+    in the tail is left for the operator, not dead-lettered (recover.py 338->336)."""
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    calls: dict = {}
+    prim = _wire(recover, monkeypatch, calls=calls)
+    notes: list = []
+    plans = {s: _Plan(s) for s in ("a", "b", "c")}
+    storm = recover.StormGuard(1, 60.0, clock=lambda: 0.0)  # one respawn, then breach
+    out = recover.recover(
+        {"a", "b", "c"},
+        plans_by_slug=plans,
+        holding="hold",
+        session_id="s1",
+        harness=None,
+        is_afk=lambda s: s != "c",  # c is HITL — never auto-dead-lettered
+        context_builder=_ctx_builder,
+        decide=lambda ctx: {"action": "retry"},
+        storm_guard=storm,
+        notify=notes.append,
+        cap=5,
+        **prim,
+    )
+    assert calls.get("respawn") == [("a", 1)]
+    escalated = {o["slug"] for o in out if o["recovery"] == "dead-lettered"}
+    assert escalated == {"b"}, "only the AFK remainder is dead-lettered; c is skipped"
+    assert not any(o["slug"] == "c" and o["recovery"] == "dead-lettered" for o in out)
+
+
 def test_recover_budget_exhausted_halts(recover, monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "repo")

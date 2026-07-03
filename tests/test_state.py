@@ -346,6 +346,54 @@ def test_rebuild_skips_empty_and_unparseable_dirs(monkeypatch, tmp_path):
     assert _rows(db) == []
 
 
+def test_list_sessions_swallows_sqlite_error(monkeypatch, tmp_path):
+    """Best-effort read: an unopenable db (path is a directory) yields [] rather
+    than raising — the NDJSON log is the truth (state.py:101-102)."""
+    as_dir = tmp_path / "state.db"
+    as_dir.mkdir()
+    monkeypatch.setenv("MENTAT_STATE_DB", str(as_dir))
+
+    assert state.list_sessions("r", now=1.0) == []
+
+
+def test_rebuild_tolerates_malformed_rows_and_nondir_entries(monkeypatch, tmp_path):
+    """_reduce_session skips: non-dict JSON, dicts missing ts/event, unparseable
+    ts, and rows without a session key — while still projecting a session that has
+    at least one valid row. Out-of-order timestamps leave last_ts at the true max.
+    Non-directory entries under log_root and under a repo dir are skipped
+    (state.py:136, 140-141, 143->145, 147->127, 182, 185)."""
+    db = tmp_path / "state.db"
+    log_root = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+
+    d = log_root / "mentat" / "s1"
+    d.mkdir(parents=True)
+    good = _iso(2026, 7, 1, 11)
+    nosession = _iso(2026, 7, 1, 12)
+    older = _iso(2026, 7, 1, 9)
+    lines = [
+        "123",  # valid JSON but not a dict → skipped
+        json.dumps({"ts": good, "event": "chunk.spawned", "session": "s1"}),
+        json.dumps({"foo": 1}),  # dict missing ts/event → skipped
+        json.dumps({"ts": "not-a-date", "event": "x", "session": "s1"}),  # bad ts → skipped
+        json.dumps({"ts": nosession, "event": "gate.evaluated"}),  # no session key
+        json.dumps({"ts": older, "event": "chunk.spawned", "session": "s1"}),  # older → last_ts holds
+    ]
+    (d / "agent-a.jsonl").write_text("\n".join(lines) + "\n")
+
+    # Non-directory entries at both levels must be skipped, not reduced.
+    (log_root / "loose-file.txt").write_text("x")
+    (log_root / "mentat" / "loose.txt").write_text("x")
+
+    state.rebuild(log_root)
+
+    rows = {r[0]: r for r in _rows(db)}
+    assert set(rows) == {"s1"}
+    assert rows["s1"][4] == "running"  # latest event = gate.evaluated
+    assert rows["s1"][5] == _epoch(older)  # earliest valid ts
+    assert rows["s1"][6] == _epoch(nosession)  # latest valid ts (out-of-order tail ignored)
+
+
 def test_rebuild_missing_log_root_yields_empty_db(monkeypatch, tmp_path):
     db = tmp_path / "state.db"
     monkeypatch.setenv("MENTAT_STATE_DB", str(db))

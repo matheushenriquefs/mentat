@@ -241,8 +241,9 @@ def _parse_decision(raw: str) -> dict[str, str]:
         obj = json.loads(_extract_json(raw))
     except (json.JSONDecodeError, ValueError):
         return {"action": ABANDON, "rationale": "unparseable recovery decision"}
-    if not isinstance(obj, dict):
-        return {"action": ABANDON, "rationale": "recovery decision was not an object"}
+    # _extract_json only ever returns a ``{...}``-bounded slice, so a successful
+    # json.loads always yields a dict — a JSON array / scalar reply fails to parse
+    # above and degrades to abandon there.
     action = obj.get("action")
     if action not in _ACTIONS:
         return {"action": ABANDON, "rationale": f"unrecognized recovery action {action!r}"}

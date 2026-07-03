@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -112,6 +113,42 @@ def test_fan_out_track_suggestion_is_bin_form(tmp_path):
     assert "python3" not in output, f"bin form must not contain python3: {output!r}"
     assert "mentat-session track" in output, f"must use bin form; got: {output!r}"
     assert "sess-binform" in output, f"session id missing from track output: {output!r}"
+
+
+# ── spawn_async: asyncio supervisor spawn path ──────────────────────────────
+
+
+def test_spawn_async_emits_prints_and_returns_process(tmp_path, monkeypatch):
+    """spawn_async builds the child via _build_spawn_cmd, launches it with
+    asyncio.create_subprocess_exec (start_new_session=True), emits chunk.spawned,
+    prints the track command, and returns (session_id, Process) (fan_out.py:123-131)."""
+    fan_out = load_module("fan_out")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="async-plan", class_="AFK", blocked_by=[], path=tmp_path / "async-plan.md")
+
+    fake_proc = object()
+    captured: dict[str, object] = {}
+
+    async def fake_exec(*cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["new_session"] = kwargs.get("start_new_session")
+        return fake_proc
+
+    monkeypatch.setattr(fan_out, "_build_spawn_cmd", lambda p, **kw: ("sess-async", ["python3", "impl"], {}))
+    monkeypatch.setattr(fan_out.asyncio, "create_subprocess_exec", fake_exec)
+
+    with patch.object(fan_out, "_emit_event") as mock_emit:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            sid, proc = asyncio.run(fan_out.spawn_async(plan))
+        output = buf.getvalue()
+
+    assert sid == "sess-async"
+    assert proc is fake_proc
+    assert captured["new_session"] is True
+    assert any("chunk.spawned" in c.args[0] for c in mock_emit.call_args_list)
+    assert "mentat-session track sess-async" in output
+    assert "sess-async" in output
 
 
 # ── _spawn_worktree_subprocess: harness/model/seed argv + env wiring ─────────

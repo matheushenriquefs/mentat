@@ -171,6 +171,32 @@ def test_land_concurrency_cap_clamps_to_half_cores(monkeypatch):
     assert lq._concurrency_cap() == 2
 
 
+def test_land_concurrency_cap_non_int_config_falls_back_to_default(monkeypatch):
+    """A non-numeric `concurrency` value falls back to the default of 3 rather
+    than raising (land_queue.py:69-70)."""
+    lq = load_module("land_queue")
+    monkeypatch.setattr(lq._utils, "read_config", lambda: {"concurrency": "lots"})
+    monkeypatch.setattr(lq.os, "cpu_count", lambda: 16)
+    assert lq._concurrency_cap() == 3  # want=3 default, min(3, 8)
+
+
+def test_speculative_gate_rebase_error_reports_not_passed(monkeypatch):
+    """A rebase conflict in speculation returns (chunk, False) without running
+    gates — the caller abandons speculation (land_queue.py:166)."""
+    lq = load_module("land_queue")
+    chunk = make_chunk("z")
+    gates_called: list[str] = []
+
+    monkeypatch.setattr(lq, "_rebase_chunk", lambda c, h: (None, "rebase conflict"))
+    monkeypatch.setattr(lq, "_run_gates", lambda c: gates_called.append(c.slug) or ("pass", ""))
+
+    result_chunk, passed = lq._speculative_gate(chunk, "main")
+
+    assert result_chunk is chunk
+    assert passed is False
+    assert gates_called == [], "gates must not run when rebase already failed"
+
+
 # ── speculative ON: mid-batch failure → serial fallback with correct ejects ───
 
 

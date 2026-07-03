@@ -54,3 +54,20 @@ def test_next_ready_skips_ejected_candidate() -> None:
     sched = scheduler.Scheduler([a, b])
     sched.mark_ejected("a")
     assert sched.next_ready(["a", "b"]) == "b"
+
+
+def test_has_ejections_reflects_eject_state() -> None:
+    """has_ejections is False on a fresh scheduler, True once any slug ejects
+    (scheduler.py:225)."""
+    a, b = _plan("a"), _plan("b")
+    sched = scheduler.Scheduler([a, b])
+    assert sched.has_ejections() is False
+    sched.mark_ejected("a")
+    assert sched.has_ejections() is True
+
+
+def test_is_anchored_false_for_unknown_slug() -> None:
+    """A slug with no loaded plan is not anchored — the cascade can't target a
+    plan the scheduler doesn't know (scheduler.py:220)."""
+    sched = scheduler.Scheduler([_plan("a")])
+    assert sched._is_anchored("ghost") is False

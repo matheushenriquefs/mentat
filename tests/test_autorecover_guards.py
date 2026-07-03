@@ -530,6 +530,114 @@ def test_install_signal_handlers_swallows_unsupported():
     orch._install_signal_handlers(_BadLoop(), lambda name: None)  # must not raise
 
 
+# ── config fallbacks: malformed values degrade to defaults ────────────────────
+
+
+def test_stall_timeout_bad_env_falls_through_to_config(monkeypatch):
+    """A non-integer MENTAT_STALL_TIMEOUT is ignored; config wins (orchestrate.py 208-209)."""
+    orch = load_module("orchestrate")
+    monkeypatch.setenv("MENTAT_STALL_TIMEOUT", "not-an-int")
+    monkeypatch.setattr(orch._utils, "read_config", lambda: {"stall_timeout": 42})
+    assert orch._stall_timeout() == 42
+
+
+def test_stall_timeout_bad_config_falls_back_to_300(monkeypatch):
+    """A non-numeric config stall_timeout degrades to the 300 default (orchestrate.py 213-214)."""
+    orch = load_module("orchestrate")
+    monkeypatch.delenv("MENTAT_STALL_TIMEOUT", raising=False)
+    monkeypatch.setattr(orch._utils, "read_config", lambda: {"stall_timeout": "soon"})
+    assert orch._stall_timeout() == 300
+
+
+def test_breaker_threshold_bad_config_falls_back_to_3(monkeypatch):
+    """A non-numeric breaker_threshold degrades to 3 (orchestrate.py 286-287)."""
+    orch = load_module("orchestrate")
+    monkeypatch.setattr(orch._utils, "read_config", lambda: {"breaker_threshold": "many"})
+    assert orch._breaker_threshold() == 3
+
+
+def test_breaker_cooldown_bad_config_falls_back_to_30(monkeypatch):
+    """A non-numeric breaker_cooldown degrades to 30.0 (orchestrate.py 295-296)."""
+    orch = load_module("orchestrate")
+    monkeypatch.setattr(orch._utils, "read_config", lambda: {"breaker_cooldown": "later"})
+    assert orch._breaker_cooldown() == 30.0
+
+
+# ── _kill_proc_group: getpgid failure fallback ────────────────────────────────
+
+
+def test_kill_proc_group_falls_back_to_kill_when_getpgid_fails(monkeypatch):
+    """A proc whose pid has no resolvable process group (already reaped) falls back
+    to proc.kill() instead of raising (orchestrate.py 340-343)."""
+    orch = load_module("orchestrate")
+    killed: list[bool] = []
+
+    class _Proc:
+        pid = 4242
+
+        def kill(self) -> None:
+            killed.append(True)
+
+    def _boom(_pid):
+        raise ProcessLookupError()
+
+    monkeypatch.setattr(orch.os, "getpgid", _boom)
+    orch._kill_proc_group(_Proc())
+    assert killed == [True]
+
+
+# ── supervisor: low-headroom warning + signal teardown harvest ────────────────
+
+
+def test_supervisor_warns_when_load_high_but_still_spawns(monkeypatch, tmp_path, capsys):
+    """High host load is advisory — the chunk still spawns, with a warning
+    (orchestrate.py branch 489->490, line 490)."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="hl", class_="AFK", blocked_by=[], path=tmp_path / "hl.md")
+
+    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 5.0)
+    monkeypatch.setattr(orch, "_stall_timeout", lambda: 0)
+    monkeypatch.setattr(orch, "_load_headroom_ok", lambda: False)
+
+    launches: list[str] = []
+
+    async def spy_spawn(plan, *, harness=None, model=None, seed_summary=None):
+        launches.append(plan.slug)
+        return (f"sess-{plan.slug}", FakeAsyncProc(rc=0))
+
+    monkeypatch.setattr(orch._fan_out, "spawn_async", spy_spawn)
+
+    results = orch._fan_out_plans([plan], harness=None, model=None)
+
+    assert launches == ["hl"], "high load is advisory — chunk still spawns"
+    assert "load high" in capsys.readouterr().err.lower()
+    assert results[0][1] == 0
+
+
+def test_supervisor_signal_handler_tears_down_and_cancels(monkeypatch, tmp_path):
+    """The installed signal handler group-tears-down the live fleet and cancels
+    every task; a cancelled task is harvested as a dead worker via the
+    BaseException branch (orchestrate.py 519-526, 535)."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="sig", class_="AFK", blocked_by=[], path=tmp_path / "sig.md")
+
+    teardowns: list = []
+    monkeypatch.setattr(orch, "_group_teardown", lambda live: teardowns.append(dict(live)))
+    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
+    # Fire the handler synchronously at install time — before any task has run — so
+    # every task is cancelled and harvested through the BaseException branch.
+    monkeypatch.setattr(orch, "_install_signal_handlers", lambda loop, cb: cb("SIGTERM"))
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(rc=0)]))
+
+    results = orch._fan_out_plans([plan], harness=None, model=None)
+
+    assert teardowns, "_group_teardown must run on signal"
+    assert results[0][1] == -1, "a cancelled task is harvested as a dead worker (rc=-1)"
+
+
 # ── S4: full-jitter backoff helper ────────────────────────────────────────────
 
 
