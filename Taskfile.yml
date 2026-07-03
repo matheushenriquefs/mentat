@@ -22,7 +22,18 @@ tasks:
       # real-harness spawn (implement veto/checkpoint), worktree plumbing and the
       # gate toolchain cannot run inside the devcontainer, so e2e caps well below
       # the unit gate. Floor guards journey regression; the unit gate guards lines.
-      - python tasks/coverage.py --source=.agents --fail-under=90 -- -m e2e
+      #
+      # The ADR-0015 autorecover engine added a large structurally-exempt surface:
+      # the asyncio fan-out supervisor (real subprocess spawn + killpg/signal
+      # teardown + per-chunk asyncio.timeout), recovery respawn/reslice (each shells
+      # out to mentat-implement in a preserved worktree), and container-down (rc69)
+      # handling — none of which run under the devcontainer's single-process e2e
+      # harness. Their pure logic (spawn-gating, write-set serialize, scheduler /
+      # land-queue paths, the sqlite projection, storm/budget/backoff math, the
+      # decision parser, the track renderers) is journeyed; the residual async /
+      # respawn / DinD shell is unit-tested (the 100% unit gate) but e2e-exempt, so
+      # the floor lands at 91 (achieved 91.5), not the 100 the unit gate holds.
+      - python tasks/coverage.py --source=.agents --fail-under=91 -- -m e2e
 
   lint:
     desc: Lint with ruff

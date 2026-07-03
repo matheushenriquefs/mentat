@@ -35,8 +35,10 @@ def test_mint_session_is_opaque_uuid():
 
     sid = session.mint_session("implement", "my-plan", pid=123)
     assert re.fullmatch(r"[0-9a-f]{32}", sid), f"expected uuid, got {sid!r}"
-    # role/slug/pid are fields, never encoded into the id.
-    assert "implement" not in sid and "my-plan" not in sid and "123" not in sid
+    # role/slug are fields, never encoded into the id. (pid is decimal — all its
+    # digits are valid hex, so a substring check against a random uuid would flake;
+    # the fullmatch above already proves the id is opaque.)
+    assert "implement" not in sid and "my-plan" not in sid
 
 
 def test_mint_session_is_unique_per_call():
