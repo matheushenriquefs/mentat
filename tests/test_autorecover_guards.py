@@ -304,6 +304,82 @@ def test_breaker_probe_failure_reopens():
     assert b.state == "open", "failed probe must re-open"
 
 
+def test_breaker_half_open_admits_exactly_one_probe_under_concurrency():
+    """N concurrent tasks calling allow() in the half-open window → exactly one is
+    admitted, the rest short-circuit until the probe resolves. (allow() claims the
+    single-probe token synchronously, so no await between allow and record can let a
+    second probe slip through.)"""
+    import asyncio
+
+    orch = load_module("orchestrate")
+    b = orch._CircuitBreaker(threshold=1, cooldown_s=0.0)
+    b.record_failure()  # open; cooldown 0 → first allow half-opens
+    admits: list = []
+
+    async def probe():
+        ok = b.allow()
+        admits.append(ok)
+        await asyncio.sleep(0)  # yield between allow and (never) record
+
+    async def main():
+        await asyncio.gather(*[probe() for _ in range(5)])
+
+    asyncio.run(main())
+    assert sum(1 for a in admits if a) == 1, f"exactly one probe may be admitted: {admits}"
+
+
+def test_breaker_abandoned_probe_releases_and_recools():
+    """A probe that ends WITHOUT a backend verdict (our own deadline killed it) must
+    release the single-probe token and return to cooling — not wedge the breaker
+    half-open forever, short-circuiting the whole remaining fleet."""
+    orch = load_module("orchestrate")
+    clk = [0.0]
+    b = orch._CircuitBreaker(threshold=1, cooldown_s=5.0, clock=lambda: clk[0])
+    b.record_failure()  # open at t=0
+    clk[0] = 5.0
+    assert b.allow() is True, "cooldown elapsed → one probe"
+    assert b.allow() is False, "sibling short-circuits while the probe is in flight"
+    b.record_abandoned()  # probe killed by our deadline — no backend verdict
+    assert b._probe_inflight is False, "abandon must release the probe token"
+    assert b.allow() is False, "still cooling immediately after abandon"
+    clk[0] = 10.0
+    assert b.allow() is True, "an abandoned probe must not wedge the breaker"
+
+
+def test_breaker_abandoned_noop_when_closed():
+    """record_abandoned on a healthy (closed) breaker is a no-op — a non-probe kill
+    doesn't perturb a backend that's up."""
+    orch = load_module("orchestrate")
+    b = orch._CircuitBreaker(threshold=3, cooldown_s=1000.0)
+    b.record_abandoned()
+    assert b.state == "closed" and b.allow() is True
+
+
+def test_supervisor_releases_probe_on_kill(monkeypatch, tmp_path):
+    """A half-open probe chunk killed by our own deadline (rc<0) must release the
+    breaker's probe token via record_abandoned — otherwise the token wedges and every
+    queued chunk short-circuits 'breaker-open' forever."""
+    orch = load_module("orchestrate")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="p", class_="AFK", blocked_by=[], path=tmp_path / "p.md")
+
+    clk = [100.0]
+    b = orch._CircuitBreaker(threshold=1, cooldown_s=0.0, clock=lambda: clk[0])
+    b.record_failure()  # open; cooldown 0 → the run's allow() half-opens (probe)
+    monkeypatch.setattr(orch, "_make_breaker", lambda: b)
+    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 30.0)  # wall far away
+    monkeypatch.setattr(orch, "_stall_timeout", lambda: 0.05)  # tiny stall window
+    monkeypatch.setattr(orch, "_event_age", lambda sid: 999.0)  # force a stall kill
+    monkeypatch.setattr(orch._devcontainer, "down", lambda slug: True)
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)]))
+
+    orch._fan_out_plans([plan], harness=None, model=None)
+
+    assert b._probe_inflight is False, "a killed probe must release the half-open token"
+    assert b.allow() is True, "breaker must re-admit a probe, not stay wedged"
+
+
 def test_supervisor_short_circuits_when_breaker_open(monkeypatch, tmp_path):
     """An open breaker → the chunk is NOT launched (spawn_async never called) and
     is ejected as a retryable 'breaker-open' transient."""

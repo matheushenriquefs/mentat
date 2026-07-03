@@ -265,6 +265,18 @@ class _CircuitBreaker:
             self.state = "open"
             self._opened_at = self._clock()
 
+    def record_abandoned(self) -> None:
+        """Release a probe that ended WITHOUT a backend verdict — our own deadline
+        killed it, not the backend. We learned nothing, so don't score it as success
+        or failure, but DO free the single-probe token and return to cooling: else a
+        killed probe leaves ``_probe_inflight`` set forever, wedging the breaker
+        half-open so every queued chunk short-circuits 'breaker-open'. A no-op unless
+        half-open, so a non-probe kill never perturbs a healthy backend."""
+        if self.state == "half_open":
+            self._probe_inflight = False
+            self.state = "open"
+            self._opened_at = self._clock()
+
 
 def _breaker_threshold() -> int:
     """Consecutive backend-failure count that trips the breaker. Default 3."""
@@ -488,12 +500,15 @@ async def _supervise_fanout(
                 live.pop(plan.slug, None)
             # rc69 == the shared backend failed the spawn → a breaker failure. Any
             # verdict-producing exit (rc>=0, != 69) proves the backend is up → success.
-            # A supervisor kill (rc<0/None) is our own deadline, not the backend — leave
-            # the breaker untouched.
+            # A supervisor kill (rc<0/None) is our own deadline, not a backend verdict —
+            # don't score it, but DO release a half-open probe token (record_abandoned is
+            # a no-op unless half-open) so a killed probe can't wedge the breaker.
             if rc == EX_UNAVAILABLE:
                 breaker.record_failure()
             elif rc is not None and rc >= 0:
                 breaker.record_success()
+            else:
+                breaker.record_abandoned()
             summary = _read_chunk_seed(session_id)
             if summary:
                 shared["seed"] = summary
