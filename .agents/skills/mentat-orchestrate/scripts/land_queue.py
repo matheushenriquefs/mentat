@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -52,6 +53,23 @@ def _teardown_container(slug: str) -> None:
 
     ok = devcontainer.down(slug)
     _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
+
+
+def _concurrency_cap() -> int:
+    """Effective max parallel gate workers: config ``concurrency`` (default 3)
+    clamped to machine headroom ``max(1, cpu_count // 2)`` (ADR-0004).
+
+    Mirrors the async fan-out's cap so the speculative gate honors the same
+    load-headroom guard instead of spawning one thread per chunk unbounded — a
+    large independent batch would otherwise oversubscribe cores and starve the
+    very builds the gate is running."""
+    raw = _utils.read_config().get("concurrency", 3)
+    try:
+        want = max(1, int(raw))
+    except (TypeError, ValueError):
+        want = 3
+    cores = os.cpu_count() or 1
+    return min(want, max(1, cores // 2))
 
 
 def _speculative_land_enabled() -> bool:
@@ -165,7 +183,8 @@ def _drain_speculative(chunks: list[Chunk], *, holding: str) -> list[dict[str, o
     with their real reasons. Serial stays the safe path; this only cuts the O(N)
     gate latency for large independent batches.
     """
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(chunks)) as ex:
+    workers = max(1, min(len(chunks), _concurrency_cap()))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
         futures = [ex.submit(_speculative_gate, chunk, holding) for chunk in chunks]
         gated = [f.result() for f in futures]
 

@@ -87,6 +87,7 @@ def test_speculative_gates_run_in_parallel_and_all_land():
         return ("pass", "")
 
     with (
+        patch.object(lq, "_concurrency_cap", return_value=3),  # cap >= batch → true parallel
         patch.object(lq, "_rebase_chunk", return_value=("sha", None)),
         patch.object(lq, "_run_gates", side_effect=fake_gate),
         patch.object(lq, "_ff_merge", return_value=None),
@@ -115,6 +116,59 @@ def test_speculative_emits_landed_for_each_chunk():
 
     landed = [c.args[1]["slug"] for c in mock_emit.call_args_list if c.args[0] == "chunk.landed"]
     assert sorted(landed) == ["a", "b"]
+
+
+# ── speculative gate threadpool is bounded by the concurrency cap ──────────────
+
+
+def _run_speculative_capturing_workers(lq, chunks):
+    """Drain a batch speculatively, returning the max_workers the gate threadpool
+    was created with."""
+    captured: dict = {}
+    real_tpe = lq.concurrent.futures.ThreadPoolExecutor
+
+    def spy_tpe(*a, max_workers=None, **k):
+        captured["max_workers"] = max_workers
+        return real_tpe(*a, max_workers=max_workers, **k)
+
+    with (
+        patch.object(lq.concurrent.futures, "ThreadPoolExecutor", spy_tpe),
+        patch.object(lq, "_rebase_chunk", return_value=("sha", None)),
+        patch.object(lq, "_run_gates", return_value=("pass", "")),
+        patch.object(lq, "_ff_merge", return_value=None),
+        patch.object(lq, "_teardown_container", lambda _s: None),
+        patch.object(lq, "_emit_event", lambda *a, **k: None),
+    ):
+        lq.drain(chunks, holding="main", speculative=True)
+    return captured["max_workers"]
+
+
+def test_speculative_threadpool_bounded_by_cap():
+    """A batch larger than the cap must not spawn one thread per chunk — the gate
+    threadpool is bounded by the effective concurrency cap (C < N → C workers)."""
+    lq = load_module("land_queue")
+    chunks = [make_chunk(f"c{i}") for i in range(8)]
+    with patch.object(lq, "_concurrency_cap", return_value=3):
+        workers = _run_speculative_capturing_workers(lq, chunks)
+    assert workers == 3, f"max_workers must be bounded by cap (3), got {workers}"
+
+
+def test_speculative_threadpool_never_exceeds_chunk_count():
+    """When the cap exceeds the batch size, the pool is sized to the batch — never
+    over-allocated idle threads."""
+    lq = load_module("land_queue")
+    chunks = [make_chunk("a"), make_chunk("b")]
+    with patch.object(lq, "_concurrency_cap", return_value=16):
+        workers = _run_speculative_capturing_workers(lq, chunks)
+    assert workers == 2, f"max_workers must not exceed chunk count (2), got {workers}"
+
+
+def test_land_concurrency_cap_clamps_to_half_cores(monkeypatch):
+    """The land-queue cap mirrors the fan-out clamp: config 8 on a 4-core box → 2."""
+    lq = load_module("land_queue")
+    monkeypatch.setattr(lq._utils, "read_config", lambda: {"concurrency": 8})
+    monkeypatch.setattr(lq.os, "cpu_count", lambda: 4)
+    assert lq._concurrency_cap() == 2
 
 
 # ── speculative ON: mid-batch failure → serial fallback with correct ejects ───
