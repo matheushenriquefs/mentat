@@ -343,8 +343,6 @@ def recover(
 
         if backoff is not None:
             backoff(i)
-        storm.record()
-        bud.spend()
         teardown(slug)
         decision = decider(context_builder(plan, attempt, cap))
         action = decision.get("action", ABANDON)
@@ -354,6 +352,13 @@ def recover(
             notifier(f"{slug}: recovery agent chose abandon — handed to HITL")
             outcomes.append({"slug": slug, "recovery": ABANDON, "rationale": decision.get("rationale", "")})
             continue
+
+        # Charge the storm-intensity + budget rungs only for an ACTUAL respawn
+        # (retry/reslice). An abandon short-circuits above without charging, so a
+        # decision that never respawns can't prematurely trip the batch-wide give-up
+        # rungs and dead-letter still-recoverable siblings.
+        storm.record()
+        bud.spend()
 
         # Payload-only respawn audit (ADR-0007): the outcome rides the existing
         # chunk.landed / chunk.ejected from the re-drained chunk.

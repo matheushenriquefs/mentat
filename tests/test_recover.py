@@ -461,6 +461,58 @@ def test_recover_budget_exhausted_halts(recover, monkeypatch, tmp_path):
     assert any("budget" in n for n in notes)
 
 
+def test_recover_abandon_does_not_charge_storm_or_budget(recover, monkeypatch, tmp_path):
+    """An abandon (no respawn happens) must not charge the storm counter or budget —
+    else it prematurely trips the batch-wide give-up rungs and dead-letters still-
+    recoverable siblings."""
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    calls: dict = {}
+    prim = _wire(recover, monkeypatch, calls=calls)
+    storm = recover.StormGuard(5, 60.0, clock=lambda: 0.0)
+    bud = recover.Budget(10.0)
+    recover.recover(
+        {"a"},
+        plans_by_slug={"a": _Plan("a")},
+        holding="hold",
+        session_id="s1",
+        harness=None,
+        is_afk=lambda s: True,
+        context_builder=_ctx_builder,
+        decide=lambda ctx: {"action": "abandon", "rationale": "no"},
+        storm_guard=storm,
+        budget=bud,
+        **prim,
+    )
+    assert storm._stamps == [], "abandon must not record a storm respawn"
+    assert bud.spent == 0.0, "abandon must not spend budget"
+
+
+def test_recover_retry_charges_storm_and_budget_once(recover, monkeypatch, tmp_path):
+    """A retry (an actual respawn) charges the storm counter and budget exactly once."""
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    calls: dict = {}
+    prim = _wire(recover, monkeypatch, calls=calls)
+    storm = recover.StormGuard(5, 60.0, clock=lambda: 0.0)
+    bud = recover.Budget(10.0)
+    recover.recover(
+        {"a"},
+        plans_by_slug={"a": _Plan("a")},
+        holding="hold",
+        session_id="s1",
+        harness=None,
+        is_afk=lambda s: True,
+        context_builder=_ctx_builder,
+        decide=lambda ctx: {"action": "retry"},
+        storm_guard=storm,
+        budget=bud,
+        **prim,
+    )
+    assert len(storm._stamps) == 1, "one respawn → one storm record"
+    assert bud.spent == 1.0, "one respawn → one unit spent"
+
+
 def test_recover_abandon_notifies(recover, monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "repo")
