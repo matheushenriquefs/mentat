@@ -712,17 +712,45 @@ def test_run_session_cmd_noop_when_script_missing(monkeypatch):
     assert not called
 
 
+class _FakeStdout:
+    def __init__(self, tty: bool) -> None:
+        self._tty = tty
+
+    def isatty(self) -> bool:
+        return self._tty
+
+
 def test_auto_doctor_opens_editor_when_set(tmp_path, monkeypatch):
     impl = load_module("implement")
     monkeypatch.setattr(impl, "_run_session_cmd", lambda _sub: None)
     monkeypatch.setenv("EDITOR", "my-editor")
     monkeypatch.setenv("MENTAT_SESSION", "sess-1")
     monkeypatch.setattr(impl, "_session_dir_fn", lambda _sid: tmp_path)
+    monkeypatch.setattr(impl.sys, "stdout", _FakeStdout(True))
     (tmp_path / "diagnosis.md").write_text("diag")
     runs: list = []
     monkeypatch.setattr(impl.subprocess, "run", lambda cmd, **k: runs.append(cmd))
     impl._auto_doctor()
     assert runs and runs[0][0] == "my-editor"
+
+
+def test_auto_doctor_skips_editor_when_not_a_tty(tmp_path, monkeypatch):
+    """Headless/AFK: $EDITOR inherited but stdout is a pipe → the terminal editor
+    must NOT be launched (it would block the child on a non-TTY until its wall kill);
+    the doctor diagnosis is still written."""
+    impl = load_module("implement")
+    doctored: list = []
+    monkeypatch.setattr(impl, "_run_session_cmd", lambda sub: doctored.append(sub))
+    monkeypatch.setenv("EDITOR", "vim")
+    monkeypatch.setenv("MENTAT_SESSION", "sess-1")
+    monkeypatch.setattr(impl, "_session_dir_fn", lambda _sid: tmp_path)
+    monkeypatch.setattr(impl.sys, "stdout", _FakeStdout(False))
+    (tmp_path / "diagnosis.md").write_text("diag")
+    runs: list = []
+    monkeypatch.setattr(impl.subprocess, "run", lambda cmd, **k: runs.append(cmd))
+    impl._auto_doctor()
+    assert runs == [], f"editor must not launch without a TTY: {runs}"
+    assert doctored == ["doctor"], "doctor diagnosis must still run"
 
 
 # ── _is_main_worktree failure modes ──────────────────────────────────────────
@@ -903,6 +931,7 @@ def test_auto_doctor_editor_set_but_no_diagnosis_file(tmp_path, monkeypatch):
     monkeypatch.setenv("EDITOR", "my-editor")
     monkeypatch.setenv("MENTAT_SESSION", "sess-1")
     monkeypatch.setattr(impl, "_session_dir_fn", lambda _sid: tmp_path)  # no diagnosis.md written
+    monkeypatch.setattr(impl.sys, "stdout", _FakeStdout(True))  # TTY, so only absence gates
     runs: list = []
     monkeypatch.setattr(impl.subprocess, "run", lambda *a, **k: runs.append(a))
     impl._auto_doctor()

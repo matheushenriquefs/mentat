@@ -565,6 +565,7 @@ def test_auto_doctor_editor_opens_diagnosis(impl, monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
     monkeypatch.setattr(impl, "_run_session_cmd", lambda sub: None)
+    monkeypatch.setattr(impl.sys, "stdout", type("S", (), {"isatty": lambda self: True})())  # interactive
     diag = impl._session_dir_fn("s") / "diagnosis.md"
     diag.parent.mkdir(parents=True, exist_ok=True)
     diag.write_text("diagnosis\n")

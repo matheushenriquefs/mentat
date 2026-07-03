@@ -221,10 +221,13 @@ def _run_session_cmd(subcmd: str) -> None:
 
 
 def _auto_doctor() -> None:
-    """Spawn mentat-session doctor on death. Honor $EDITOR for the diagnosis if set."""
+    """Spawn mentat-session doctor on death. Open $EDITOR on the diagnosis only when
+    attached to a TTY — a headless/AFK child inherits $EDITOR but has no terminal, so
+    launching a terminal editor (vim) on a pipe blocks the child until its wall-deadline
+    kill. The doctor diagnosis is always written; only the interactive open is gated."""
     _run_session_cmd("doctor")
     editor = os.environ.get("EDITOR")
-    if editor:
+    if editor and sys.stdout.isatty():
         diag = _session_dir_fn(os.environ.get("MENTAT_SESSION", "manual")) / "diagnosis.md"
         if diag.exists():
             subprocess.run([editor, str(diag)], check=False)
