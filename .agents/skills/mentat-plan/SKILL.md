@@ -50,12 +50,27 @@ Slash or `.md` suffix → treated as a path (expanduser + resolve).
 
 ## Tracer-bullet slicing
 
-Each slice cuts through every layer end-to-end and is verifiable alone. Prefer many-thin over few-thick — the slice is the orchestration unit, so a clean vertical cut is why parallel chunks compose instead of colliding.
+Each slice cuts through every layer end-to-end and is verifiable alone. Prefer thin over thick — the slice is the orchestration unit, so a clean vertical cut is why parallel chunks compose instead of colliding — but not below the transaction-cost floor (see **Slice sizing**).
 
 A slice is well-formed when:
 - It can be implemented, tested, and reviewed without partial work from any sibling.
 - Its diff lives in a bounded set of paths.
 - Its gate passes deterministically on its own merits (red test → green).
+
+## Slice sizing — fit the wall, don't over-shard
+
+Each slice runs as one orchestrated chunk under a wall-clock timeout (`chunk_timeout`, default 1800s) that also pays container cold-start + one red→green cycle + the full land gate (coverage per ADR-0014). Size so a slice **finishes inside the wall with headroom** — target roughly half of it. A slice that needs the whole wall times out and ejects (observed: cold-start + one gate ≈ 25 of 30 min).
+
+Do **not** size by predicting duration. Neither model self-estimates nor point estimates (story points / COCOMO) are reliable for agent work — COCOMO's average error is ≈100%, and LLM agents are measurably not budget-aware (they can't forecast or self-throttle to a cost cap). Industry abandoned upfront point-estimation for *size-to-fit* + *historical throughput* (INVEST "Small"; CI timing-based test sharding). Size by the **shape** of the work instead:
+- one behavior / one red→green cycle,
+- a bounded, non-overlapping file-set,
+- no dependence on a sibling's partial work.
+
+There is a floor. Every slice pays a fixed transaction cost — cold-start + a full land/review gate. Shattering work below that floor spends real tokens per slice to remove risk that is already near zero. Batch size is a U-curve — transaction cost falls per unit as a slice grows, timeout/rework risk rises — with a **flat bottom**: a ~10% sizing error costs ~2–3%, so aim for the band, don't over-optimize. Rule of thumb (mirrors CI shard tuning): a slice projected near the wall → split; a cluster of trivial slices each far under the floor → merge.
+
+Prefer historical signal when you have it: past chunk durations (`chunk.spawned`→`chunk.landed` in the audit log) are the most accurate sizing input — size a new slice against observed times of *similar* past slices, not a guess.
+
+If the per-slice tax is the real pain, the higher-leverage fix is orchestrate-side, not sizing: drive the fixed cost down (warm/pooled containers, tiered review that reserves the full gate for risky slices). That shifts the optimum *smaller* and lets you slice finer without waste — a cheaper gate buys what a sizing guess cannot.
 
 ## Sibling-plan split
 
