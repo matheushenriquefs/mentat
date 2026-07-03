@@ -177,6 +177,52 @@ def test_recovery_reslice_fans_sub_slices(monkeypatch, tmp_path):
     assert out[0]["status"] == "success"
 
 
+# ── _recovery_backoff ─────────────────────────────────────────────────────────
+
+
+def test_recovery_backoff_sleeps_the_full_jitter_delay(monkeypatch):
+    """The injected backoff must SLEEP the computed full-jitter delay — the earlier
+    wiring computed the delay then discarded it, so respawn spacing was a no-op."""
+    orch = _load("orchestrate")
+    monkeypatch.setattr(orch._backoff, "full_jitter", lambda i: 4.0 + i)
+    slept: list = []
+    orch._recovery_backoff(0, sleep=slept.append)
+    orch._recovery_backoff(1, sleep=slept.append)
+    assert slept == [4.0, 5.0], f"must sleep the jittered delay, not zero/skipped: {slept}"
+
+
+def test_recovery_pass_spaces_respawns_with_jittered_sleep(monkeypatch, tmp_path):
+    """A recovery pass with >=2 respawns invokes the sleep once per respawn with the
+    full-jitter delay (asserted via a fake sleep spy) — not zero, not skipped."""
+    orch = _load("orchestrate")
+    recover = _load("recover")
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    monkeypatch.setattr(recover, "_emit_event", lambda *a, **k: None)
+    monkeypatch.setattr(orch._backoff, "full_jitter", lambda i: 2.0 + i)
+    slept: list = []
+    monkeypatch.setattr(orch.time, "sleep", lambda d: slept.append(d))
+
+    plans = {s: _plan(orch, s) for s in ("a", "b")}
+    recover.recover(
+        {"a", "b"},
+        plans_by_slug=plans,
+        holding="hold",
+        session_id="s1",
+        harness=None,
+        is_afk=lambda s: True,
+        context_builder=lambda p, a, c: {"slug": p.slug, "worktree": "w"},
+        teardown=lambda s: None,
+        respawn=lambda p, a: [{"slug": p.slug, "status": "success"}],
+        reslice=lambda p, a: [],
+        dead_letter=lambda p, r: None,
+        decide=lambda ctx: {"action": "retry"},
+        backoff=orch._recovery_backoff,
+        cap=5,
+    )
+    assert slept == [2.0, 3.0], f"each respawn must sleep its jittered delay: {slept}"
+
+
 # ── _run_recovery ─────────────────────────────────────────────────────────────
 
 

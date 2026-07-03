@@ -926,6 +926,16 @@ def _recovery_reslice(
     return results
 
 
+def _recovery_backoff(attempt: int, *, sleep: Callable[[float], None] | None = None) -> None:
+    """Sleep the full-jitter backoff delay before a recovery respawn.
+
+    The delay is both computed AND slept: the prior wiring computed the jittered
+    delay and discarded it, so respawns fired back-to-back with zero spacing — the
+    synchronized re-collision the jitter exists to prevent. ``sleep`` is injectable
+    (defaults to ``time.sleep``) so tests stay deterministic."""
+    (sleep or time.sleep)(_backoff.full_jitter(attempt))
+
+
 def _run_recovery(
     transient: set[str],
     *,
@@ -962,7 +972,7 @@ def _run_recovery(
         respawn=lambda plan, attempt: _recovery_respawn(plan, attempt, holding=holding, harness=harness, model=model),
         reslice=lambda plan, attempt: _recovery_reslice(plan, attempt, holding=holding, harness=harness, model=model),
         dead_letter=_dead_letter,
-        backoff=lambda i: _backoff.full_jitter(i),
+        backoff=_recovery_backoff,
     )
 
     recovered_ok: set[str] = set()
