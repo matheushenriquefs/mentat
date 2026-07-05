@@ -51,7 +51,7 @@ def _wire(recover, monkeypatch, *, calls):
     def teardown(slug):
         calls.setdefault("teardown", []).append(slug)
 
-    def respawn(plan, attempt):
+    def respawn(plan, attempt, context):
         calls.setdefault("respawn", []).append((plan.slug, attempt))
         return [{"slug": plan.slug, "status": "success"}]
 
@@ -160,9 +160,69 @@ def test_parse_decision_non_object_degrades_to_abandon(recover):
     assert recover._parse_decision("[1, 2, 3]")["action"] == "abandon"
 
 
-def test_build_prompt_includes_context(recover):
-    prompt = recover.build_prompt({"slug": "core", "reason": "worker-died", "attempt": 1, "cap": 2})
-    assert "core" in prompt and "worker-died" in prompt
+def test_make_recovery_prompt_includes_context(recover):
+    prompt = recover.make_recovery_prompt(
+        {"slug": "core", "reason": "worker-died", "attempt": 1, "cap": 2, "progress_note": "## Done\n- x"}
+    )
+    assert "core" in prompt and "worker-died" in prompt and "## Done" in prompt
+
+
+def test_build_prompt_alias(recover):
+    assert recover.build_prompt({"slug": "a", "progress_note": "note"}) == recover.make_recovery_prompt(
+        {"slug": "a", "progress_note": "note"}
+    )
+
+
+def test_distill_falls_back_to_diff_without_transcript(recover, tmp_path):
+    note = recover.distill_progress_note(agent_log_dir=tmp_path, diff="the-diff", holding_tip="abc123")
+    assert note == "the-diff"
+
+
+def test_distill_reads_transcript(recover, tmp_path):
+    log_dir = tmp_path / "agent"
+    log_dir.mkdir()
+    (log_dir / "transcript.jsonl").write_text('{"type":"assistant","message":{"content":[{"text":"did X"}]}}\n')
+    note = recover.distill_progress_note(
+        agent_log_dir=log_dir,
+        diff="fallback",
+        holding_tip="deadbeef",
+        invoke=lambda _p: "## Done\n- implemented X",
+    )
+    assert "## Done" in note
+
+
+def test_make_recovery_seed_includes_progress_note(recover, monkeypatch, tmp_path):
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    seed_agent_events(
+        tmp_path,
+        "repo",
+        "orch-sess",
+        [
+            {
+                "event": "chunk.ejected",
+                "payload": {"slug": "core", "reason": "worker-died", "logs_path": str(tmp_path / "agent")},
+            }
+        ],
+    )
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    (agent_dir / "transcript.jsonl").write_text('{"type":"assistant"}\n')
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    monkeypatch.setattr(recover, "distill_progress_note", lambda **kw: "## Pending\n- finish tests")
+    seed = recover.make_recovery_seed(
+        slug="core",
+        reason="worker-died",
+        worktree=wt,
+        holding="main",
+        attempt=1,
+        cap=2,
+        session_id="orch-sess",
+        diff="raw-diff",
+    )
+    assert seed["progress_note"] == "## Pending\n- finish tests"
+    assert seed["seed_summary"] == seed["progress_note"]
 
 
 def test_decide_uses_injected_invoke(recover):

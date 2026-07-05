@@ -44,7 +44,7 @@ def _wire(mod, *, calls: dict):
     calls.setdefault("dead", [])
     calls.setdefault("teardown", [])
 
-    def respawn(plan, attempt):
+    def respawn(plan, attempt, context):
         calls["respawn"].append((plan.slug, attempt))
         return [{"slug": plan.slug, "status": "success"}]
 
@@ -182,10 +182,20 @@ def test_decision_parsing_and_decide_seam():
     assert "core" in seen["prompt"] and "timeout" in seen["prompt"]
 
 
-def test_build_prompt_fills_all_fields():
+def test_make_recovery_prompt_fills_all_fields():
     m = _recover()
-    prompt = m.build_prompt({"slug": "c", "reason": "r", "worktree": "/w", "holding": "h", "attempt": 1, "cap": 2})
-    for token in ("c", "/w", "attempt 1 of 2"):
+    prompt = m.make_recovery_prompt(
+        {
+            "slug": "c",
+            "reason": "r",
+            "worktree": "/w",
+            "holding": "h",
+            "attempt": 1,
+            "cap": 2,
+            "progress_note": "## Done\n- step",
+        }
+    )
+    for token in ("c", "/w", "attempt 1 of 2", "## Done"):
         assert token in prompt
 
 

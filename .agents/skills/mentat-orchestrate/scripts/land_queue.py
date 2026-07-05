@@ -85,7 +85,7 @@ def _concurrency_cap() -> int:
     raw = _utils.read_config().get("concurrency", 3)
     try:
         want = max(1, int(raw))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         want = 3
     cores = os.cpu_count() or 1
     return min(want, max(1, cores // 2))

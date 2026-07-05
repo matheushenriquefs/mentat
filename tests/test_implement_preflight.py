@@ -89,6 +89,14 @@ def test_preflight_skips_when_env_set(main_repo, monkeypatch):
     assert not (main_repo.parent / "feat-x").exists()
 
 
+def test_preflight_skips_when_reuse_worktree(main_repo):
+    impl = _load()
+    rc, target = impl.preflight_worktree("feat-x", reuse_worktree=True)
+    assert rc == 0
+    assert target is None
+    assert not (main_repo.parent / "feat-x").exists()
+
+
 def test_preflight_skips_when_not_in_repo(tmp_path, monkeypatch):
     impl = _load()
     monkeypatch.chdir(tmp_path)

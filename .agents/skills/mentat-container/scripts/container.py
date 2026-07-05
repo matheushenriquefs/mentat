@@ -86,7 +86,7 @@ def _git_mount_for_worktree(wt: Path) -> str | None:
         return None
     try:
         content = git_path.read_text().strip()
-    except OSError, UnicodeDecodeError:
+    except (OSError, UnicodeDecodeError):
         return None
     if not content.startswith("gitdir:"):
         return None
@@ -102,7 +102,7 @@ def _main_repo_root_for_wt(wt: Path) -> Path | None:
         return None
     try:
         content = git_path.read_text().strip()
-    except OSError, UnicodeDecodeError:
+    except (OSError, UnicodeDecodeError):
         return None
     if not content.startswith("gitdir:"):
         return None
@@ -435,7 +435,7 @@ def _doctor_section_container(wt: Path, host_arch: str) -> tuple[list[str], list
     print("[container]")
     try:
         daemon_ok = subprocess.run([_docker(), "info"], capture_output=True, timeout=30).returncode == 0
-    except FileNotFoundError, subprocess.TimeoutExpired:
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         daemon_ok = False
     if not daemon_ok:
         print(_col("daemon", "not running"))
@@ -563,7 +563,7 @@ def cmd_doctor(wt: Path) -> int:
 
     try:
         host_arch = subprocess.run(["uname", "-m"], capture_output=True, text=True, timeout=30).stdout.strip()
-    except FileNotFoundError, subprocess.TimeoutExpired:
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         host_arch = "unknown"
     host_os = f"{_platform.system().lower()} {_platform.release()}"
 

@@ -59,30 +59,36 @@ def test_recovery_diff_empty_on_oserror(monkeypatch, tmp_path):
     assert orch._recovery_diff(tmp_path, "hold") == ""
 
 
-# ── _recovery_context ─────────────────────────────────────────────────────────
+# ── make_recovery_seed_for_plan ───────────────────────────────────────────────
 
 
-def test_recovery_context_reads_summary(monkeypatch, tmp_path):
+def test_make_recovery_seed_distills(monkeypatch, tmp_path):
     orch = _load("orchestrate")
     wt = tmp_path / "wt"
     wt.mkdir()
-    (wt / "summary.md").write_text("what went wrong")
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
     monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: wt)
     monkeypatch.setattr(orch, "_recovery_diff", lambda w, h: "the-diff")
-    ctx = orch._recovery_context(_plan(orch, "core"), 1, 2, holding="hold")
-    assert ctx["diagnosis"] == "what went wrong"
-    assert ctx["diff"] == "the-diff"
-    assert ctx["attempt"] == 1 and ctx["cap"] == 2 and ctx["slug"] == "core"
+    monkeypatch.setattr(
+        orch._recover,
+        "make_recovery_seed",
+        lambda **kw: {"slug": kw["slug"], "progress_note": "distilled", "seed_summary": "distilled"},
+    )
+    ctx = orch.make_recovery_seed_for_plan(_plan(orch, "core"), 1, 2, holding="hold", session_id="s1")
+    assert ctx["progress_note"] == "distilled"
+    assert ctx["seed_summary"] == "distilled"
 
 
-def test_recovery_context_no_summary(monkeypatch, tmp_path):
+def test_make_recovery_seed_falls_back_to_diff(monkeypatch, tmp_path):
     orch = _load("orchestrate")
     wt = tmp_path / "wt"
     wt.mkdir()
     monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: wt)
-    monkeypatch.setattr(orch, "_recovery_diff", lambda w, h: "")
-    ctx = orch._recovery_context(_plan(orch, "core"), 1, 2, holding="hold")
-    assert ctx["diagnosis"] == ""
+    monkeypatch.setattr(orch, "_recovery_diff", lambda w, h: "the-diff")
+    monkeypatch.setattr(orch._recover, "distill_progress_note", lambda **kw: kw["diff"])
+    ctx = orch.make_recovery_seed_for_plan(_plan(orch, "core"), 1, 2, holding="hold", session_id="s1")
+    assert ctx["progress_note"] == "the-diff"
 
 
 # ── _spawn_implement_in_worktree ──────────────────────────────────────────────
@@ -99,13 +105,17 @@ def test_spawn_implement_in_worktree_reuses_worktree(monkeypatch, tmp_path):
     def fake_popen(cmd, *, cwd=None, env=None, start_new_session=None):
         captured["cmd"] = cmd
         captured["cwd"] = cwd
-        captured["skip"] = env.get("MENTAT_SKIP_PREFLIGHT")
+        captured["env"] = env
         return _P()
 
     monkeypatch.setattr(orch.subprocess, "Popen", fake_popen)
-    rc = orch._spawn_implement_in_worktree(Path("/tmp/core.md"), tmp_path, harness="claude-code", model="m")
+    rc = orch._spawn_implement_in_worktree(
+        Path("/tmp/core.md"), tmp_path, harness="claude-code", model="m", reuse_worktree=True, seed_summary="handoff"
+    )
     assert rc == 0
-    assert captured["skip"] == "1"  # idempotent reuse, no `worktree create`
+    assert "--reuse-worktree" in captured["cmd"]
+    assert "MENTAT_SKIP_PREFLIGHT" not in captured["env"]
+    assert captured["env"]["MENTAT_SEED_SUMMARY"] == "handoff"
     assert captured["cwd"] == str(tmp_path)
     assert "--harness" in captured["cmd"] and "--model" in captured["cmd"]
 
@@ -121,7 +131,9 @@ def test_recovery_respawn_lands_on_success(monkeypatch, tmp_path):
     monkeypatch.setattr(orch._git, "rebase_ff_only", lambda *a, **k: (None, None))
     monkeypatch.setattr(orch, "_spawn_implement_in_worktree", lambda *a, **k: 0)
     monkeypatch.setattr(orch._land_queue, "drain", lambda chunks, *, holding: [{"slug": "core", "status": "success"}])
-    out = orch._recovery_respawn(_plan(orch, "core"), 1, holding="hold", harness=None, model=None)
+    out = orch._recovery_respawn(
+        _plan(orch, "core"), 1, holding="hold", harness=None, model=None, session_id="s1", seed={"seed_summary": "note"}
+    )
     assert out == [{"slug": "core", "status": "success"}]
 
 
@@ -132,7 +144,9 @@ def test_recovery_respawn_ejects_on_implement_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(orch._git, "rebase_ff_only", lambda *a, **k: (None, None))
     monkeypatch.setattr(orch, "_spawn_implement_in_worktree", lambda *a, **k: 1)
     monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
-    out = orch._recovery_respawn(_plan(orch, "core"), 1, holding="hold", harness=None, model=None)
+    out = orch._recovery_respawn(
+        _plan(orch, "core"), 1, holding="hold", harness=None, model=None, session_id="s1", seed={"seed_summary": "note"}
+    )
     assert out[0]["status"] == "eject" and out[0]["reason"] == "implement-failed"
 
 
@@ -214,7 +228,7 @@ def test_recovery_pass_spaces_respawns_with_jittered_sleep(monkeypatch, tmp_path
         is_afk=lambda s: True,
         context_builder=lambda p, a, c: {"slug": p.slug, "worktree": "w"},
         teardown=lambda s: None,
-        respawn=lambda p, a: [{"slug": p.slug, "status": "success"}],
+        respawn=lambda p, a, ctx: [{"slug": p.slug, "status": "success"}],
         reslice=lambda p, a: [],
         dead_letter=lambda p, r: None,
         decide=lambda ctx: {"action": "retry"},
@@ -233,9 +247,13 @@ def test_run_recovery_retry_marks_recovered(monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_REPO", "repo")
     monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path)
     monkeypatch.setattr(orch, "_teardown_ejected", lambda s: None)
-    monkeypatch.setattr(orch, "_recovery_context", lambda p, a, c, *, holding: {"slug": p.slug, "worktree": "w"})
+    monkeypatch.setattr(
+        orch,
+        "make_recovery_seed_for_plan",
+        lambda p, a, c, *, holding, session_id: {"slug": p.slug, "worktree": "w"},
+    )
     monkeypatch.setattr(orch._recover, "decide", lambda ctx: {"action": "retry", "rationale": "env"})
-    monkeypatch.setattr(orch, "_recovery_respawn", lambda p, a, **k: [{"slug": p.slug, "status": "success"}])
+    monkeypatch.setattr(orch, "_recovery_respawn", lambda p, a, ctx=None, **k: [{"slug": p.slug, "status": "success"}])
     monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
     plan = _plan(orch, "core")
     ok, dead = orch._run_recovery(
@@ -291,7 +309,9 @@ def test_run_recovery_abandon_dead_letters(monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_REPO", "repo")
     monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path)
     monkeypatch.setattr(orch, "_teardown_ejected", lambda s: None)
-    monkeypatch.setattr(orch, "_recovery_context", lambda p, a, c, *, holding: {"slug": p.slug})
+    monkeypatch.setattr(
+        orch, "make_recovery_seed_for_plan", lambda p, a, c, *, holding, session_id: {"slug": p.slug}
+    )
     monkeypatch.setattr(orch._recover, "decide", lambda ctx: {"action": "abandon", "rationale": "no"})
     emitted = []
     monkeypatch.setattr(orch, "_emit_event", lambda ev, p: emitted.append((ev, p)))
@@ -311,10 +331,14 @@ def test_run_recovery_retry_without_success_not_marked_recovered(monkeypatch, tm
     monkeypatch.setenv("MENTAT_REPO", "repo")
     monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path)
     monkeypatch.setattr(orch, "_teardown_ejected", lambda s: None)
-    monkeypatch.setattr(orch, "_recovery_context", lambda p, a, c, *, holding: {"slug": p.slug, "worktree": "w"})
+    monkeypatch.setattr(
+        orch,
+        "make_recovery_seed_for_plan",
+        lambda p, a, c, *, holding, session_id: {"slug": p.slug, "worktree": "w"},
+    )
     monkeypatch.setattr(orch._recover, "decide", lambda ctx: {"action": "retry", "rationale": "env"})
     monkeypatch.setattr(
-        orch, "_recovery_respawn", lambda p, a, **k: [{"slug": p.slug, "status": "eject", "reason": "gate-failed"}]
+        orch, "_recovery_respawn", lambda p, a, ctx=None, **k: [{"slug": p.slug, "status": "eject", "reason": "gate-failed"}]
     )
     monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
     plan = _plan(orch, "core")

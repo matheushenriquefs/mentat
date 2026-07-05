@@ -199,7 +199,7 @@ def _concurrency_cap() -> int:
     raw = _utils.read_config().get("concurrency", 3)
     try:
         want = max(1, int(raw))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         want = 3
     cores = os.cpu_count() or 1
     ceiling = max(1, cores // 2)
@@ -224,7 +224,7 @@ def _load_headroom_ok() -> bool:
     """
     try:
         load1 = os.getloadavg()[0]
-    except OSError, AttributeError:
+    except (OSError, AttributeError):
         return True
     cores = os.cpu_count() or 1
     return load1 < cores
@@ -246,7 +246,7 @@ def _chunk_timeout() -> int:
     raw = _utils.read_config().get("chunk_timeout", 1800)
     try:
         return max(1, int(raw))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return 1800
 
 
@@ -270,7 +270,7 @@ def _stall_timeout() -> int:
     raw = _utils.read_config().get("stall_timeout", 300)
     try:
         return int(raw)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return 300
 
 
@@ -343,7 +343,7 @@ def _breaker_threshold() -> int:
     raw = _utils.read_config().get("breaker_threshold", 3)
     try:
         return max(1, int(raw))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return 3
 
 
@@ -352,7 +352,7 @@ def _breaker_cooldown() -> float:
     raw = _utils.read_config().get("breaker_cooldown", 30)
     try:
         return max(0.0, float(raw))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return 30.0
 
 
@@ -397,7 +397,7 @@ def _kill_proc_group(proc: object) -> None:
         return
     try:
         pgid = os.getpgid(pid)
-    except ProcessLookupError, OSError:
+    except (ProcessLookupError, OSError):
         with contextlib.suppress(Exception):
             proc.kill()  # type: ignore[attr-defined]
         return
@@ -884,8 +884,8 @@ def _run_batch(
 def _recovery_diff(worktree: Path, holding: str) -> str:
     """Best-effort partial diff of the chunk's worktree vs the holding tip.
 
-    Handed to the recovery agent so it can see what the dead chunk produced before
-    it died. Truncated to keep the prompt bounded; any git failure yields ""."""
+    Baseline seed when transcript distillation is unavailable. Truncated to keep
+    prompts bounded; any git failure yields ""."""
     try:
         result = subprocess.run(
             ["git", "-C", str(worktree), "diff", holding],
@@ -897,41 +897,59 @@ def _recovery_diff(worktree: Path, holding: str) -> str:
     return result.stdout[:4000] if result.returncode == 0 else ""
 
 
-def _recovery_context(plan: _scheduler.Plan, attempt: int, cap: int, *, holding: str) -> dict[str, object]:
-    """Build the failure context handed to the recovery agent."""
+def make_recovery_seed_for_plan(
+    plan: _scheduler.Plan, attempt: int, cap: int, *, holding: str, session_id: str
+) -> dict[str, object]:
+    """Build the failure context handed to the recovery agent and respawn seed."""
     worktree = _worktree_for_slug(plan.slug)
-    diag = worktree / "summary.md"
-    diagnosis = diag.read_text() if diag.exists() else ""
-    return {
-        "slug": plan.slug,
-        "reason": EjectReason.WORKER_DIED,
-        "worktree": str(worktree),
-        "holding": holding,
-        "attempt": attempt,
-        "cap": cap,
-        "diagnosis": diagnosis,
-        "diff": _recovery_diff(worktree, holding),
-    }
+    return _recover.make_recovery_seed(
+        slug=plan.slug,
+        reason=EjectReason.WORKER_DIED,
+        worktree=worktree,
+        holding=holding,
+        attempt=attempt,
+        cap=cap,
+        session_id=session_id,
+        diff=_recovery_diff(worktree, holding),
+    )
 
 
-def _spawn_implement_in_worktree(plan_path: Path, worktree: Path, *, harness: str | None, model: str | None) -> int:
+def _spawn_implement_in_worktree(
+    plan_path: Path,
+    worktree: Path,
+    *,
+    harness: str | None,
+    model: str | None,
+    reuse_worktree: bool = False,
+    seed_summary: str | None = None,
+) -> int:
     """Run mentat-implement inside an EXISTING worktree and return its exit code.
 
-    ``MENTAT_SKIP_PREFLIGHT`` makes implement reuse the preserved worktree/branch
-    instead of ``worktree create`` (rc65 on an existing branch) — the idempotent
-    re-land the recovery contract requires."""
+    ``reuse_worktree`` skips ``worktree create`` (rc65 on an existing branch) —
+    the idempotent re-land the recovery contract requires."""
     cmd = ["python3", str(_fan_out._IMPLEMENT_SCRIPT), str(plan_path)]
     if harness:
         cmd += ["--harness", harness]
     if model:
         cmd += ["--model", model]
-    env = {**os.environ, "MENTAT_SKIP_PREFLIGHT": "1"}
+    if reuse_worktree:
+        cmd += ["--reuse-worktree"]
+    env = dict(os.environ)
+    if seed_summary:
+        env["MENTAT_SEED_SUMMARY"] = seed_summary
     proc = subprocess.Popen(cmd, cwd=str(worktree), env=env, start_new_session=True)
     return proc.wait()
 
 
 def _recovery_respawn(
-    plan: _scheduler.Plan, attempt: int, *, holding: str, harness: str | None, model: str | None
+    plan: _scheduler.Plan,
+    attempt: int,
+    *,
+    holding: str,
+    harness: str | None,
+    model: str | None,
+    session_id: str,
+    seed: dict[str, object] | None = None,
 ) -> list[dict[str, object]]:
     """retry action: rebase the preserved worktree onto holding, re-run implement, land."""
     worktree = _worktree_for_slug(plan.slug)
@@ -939,7 +957,15 @@ def _recovery_respawn(
     # rebase does not refuse on unstaged changes (mirrors land_queue._rebase_chunk).
     _git.discard_path(worktree, ".devcontainer/")
     _git.rebase_ff_only(worktree, holding)
-    rc = _spawn_implement_in_worktree(plan.path, worktree, harness=harness, model=model)
+    seed_summary = str((seed or {}).get("seed_summary", "")) or None
+    rc = _spawn_implement_in_worktree(
+        plan.path,
+        worktree,
+        harness=harness,
+        model=model,
+        reuse_worktree=True,
+        seed_summary=seed_summary,
+    )
     if rc != 0:
         _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.IMPLEMENT_FAILED, str(worktree)))
         return [{"slug": plan.slug, "status": "eject", "reason": EjectReason.IMPLEMENT_FAILED}]
@@ -1023,9 +1049,19 @@ def _run_recovery(
         session_id=session_id,
         harness=harness,
         is_afk=lambda s: plans_by_slug[s].class_ == "AFK",
-        context_builder=lambda plan, attempt, cap: _recovery_context(plan, attempt, cap, holding=holding),
+        context_builder=lambda plan, attempt, cap: make_recovery_seed_for_plan(
+            plan, attempt, cap, holding=holding, session_id=session_id
+        ),
         teardown=_teardown_ejected,
-        respawn=lambda plan, attempt: _recovery_respawn(plan, attempt, holding=holding, harness=harness, model=model),
+        respawn=lambda plan, attempt, ctx: _recovery_respawn(
+            plan,
+            attempt,
+            holding=holding,
+            harness=harness,
+            model=model,
+            session_id=session_id,
+            seed=ctx,
+        ),
         reslice=lambda plan, attempt: _recovery_reslice(plan, attempt, holding=holding, harness=harness, model=model),
         dead_letter=_dead_letter,
         backoff=_recovery_backoff,

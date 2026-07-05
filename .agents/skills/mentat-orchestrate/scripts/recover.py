@@ -63,7 +63,7 @@ def _int_config(key: str, default: int, *, minimum: int = 1) -> int:
     raw = _config.read_config().get(key, default)
     try:
         return max(minimum, int(raw))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return default
 
 
@@ -84,7 +84,7 @@ def recovery_restart_window() -> float:
     raw = _config.read_config().get("recovery_restart_window", DEFAULT_RESTART_WINDOW)
     try:
         return max(0.0, float(raw))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return DEFAULT_RESTART_WINDOW
 
 
@@ -97,7 +97,7 @@ def recovery_budget() -> float | None:
         return None
     try:
         return max(0.0, float(raw))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
 
 
@@ -165,11 +165,8 @@ Eject reason: {reason}
 Worktree (preserved): {worktree}
 Holding tip: {holding}
 
-Diagnosis:
-{diagnosis}
-
-Partial diff (what the chunk produced before it died):
-{diff}
+Progress note (distilled from the dead agent's transcript):
+{progress_note}
 
 Choose exactly one action and reply with ONLY a JSON object, no prose:
   {{"action": "retry",   "rationale": "..."}}  re-run the SAME work rebased onto holding \
@@ -182,8 +179,34 @@ because it was doing too much).
 when retrying or reslicing cannot help).
 """
 
+_DISTILL_TEMPLATE = """Distill this AFK agent transcript + worktree diff into a compact handoff note \
+for a respawned agent. Output ONLY the note — no preamble.
 
-def build_prompt(context: dict[str, object]) -> str:
+Format:
+## Done
+- <completed step> (file pointers: path — what changed)
+
+## In progress
+- <partial step> (path — what's left there)
+
+## Pending
+- <not started>
+
+## Key decisions
+- <decision>
+
+## Git tip
+<holding branch tip sha from context>
+
+Transcript (tail):
+{transcript}
+
+Worktree diff vs holding (truncated):
+{diff}
+"""
+
+
+def make_recovery_prompt(context: dict[str, object]) -> str:
     """Render the recovery-agent prompt from a failure context dict."""
     return _PROMPT_TEMPLATE.format(
         slug=context.get("slug", "?"),
@@ -192,9 +215,119 @@ def build_prompt(context: dict[str, object]) -> str:
         holding=context.get("holding", "?"),
         attempt=context.get("attempt", "?"),
         cap=context.get("cap", "?"),
-        diagnosis=context.get("diagnosis") or "(none)",
-        diff=context.get("diff") or "(none)",
+        progress_note=context.get("progress_note") or "(none)",
     )
+
+
+def build_prompt(context: dict[str, object]) -> str:
+    """Deprecated alias for ``make_recovery_prompt``."""
+    return make_recovery_prompt(context)
+
+
+def _transcript_path(agent_log_dir: Path | None) -> Path | None:
+    if agent_log_dir is None:
+        return None
+    for name in ("transcript.jsonl", "session.jsonl"):
+        path = agent_log_dir / name
+        if path.is_file() and path.stat().st_size > 0:
+            return path
+    return None
+
+
+def _read_tail(path: Path, *, max_bytes: int = 12000) -> str:
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return ""
+    if len(data) <= max_bytes:
+        return data.decode("utf-8", errors="replace")
+    return data[-max_bytes:].decode("utf-8", errors="replace")
+
+
+def distill_progress_note(
+    *,
+    agent_log_dir: Path | None,
+    diff: str,
+    holding_tip: str,
+    invoke: Callable[[str], str] | None = None,
+) -> str:
+    """Distill transcript + diff into a compact done/pending handoff note.
+
+    Absent transcript → returns ``diff`` unchanged (today's baseline seed).
+    """
+    transcript_file = _transcript_path(agent_log_dir)
+    if transcript_file is None:
+        return diff or "(none)"
+    invoke = invoke or _invoke_claude
+    prompt = _DISTILL_TEMPLATE.format(
+        transcript=_read_tail(transcript_file),
+        diff=(diff or "(empty)")[:4000],
+    )
+    if holding_tip:
+        prompt = prompt.replace("<holding branch tip sha from context>", holding_tip)
+    raw = invoke(prompt).strip()
+    return raw if raw else (diff or "(none)")
+
+
+def _holding_tip_sha(worktree: Path, holding: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(worktree), "rev-parse", holding],
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _agent_log_dir_for_slug(session_id: str, slug: str) -> Path | None:
+    """Resolve the ejected implement agent's log dir from canonical store events."""
+    from lib import store
+
+    for row in reversed(store.list_events(session_id)):
+        if row.get("event") != "chunk.ejected":
+            continue
+        payload = row.get("payload")
+        if not isinstance(payload, dict) or payload.get("slug") != slug:
+            continue
+        logs_path = payload.get("logs_path")
+        if isinstance(logs_path, str) and logs_path:
+            return Path(logs_path)
+    return None
+
+
+def make_recovery_seed(
+    *,
+    slug: str,
+    reason: str,
+    worktree: Path,
+    holding: str,
+    attempt: int,
+    cap: int,
+    session_id: str,
+    diff: str,
+    invoke: Callable[[str], str] | None = None,
+) -> dict[str, object]:
+    """Mint the composite recovery context: distilled progress note + metadata."""
+    agent_log_dir = _agent_log_dir_for_slug(session_id, slug)
+    tip = _holding_tip_sha(worktree, holding)
+    progress_note = distill_progress_note(
+        agent_log_dir=agent_log_dir,
+        diff=diff,
+        holding_tip=tip,
+        invoke=invoke,
+    )
+    return {
+        "slug": slug,
+        "reason": reason,
+        "worktree": str(worktree),
+        "holding": holding,
+        "attempt": attempt,
+        "cap": cap,
+        "progress_note": progress_note,
+        "seed_summary": progress_note,
+    }
 
 
 def _extract_json(raw: str) -> str:
@@ -213,7 +346,7 @@ def _parse_decision(raw: str) -> dict[str, str]:
     safe escalate rung (never a blind retry against an unclassifiable failure)."""
     try:
         obj = json.loads(_extract_json(raw))
-    except json.JSONDecodeError, ValueError:
+    except (json.JSONDecodeError, ValueError):
         return {"action": ABANDON, "rationale": "unparseable recovery decision"}
     # _extract_json only ever returns a ``{...}``-bounded slice, so a successful
     # json.loads always yields a dict — a JSON array / scalar reply fails to parse
@@ -240,7 +373,7 @@ def _invoke_claude(prompt: str) -> str:
 def decide(context: dict[str, object], *, invoke: Callable[[str], str] | None = None) -> dict[str, str]:
     """Ask the recovery agent how to recover a chunk. Returns ``{action, rationale}``."""
     invoke = invoke or _invoke_claude
-    return _parse_decision(invoke(build_prompt(context)))
+    return _parse_decision(invoke(make_recovery_prompt(context)))
 
 
 def recover(
@@ -253,7 +386,7 @@ def recover(
     is_afk: Callable[[str], bool],
     context_builder: Callable[[_PlanLike, int, int], dict[str, object]],
     teardown: Callable[[str], None],
-    respawn: Callable[[_PlanLike, int], list[dict[str, object]]],
+    respawn: Callable[[_PlanLike, int, dict[str, object]], list[dict[str, object]]],
     reslice: Callable[[_PlanLike, int], list[dict[str, object]]],
     dead_letter: Callable[[_PlanLike, str], None],
     decide: Callable[[dict[str, object]], dict[str, str]] | None = None,
@@ -319,7 +452,8 @@ def recover(
         if backoff is not None:
             backoff(i)
         teardown(slug)
-        decision = decider(context_builder(plan, attempt, cap))
+        context = context_builder(plan, attempt, cap)
+        decision = decider(context)
         action = decision.get("action", ABANDON)
 
         if action == ABANDON:
@@ -343,12 +477,12 @@ def recover(
                 "slug": slug,
                 "plan": str(plan.path),
                 "harness": harness or "default",
-                "worktree": str(context_builder(plan, attempt, cap).get("worktree", "")),
+                "worktree": str(context.get("worktree", "")),
                 "trigger": "recovery",
                 "attempt": attempt,
             },
         )
-        results = respawn(plan, attempt) if action == RETRY else reslice(plan, attempt)
+        results = respawn(plan, attempt, context) if action == RETRY else reslice(plan, attempt)
         outcomes.append({"slug": slug, "recovery": action, "attempt": attempt, "results": results})
 
     return outcomes

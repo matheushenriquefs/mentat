@@ -263,7 +263,11 @@ def _is_main_worktree(cwd: Path) -> bool:
     return bool(mod.is_main_worktree(cwd))
 
 
-def _in_shared_main_tree() -> bool:
+def _skip_preflight(*, reuse_worktree: bool = False) -> bool:
+    return reuse_worktree or bool(os.environ.get("MENTAT_SKIP_PREFLIGHT"))
+
+
+def _in_shared_main_tree(*, reuse_worktree: bool = False) -> bool:
     """True iff running in the shared main worktree, where a ``git checkout``
     flips HEAD for every concurrent session sharing that working tree — the
     branch-leak risk. Separate worktrees each own their HEAD (git refuses
@@ -273,13 +277,13 @@ def _in_shared_main_tree() -> bool:
     leak guard and ``preflight_worktree``'s create gate route through it, so
     the skip→rev-parse→``_is_main_worktree`` triad lives in exactly one place.
 
-    ``MENTAT_SKIP_PREFLIGHT`` returns False by design: it is the test-isolation
-    escape hatch. A test that sets it and switches branches in a tmp main tree is
-    its own private repo with no concurrent sessions to leak into — the hatch
-    trades the (vacuous) leak risk for hermetic, worktree-free test runs.
+    ``--reuse-worktree`` / ``MENTAT_SKIP_PREFLIGHT`` returns False by design: test /
+    recovery isolation escape hatches. A run that sets either and switches branches
+    in a tmp main tree is its own private repo with no concurrent sessions to leak
+    into — the hatch trades the (vacuous) leak risk for hermetic, worktree-free runs.
     Non-repo cwds likewise have no shared HEAD to leak.
     """
-    if os.environ.get("MENTAT_SKIP_PREFLIGHT"):
+    if _skip_preflight(reuse_worktree=reuse_worktree):
         return False
     cwd = Path.cwd()
     in_repo = subprocess.run(
@@ -293,22 +297,22 @@ def _in_shared_main_tree() -> bool:
     return _is_main_worktree(cwd)
 
 
-def preflight_worktree(slug: str) -> tuple[int, Path | None]:
+def preflight_worktree(slug: str, *, reuse_worktree: bool = False) -> tuple[int, Path | None]:
     """Auto-create a chunk-keyed worktree for slug if cwd is the main worktree.
 
     Returns (rc, target). rc=0 → success (target valid or skipped intentionally).
     rc=65 → path conflict. rc=66 → base branch missing. Other → bubble up.
 
     Skipped (rc=0, target=None) when:
-      - MENTAT_SKIP_PREFLIGHT env var is set
+      - ``--reuse-worktree`` or MENTAT_SKIP_PREFLIGHT is set
       - cwd is not in a git repo (test envs)
       - cwd is already a non-main worktree (we're already inside a slug)
     """
-    if os.environ.get("MENTAT_SKIP_PREFLIGHT"):
+    if _skip_preflight(reuse_worktree=reuse_worktree):
         return (0, None)
     if not _GIT_SCRIPT.exists():
         return (0, None)
-    if not _in_shared_main_tree():
+    if not _in_shared_main_tree(reuse_worktree=reuse_worktree):
         return (0, None)
 
     from lib.chunk import bind_plan_chunk, make_chunk_id
@@ -449,13 +453,13 @@ def _veto_agents_dir(harness: str) -> Path:
     return Path.home() / dir_name / "agents"
 
 
-def preflight_veto_reviewers(harness: str) -> tuple[int, list[str]]:
+def preflight_veto_reviewers(harness: str, *, reuse_worktree: bool = False) -> tuple[int, list[str]]:
     """Check all veto-tier reviewers are registered in the harness agents dir.
 
     Returns (0, []) when all present. Returns (1, [missing-names]) when any absent.
-    Skipped (0, []) when MENTAT_SKIP_PREFLIGHT is set.
+    Skipped (0, []) when ``--reuse-worktree`` or MENTAT_SKIP_PREFLIGHT is set.
     """
-    if os.environ.get("MENTAT_SKIP_PREFLIGHT"):
+    if _skip_preflight(reuse_worktree=reuse_worktree):
         return (0, [])
     from lib.gates.score import missing_veto_reviewers as _missing
 
@@ -646,6 +650,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Holding branch to land onto (required with --land; defaults to 'main')",
     )
 
+    run.add_argument(
+        "--reuse-worktree",
+        action="store_true",
+        default=False,
+        help="Reuse the cwd worktree (skip worktree create) — recovery respawn contract",
+    )
+
     mark = sub.add_parser("mark-test-writable", help="Flip a closed test path writable for the red step")
     mark.add_argument("slug")
     mark.add_argument("path")
@@ -689,7 +700,8 @@ def main() -> None:
     print(f"mentat-implement: track this run with `mentat-session track {session_id}`", file=sys.stderr)
     _prune_worktrees_preflight()
     harness = _utils.default_harness()
-    pf_veto_rc, missing_reviewers = preflight_veto_reviewers(harness)
+    reuse_worktree = bool(getattr(args, "reuse_worktree", False))
+    pf_veto_rc, missing_reviewers = preflight_veto_reviewers(harness, reuse_worktree=reuse_worktree)
     if pf_veto_rc != 0:
         for name in missing_reviewers:
             print(
@@ -699,7 +711,7 @@ def main() -> None:
                 file=sys.stderr,
             )
         sys.exit(pf_veto_rc)
-    pf_rc, target = preflight_worktree(slug)
+    pf_rc, target = preflight_worktree(slug, reuse_worktree=reuse_worktree)
     if pf_rc != 0:
         _emit_event(
             "chunk.ejected",
@@ -722,7 +734,7 @@ def main() -> None:
     # Fail closed if preflight did not isolate us into our own worktree. A run
     # in the shared main tree leaks branch switches across every concurrent
     # session — refuse rather than risk the leak.
-    if _in_shared_main_tree():
+    if _in_shared_main_tree(reuse_worktree=reuse_worktree):
         _emit_event(
             "chunk.ejected",
             ejected_payload(
