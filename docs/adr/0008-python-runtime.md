@@ -25,12 +25,16 @@ Post-shell-port audit (2026-06-13) surfaced two additional issues:
 
 ## Decision
 
-**Python 3.11+ runtime.** `requires-python = ">=3.11"` in `pyproject.toml`.
+**Python 3.14+ runtime.** `requires-python = ">=3.14"` in `pyproject.toml`.
+
+Agent ids mint via stdlib `uuid.uuid7()` (RFC 9562) — time-ordered, no third-party
+dep. Existing v4 ids remain valid opaque `TEXT`; lexical-sort=chronological holds
+only for the v7-era tail.
 
 **Stdlib only for user-runtime.** `scripts/<bin>.py` + `lib/*.py` use no third-party
 imports. Pydantic, PyYAML allowed in `[dependency-groups] dev` (tests only).
 
-**Dev tooling:** uv (env), ruff (lint+format, target py311), pyright (strict), pytest.
+**Dev tooling:** uv (env), ruff (lint+format, target py314), pyright (strict), pytest.
 
 ### User-state layout
 

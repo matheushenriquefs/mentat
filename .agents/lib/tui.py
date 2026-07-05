@@ -133,7 +133,7 @@ def print_step(symbol: str, text: str, *, dim: bool = False) -> None:
 
 
 @contextlib.contextmanager
-def open_tty() -> Generator[IO[str] | None, None, None]:
+def open_tty() -> Generator[IO[str] | None]:
     """Yield a readable file for interactive input, even inside curl | bash.
 
     Yields None when no TTY is available (true non-interactive CI).

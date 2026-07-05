@@ -22,15 +22,15 @@ import uuid
 from pathlib import Path
 
 
-def mint_session(role: str, slug: str, *, pid: int | None = None) -> str:
-    """Return a fresh opaque session id — a ``uuid4`` hex.
+def make_agent_id(role: str, slug: str, *, pid: int | None = None) -> str:
+    """Return a fresh opaque agent id — a ``uuid7`` hex.
 
     ``role``/``slug``/``pid`` are accepted for call-site symmetry (and recorded
     as projection fields by ``ensure_session``) but are deliberately *not*
     encoded into the id: a session keyed by a ``uuid`` has no slash to mismatch,
     no pid to collide, and no repo bucket to strand it.
     """
-    return uuid.uuid4().hex
+    return uuid.uuid7().hex
 
 
 def current_branch() -> str | None:
@@ -139,7 +139,7 @@ def ensure_session(role: str, slug: str) -> str:
     """
     session_id = os.environ.get("MENTAT_SESSION")
     if not session_id:
-        session_id = mint_session(role, slug)
+        session_id = make_agent_id(role, slug)
         os.environ["MENTAT_SESSION"] = session_id
     # Freeze the repo name now, while cwd is still the repo. implement chdir's
     # into its worktree before it emits / doctors / promotes a summary; a bare

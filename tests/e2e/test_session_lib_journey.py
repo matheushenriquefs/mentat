@@ -27,22 +27,19 @@ pytestmark = pytest.mark.e2e
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-# ── mint_session ─────────────────────────────────────────────────────────────
+# ── make_agent_id ─────────────────────────────────────────────────────────────
 
 
-def test_mint_session_is_opaque_uuid():
+def test_make_agent_id_is_opaque_uuid7():
     import re
 
-    sid = session.mint_session("implement", "my-plan", pid=123)
-    assert re.fullmatch(r"[0-9a-f]{32}", sid), f"expected uuid, got {sid!r}"
-    # role/slug are fields, never encoded into the id. (pid is decimal — all its
-    # digits are valid hex, so a substring check against a random uuid would flake;
-    # the fullmatch above already proves the id is opaque.)
+    sid = session.make_agent_id("implement", "my-plan", pid=123)
+    assert re.fullmatch(r"[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}", sid), f"expected uuid7, got {sid!r}"
     assert "implement" not in sid and "my-plan" not in sid
 
 
-def test_mint_session_is_unique_per_call():
-    assert session.mint_session("orchestrate", "hold") != session.mint_session("orchestrate", "hold")
+def test_make_agent_id_is_unique_per_call():
+    assert session.make_agent_id("orchestrate", "hold") != session.make_agent_id("orchestrate", "hold")
 
 
 def test_current_branch_inside_real_repo(monkeypatch, tmp_path):
@@ -203,7 +200,7 @@ def test_ensure_session_mints_and_exports_from_clean_env(monkeypatch, tmp_path):
 
     import re
 
-    assert re.fullmatch(r"[0-9a-f]{32}", sid), f"expected uuid, got {sid!r}"
+    assert re.fullmatch(r"[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}", sid), f"expected uuid7, got {sid!r}"
     assert os.environ["MENTAT_SESSION"] == sid
     assert os.environ["MENTAT_REPO"] == "workrepo"
     assert os.environ["MENTAT_SESSION_ROLE"] == "implement"

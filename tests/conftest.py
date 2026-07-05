@@ -68,7 +68,7 @@ def mentat_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def fixture_repo(tmp_path: Path) -> Generator[Path, None, None]:
+def fixture_repo(tmp_path: Path) -> Generator[Path]:
     """Create a minimal git repo with optional plan files. Yield the repo root."""
     repo = tmp_path / "repo"
     repo.mkdir()

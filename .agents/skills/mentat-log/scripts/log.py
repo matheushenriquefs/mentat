@@ -18,7 +18,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 from lib import state as _state  # noqa: E402
 from lib.events import EJECT_REASONS as _EJECT_REASONS  # noqa: E402
 from lib.session import log_root as _log_root  # noqa: E402
-from lib.session import mint_session as _mint_session
+from lib.session import make_agent_id as _make_agent_id
 from lib.session import repo_name as _repo
 
 EVENT_CATALOG: dict[str, list[str]] = {
@@ -138,7 +138,7 @@ def cmd_emit(args: argparse.Namespace) -> int:
     # set MENTAT_SESSION before any emit. If a raw `mentat-log emit` still slips
     # through unkeyed, mint an opaque uuid — never an `orphan-`/pid-derived id
     # that could collide or strand the row.
-    session = _session() or _mint_session("mentat-log", "adhoc")
+    session = _session() or _make_agent_id("mentat-log", "adhoc")
     slug = _agent_slug()
 
     _ensure_log_dir(base)

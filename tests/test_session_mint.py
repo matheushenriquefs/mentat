@@ -1,6 +1,6 @@
-"""S1 — stable uuid session id; env-less emit impossible.
+"""S1 — stable uuid7 agent id; env-less emit impossible.
 
-The id is an opaque ``uuid`` — repo/branch/pid are recorded as *fields*, never
+The id is an opaque ``uuid7`` — repo/branch/pid are recorded as *fields*, never
 encoded into the id, so a ``/``-branch can't nest a dir, a reused pid can't
 collide, and no ``orphan-session-`` fallback is reachable. One helper mints it;
 ``ensure_session`` exports ``MENTAT_SESSION`` + ``MENTAT_SESSION_LOG`` (and the
@@ -24,29 +24,29 @@ sys.path.insert(0, str(REPO_ROOT / ".agents"))
 from lib import session as session_mod  # noqa: E402
 
 UUID_HEX = re.compile(r"^[0-9a-f]{32}$")
+UUID_V7_HEX = re.compile(r"^[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$")
 
 
-def test_mint_session_is_opaque_uuid() -> None:
-    sid = session_mod.mint_session("implement", "my-plan", pid=4242)
-    assert UUID_HEX.match(sid), f"expected uuid hex, got {sid!r}"
-    # role / slug / pid must not leak into the id — the whole point of the rewrite.
+def test_make_agent_id_is_opaque_uuid7() -> None:
+    sid = session_mod.make_agent_id("implement", "my-plan", pid=4242)
+    assert UUID_V7_HEX.match(sid), f"expected uuid7 hex, got {sid!r}"
     assert "implement" not in sid
     assert "my-plan" not in sid
     assert "4242" not in sid
 
 
-def test_mint_session_is_unique_per_call() -> None:
-    a = session_mod.mint_session("orchestrate", "batch")
-    b = session_mod.mint_session("orchestrate", "batch")
+def test_make_agent_id_is_unique_per_call() -> None:
+    a = session_mod.make_agent_id("orchestrate", "batch")
+    b = session_mod.make_agent_id("orchestrate", "batch")
     assert a != b
-    assert UUID_HEX.match(a) and UUID_HEX.match(b)
+    assert UUID_V7_HEX.match(a) and UUID_V7_HEX.match(b)
 
 
-def test_mint_session_slash_slug_stays_flat(tmp_path, monkeypatch) -> None:
+def test_make_agent_id_slash_slug_stays_flat(tmp_path, monkeypatch) -> None:
     """A '/'-bearing slug (branch) never nests the session dir — the id is a uuid."""
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "demo")
-    sid = session_mod.mint_session("implement", "feat/x")
+    sid = session_mod.make_agent_id("implement", "feat/x")
     assert "/" not in sid
     sd = session_mod.session_dir(sid)
     assert sd.parent == tmp_path / "demo"  # one canonical dir, not nested under feat/
@@ -61,7 +61,7 @@ def test_ensure_session_exports_env(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("MENTAT_REPO", "demo")
     sid = session_mod.ensure_session("implement", "p")
     assert os.environ["MENTAT_SESSION"] == sid
-    assert UUID_HEX.match(sid), f"expected uuid, got {sid!r}"
+    assert UUID_V7_HEX.match(sid), f"expected uuid7, got {sid!r}"
     log = Path(os.environ["MENTAT_SESSION_LOG"])
     assert log == tmp_path / "demo" / sid / "session.jsonl"
     assert log.parent.is_dir()

@@ -16,7 +16,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 from lib import paths  # noqa: E402
 from lib.events import bind, spawned_payload  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
-from lib.session import mint_session  # noqa: E402
+from lib.session import make_agent_id  # noqa: E402
 from lib.session import session_dir as _session_dir_fn
 
 _IMPLEMENT_SCRIPT = paths.SKILLS_DIR / "mentat-implement/scripts/implement.py"
@@ -54,7 +54,7 @@ def _build_spawn_cmd(
     """
     # The child is an implement run — mint a fresh implement session per child
     # (overriding any inherited orchestrate id in the child env below).
-    session_id = mint_session("implement", plan_path.stem)
+    session_id = make_agent_id("implement", plan_path.stem)
     log_dir = _log_dir_for(session_id)
     log_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     session_log = log_dir / "session.jsonl"

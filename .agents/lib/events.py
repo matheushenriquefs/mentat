@@ -9,7 +9,7 @@ import sys
 from collections.abc import Callable
 
 from lib import paths, state
-from lib.session import mint_session
+from lib.session import make_agent_id
 
 # Events where a failed emit must not be silently swallowed — the orchestration
 # state machine cannot proceed correctly without a confirmed log write.
@@ -22,7 +22,7 @@ def _spawn(skill: str, event: str, payload: dict[str, object]) -> bool:
     # last-resort fallback is unreachable and no unkeyed `orphan-` dir is born.
     env = dict(os.environ)
     if not env.get("MENTAT_SESSION"):
-        env["MENTAT_SESSION"] = mint_session(skill, "adhoc")
+        env["MENTAT_SESSION"] = make_agent_id(skill, "adhoc")
     r = subprocess.run(
         ["python3", str(paths.LOG_SCRIPT), "emit", skill, event, json.dumps(payload)],
         capture_output=True,

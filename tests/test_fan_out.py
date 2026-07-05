@@ -158,7 +158,7 @@ def test_spawn_worktree_subprocess_wires_harness_model_and_seed(tmp_path, monkey
     """harness/model append CLI flags; seed_summary injects MENTAT_SEED_SUMMARY."""
     fan_out = load_module("fan_out")
 
-    monkeypatch.setattr(fan_out, "mint_session", lambda kind, stem: "sess-wire")
+    monkeypatch.setattr(fan_out, "make_agent_id", lambda kind, stem: "sess-wire")
     monkeypatch.setattr(fan_out, "_log_dir_for", lambda sid: tmp_path)
 
     captured: dict[str, object] = {}
@@ -189,7 +189,7 @@ def test_spawn_worktree_subprocess_omits_flags_when_unset(tmp_path, monkeypatch)
     """No harness/model/seed → no flags and no MENTAT_SEED_SUMMARY env key."""
     fan_out = load_module("fan_out")
 
-    monkeypatch.setattr(fan_out, "mint_session", lambda kind, stem: "sess-bare")
+    monkeypatch.setattr(fan_out, "make_agent_id", lambda kind, stem: "sess-bare")
     monkeypatch.setattr(fan_out, "_log_dir_for", lambda sid: tmp_path)
 
     captured: dict[str, object] = {}
