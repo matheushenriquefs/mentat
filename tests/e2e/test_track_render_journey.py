@@ -12,6 +12,7 @@ pytest default) also drives the one-shot fallbacks of ``view_session`` /
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -223,13 +224,18 @@ def test_frame_fingerprint_restore_and_sigterm():
 
 def test_registry_frame_navigate_and_kill(tmp_path, monkeypatch, capsys):
     m = _track()
-    db = tmp_path / "state.db"
-    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+    db = tmp_path / "mentat.db"
+    logs = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_DB", str(db))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(logs))
 
-    repo_dir = tmp_path / "myrepo"
-    repo_dir.mkdir()
-    env = {"MENTAT_SESSION": "s1", "MENTAT_REPO": "myrepo"}
-    m.state.project(env, "chunk.spawned", now=100.0)
+    repo_dir = logs / "myrepo"
+    repo_dir.mkdir(parents=True)
+    env = {"MENTAT_AGENT": "s1", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
+    from lib import store
+
+    store.record_emit(env, "chunk.spawned", {"slug": "x", "worktree": "/tmp/wt-s1"})
+    (repo_dir / "s1").mkdir()
 
     entries = m._registry(repo_dir)
     assert entries and entries[0][0]["session"] == "s1"

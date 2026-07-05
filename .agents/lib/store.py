@@ -556,12 +556,111 @@ def record_emit(env: dict[str, str], event: str, payload: dict[str, object]) -> 
         terminal = _AGENT_TERMINAL_EVENTS.get(event)
         if terminal is not None:
             agents.update_status(agent_id, status=terminal, ended_at=iso_now())
-        chunk_id = env.get("MENTAT_CHUNK_ID")
+        raw_chunk = env.get("MENTAT_CHUNK_ID", "").strip()
+        chunk_id: str | None = None
+        if raw_chunk and ChunkDAO(conn).get_by_id(raw_chunk) is not None:
+            chunk_id = raw_chunk
         events.append(
             kind=event,
             payload=payload,
             agent_id=agent_id,
             chunk_id=chunk_id or None,
         )
+    finally:
+        conn.close()
+
+
+_CHUNK_TERMINAL_KINDS = frozenset({"chunk_landed", "chunk_ejected", "plan_succeeded", "plan_failed"})
+
+
+def display_kind(kind: str) -> str:
+    return kind.replace("_", ".")
+
+
+def reconcile_liveness() -> None:
+    """Mark running agents with dead pids as reaped when no terminal event exists."""
+    conn = connect()
+    try:
+        agents = AgentDAO(conn)
+        events = EventDAO(conn)
+        for agent in agents.list_running():
+            if agent.status not in ("pending", "running"):
+                continue
+            if probe_pid(agent.pid):
+                continue
+            rows = events.list_by_agent(agent.id)
+            if rows and rows[-1].kind in _CHUNK_TERMINAL_KINDS:
+                continue
+            agents.mark_reaped(agent.id)
+    finally:
+        conn.close()
+
+
+def _track_status(agent: Agent) -> str:
+    if agent.status == "reaped":
+        return "reaped"
+    if agent.status in ("stopped",):
+        return "idle"
+    if agent.status in ("pending", "running"):
+        return "working"
+    return "?"
+
+
+def list_track_entries(
+    repo: str,
+    *,
+    active_only: bool = True,
+    now: float | None = None,
+) -> list[dict[str, object]]:
+    """Agents for one repo's track registry — keyed on log dir under ``repo``."""
+    from lib.session import log_root
+
+    reconcile_liveness()
+    clock = time.time() if now is None else now
+    root = log_root() / repo
+    conn = connect()
+    try:
+        agents = AgentDAO(conn)
+        events = EventDAO(conn)
+        pool = agents.list_visible() if not active_only else agents.list_running()
+        out: list[dict[str, object]] = []
+        for agent in pool:
+            log_dir = root / agent.id.replace("/", "-")
+            if not log_dir.is_dir():
+                continue
+            if active_only and agent.status == "reaped":
+                continue
+            evs = events.list_by_agent(agent.id)
+            last_event = display_kind(evs[-1].kind) if evs else None
+            try:
+                started = datetime.fromisoformat(agent.started_at).timestamp()
+            except ValueError:
+                started = clock
+            mtime = started
+            if evs:
+                try:
+                    mtime = datetime.fromisoformat(evs[-1].ts).timestamp()
+                except ValueError:
+                    pass
+            out.append(
+                {
+                    "session": agent.id,
+                    "status": _track_status(agent),
+                    "mtime": mtime,
+                    "age": max(0.0, clock - mtime),
+                    "last_event": last_event,
+                }
+            )
+        out.sort(key=lambda r: (r["status"] != "working", -(cast("float", r["mtime"]))))
+        return out
+    finally:
+        conn.close()
+
+
+def get_agent(agent_id: str) -> Agent | None:
+    reconcile_liveness()
+    conn = connect()
+    try:
+        return AgentDAO(conn).get_by_id(agent_id)
     finally:
         conn.close()

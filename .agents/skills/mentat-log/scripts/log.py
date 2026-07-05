@@ -17,6 +17,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib import state as _state  # noqa: E402
 from lib.events import EJECT_REASONS as _EJECT_REASONS  # noqa: E402
+from lib.session import agent_id_from_env as _agent_id_from_env
 from lib.session import log_root as _log_root  # noqa: E402
 from lib.session import make_agent_id as _make_agent_id
 from lib.session import repo_name as _repo
@@ -52,7 +53,7 @@ EVENT_OPTIONAL_FIELDS: dict[str, list[str]] = {
 
 
 def _session() -> str | None:
-    return os.environ.get("MENTAT_SESSION")
+    return _agent_id_from_env()
 
 
 def _agent_slug() -> str:
@@ -60,7 +61,7 @@ def _agent_slug() -> str:
 
 
 def _session_dir(base: Path, repo: str, session: str) -> Path:
-    return base / repo / session
+    return base / repo / session.replace("/", "-")
 
 
 def _log_file(base: Path, repo: str, session: str, agent: str, slug: str) -> Path:

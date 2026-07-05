@@ -405,8 +405,15 @@ def test_cmd_track_session_not_found_returns_1(tmp_path, monkeypatch):
 
 def test_cmd_track_session_found_calls_view_session(tmp_path, monkeypatch):
     session_mod, log_root = _make_session_env(tmp_path, monkeypatch)
+    from lib import store
+
     session_dir = log_root / "testrepo" / "sess-abc"
     session_dir.mkdir(parents=True)
+    store.record_emit(
+        {"MENTAT_AGENT": "sess-abc", "MENTAT_AGENT_PID": "1", "MENTAT_HARNESS": "cursor"},
+        "chunk.spawned",
+        {"slug": "x"},
+    )
     view_calls: list = []
     with patch.object(session_mod._track, "view_session", side_effect=lambda sd: view_calls.append(sd)):
         rc = session_mod.cmd_track("sess-abc")

@@ -411,6 +411,8 @@ def test_emit_projects_session_row(monkeypatch, tmp_path):
 
     db = tmp_path / "state.db"
     monkeypatch.setenv("MENTAT_STATE_DB", str(db))
+    monkeypatch.setenv("MENTAT_DB", str(tmp_path / "mentat.db"))
+    monkeypatch.setenv("MENTAT_AGENT", "deadbeef")
     monkeypatch.setenv("MENTAT_SESSION", "deadbeef")
     monkeypatch.setenv("MENTAT_REPO", "mentat")
 

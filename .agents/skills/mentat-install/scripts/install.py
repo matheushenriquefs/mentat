@@ -12,6 +12,7 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib import store as _store  # noqa: E402
 from lib.events import bind  # noqa: E402
 from lib.exits import EX_DATAERR  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
@@ -96,6 +97,8 @@ def do_install(
     config_file = mentat_dir / "config.toml"
     _utils.safe_mkdir(mentat_dir)
     _utils.write_default_config(config_file)
+    if _store.migrate_legacy_state_db():
+        print("mentat-install: migrated state.db → mentat.db")
 
     _emit_installed()
     if not ok:

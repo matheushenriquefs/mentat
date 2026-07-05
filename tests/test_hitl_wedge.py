@@ -231,11 +231,13 @@ def test_partition_fanout_all_clean_lands_all():
 def test_ensure_session_freezes_mentat_repo(tmp_path, monkeypatch):
     """ensure_session exports MENTAT_REPO from the pre-chdir cwd, so a later
     os.chdir into the worktree can't make _logs_path / doctor / emit resolve to
-    the slug dir while session.jsonl sits under the repo dir."""
+    the slug dir while transcript.jsonl sits under the repo dir."""
     from lib import session as session_mod
 
+    from tests.conftest import init_git_repo
+
     repo = tmp_path / "myrepo"
-    repo.mkdir()
+    init_git_repo(repo)
     monkeypatch.chdir(repo)
     monkeypatch.delenv("MENTAT_REPO", raising=False)
     monkeypatch.delenv("MENTAT_SESSION", raising=False)

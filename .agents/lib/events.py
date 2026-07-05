@@ -21,6 +21,7 @@ def _spawn(skill: str, event: str, payload: dict[str, object]) -> bool:
     env = dict(os.environ)
     if not agent_id_from_env(env):
         env["MENTAT_AGENT"] = make_agent_id(skill, "adhoc")
+        env.setdefault("MENTAT_SESSION", env["MENTAT_AGENT"])
     r = subprocess.run(
         ["python3", str(paths.LOG_SCRIPT), "emit", skill, event, json.dumps(payload)],
         capture_output=True,

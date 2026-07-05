@@ -53,22 +53,23 @@ def test_make_agent_id_slash_slug_stays_flat(tmp_path, monkeypatch) -> None:
 
 
 def test_ensure_session_exports_env(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
     monkeypatch.delenv("MENTAT_SESSION", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
     monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
-    for k in ("MENTAT_SESSION_ROLE", "MENTAT_SESSION_SLUG", "MENTAT_SESSION_PID", "MENTAT_SESSION_BRANCH"):
-        monkeypatch.delenv(k, raising=False)
+    monkeypatch.delenv("MENTAT_SLUG", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_PID", raising=False)
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "demo")
     sid = session_mod.ensure_session("implement", "p")
+    assert os.environ["MENTAT_AGENT"] == sid
     assert os.environ["MENTAT_SESSION"] == sid
     assert UUID_V7_HEX.match(sid), f"expected uuid7, got {sid!r}"
-    log = Path(os.environ["MENTAT_SESSION_LOG"])
-    assert log == tmp_path / "demo" / sid / "session.jsonl"
+    log = Path(os.environ["MENTAT_AGENT_LOG"])
+    assert log == tmp_path / "demo" / sid / "transcript.jsonl"
     assert log.parent.is_dir()
-    # role/slug/pid frozen as fields for the projection to read at emit time.
-    assert os.environ["MENTAT_SESSION_ROLE"] == "implement"
-    assert os.environ["MENTAT_SESSION_SLUG"] == "p"
-    assert os.environ["MENTAT_SESSION_PID"] == str(os.getpid())
+    assert os.environ["MENTAT_SLUG"] == "p"
+    assert os.environ["MENTAT_AGENT_PID"] == str(os.getpid())
 
 
 def test_emit_without_session_env_mints_uuid_not_orphan(monkeypatch, tmp_path) -> None:
@@ -91,14 +92,14 @@ def test_emit_without_session_env_mints_uuid_not_orphan(monkeypatch, tmp_path) -
 
 
 def test_ensure_session_records_branch_when_resolvable(monkeypatch, tmp_path) -> None:
+    """Branch is no longer exported as an env var (V1 agent entity)."""
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
     monkeypatch.delenv("MENTAT_SESSION", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_BRANCH", raising=False)
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "demo")
     monkeypatch.setattr(session_mod, "current_branch", lambda: "trunk")
     session_mod.ensure_session("orchestrate", "hold")
-    assert os.environ["MENTAT_SESSION_BRANCH"] == "trunk"
+    assert "MENTAT_SESSION_BRANCH" not in os.environ
 
 
 def test_ensure_session_skips_branch_when_unresolvable(monkeypatch, tmp_path) -> None:

@@ -163,22 +163,22 @@ def test_repo_name_env_wins(tmp_path, monkeypatch):
     assert session.repo_name() == "frozen"
 
 
-def test_repo_name_falls_back_to_cwd_outside_git(tmp_path, monkeypatch):
-    """Outside any git repo, repo_name() falls back to the cwd basename."""
+def test_repo_name_falls_back_to_unknown_outside_git(tmp_path, monkeypatch):
+    """Outside any git repo, repo_name() is ``unknown`` — never cwd basename."""
     monkeypatch.delenv("MENTAT_REPO", raising=False)
     outside = tmp_path / "not-a-repo"
     outside.mkdir()
     monkeypatch.chdir(outside)
     sys.modules.pop("lib.session", None)
     session = _load_session()
-    assert session.repo_name() == "not-a-repo"
+    assert session.repo_name() == "unknown"
 
 
 # ── _repo_root error paths ────────────────────────────────────────────────────
 
 
 def test_repo_name_falls_back_when_git_binary_missing(tmp_path, monkeypatch):
-    """git not on PATH → _repo_root returns None → cwd basename (lines 52-53)."""
+    """git not on PATH → _repo_root returns None → unknown."""
     monkeypatch.delenv("MENTAT_REPO", raising=False)
     outside = tmp_path / "no-git-here"
     outside.mkdir()
@@ -190,11 +190,11 @@ def test_repo_name_falls_back_when_git_binary_missing(tmp_path, monkeypatch):
         raise OSError("no git")
 
     monkeypatch.setattr(subprocess, "run", raise_oserror)
-    assert session.repo_name() == "no-git-here"
+    assert session.repo_name() == "unknown"
 
 
 def test_repo_name_falls_back_when_common_dir_empty(tmp_path, monkeypatch):
-    """git prints empty --git-common-dir → _repo_root returns None → cwd basename (line 58)."""
+    """git prints empty --git-common-dir → _repo_root returns None → unknown."""
     monkeypatch.delenv("MENTAT_REPO", raising=False)
     outside = tmp_path / "empty-out"
     outside.mkdir()
@@ -207,7 +207,7 @@ def test_repo_name_falls_back_when_common_dir_empty(tmp_path, monkeypatch):
         stdout = "   \n"
 
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Result())
-    assert session.repo_name() == "empty-out"
+    assert session.repo_name() == "unknown"
 
 
 # ── cross-caller convergence ──────────────────────────────────────────────────

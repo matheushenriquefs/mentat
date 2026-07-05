@@ -13,10 +13,12 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib import store as _store
 from lib.loader import load_sibling  # noqa: E402
+from lib.session import agent_dir as _agent_dir_fn  # noqa: E402
 from lib.session import log_root as _log_root  # noqa: E402
 from lib.session import repo_name as _repo
-from lib.session import session_dir as _session_dir_fn
+from lib.session import resolve_agent_dir as _resolve_agent_dir
 
 _sessions = load_sibling(__file__, "sessions")
 _doctor = load_sibling(__file__, "doctor")
@@ -32,13 +34,14 @@ def _session_dir(repo: str, session_id: str) -> Path:
 def cmd_track(session_id: str | None, all_sessions: bool = False) -> int:
     repo = _repo()
     repo_dir = _log_root() / repo
-    # No session id → live multi-AFK navigator over the whole repo registry.
     if session_id is None:
         return _track.navigate(repo_dir, repo=repo, active_only=not all_sessions)
-    sd = _session_dir_fn(session_id)
-    if not sd.exists():
-        print(f"mentat-session: session dir not found: {sd}", file=sys.stderr)
+    agent = _store.get_agent(session_id)
+    if agent is None:
+        print(f"mentat-session: agent not found: {session_id}", file=sys.stderr)
         return 1
+    sd = _resolve_agent_dir(session_id) or _agent_dir_fn(session_id)
+    sd.mkdir(parents=True, exist_ok=True)
     _track.view_session(sd)
     return 0
 
@@ -47,12 +50,16 @@ def _resolve_session(session_id: str | None) -> Path | int:
     """Resolve session_id to an existing session dir, or return an exit code."""
     repo = _repo()
     repo_dir = _log_root() / repo
+    sd = _resolve_agent_dir(session_id) if session_id else None
+    if session_id is not None and sd is None:
+        sd = _agent_dir_fn(session_id)
     if session_id is None:
         session_id = _sessions.latest_session(repo_dir)
     if session_id is None:
         print("mentat-session: no sessions found", file=sys.stderr)
         return 1
-    sd = _session_dir_fn(session_id)
+    if sd is None:
+        sd = _resolve_agent_dir(session_id) or _agent_dir_fn(session_id)
     if not sd.exists():
         print(f"mentat-session: session dir not found: {sd}", file=sys.stderr)
         return 1

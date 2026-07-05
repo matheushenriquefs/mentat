@@ -17,7 +17,7 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import harness_stream as _hs  # noqa: E402
-from lib import state, tui  # noqa: E402
+from lib import store, tui  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
 _sessions = load_sibling(__file__, "sessions")
@@ -69,14 +69,13 @@ def empty_hint(view: str, last_event: str | None) -> str:
 
 
 def _transcript_content(session_dir: Path, *, limit: int = 0) -> list[str]:
-    """Transcript content lines (assistant text + tool calls + result summaries); [] if none.
-
-    Reads all *.jsonl in session_dir, filters to harness stream rows (type-keyed,
-    no event key); limit 0 = the full history (focus pane scrolls it), else tails.
-    """
+    """Transcript content from ``transcript.jsonl`` (legacy: ``session.jsonl``)."""
     rows: list[dict[str, object]] = []
-    for f in sorted(session_dir.glob("*.jsonl")):
-        rows.extend(_sessions.iter_rows(f))
+    for name in ("transcript.jsonl", "session.jsonl"):
+        path = session_dir / name
+        if path.is_file():
+            rows.extend(_sessions.iter_rows(path))
+            break
     stream_rows = [r for r in rows if "type" in r and "event" not in r]
     # limit 0 = full history (the focus pane scrolls it); a positive limit tails.
     tail = stream_rows[-limit:] if limit else stream_rows
@@ -111,7 +110,25 @@ def render_transcript_lines(session_dir: Path, *, limit: int = 0) -> list[str]:
 
 
 def _audit_content(session_dir: Path, *, limit: int = 0) -> list[str]:
-    """Audit envelope rows as 'ts event payload'; [] if the session has no audit log."""
+    """Audit rows from the canonical store for this agent id, else legacy jsonl."""
+    agent_id = session_dir.name
+    conn = store.connect()
+    try:
+        events = store.EventDAO(conn).list_by_agent(agent_id)
+    finally:
+        conn.close()
+    if events:
+        tail = events[-limit:] if limit else events
+        gutter = tui.color(tui.PIPE, tui.DIM)
+        out: list[str] = []
+        for row in tail:
+            ts = row.ts[-19:]
+            event = store.display_kind(row.kind)
+            payload = json.dumps(row.payload)
+            sgr = _color_for_event(event)
+            body = f"{event} {payload[:100]}"
+            out.append(f"{gutter} {ts} {tui.color(body, sgr) if sgr else body}")
+        return out
     rows: list[dict[str, object]] = []
     for f in sorted(session_dir.glob("*.jsonl")):
         rows.extend(_sessions.iter_rows(f))
@@ -568,15 +585,8 @@ def _navigate_tty(repo_dir: Path, *, repo: str, active_only: bool) -> int:  # pr
 
 
 def _registry(repo_dir: Path, *, active_only: bool = True) -> list[Entry]:
-    """Registry status records from the sqlite projection, paired with each session's
-    absolute dir (for preview/kill).
-
-    One indexed query keyed on the repo — no repo-dir scan, no per-session tail reduce,
-    no recency window (which used to hide live-but-idle sessions). The db path is fixed
-    (`MENTAT_STATE_DB` / `~/.mentat/state.db`), so a reader invoked outside the writer's
-    cwd can't false-empty against populated state — the motivating "couldn't track" bug.
-    """
-    rows = state.list_sessions(repo_dir.name, active_only=active_only)
+    """Registry from the canonical store, paired with each agent's log dir."""
+    rows = store.list_track_entries(repo_dir.name, active_only=active_only)
     return [(r, repo_dir / str(r["session"])) for r in rows]
 
 

@@ -64,9 +64,22 @@ def _clear_chunk_registry() -> None:
 
 @pytest.fixture(autouse=True)
 def _isolate_state_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Redirect the sqlite projection to a throwaway path for every test so an
-    emit never writes the operator's real ``~/.mentat/state.db``."""
+    """Redirect sqlite stores to throwaway paths for every test."""
     monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "state.db"))
+    monkeypatch.setenv("MENTAT_DB", str(tmp_path / "mentat.db"))
+    for key in (
+        "MENTAT_AGENT",
+        "MENTAT_SESSION",
+        "MENTAT_AGENT_LOG",
+        "MENTAT_SESSION_LOG",
+        "MENTAT_AGENT_PID",
+        "MENTAT_SESSION_PID",
+        "MENTAT_SESSION_ROLE",
+        "MENTAT_SESSION_SLUG",
+        "MENTAT_SESSION_BRANCH",
+        "MENTAT_SLUG",
+    ):
+        monkeypatch.delenv(key, raising=False)
 
 
 @pytest.fixture

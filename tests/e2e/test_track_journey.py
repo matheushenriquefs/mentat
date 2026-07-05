@@ -26,7 +26,7 @@ pytestmark = pytest.mark.e2e
 _AGENTS = Path(__file__).resolve().parents[2] / ".agents"
 if str(_AGENTS) not in sys.path:
     sys.path.insert(0, str(_AGENTS))
-from lib import state  # noqa: E402
+from lib import store  # noqa: E402
 
 SESSION_PY = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-session/scripts/session.py"
 
@@ -89,16 +89,17 @@ def _run(args: list[str], log_root: Path, repo: str) -> str:
 def test_track_all_lists_every_seeded_session(tmp_path, monkeypatch):
     repo = "trackrepo"
     log_root = tmp_path / "logs"
-    db = tmp_path / "state.db"
-    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
-    # track reads the sqlite projection: a live (running) session plus two terminal ones.
+    db = tmp_path / "mentat.db"
+    monkeypatch.setenv("MENTAT_DB", str(db))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     for uuid, event in (("live-sess", "chunk.spawned"), ("done-sess", "chunk.landed"), ("failed-sess", "plan.failed")):
-        state.project({"MENTAT_SESSION": uuid, "MENTAT_REPO": repo}, event, now=100.0)
+        env = {"MENTAT_AGENT": uuid, "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
+        store.record_emit(env, event, {"slug": "x"})
+        (log_root / repo / uuid).mkdir(parents=True)
 
     out = _run(["track", "--all"], log_root, repo)
 
-    # Every projected session surfaces with its projected status.
-    for session, status in (("live-sess", "running"), ("done-sess", "landed"), ("failed-sess", "failed")):
+    for session, status in (("live-sess", "working"), ("done-sess", "idle"), ("failed-sess", "idle")):
         line = next((ln for ln in out.splitlines() if session in ln), None)
         assert line is not None, f"{session} missing from track --all output:\n{out}"
         assert status in line, f"{session} wrong status (want {status!r}):\n{line!r}"

@@ -25,7 +25,7 @@ pytestmark = pytest.mark.e2e
 _AGENTS = Path(__file__).resolve().parents[2] / ".agents"
 if str(_AGENTS) not in sys.path:
     sys.path.insert(0, str(_AGENTS))
-from lib import state  # noqa: E402
+from lib import store  # noqa: E402
 
 SESSION_DIR = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-session/scripts"
 SESSION_PY = SESSION_DIR / "session.py"
@@ -219,10 +219,16 @@ def test_doctor_no_sessions_errors(repo_log, capsys):
     assert "no sessions found" in capsys.readouterr().err
 
 
-def test_track_single_session_view(repo_log, capsys):
+def test_track_single_session_view(repo_log, capsys, tmp_path, monkeypatch):
     log_root, repo = repo_log
     s = _session()
     sd = log_root / repo / "orchestrate-main-5"
+    monkeypatch.setenv("MENTAT_DB", str(tmp_path / "mentat.db"))
+    store.record_emit(
+        {"MENTAT_AGENT": "orchestrate-main-5", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"},
+        "chunk.spawned",
+        {"slug": "x"},
+    )
     _write_events(sd, _LANDED)
     # A harness stream so the transcript renderer produces real content.
     (sd / "session.jsonl").write_text(
@@ -244,10 +250,14 @@ def test_track_single_session_view(repo_log, capsys):
 def test_track_navigator_oneshot_lists_registry(repo_log, capsys, monkeypatch, tmp_path):
     log_root, repo = repo_log
     s = _session()
-    # The navigator registry reads the sqlite projection, not the log dir scan.
-    monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "state.db"))
-    state.project({"MENTAT_SESSION": "orchestrate-main-6", "MENTAT_REPO": repo}, "chunk.spawned", now=100.0)
-    state.project({"MENTAT_SESSION": "orchestrate-main-7", "MENTAT_REPO": repo}, "chunk.ejected", now=100.0)
+    monkeypatch.setenv("MENTAT_DB", str(tmp_path / "mentat.db"))
+    for agent_id, event in (("orchestrate-main-6", "chunk.spawned"), ("orchestrate-main-7", "chunk.ejected")):
+        store.record_emit(
+            {"MENTAT_AGENT": agent_id, "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"},
+            event,
+            {"slug": "x", "reason": "implement-failed", "where": "/tmp"},
+        )
+        (log_root / repo / agent_id).mkdir(parents=True)
 
     # cmd_track(None) → navigate(); stdin is not a tty → one-shot registry list print.
     assert s.cmd_track(None, all_sessions=True) == 0

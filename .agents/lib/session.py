@@ -114,7 +114,8 @@ def ensure_agent(role: str, slug: str) -> str:
     agent_id = agent_id_from_env()
     if not agent_id:
         agent_id = make_agent_id(role, slug)
-        os.environ["MENTAT_AGENT"] = agent_id
+    os.environ["MENTAT_AGENT"] = agent_id
+    os.environ.setdefault("MENTAT_SESSION", agent_id)
     if not os.environ.get("MENTAT_REPO"):
         os.environ["MENTAT_REPO"] = repo_name()
     os.environ.setdefault("MENTAT_SLUG", slug)
@@ -123,6 +124,7 @@ def ensure_agent(role: str, slug: str) -> str:
         log = transcript_log_path(agent_id)
         log.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.environ["MENTAT_AGENT_LOG"] = str(log)
+    os.environ.setdefault("MENTAT_SESSION_LOG", os.environ["MENTAT_AGENT_LOG"])
     return agent_id
 
 
@@ -136,3 +138,21 @@ def session_log_path(session_id: str) -> Path:
 
 def ensure_session(role: str, slug: str) -> str:
     return ensure_agent(role, slug)
+
+
+def resolve_agent_dir(agent_id: str) -> Path | None:
+    """Find an agent's log dir anywhere under log_root (cwd/repo-independent)."""
+    safe_id = agent_id.replace("/", "-")
+    direct = agent_dir(agent_id)
+    if direct.is_dir():
+        return direct
+    root = log_root()
+    if not root.is_dir():
+        return None
+    for repo_path in sorted(root.iterdir()):
+        if not repo_path.is_dir():
+            continue
+        candidate = repo_path / safe_id
+        if candidate.is_dir():
+            return candidate
+    return None

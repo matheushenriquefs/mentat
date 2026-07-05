@@ -142,13 +142,13 @@ def test_repo_name_uses_repo_basename_inside_repo(monkeypatch, tmp_path):
     assert session.repo_name() == "coolrepo"
 
 
-def test_repo_name_falls_back_to_cwd_name_outside_repo(monkeypatch, tmp_path):
+def test_repo_name_falls_back_to_unknown_outside_repo(monkeypatch, tmp_path):
     monkeypatch.delenv("MENTAT_REPO", raising=False)
     outside = tmp_path / "loosedir"
     outside.mkdir()
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     monkeypatch.chdir(outside)
-    assert session.repo_name() == "loosedir"
+    assert session.repo_name() == "unknown"
 
 
 # ── session_dir + canonical filenames ────────────────────────────────────────
@@ -173,19 +173,22 @@ def test_diagnosis_file_is_diagnosis_md_under_session_dir(monkeypatch, tmp_path)
     assert session.diagnosis_file("s1") == session.session_dir("s1") / "diagnosis.md"
 
 
-def test_session_log_path_is_session_jsonl_under_session_dir(monkeypatch, tmp_path):
+def test_session_log_path_is_transcript_jsonl_under_session_dir(monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "r")
-    assert session.session_log_path("s1") == session.session_dir("s1") / "session.jsonl"
+    assert session.session_log_path("s1") == session.session_dir("s1") / "transcript.jsonl"
 
 
 # ── ensure_session ───────────────────────────────────────────────────────────
 
 
 def test_ensure_session_mints_and_exports_from_clean_env(monkeypatch, tmp_path):
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
     monkeypatch.delenv("MENTAT_SESSION", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
     monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
     monkeypatch.delenv("MENTAT_REPO", raising=False)
+    monkeypatch.delenv("MENTAT_SLUG", raising=False)
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
 
     repo = tmp_path / "workrepo"
@@ -193,33 +196,30 @@ def test_ensure_session_mints_and_exports_from_clean_env(monkeypatch, tmp_path):
     init_git_repo(repo)
     monkeypatch.chdir(repo)
 
-    for k in ("MENTAT_SESSION_ROLE", "MENTAT_SESSION_SLUG", "MENTAT_SESSION_PID", "MENTAT_SESSION_BRANCH"):
-        monkeypatch.delenv(k, raising=False)
-
     sid = session.ensure_session("implement", "the-plan")
 
     import re
 
     assert re.fullmatch(r"[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}", sid), f"expected uuid7, got {sid!r}"
+    assert os.environ["MENTAT_AGENT"] == sid
     assert os.environ["MENTAT_SESSION"] == sid
     assert os.environ["MENTAT_REPO"] == "workrepo"
-    assert os.environ["MENTAT_SESSION_ROLE"] == "implement"
-    assert os.environ["MENTAT_SESSION_SLUG"] == "the-plan"
-    log = Path(os.environ["MENTAT_SESSION_LOG"])
-    assert log.name == "session.jsonl"
+    assert os.environ["MENTAT_SLUG"] == "the-plan"
+    log = Path(os.environ["MENTAT_AGENT_LOG"])
+    assert log.name == "transcript.jsonl"
     assert log.parent.is_dir()
 
 
 def test_ensure_session_preserves_preset_session(monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_SESSION", "preexisting-id")
     monkeypatch.setenv("MENTAT_REPO", "frozen")
-    monkeypatch.setenv("MENTAT_SESSION_LOG", str(tmp_path / "already.jsonl"))
+    monkeypatch.setenv("MENTAT_AGENT_LOG", str(tmp_path / "already.jsonl"))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
 
     sid = session.ensure_session("implement", "ignored-slug")
 
-    # Already-set session id is preserved, not re-minted.
     assert sid == "preexisting-id"
+    assert os.environ["MENTAT_AGENT"] == "preexisting-id"
     assert os.environ["MENTAT_SESSION"] == "preexisting-id"
 
 
@@ -240,11 +240,12 @@ def test_ensure_session_preserves_preset_repo(monkeypatch, tmp_path):
     assert os.environ["MENTAT_REPO"] == "already-frozen"
 
 
-def test_ensure_session_preserves_preset_session_log(monkeypatch, tmp_path):
+def test_ensure_session_preserves_preset_agent_log(monkeypatch, tmp_path):
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
     monkeypatch.delenv("MENTAT_SESSION", raising=False)
     monkeypatch.delenv("MENTAT_REPO", raising=False)
-    preset_log = tmp_path / "pinned" / "session.jsonl"
-    monkeypatch.setenv("MENTAT_SESSION_LOG", str(preset_log))
+    preset_log = tmp_path / "pinned" / "transcript.jsonl"
+    monkeypatch.setenv("MENTAT_AGENT_LOG", str(preset_log))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
 
     repo = tmp_path / "logrepo"
@@ -255,5 +256,6 @@ def test_ensure_session_preserves_preset_session_log(monkeypatch, tmp_path):
     session.ensure_session("implement", "plan")
 
     # Pre-set log path is preserved; no new dir is minted for it.
+    assert os.environ["MENTAT_AGENT_LOG"] == str(preset_log)
     assert os.environ["MENTAT_SESSION_LOG"] == str(preset_log)
     assert not preset_log.parent.exists()

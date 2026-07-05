@@ -6,6 +6,7 @@ keypress reducer + list/preview renderers. Gate-run home (testpaths = ["tests"])
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -636,11 +637,16 @@ def test_tools_delegates_to_stream_tools(tmp_path):
 
 def test_registry_pairs_records_with_dirs(tmp_path, monkeypatch):
     track = load_module("track")
-    from lib import state
+    from lib import store
 
-    monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "state.db"))
-    state.project({"MENTAT_SESSION": "implement-a-1", "MENTAT_REPO": "repo"}, "chunk.spawned", now=1.0)
-    repo_dir = tmp_path / "repo"
+    db = tmp_path / "mentat.db"
+    logs = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_DB", str(db))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(logs))
+    env = {"MENTAT_AGENT": "implement-a-1", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
+    store.record_emit(env, "chunk.spawned", {"slug": "x"})
+    (logs / "repo" / "implement-a-1").mkdir(parents=True)
+    repo_dir = logs / "repo"
     entries = track._registry(repo_dir, active_only=False)
     assert entries, "expected the seeded session in the registry"
     rec, sd = entries[0]
@@ -649,15 +655,21 @@ def test_registry_pairs_records_with_dirs(tmp_path, monkeypatch):
 
 
 def test_registry_reads_sqlite_lists_live_and_idle(tmp_path, monkeypatch):
-    """S3: track/registry reads the sqlite projection — a live + an idle-but-incomplete
-    session both list; the dir scan + recency window that used to false-empty are gone."""
+    """track/registry reads the canonical store — live sessions list without recency window."""
     track = load_module("track")
-    from lib import state
+    from lib import store
 
-    monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "state.db"))
-    state.project({"MENTAT_SESSION": "live", "MENTAT_REPO": "repo"}, "chunk.spawned", now=1_000_000.0)
-    state.project({"MENTAT_SESSION": "idle", "MENTAT_REPO": "repo"}, "gate.evaluated", now=0.0)  # ancient, running
-    repo_dir = tmp_path / "logs" / "repo"
+    db = tmp_path / "mentat.db"
+    logs = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_DB", str(db))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(logs))
+    live_env = {"MENTAT_AGENT": "live", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
+    idle_env = {"MENTAT_AGENT": "idle", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
+    store.record_emit(live_env, "chunk.spawned", {"slug": "a"})
+    store.record_emit(idle_env, "gate.evaluated", {"gate": "x", "verdict": "pass", "severity": "low", "message": "ok"})
+    (logs / "repo" / "live").mkdir(parents=True)
+    (logs / "repo" / "idle").mkdir(parents=True)
+    repo_dir = logs / "repo"
     entries = track._registry(repo_dir, active_only=True)
     assert {rec["session"] for rec, _ in entries} == {"live", "idle"}
     assert repo_dir / "live" in {sd for _, sd in entries}
@@ -712,11 +724,16 @@ def test_kill_swallows_git_error(tmp_path, monkeypatch):
 
 def test_frame_builds_list_view_with_repo_and_hint(tmp_path, monkeypatch):
     track = load_module("track")
-    from lib import state
+    from lib import store
 
-    monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "state.db"))
-    repo_dir = tmp_path / "repo"
-    state.project({"MENTAT_SESSION": "implement-a-1", "MENTAT_REPO": "repo"}, "chunk.spawned", now=1.0)
+    db = tmp_path / "mentat.db"
+    logs = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_DB", str(db))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(logs))
+    env = {"MENTAT_AGENT": "implement-a-1", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
+    store.record_emit(env, "chunk.spawned", {"slug": "x"})
+    repo_dir = logs / "repo"
+    (repo_dir / "implement-a-1").mkdir(parents=True)
     _write_stream(repo_dir / "implement-a-1", "session", [_assistant("Read", "Grep")])
     entries = track._registry(repo_dir, active_only=False)
     body = "\n".join(track._frame(entries, 0, "myrepo", rows=24))
@@ -780,11 +797,16 @@ def test_view_session_tty_dispatches_to_loop(tmp_path, monkeypatch):
 
 def test_navigate_non_tty_prints_list_and_returns_zero(tmp_path, monkeypatch):
     track = load_module("track")
-    from lib import state
+    from lib import store
 
-    monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "state.db"))
-    repo_dir = tmp_path / "repo"
-    state.project({"MENTAT_SESSION": "implement-x-1", "MENTAT_REPO": "repo"}, "chunk.spawned", now=1.0)
+    db = tmp_path / "mentat.db"
+    logs = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_DB", str(db))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(logs))
+    env = {"MENTAT_AGENT": "implement-x-1", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
+    store.record_emit(env, "chunk.spawned", {"slug": "x"})
+    repo_dir = logs / "repo"
+    (repo_dir / "implement-x-1").mkdir(parents=True)
     _write_stream(repo_dir / "implement-x-1", "session", [_assistant("Read", text="hi")])
     monkeypatch.setattr("sys.stdin", type("FakeStdin", (), {"isatty": lambda self: False})())
     out: list[str] = []

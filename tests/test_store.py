@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import multiprocessing as mp
 import os
 import sqlite3
@@ -192,11 +193,6 @@ def test_migrate_legacy_state_db(tmp_path, monkeypatch):
     assert store.migrate_legacy_state_db(dest=dest) is False
 
 
-def test_probe_pid_live_and_dead():
-    assert store.probe_pid(os.getpid()) is True
-    assert store.probe_pid(2**30) is False
-
-
 def test_record_emit_creates_agent_and_event(tmp_path, monkeypatch):
     db = tmp_path / "mentat.db"
     monkeypatch.setenv("MENTAT_DB", str(db))
@@ -216,3 +212,82 @@ def test_record_emit_creates_agent_and_event(tmp_path, monkeypatch):
         assert events[0].kind == "chunk_spawned"
     finally:
         conn.close()
+
+
+def test_probe_pid_live_and_dead():
+    assert store.probe_pid(os.getpid()) is True
+    assert store.probe_pid(2**30) is False
+
+
+def test_reconcile_liveness_reaps_dead_pid(tmp_path, monkeypatch):
+    db = tmp_path / "mentat.db"
+    monkeypatch.setenv("MENTAT_DB", str(db))
+    conn = store.connect(db)
+    store.AgentDAO(conn).insert(
+        store.Agent(
+            id="dead-agent",
+            supervisor_id=None,
+            resumed_from_id=None,
+            forked_from_id=None,
+            harness="test",
+            pid=2**30,
+            status="running",
+            status_reason=None,
+            started_at=store.iso_now(),
+            ended_at=None,
+        )
+    )
+    conn.close()
+    store.reconcile_liveness()
+    conn = store.connect(db)
+    try:
+        agent = store.AgentDAO(conn).get_by_id("dead-agent")
+        assert agent is not None
+        assert agent.status == "reaped"
+        assert agent.status_reason == "dead_pid"
+    finally:
+        conn.close()
+
+
+def test_list_track_entries_scoped_to_repo_log_dir(tmp_path, monkeypatch):
+    db = tmp_path / "mentat.db"
+    logs = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_DB", str(db))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(logs))
+    env = {"MENTAT_AGENT": "agent-a", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
+    store.record_emit(env, "chunk.spawned", {"slug": "x"})
+    (logs / "repo" / "agent-a").mkdir(parents=True)
+    rows = store.list_track_entries("repo", active_only=True)
+    assert len(rows) == 1
+    assert rows[0]["session"] == "agent-a"
+
+
+def test_get_agent_returns_none_for_missing(tmp_path, monkeypatch):
+    monkeypatch.setenv("MENTAT_DB", str(tmp_path / "mentat.db"))
+    assert store.get_agent("missing") is None
+
+
+def test_cmd_track_by_id_outside_repo(tmp_path, monkeypatch, capsys):
+    """track <id> resolves via store, not cwd repo name."""
+    from tests.conftest import load_script
+
+    session_py = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-session/scripts/session.py"
+    mod = load_script(session_py, "session_track_outside")
+    db = tmp_path / "mentat.db"
+    logs = tmp_path / "logs"
+    monkeypatch.setenv("MENTAT_DB", str(db))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(logs))
+    monkeypatch.chdir("/tmp")
+    agent_id = "agent-outside-repo"
+    store.record_emit(
+        {"MENTAT_AGENT": agent_id, "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"},
+        "chunk.spawned",
+        {"slug": "x"},
+    )
+    (logs / "mentat" / agent_id).mkdir(parents=True)
+    (logs / "mentat" / agent_id / "transcript.jsonl").write_text(
+        json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}}) + "\n"
+    )
+    monkeypatch.setenv("MENTAT_REPO", "mentat")
+    assert mod.cmd_track(agent_id) == 0
+    assert "hi" in capsys.readouterr().out
