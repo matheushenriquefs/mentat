@@ -107,10 +107,7 @@ def list_events(session_dir: Path) -> list[dict[str, object]]:
     return store.list_events(session_dir.name)
 
 
-# ── repo-wide registry ────────────────────────────────────────────────────────
-# The filesystem is the registry: each subdir of ~/.mentat/logs/<repo> is one
-# session. We have no push hooks, so status is *pulled* from the tail row of the
-# session's newest jsonl, classified against its st_mtime freshness.
+# ── repo-wide registry (list_agents reads the canonical store) ───────────────
 
 
 def _safe_mtime(path: Path) -> float | None:
@@ -279,9 +276,8 @@ def list_agents(
 def session_stream_tools(session_dir: Path, *, limit: int = 20) -> list[str]:
     """The last `limit` harness tool-call names from a session's stream (preview pane).
 
-    Reads the captured stream-json (session.jsonl). Audit rows yield nothing — only
-    assistant tool_use blocks count — so globbing every jsonl is safe. Order is the
-    file's append order (chronological for the stream). Race-safe via `iter_rows`.
+    Reads the harness transcript (`transcript.jsonl`, legacy `session.jsonl`). Only
+    assistant tool_use blocks count. Order is the file's append order.
     """
     names: list[str] = []
     for f in sorted(session_dir.glob("*.jsonl")):

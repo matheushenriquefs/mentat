@@ -18,8 +18,8 @@ Before this ADR, every eject was final. A batch that lost three chunks to a
 transient container hiccup handed the operator three dead worktrees to re-run by
 hand, even though a rebase-and-retry would have landed them. The four dependency
 roots this feature needed — a transient-vs-terminal classification seam and
-worker-died marker (runtime), backpressure/breaker/backoff guards, a correct
-end-of-batch doctor + projection rebuild (session), and a write-set serializer
+worker-died marker (runtime), backpressure/breaker/backoff guards, session
+inspection (`mentat-session track` / `diagnose`), and a write-set serializer
 (land queue) — were landed first; this ADR records the recovery engine built on
 top of them.
 

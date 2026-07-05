@@ -526,7 +526,7 @@ _AGENT_TERMINAL_EVENTS: dict[str, AgentStatus] = {
 
 
 def record_emit(env: dict[str, str], event: str, payload: dict[str, object]) -> None:
-    """Append one canonical event row and upsert the agent projection (V1 dual-write)."""
+    """Append one canonical event row and upsert the agent projection."""
     agent_id = env.get("MENTAT_AGENT") or env.get("MENTAT_SESSION")
     if not agent_id:
         return

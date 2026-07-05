@@ -1,6 +1,4 @@
-"""S2: orchestrate's recovery wiring — the real spawn / land / re-plan primitives
-bound into ``recover.recover``, plus the end-of-batch doctor + projection wiring.
-"""
+"""S2: orchestrate's recovery wiring — spawn / land / re-plan primitives bound into recover.recover."""
 
 from __future__ import annotations
 

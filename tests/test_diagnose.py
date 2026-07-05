@@ -1,4 +1,4 @@
-"""mentat-session diagnose: doctor-first context, then the /diagnose loop entry."""
+"""mentat-session diagnose: verdict from the canonical store, then the /diagnose loop."""
 
 from __future__ import annotations
 

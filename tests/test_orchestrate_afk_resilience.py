@@ -1,11 +1,10 @@
-"""Tests for mentat-afk-resilience-orchestrate slices 1-6.
+"""Tests for mentat-afk-resilience-orchestrate slices 1-5.
 
 Slice 1: _partition_fanout is total — rc=1/69/70 → eject not land.
 Slice 2: _fan_out_plans kills hung child after deadline, returns rc<0.
-Slice 3: _spawn_batch_doctor argv parses cleanly (no --reason).
-Slice 4: run_orchestrate names ejected chunks on stdout.
-Slice 5: _prune_stale_containers runs even with dirty worktrees.
-Slice 6: _SIGNAL_EXIT_BASE = 128 module constant.
+Slice 3: run_orchestrate names ejected chunks on stdout.
+Slice 4: _prune_stale_containers runs even with dirty worktrees.
+Slice 5: _SIGNAL_EXIT_BASE = 128 module constant.
 """
 
 from __future__ import annotations
@@ -34,7 +33,7 @@ def _make_plan_obj(tmp_path: Path, slug: str, class_: str = "AFK"):
     return routing.Plan(slug=slug, class_=class_, blocked_by=[], path=path)
 
 
-# ── Slice 6: _SIGNAL_EXIT_BASE constant ──────────────────────────────────────
+# ── Slice 5: _SIGNAL_EXIT_BASE constant ──────────────────────────────────────
 
 
 def test_signal_exit_base_constant_is_128():
@@ -464,7 +463,7 @@ def test_partition_fanout_transient_chunks_not_marked_ejected_by_partition(tmp_p
     assert marked == [], "partition must not mark_ejected transient chunks"
 
 
-# ── Slice 4: eject summary on stdout ─────────────────────────────────────────
+# ── Slice 3: eject summary on stdout ─────────────────────────────────────────
 
 
 def test_run_orchestrate_names_ejected_chunks_on_failure(tmp_path, capsys):
@@ -525,7 +524,7 @@ def test_run_orchestrate_all_green_no_eject_summary(tmp_path, capsys):
     assert "ejected" not in output.lower(), f"no eject summary on green batch; got: {output!r}"
 
 
-# ── Slice 5: prune runs even with dirty worktrees ────────────────────────────
+# ── Slice 4: prune runs even with dirty worktrees ────────────────────────────
 
 
 def test_prune_stale_containers_runs_even_with_dirty_worktree(tmp_path, monkeypatch):

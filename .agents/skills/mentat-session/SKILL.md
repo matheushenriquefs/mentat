@@ -5,7 +5,7 @@ description: >
   Use when you want to stream live chunk events, produce a verdict markdown, or kick off a bug-hunt loop.
 ---
 
-Session inspection toolkit. `list` shows the repo-wide registry — every session under `~/.mentat/logs/<repo>/`, attention-needing ones on top. `track` tails JSONL events live with color-coded output. `doctor` derives a verdict markdown from log events and writes it to `~/.mentat/logs/<repo>/<session>/diagnosis.md`. `report` is its success-side twin — a one-paragraph report-back of what the session implemented, written to `summary.md`. `diagnose` invokes `doctor` for context then enters the `/diagnose` loop.
+Session inspection toolkit. `list` shows the repo-wide agent registry from `mentat.db` (attention-needing agents on top). `track` tails canonical audit events and the harness transcript live. `doctor` prints a verdict markdown from store events to stdout. `report` is its success-side twin — a one-paragraph report-back written to `summary.md`. `diagnose` renders the verdict from the store, then enters the `/diagnose` loop.
 
 ## How to invoke
 
@@ -21,7 +21,7 @@ mentat-session diagnose
 
 ## list (repo-wide registry)
 
-The filesystem *is* the registry — each subdir of `~/.mentat/logs/<repo>/` is one session. There are no push hooks, so status is **pulled**: read the tail row of the session's newest jsonl and classify it against the file's `st_mtime`.
+`list` reads agents from the canonical store (`lib/store.list_track_entries`), scoped to agents with a log dir under `~/.mentat/logs/<repo>/`. Status is derived from the agent projection and the latest audit event.
 
 | Status | Marker | Meaning |
 |---|---|---|
@@ -30,7 +30,7 @@ The filesystem *is* the registry — each subdir of `~/.mentat/logs/<repo>/` is 
 | `?` | `?` | Non-terminal tail but stale `st_mtime` (no activity > 300s) — crashed silently. |
 | `working` | `•` | Non-terminal tail, recently active. |
 
-Rows sort attention-to-top by `(rank, age)` — `waiting` (0) > `idle` (1) > `?` (2) > `working` (3). `st_mtime` of the newest file is the free "last-active" timestamp.
+Rows sort attention-to-top by `(rank, age)` — `waiting` (0) > `idle` (1) > `?` (2) > `working` (3). Last event timestamp drives age.
 
 ## Doctor markdown structure
 
@@ -62,7 +62,7 @@ Rows sort attention-to-top by `(rank, age)` — `waiting` (0) > `idle` (1) > `?`
 
 ## track (live multi-AFK navigator)
 
-`track` with **no session** opens the live navigator over the whole repo registry; `track <session>` tails one session's audit events (color-coded, below).
+`track` with **no agent id** opens the live navigator over the whole repo registry; `track <agent-id>` tails one agent's audit events (from the store) and transcript (color-coded, below).
 
 The navigator timer-polls the registry (~1s, no daemon — there are no push hooks) so newly-spawned AFKs appear without restart. A **list pane** shows one row per session (status dot in the rank palette + name + last event); a **preview pane** tails the selected session's recent harness tool calls under a `│` gutter, each under a `── [session] ──` rule. ASCII/house glyphs only — no emoji.
 
@@ -97,14 +97,14 @@ Glyphs (shared with `lib/tui.py`): tool calls `Read ·` `Edit ~` `Write +` `Bash
 ## Rules
 
 - `track` uses `tail -F` semantics: follows new events as they arrive.
-- `doctor` writes to `~/.mentat/logs/<repo>/<session>/diagnosis.md`; overwrites on re-run.
-- `diagnose` calls `doctor` first, then enters the `/diagnose` loop with the diagnosis as context.
+- `doctor` prints verdict markdown to stdout (no `diagnosis.md` artifact).
+- `diagnose` renders the verdict from the canonical store, then enters the `/diagnose` loop with it as context.
 - `diagnose` loop should land a regression test as the first red slice; hand off to `mentat-implement` rather than fixing inline.
-- Session ID defaults to latest session for the current repo when not supplied.
-- All event reading goes through `mentat-log query`; never reads raw JSONL directly.
+- Agent id defaults to latest agent for the current repo when not supplied.
+- Audit reads go through `lib/store.list_events`; transcript reads use `transcript.jsonl`.
 
 ## Constraints
 
 - Read-only: `track` and `doctor` never write events or modify plan state.
 - `diagnose` is interactive; requires `AskUserQuestion` — do not invoke in AFK class plans.
-- Session lookup uses `$MENTAT_SESSION` when set; otherwise latest session in log dir.
+- Session lookup uses `$MENTAT_AGENT` (or legacy `$MENTAT_SESSION`) when set; otherwise latest agent in log dir.

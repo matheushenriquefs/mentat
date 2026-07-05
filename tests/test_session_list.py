@@ -1,6 +1,4 @@
-"""S6 — `mentat-session list`: repo-wide registry by filesystem scan, status pulled
-from the tail event of each session's newest jsonl, attention-ordered. Gate-run home
-(testpaths = ["tests"])."""
+"""S6 — `mentat-session list`: repo-wide agent registry from the canonical store."""
 
 from __future__ import annotations
 
