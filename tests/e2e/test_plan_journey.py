@@ -9,13 +9,12 @@ In-process so the plan dispatch is measured.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import event_kinds, load_script
 
 pytestmark = pytest.mark.e2e
 
@@ -31,17 +30,8 @@ def audit(tmp_path, monkeypatch):
     return log_root
 
 
-def _plan_events(log_root: Path) -> list[str]:
-    events: list[str] = []
-    for f in log_root.rglob("*.jsonl"):
-        for line in f.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            row = json.loads(line)
-            if isinstance(row, dict) and "event" in row:
-                events.append(row["event"])
-    return events
+def _plan_events(session_id: str) -> list[str]:
+    return event_kinds(session_id)
 
 
 def _run_main(plan, argv: list[str], monkeypatch) -> int:
@@ -68,7 +58,7 @@ def test_plan_write_lands_file_and_audit(tmp_path, audit, monkeypatch):
     assert "/mentat-tasks my-plan" in plan.suggest_tasks("my-plan")
 
     # Real audit rows: plan.started then plan.succeeded.
-    events = _plan_events(audit)
+    events = _plan_events("orchestrate-main-1")
     assert "plan.started" in events
     assert "plan.succeeded" in events
 

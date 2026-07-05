@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import TEST_CHUNK_ID, bind_plan, load_script
+from tests.conftest import TEST_CHUNK_ID, bind_plan, events_by_kind, load_script
 
 pytestmark = pytest.mark.e2e
 
@@ -83,22 +83,18 @@ def _fake_spawn(worktrees: dict[str, Path]):
     return spawn_async
 
 
-def _landed_events(log_root: Path) -> list[dict]:
-    import json
+def _landed_events() -> list[dict]:
+    from lib import store
 
-    events: list[dict] = []
-    for f in log_root.rglob("*.jsonl"):
-        for line in f.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(row, dict) and row.get("event") == "chunk.landed":
-                events.append(row)
-    return events
+    conn = store.connect()
+    try:
+        agent_ids = [row[0] for row in conn.execute("SELECT id FROM agent").fetchall()]
+    finally:
+        conn.close()
+    out: list[dict] = []
+    for agent_id in agent_ids:
+        out.extend(events_by_kind(agent_id, "chunk.landed"))
+    return out
 
 
 def test_orchestrate_run_lands_both_chunks_onto_holding(tmp_path, monkeypatch):
@@ -124,7 +120,6 @@ def test_orchestrate_run_lands_both_chunks_onto_holding(tmp_path, monkeypatch):
         # Docker-touching seams: stubbed (hermetic, no devcontainer).
         stack.enter_context(_patch_attr(orch, "_prune_stale_containers", lambda: None))
         stack.enter_context(_patch_attr(orch, "_prune_stale_worktrees", lambda preserve=None: None))
-        stack.enter_context(_patch_attr(orch, "_spawn_batch_doctor", lambda: None))
         # Harness spawn boundary: the fake agent does the real per-slice commit.
         stack.enter_context(_patch_attr(orch._fan_out, "spawn_async", _fake_spawn({"a": wt_a, "b": wt_b})))
         # Land-queue gate passes; container teardown is a no-op (no docker).
@@ -145,6 +140,6 @@ def test_orchestrate_run_lands_both_chunks_onto_holding(tmp_path, monkeypatch):
     assert {"a.txt", "b.txt", "base.txt"} <= set(tree), f"holding tip missing slice files: {tree}"
 
     # Two chunk.landed events recorded — one per ff-merge onto the tip.
-    landed = _landed_events(log_root)
+    landed = _landed_events()
     assert {e["payload"]["slug"] for e in landed} == {"a", "b"}, f"expected both landed: {landed}"
     assert all(e["payload"]["holding"] == "holding" for e in landed)

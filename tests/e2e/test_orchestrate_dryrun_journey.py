@@ -9,12 +9,11 @@ audit row is written. Also drives the plan-loader guards (nested index, bad bloc
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import events_by_kind, load_script
 
 pytestmark = pytest.mark.e2e
 
@@ -24,12 +23,14 @@ SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestra
 @pytest.fixture
 def audit_env(tmp_path, monkeypatch):
     log_root = tmp_path / "logs"
+    session = "orchestrate-holding-1"
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", "orchrepo")
-    monkeypatch.setenv("MENTAT_SESSION", "orchestrate-holding-1")
+    monkeypatch.setenv("MENTAT_AGENT", session)
+    monkeypatch.setenv("MENTAT_SESSION", session)
     monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
     monkeypatch.chdir(tmp_path)
-    return log_root
+    return session
 
 
 def _orch():
@@ -48,17 +49,8 @@ def _plan(plans_dir: Path, slug: str, *, cls: str = "AFK", blocked_by: str = "",
     return p
 
 
-def _batch_reviews(log_root: Path) -> list[dict]:
-    out: list[dict] = []
-    for f in log_root.rglob("*.jsonl"):
-        for line in f.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            row = json.loads(line)
-            if isinstance(row, dict) and row.get("event") == "batch.reviewed":
-                out.append(row)
-    return out
+def _batch_reviews(session_id: str) -> list[dict]:
+    return events_by_kind(session_id, "batch.reviewed")
 
 
 def test_dry_run_previews_partition(tmp_path, audit_env, capsys):

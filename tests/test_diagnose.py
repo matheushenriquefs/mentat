@@ -25,18 +25,23 @@ def test_run_diagnose_loop_prints_context(capsys):
     assert "enter diagnose loop" in out
 
 
-def test_call_doctor_reads_written_diagnosis(tmp_path, monkeypatch):
+def test_build_verdict_returns_markdown(tmp_path):
+    from tests.conftest import seed_agent_events
+
     diag = load_module("diagnose")
-    f = tmp_path / "diagnosis.md"
-    f.write_text("DIAG-TEXT")
-    monkeypatch.setattr(diag._doctor, "write_diagnosis", lambda sd: f)
-    assert diag._call_doctor(tmp_path) == "DIAG-TEXT"
+    sd = seed_agent_events(
+        tmp_path,
+        "testrepo",
+        "sess-1",
+        [{"ts": "t0", "event": "chunk.landed", "payload": {"slug": "x", "sha": "a", "holding": "h"}}],
+    )
+    text = diag.build_verdict(sd)
+    assert "## Verdict" in text
+    assert "chunk.landed" in text
 
 
-def test_run_diagnose_wires_doctor_into_loop(tmp_path, monkeypatch, capsys):
+def test_run_diagnose_wires_verdict_into_loop(tmp_path, monkeypatch, capsys):
     diag = load_module("diagnose")
-    f = tmp_path / "diagnosis.md"
-    f.write_text("DOCTOR-BODY")
-    monkeypatch.setattr(diag._doctor, "write_diagnosis", lambda sd: f)
-    diag.run_diagnose(tmp_path)
+    monkeypatch.setattr(diag, "build_verdict", lambda sd: "DOCTOR-BODY")
+    diag.run_diagnose(tmp_path / "sess-1")
     assert "DOCTOR-BODY" in capsys.readouterr().out

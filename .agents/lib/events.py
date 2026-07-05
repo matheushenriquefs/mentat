@@ -8,7 +8,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 
-from lib import paths, state, store
+from lib import paths
 from lib.session import agent_id_from_env, make_agent_id
 
 # Events where a failed emit must not be silently swallowed — the orchestration
@@ -33,8 +33,6 @@ def _spawn(skill: str, event: str, payload: dict[str, object]) -> bool:
         tail = (r.stderr or "").strip().splitlines()[-1:] or ["(no stderr)"]
         print(f"{skill}: emit {event!r} failed rc={r.returncode}: {tail[0]}", file=sys.stderr)
         return False
-    state.project(env, event)
-    store.record_emit(env, event, payload)
     return True
 
 
@@ -49,7 +47,7 @@ def bind(skill: str) -> Callable[[str, dict[str, object]], None]:
 
 class EjectReason:
     """Canonical ``chunk.ejected`` reasons — one definition imported by every
-    emitter (implement, orchestrate, land_queue) and reader (doctor, sessions,
+    emitter (implement, orchestrate, land_queue) and reader (sessions,
     log) so a rename can't desync them. Values are the wire strings."""
 
     IMPLEMENT_FAILED = "implement-failed"
@@ -99,7 +97,7 @@ def is_transient_eject(reason: str) -> bool:
 
 
 # The one report-back filename: implement reads it as the AFK wedge marker, the
-# AFK prompt tells the agent to write it, doctor writes the success summary to
+# AFK prompt tells the agent to write it, diagnose writes the success summary to
 # it. Shared so the cross-skill contract has a single source.
 SUMMARY_FILE = "summary.md"
 

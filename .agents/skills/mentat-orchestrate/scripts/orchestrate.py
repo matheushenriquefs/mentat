@@ -22,7 +22,6 @@ if str(_AGENTS_ROOT) not in sys.path:
 from lib import backoff as _backoff  # noqa: E402
 from lib import devcontainer as _devcontainer  # noqa: E402
 from lib import git as _git  # noqa: E402
-from lib import paths  # noqa: E402
 from lib import worktrees as _worktrees  # noqa: E402
 from lib.events import HITL_IN_SESSION, EjectReason, ejected_payload, spawned_payload  # noqa: E402
 from lib.events import bind as _bind  # noqa: E402
@@ -761,46 +760,6 @@ def _gc_preserved_worktrees(preserve: set[str] | None = None) -> None:
     _utils.emit_event("session.prune", {"reclaimed_bytes": None, "worktrees_gc": reclaimed})
 
 
-def _spawn_batch_doctor() -> None:
-    """Non-blocking doctor spawn after a failed batch. Swallows all errors.
-
-    Scoped to THIS batch's session (from ``MENTAT_SESSION``, exported by
-    ``ensure_session``) so the diagnosis covers the failed run's chunks, and its
-    output is captured to ``<session>/doctor.out`` — not DEVNULL — so the operator
-    can read the verdict after the fact. subprocess dups the file fd into the
-    child, so closing the parent handle after Popen is safe (the child keeps its
-    own reference)."""
-    _session_script = paths.SKILLS_DIR / "mentat-session/scripts/session.py"
-    if not _session_script.exists():
-        return
-    session_id = os.environ.get("MENTAT_SESSION")
-    cmd = ["python3", str(_session_script), "doctor"]
-    if session_id:
-        cmd.append(session_id)
-    with contextlib.suppress(OSError):
-        if session_id:
-            out_path = _session_dir(session_id) / "doctor.out"
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            with out_path.open("wb") as out:
-                subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT)
-        else:
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-
-def _rebuild_projection() -> None:
-    """Rebuild the disposable sqlite read model from the durable NDJSON log.
-
-    Run at end-of-batch so track/doctor readers reflect the batch's final terminal
-    states (landed/ejected/recovered) without scanning the log dir. The log is the
-    source of truth (ADR-0007); the projection is derived. Best-effort — never
-    raises."""
-    with contextlib.suppress(Exception):
-        from lib import session as _session_lib
-        from lib import state as _state
-
-        _state.rebuild(_session_lib.log_root())
-
-
 def _chunk_id_for_land(plan_slug: str) -> str:
     from lib.chunk import chunk_id_for_plan
 
@@ -1202,7 +1161,6 @@ def run_orchestrate(
                     print(f"mentat-orchestrate: ejected {slug}", file=sys.stderr)
             for slug in sorted(hitl_slugs):
                 print(f"mentat-orchestrate: ejected {slug} — hitl-required", file=sys.stderr)
-            _spawn_batch_doctor()
         else:
             print(f"mentat-orchestrate: review the diff with `git diff {holding}..HEAD`", file=sys.stderr)
         return rc
@@ -1212,9 +1170,6 @@ def run_orchestrate(
         # crash never leaks worktrees or containers. hitl worktrees are held back.
         _prune_stale_worktrees(preserve=hitl_slugs)
         _gc_preserved_worktrees(preserve=hitl_slugs)
-        # Refresh the disposable read model from the durable log so post-batch
-        # readers (track/doctor) see the final terminal + recovered states.
-        _rebuild_projection()
 
 
 def build_parser() -> argparse.ArgumentParser:

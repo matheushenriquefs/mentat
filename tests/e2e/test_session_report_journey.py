@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import load_script, seed_agent_events
 
 pytestmark = pytest.mark.e2e
 
@@ -46,14 +46,29 @@ def _session():
     return load_script(SESSION_PY, "e2e_session")
 
 
-def _write_events(session_dir: Path, events: list[dict], *, age: float = 0.0) -> None:
-    session_dir.mkdir(parents=True, exist_ok=True)
-    f = session_dir / "events.jsonl"
-    f.write_text("".join(json.dumps(e) + "\n" for e in events))
+def _seed_session(
+    tmp_path: Path,
+    log_root: Path,
+    repo: str,
+    agent_id: str,
+    events: list[dict],
+    *,
+    age: float = 0.0,
+    status: str = "stopped",
+) -> Path:
+    from lib import store
+
+    base = time.time() - age if age else time.time()
+    stamped: list[dict] = []
+    for index, event in enumerate(events):
+        stamped.append({**event, "ts": store.iso_now(now=base + index)})
+    seed_agent_events(tmp_path, repo, agent_id, stamped, status=status)
+    sd = log_root / repo / agent_id
+    sd.mkdir(parents=True, exist_ok=True)
     if age:
         old = time.time() - age
-        os.utime(f, (old, old))
-        os.utime(session_dir, (old, old))  # latest_session + list read dir mtime
+        os.utime(sd, (old, old))
+    return sd
 
 
 _LANDED = [
@@ -83,11 +98,10 @@ _EJECTED = [
 ]
 
 
-def test_report_summarizes_a_landed_session(repo_log, capsys):
+def test_report_summarizes_a_landed_session(repo_log, tmp_path, capsys):
     log_root, repo = repo_log
     s = _session()
-    sd = log_root / repo / "orchestrate-main-1"
-    _write_events(sd, _LANDED)
+    sd = _seed_session(tmp_path, log_root, repo, "orchestrate-main-1", _LANDED)
 
     assert s.cmd_report("orchestrate-main-1") == 0
     out = capsys.readouterr().out
@@ -96,44 +110,43 @@ def test_report_summarizes_a_landed_session(repo_log, capsys):
     assert "Landed" in (sd / "summary.md").read_text()
 
 
-def test_report_summarizes_an_ejected_session(repo_log, capsys):
+def test_report_summarizes_an_ejected_session(repo_log, tmp_path, capsys):
     log_root, repo = repo_log
     s = _session()
-    sd = log_root / repo / "orchestrate-main-2"
-    _write_events(sd, _EJECTED)
+    _seed_session(tmp_path, log_root, repo, "orchestrate-main-2", _EJECTED)
 
     assert s.cmd_report("orchestrate-main-2") == 0
     out = capsys.readouterr().out
-    assert "Ejected" in out and "gate-failed" in out and "diagnosis.md" in out
+    assert "Ejected" in out and "gate-failed" in out and "diagnose output" in out
 
 
-def test_report_defaults_to_latest_session(repo_log, capsys):
+def test_report_defaults_to_latest_session(repo_log, tmp_path, capsys):
     log_root, repo = repo_log
     s = _session()
-    _write_events(log_root / repo / "orchestrate-main-old", _LANDED, age=600)
-    _write_events(log_root / repo / "orchestrate-main-new", _EJECTED)
+    _seed_session(tmp_path, log_root, repo, "orchestrate-main-old", _LANDED, age=600)
+    _seed_session(tmp_path, log_root, repo, "orchestrate-main-new", _EJECTED)
 
     assert s.cmd_report(None) == 0
     assert "Ejected" in capsys.readouterr().out, "bare report must resolve the newest session"
 
 
-def test_doctor_writes_verdict(repo_log, capsys):
+def test_doctor_writes_verdict(repo_log, tmp_path, capsys):
     log_root, repo = repo_log
     s = _session()
-    sd = log_root / repo / "orchestrate-main-3"
-    _write_events(sd, _LANDED)
+    _seed_session(tmp_path, log_root, repo, "orchestrate-main-3", _LANDED)
 
     assert s.cmd_doctor("orchestrate-main-3") == 0
     assert "chunk.landed" in capsys.readouterr().out
-    assert (sd / "diagnosis.md").exists()
 
 
-def test_doctor_verdict_hitl_eject_cites_blocker(repo_log, capsys):
+def test_doctor_verdict_hitl_eject_cites_blocker(repo_log, tmp_path, capsys):
     log_root, repo = repo_log
     s = _session()
-    sd = log_root / repo / "orchestrate-main-hitl"
-    _write_events(
-        sd,
+    _seed_session(
+        tmp_path,
+        log_root,
+        repo,
+        "orchestrate-main-hitl",
         [
             {"ts": "2026-06-30T00:00:00Z", "event": "plan.started", "payload": {"path": "tiny.md"}},
             {
@@ -162,30 +175,28 @@ def test_doctor_verdict_empty_session(repo_log, capsys):
     s = _session()
     sd = log_root / repo / "orchestrate-main-empty"
     sd.mkdir(parents=True)
-    (sd / "events.jsonl").write_text("")  # no rows
 
     assert s.cmd_doctor("orchestrate-main-empty") == 0
     out = capsys.readouterr().out
     assert "Reason: unknown" in out and "Is regression: unknown" in out
 
 
-def test_diagnose_dumps_doctor_context(repo_log, capsys):
+def test_diagnose_dumps_doctor_context(repo_log, tmp_path, capsys):
     log_root, repo = repo_log
     s = _session()
-    sd = log_root / repo / "orchestrate-main-4"
-    _write_events(sd, _EJECTED)
+    _seed_session(tmp_path, log_root, repo, "orchestrate-main-4", _EJECTED)
 
     assert s.cmd_diagnose("orchestrate-main-4") == 0
     out = capsys.readouterr().out
     assert "diagnose context" in out and "enter diagnose loop" in out
-    assert (sd / "diagnosis.md").exists()
 
 
-def test_list_active_only_hides_old_idle(repo_log, capsys):
+def test_list_active_only_hides_old_idle(repo_log, tmp_path, capsys, monkeypatch):
     log_root, repo = repo_log
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     s = _session()
-    _write_events(log_root / repo / "recent-idle", _LANDED)
-    _write_events(log_root / repo / "ancient-idle", _LANDED, age=90000)  # > 24h
+    _seed_session(tmp_path, log_root, repo, "recent-idle", _LANDED)
+    _seed_session(tmp_path, log_root, repo, "ancient-idle", _LANDED, age=90000)
 
     assert s.cmd_list(all_sessions=False) == 0
     out = capsys.readouterr().out
@@ -222,14 +233,7 @@ def test_doctor_no_sessions_errors(repo_log, capsys):
 def test_track_single_session_view(repo_log, capsys, tmp_path, monkeypatch):
     log_root, repo = repo_log
     s = _session()
-    sd = log_root / repo / "orchestrate-main-5"
-    monkeypatch.setenv("MENTAT_DB", str(tmp_path / "mentat.db"))
-    store.record_emit(
-        {"MENTAT_AGENT": "orchestrate-main-5", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"},
-        "chunk.spawned",
-        {"slug": "x"},
-    )
-    _write_events(sd, _LANDED)
+    sd = _seed_session(tmp_path, log_root, repo, "orchestrate-main-5", _LANDED, status="running")
     # A harness stream so the transcript renderer produces real content.
     (sd / "session.jsonl").write_text(
         json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "working on it"}]}})
@@ -266,11 +270,10 @@ def test_track_navigator_oneshot_lists_registry(repo_log, capsys, monkeypatch, t
     assert "orchestrate-main-7" in out
 
 
-def test_track_render_helpers_over_real_streams(repo_log):
+def test_track_render_helpers_over_real_streams(repo_log, tmp_path):
     log_root, repo = repo_log
     track = load_script(TRACK_PY, "e2e_track")
-    sd = log_root / repo / "orchestrate-main-8"
-    _write_events(sd, _EJECTED)
+    sd = _seed_session(tmp_path, log_root, repo, "orchestrate-main-8", _EJECTED)
     (sd / "session.jsonl").write_text(
         json.dumps(
             {

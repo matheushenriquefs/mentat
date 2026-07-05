@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -317,42 +316,6 @@ def test_prune_stale_worktrees_folds_preserve_into_active(orch, monkeypatch):
     orch._prune_stale_worktrees(preserve={"wedged"})
     assert seen["active"] == {chunk_label("wedged")}
     assert events == [("session.prune", {"reclaimed_bytes": None, "worktrees_removed": 2})]
-
-
-# ── _spawn_batch_doctor ───────────────────────────────────────────────────────
-
-
-def test_spawn_batch_doctor_returns_early_without_script(orch, monkeypatch, tmp_path):
-    monkeypatch.setattr(orch, "paths", SimpleNamespace(SKILLS_DIR=tmp_path))
-    called = []
-    monkeypatch.setattr(orch.subprocess, "Popen", lambda *a, **k: called.append((a, k)))
-    orch._spawn_batch_doctor()
-    assert called == []
-
-
-def test_spawn_batch_doctor_spawns_when_script_present(orch, monkeypatch, tmp_path):
-    script = tmp_path / "mentat-session" / "scripts" / "session.py"
-    script.parent.mkdir(parents=True)
-    script.write_text("# stub\n")
-    monkeypatch.setattr(orch, "paths", SimpleNamespace(SKILLS_DIR=tmp_path))
-    called = []
-    monkeypatch.setattr(orch.subprocess, "Popen", lambda *a, **k: called.append((a, k)))
-    orch._spawn_batch_doctor()
-    assert len(called) == 1
-
-
-def test_spawn_batch_doctor_swallows_oserror(orch, monkeypatch, tmp_path):
-    script = tmp_path / "mentat-session" / "scripts" / "session.py"
-    script.parent.mkdir(parents=True)
-    script.write_text("# stub\n")
-    monkeypatch.setattr(orch, "paths", SimpleNamespace(SKILLS_DIR=tmp_path))
-
-    def _boom(*a, **k):
-        raise OSError("no fork")
-
-    monkeypatch.setattr(orch.subprocess, "Popen", _boom)
-    # Must not propagate.
-    orch._spawn_batch_doctor()
 
 
 # ── _land_all ─────────────────────────────────────────────────────────────────

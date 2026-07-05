@@ -8,7 +8,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.conftest import load_script
+from tests.conftest import load_script, seed_agent_events
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-session/scripts"
 
@@ -17,20 +17,34 @@ def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
 
 
-def _write_log(session_dir: Path, agent: str, events: list[dict]) -> Path:
-    log_file = session_dir / f"{agent}-manual.jsonl"
-    session_dir.mkdir(parents=True, exist_ok=True)
-    with log_file.open("w") as f:
-        for ev in events:
-            f.write(json.dumps(ev) + "\n")
-    return log_file
+def _write_log(
+    tmp_path: Path,
+    session_id: str,
+    harness: str,
+    events: list[dict],
+    *,
+    repo: str = "testrepo",
+) -> Path:
+    return seed_agent_events(tmp_path, repo, session_id, events, harness=harness)
 
 
-def test_latest_session_excludes_manual(tmp_path):
+def test_latest_session_excludes_manual(tmp_path, monkeypatch):
     sessions_mod = load_module("sessions")
-    repo_dir = tmp_path / "myrepo"
+    monkeypatch.setenv("MENTAT_REPO", "myrepo")
+    repo_dir = tmp_path / "logs" / "myrepo"
     (repo_dir / "manual").mkdir(parents=True)
-    (repo_dir / "sess-1").mkdir()
+    seed_agent_events(
+        tmp_path,
+        "myrepo",
+        "sess-1",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "event": "chunk.landed",
+                "payload": {"slug": "x", "sha": "a", "holding": "h"},
+            }
+        ],
+    )
     session = sessions_mod.latest_session(repo_dir)
     assert session == "sess-1"
 
@@ -47,72 +61,66 @@ def test_chunks_in_session_lists_all(tmp_path):
 
 
 def test_verdict_for_chunk_landed(tmp_path):
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "sess-1"
-    _write_log(
-        session_dir,
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "sess-1",
         "mentat-orchestrate",
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "agent": "mentat-orchestrate",
-                "session": "sess-1",
                 "event": "chunk.landed",
                 "payload": {"slug": "my-chunk", "sha": "abc123", "holding": "main"},
             },
         ],
     )
-    verdict = doctor_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(session_dir)
     assert "landed" in verdict.lower() or "success" in verdict.lower()
 
 
 def test_verdict_for_chunk_ejected_implement_failed(tmp_path):
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "sess-1"
-    _write_log(
-        session_dir,
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "sess-1",
         "mentat-implement",
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "agent": "mentat-implement",
-                "session": "sess-1",
                 "event": "chunk.ejected",
                 "payload": {"slug": "my-chunk", "reason": "implement-failed", "where": "/tmp"},
             },
         ],
     )
-    verdict = doctor_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(session_dir)
     assert "implement-failed" in verdict or "TDD" in verdict or "gate" in verdict.lower()
 
 
 def test_verdict_for_chunk_ejected_hitl_required(tmp_path):
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "sess-1"
-    _write_log(
-        session_dir,
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "sess-1",
         "mentat-implement",
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "agent": "mentat-implement",
-                "session": "sess-1",
                 "event": "chunk.ejected",
                 "payload": {"slug": "my-chunk", "reason": "hitl-required", "where": "/tmp"},
             },
         ],
     )
-    verdict = doctor_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(session_dir)
     assert "hitl" in verdict.lower() or "ambiguity" in verdict.lower() or "self-answered" in verdict.lower()
 
 
 def test_verdict_for_worker_died_names_slug_and_reason(tmp_path):
     """A worker-died eject must attribute the dead chunk by slug + reason, never
     fall through to an "Unknown reason" suspect (S5)."""
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "sess-1"
-    _write_log(
-        session_dir,
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "sess-1",
         "mentat-orchestrate",
         [
             {
@@ -122,7 +130,7 @@ def test_verdict_for_worker_died_names_slug_and_reason(tmp_path):
             },
         ],
     )
-    verdict = doctor_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(session_dir)
     assert "worker-died" in verdict
     assert "dead-chunk" in verdict
     assert "Unknown reason" not in verdict
@@ -133,11 +141,11 @@ def test_verdict_worker_died_not_masked_by_later_land(tmp_path):
     """Batch session, two chunks: one lands, another's worker died earlier. The
     reversed-by-ts scan must not report 'chunk.landed / Suspect: None' and bury
     the dead worker — the eject is the story doctor exists to tell (S5)."""
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "sess-1"
-    _write_log(
-        session_dir,
-        "mentat-orchestrate-dead",
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "sess-1",
+        "mentat-orchestrate",
         [
             {
                 "ts": "2026-01-01T00:00:01+00:00",
@@ -149,12 +157,6 @@ def test_verdict_worker_died_not_masked_by_later_land(tmp_path):
                 "event": "chunk.ejected",
                 "payload": {"slug": "dead-chunk", "reason": "worker-died", "where": "/tmp/wt"},
             },
-        ],
-    )
-    _write_log(
-        session_dir,
-        "mentat-orchestrate-good",
-        [
             {
                 "ts": "2026-01-01T00:00:03+00:00",
                 "event": "chunk.landed",
@@ -162,44 +164,43 @@ def test_verdict_worker_died_not_masked_by_later_land(tmp_path):
             },
         ],
     )
-    verdict = doctor_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(session_dir)
     assert "Reason: chunk.landed" not in verdict
     assert "Suspect: None" not in verdict
     assert "worker-died" in verdict
     assert "dead-chunk" in verdict
 
 
-def test_doctor_writes_diagnosis_in_session_dir(tmp_path):
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "sess-1"
+def test_doctor_writes_diagnosis_in_session_dir(tmp_path, monkeypatch):
+    session_mod = load_module("session")
+    monkeypatch.setenv("MENTAT_REPO", "testrepo")
     _write_log(
-        session_dir,
+        tmp_path,
+        "sess-1",
         "mentat-orchestrate",
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "agent": "mentat-orchestrate",
-                "session": "sess-1",
                 "event": "chunk.landed",
                 "payload": {"slug": "x", "sha": "abc", "holding": "main"},
             },
         ],
     )
-    doctor_mod.write_diagnosis(session_dir)
-    diagnosis = session_dir / "diagnosis.md"
-    assert diagnosis.exists()
-    content = diagnosis.read_text()
-    assert "## Verdict" in content
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = session_mod.cmd_doctor("sess-1")
+    assert rc == 0
+    assert "## Verdict" in buf.getvalue()
 
 
 # ── S8: success-side report-back summary ─────────────────────────────────────
 
 
 def test_summary_for_chunk_landed(tmp_path):
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "sess-1"
-    _write_log(
-        session_dir,
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "sess-1",
         "mentat-orchestrate",
         [
             {
@@ -209,16 +210,16 @@ def test_summary_for_chunk_landed(tmp_path):
             },
         ],
     )
-    summary = doctor_mod.build_summary(session_dir)
+    summary = diag_mod.build_summary(session_dir)
     assert "my-chunk" in summary
     assert "abc123" in summary
 
 
 def test_summary_for_chunk_ejected_carries_failure(tmp_path):
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "sess-1"
-    _write_log(
-        session_dir,
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "sess-1",
         "mentat-implement",
         [
             {
@@ -228,15 +229,15 @@ def test_summary_for_chunk_ejected_carries_failure(tmp_path):
             },
         ],
     )
-    summary = doctor_mod.build_summary(session_dir)
+    summary = diag_mod.build_summary(session_dir)
     assert "gate-failed" in summary
 
 
 def test_write_summary_writes_summary_md(tmp_path):
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "sess-1"
-    _write_log(
-        session_dir,
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "sess-1",
         "mentat-implement",
         [
             {
@@ -246,7 +247,7 @@ def test_write_summary_writes_summary_md(tmp_path):
             },
         ],
     )
-    out = doctor_mod.write_summary(session_dir)
+    out = diag_mod.write_summary(session_dir)
     assert out == session_dir / "summary.md"
     assert out.exists()
     assert "deadbee" in out.read_text()
@@ -254,11 +255,10 @@ def test_write_summary_writes_summary_md(tmp_path):
 
 def test_report_prints_success_summary(tmp_path, monkeypatch):
     session_mod = load_module("session")
-    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    session_dir = tmp_path / "logs" / "myrepo" / "sess-1"
     _write_log(
-        session_dir,
+        tmp_path,
+        "sess-1",
         "mentat-implement",
         [
             {
@@ -267,6 +267,7 @@ def test_report_prints_success_summary(tmp_path, monkeypatch):
                 "payload": {"slug": "c", "sha": "abc999", "holding": "main"},
             },
         ],
+        repo="myrepo",
     )
     buf = io.StringIO()
     with redirect_stdout(buf):
@@ -277,11 +278,10 @@ def test_report_prints_success_summary(tmp_path, monkeypatch):
 
 def test_report_shows_failure_for_ejected(tmp_path, monkeypatch):
     session_mod = load_module("session")
-    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    session_dir = tmp_path / "logs" / "myrepo" / "sess-1"
     _write_log(
-        session_dir,
+        tmp_path,
+        "sess-1",
         "mentat-implement",
         [
             {
@@ -290,6 +290,7 @@ def test_report_shows_failure_for_ejected(tmp_path, monkeypatch):
                 "payload": {"slug": "c", "reason": "gate-failed", "where": "/x"},
             },
         ],
+        repo="myrepo",
     )
     buf = io.StringIO()
     with redirect_stdout(buf):
@@ -299,43 +300,38 @@ def test_report_shows_failure_for_ejected(tmp_path, monkeypatch):
 
 
 def test_expected_vs_actual_derived(tmp_path):
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "sess-1"
-    _write_log(
-        session_dir,
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "sess-1",
         "mentat-implement",
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "agent": "mentat-implement",
-                "session": "sess-1",
                 "event": "chunk.ejected",
                 "payload": {"slug": "x", "reason": "gate-failed", "where": "/tmp"},
             },
         ],
     )
-    verdict = doctor_mod.build_verdict(session_dir)
-    # <where> placeholder must be filled in; no unfilled angle-bracket placeholders
+    verdict = diag_mod.build_verdict(session_dir)
     assert "<where>" not in verdict
 
 
 def test_regression_marks_unknown_when_no_prior_landed(tmp_path):
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "sess-1"
-    _write_log(
-        session_dir,
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "sess-1",
         "mentat-implement",
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "agent": "mentat-implement",
-                "session": "sess-1",
                 "event": "chunk.ejected",
                 "payload": {"slug": "x", "reason": "implement-failed", "where": "/tmp"},
             },
         ],
     )
-    verdict = doctor_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(session_dir)
     assert "unknown" in verdict.lower()
 
 
@@ -344,17 +340,17 @@ def test_diagnose_calls_doctor_first(tmp_path):
     session_dir = tmp_path / "sess-1"
     session_dir.mkdir(parents=True)
 
-    doctor_calls = []
+    verdict_calls: list[Path] = []
 
-    def fake_write(sd):
-        doctor_calls.append(sd)
+    def fake_verdict(sd: Path) -> str:
+        verdict_calls.append(sd)
         return "## Verdict\n- Reason: landed\n"
 
-    with patch.object(diag_mod, "_call_doctor", side_effect=fake_write):
+    with patch.object(diag_mod, "build_verdict", side_effect=fake_verdict):
         with patch.object(diag_mod, "_run_diagnose_loop", return_value=None):
             diag_mod.run_diagnose(session_dir)
 
-    assert doctor_calls
+    assert verdict_calls == [session_dir]
 
 
 def test_diagnose_feeds_doctor_output_into_loop(tmp_path):
@@ -367,11 +363,11 @@ def test_diagnose_feeds_doctor_output_into_loop(tmp_path):
     def fake_loop(context: str) -> None:
         loop_inputs.append(context)
 
-    with patch.object(diag_mod, "_call_doctor", return_value="## Verdict\n- Reason: ejected\n"):
+    with patch.object(diag_mod, "build_verdict", return_value="## Verdict\n- Reason: ejected\n"):
         with patch.object(diag_mod, "_run_diagnose_loop", side_effect=fake_loop):
             diag_mod.run_diagnose(session_dir)
 
-    assert loop_inputs
+    assert loop_inputs == ["## Verdict\n- Reason: ejected\n"]
 
 
 # ── session.py dispatcher branches ───────────────────────────────────────────
@@ -442,13 +438,21 @@ def test_cmd_doctor_invalid_session_returns_1(tmp_path, monkeypatch):
 
 
 def test_cmd_doctor_valid_session_writes_diagnosis(tmp_path, monkeypatch):
-    session_mod, log_root = _make_session_env(tmp_path, monkeypatch)
-    session_dir = log_root / "testrepo" / "sess-doc"
-    session_dir.mkdir(parents=True)
-    fake_diag = session_dir / "diagnosis.md"
-    fake_diag.write_text("## Verdict\n- landed\n")
+    session_mod, _ = _make_session_env(tmp_path, monkeypatch)
+    seed_agent_events(
+        tmp_path,
+        "testrepo",
+        "sess-doc",
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "event": "chunk.landed",
+                "payload": {"slug": "x", "sha": "a", "holding": "h"},
+            }
+        ],
+    )
     buf = io.StringIO()
-    with patch.object(session_mod._doctor, "write_diagnosis", return_value=fake_diag):
+    with patch.object(session_mod._diagnose, "build_verdict", return_value="## Verdict\n- landed\n"):
         with redirect_stdout(buf):
             rc = session_mod.cmd_doctor("sess-doc")
     assert rc == 0
@@ -535,32 +539,32 @@ def test_main_dispatches_track_no_session(tmp_path, monkeypatch):
 
 
 def test_verdict_empty_events_is_all_unknown(tmp_path):
-    doctor_mod = load_module("doctor")
+    diag_mod = load_module("diagnose")
     session_dir = tmp_path / "empty"
     session_dir.mkdir()
-    verdict = doctor_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(session_dir)
     assert "Reason: unknown" in verdict
     assert "Is regression: unknown" in verdict
 
 
 def test_verdict_events_without_terminal_reports_no_terminal(tmp_path):
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "no-terminal"
-    _write_log(
-        session_dir,
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "no-terminal",
         "mentat-implement",
         [{"ts": "2026-01-01T00:00:00+00:00", "event": "plan.started", "payload": {"path": "/p.md"}}],
     )
-    verdict = doctor_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(session_dir)
     assert "No terminal event found." in verdict
     assert "Reason: unknown" in verdict
 
 
 def test_verdict_hitl_blocker_appended_to_suspect(tmp_path):
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "hitl"
-    _write_log(
-        session_dir,
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "hitl",
         "mentat-implement",
         [
             {
@@ -570,27 +574,27 @@ def test_verdict_hitl_blocker_appended_to_suspect(tmp_path):
             }
         ],
     )
-    verdict = doctor_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(session_dir)
     assert "Blocker: need a decision" in verdict
 
 
 def test_summary_no_terminal_says_completed_in_session(tmp_path):
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "insession"
-    _write_log(
-        session_dir,
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "insession",
         "mentat-implement",
         [{"ts": "2026-01-01T00:00:00+00:00", "event": "chunk.spawned", "payload": {"slug": "c"}}],
     )
-    summary = doctor_mod.build_summary(session_dir)
+    summary = diag_mod.build_summary(session_dir)
     assert "not yet landed" in summary
 
 
 def test_summary_hitl_blocker_appended(tmp_path):
-    doctor_mod = load_module("doctor")
-    session_dir = tmp_path / "hitl-sum"
-    _write_log(
-        session_dir,
+    diag_mod = load_module("diagnose")
+    session_dir = _write_log(
+        tmp_path,
+        "hitl-sum",
         "mentat-implement",
         [
             {
@@ -600,7 +604,7 @@ def test_summary_hitl_blocker_appended(tmp_path):
             }
         ],
     )
-    summary = doctor_mod.build_summary(session_dir)
+    summary = diag_mod.build_summary(session_dir)
     assert "Blocker: blocked here" in summary
 
 

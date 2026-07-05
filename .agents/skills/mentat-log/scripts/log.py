@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""mentat-log — emit / validate / query / prune audit JSONL."""
+"""mentat-log — emit / validate / list / prune audit events (SQLite canonical)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
-from lib import state as _state  # noqa: E402
+from lib import store as _store  # noqa: E402
 from lib.events import EJECT_REASONS as _EJECT_REASONS  # noqa: E402
 from lib.session import agent_id_from_env as _agent_id_from_env
 from lib.session import log_root as _log_root  # noqa: E402
@@ -41,13 +41,8 @@ EVENT_CATALOG: dict[str, list[str]] = {
     "session.prune": ["reclaimed_bytes"],
 }
 
-# Optional payload fields per event — extensions beyond the required catalog
-# above. Declared (documented), not rejected: emitters may add these without a
-# new event type. chunk.ejected carries them via lib.events.ejected_payload.
 EVENT_OPTIONAL_FIELDS: dict[str, list[str]] = {
     "chunk.ejected": ["logs_path", "preflight_exit", "upstream", "summary", "killed_by", "timed_out"],
-    # Recovery respawn (ADR-0015): a chunk.spawned with trigger:"recovery" carries
-    # the 1-based attempt number. Payload extension, not a new event type.
     "chunk.spawned": ["trigger", "attempt"],
 }
 
@@ -62,10 +57,6 @@ def _agent_slug() -> str:
 
 def _session_dir(base: Path, repo: str, session: str) -> Path:
     return base / repo / session.replace("/", "-")
-
-
-def _log_file(base: Path, repo: str, session: str, agent: str, slug: str) -> Path:
-    return _session_dir(base, repo, session) / f"{agent}-{slug}.jsonl"
 
 
 def _sidecar_file(base: Path, repo: str, session: str, agent: str, slug: str) -> Path:
@@ -89,7 +80,6 @@ def _reject(base: Path, repo: str, session: str, agent: str, slug: str, event: s
 
 
 def _validate_row(row: dict[str, object]) -> list[str]:
-    """Return list of validation errors for a single row dict."""
     errors: list[str] = []
     for field in ("ts", "agent", "session", "event", "payload"):
         if field not in row:
@@ -135,10 +125,6 @@ def cmd_emit(args: argparse.Namespace) -> int:
 
     base = _log_root()
     repo = _repo()
-    # Last-resort guard: ensure_session (entrypoints) and bind() (emit path) both
-    # set MENTAT_SESSION before any emit. If a raw `mentat-log emit` still slips
-    # through unkeyed, mint an opaque uuid — never an `orphan-`/pid-derived id
-    # that could collide or strand the row.
     session = _session() or _make_agent_id("mentat-log", "adhoc")
     slug = _agent_slug()
 
@@ -156,16 +142,12 @@ def cmd_emit(args: argparse.Namespace) -> int:
             _reject(base, repo, session, agent, slug, event, f"invalid-reason:{reason!r}")
             return 1
 
-    row = {
-        "ts": datetime.datetime.now(datetime.UTC).isoformat(),
-        "agent": agent,
-        "session": session,
-        "event": event,
-        "payload": payload,
-    }
-    log_file = _log_file(base, repo, session, agent, slug)
-    with log_file.open("a") as f:
-        f.write(json.dumps(row) + "\n")
+    env = dict(os.environ)
+    env["MENTAT_AGENT"] = session
+    env.setdefault("MENTAT_SESSION", session)
+    if not env.get("MENTAT_HARNESS"):
+        env["MENTAT_HARNESS"] = agent
+    _store.record_emit(env, event, payload)
     return 0
 
 
@@ -192,28 +174,20 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 1 if errors_found else 0
 
 
-def cmd_query(args: argparse.Namespace) -> int:
-    base = _log_root()
-    repo = _repo()
-    session = args.session
-    session_dir = _session_dir(base, repo, session)
-    if not session_dir.exists():
-        print(f"mentat-log: session dir not found: {session_dir}", file=sys.stderr)
+def cmd_list(args: argparse.Namespace) -> int:
+    agent_id = args.agent_id
+    if not _store.get_agent(agent_id) and not (_log_root() / _repo() / agent_id.replace("/", "-")).is_dir():
+        print(f"mentat-log: agent not found: {agent_id}", file=sys.stderr)
         return 1
 
-    for log_file in sorted(session_dir.glob("*.jsonl")):
-        for line in log_file.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if args.event and row.get("event") != args.event:
-                continue
-            if args.agent and row.get("agent") != args.agent:
-                continue
+    for row in _store.list_events(agent_id):
+        if args.event and row.get("event") != args.event:
+            continue
+        if args.agent and row.get("agent") != args.agent:
+            continue
+        if args.format == "jsonl":
+            print(json.dumps(row))
+        else:
             print(json.dumps(row))
     return 0
 
@@ -246,30 +220,11 @@ def cmd_prune(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_rebuild(args: argparse.Namespace) -> int:
-    """Regenerate state.db from the NDJSON log; optionally prune stale dirs first.
-
-    The log is durable and authoritative (ADR-0007); state.db is a throwaway read
-    model rebuilt from it (Kleppmann). ``--prune-before`` runs the one-shot sweep
-    that reclaims orphan session dirs older than the cutoff before projecting."""
-    prune_before = None
-    if args.prune_before is not None:
-        try:
-            prune_before = datetime.date.fromisoformat(args.prune_before)
-        except ValueError:
-            print(f"mentat-log: invalid date {args.prune_before!r}, expected YYYY-MM-DD", file=sys.stderr)
-            return 1
-
-    counts = _state.rebuild(_log_root(), prune_before=prune_before)
-    print(f"mentat-log: rebuilt projection — {counts['projected']} session(s) projected, {counts['pruned']} pruned")
-    return 0
-
-
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="mentat-log", description="Mentat audit log tool")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    emit_p = sub.add_parser("emit", help="Append a JSONL audit row")
+    emit_p = sub.add_parser("emit", help="Append a canonical audit event")
     emit_p.add_argument("agent", help="Emitting agent name")
     emit_p.add_argument("event", help="Event name (must be in EVENT_CATALOG)")
     emit_p.add_argument("payload", help="JSON payload string")
@@ -277,21 +232,25 @@ def build_parser() -> argparse.ArgumentParser:
     val_p = sub.add_parser("validate", help="Validate a JSONL log file")
     val_p.add_argument("file", help="Path to .jsonl file")
 
-    qry_p = sub.add_parser("query", help="Filter and print log rows")
-    qry_p.add_argument("session", help="Session ID")
+    list_p = sub.add_parser("list", help="List audit events from the canonical store")
+    list_p.add_argument("agent_id", help="Agent ID")
+    list_p.add_argument("--event", default=None, help="Filter by event name")
+    list_p.add_argument("--agent", default=None, help="Filter by emitting skill name")
+    list_p.add_argument(
+        "--format",
+        default="jsonl",
+        choices=("jsonl",),
+        help="Output format (jsonl reproduces the legacy audit trail on stdout)",
+    )
+
+    qry_p = sub.add_parser("query", help="Alias for list (deprecated)")
+    qry_p.add_argument("agent_id", help="Agent ID")
     qry_p.add_argument("--event", default=None, help="Filter by event name")
-    qry_p.add_argument("--agent", default=None, help="Filter by agent name")
+    qry_p.add_argument("--agent", default=None, help="Filter by emitting skill name")
+    qry_p.add_argument("--format", default="jsonl", choices=("jsonl",))
 
     prune_p = sub.add_parser("prune", help="Delete old session dirs")
     prune_p.add_argument("--before", required=True, metavar="YYYY-MM-DD", help="Delete dirs older than this date")
-
-    rebuild_p = sub.add_parser("rebuild-projection", help="Regenerate state.db from the NDJSON log")
-    rebuild_p.add_argument(
-        "--prune-before",
-        default=None,
-        metavar="YYYY-MM-DD",
-        help="One-shot: prune session dirs older than this date before projecting",
-    )
 
     return p
 
@@ -299,12 +258,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    if args.cmd == "query":
+        args.cmd = "list"
     dispatch = {
         "emit": cmd_emit,
         "validate": cmd_validate,
-        "query": cmd_query,
+        "list": cmd_list,
         "prune": cmd_prune,
-        "rebuild-projection": cmd_rebuild,
     }
     sys.exit(dispatch[args.cmd](args))
 

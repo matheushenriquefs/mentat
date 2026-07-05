@@ -7,13 +7,11 @@ same orchestrate invocation.
 
 from __future__ import annotations
 
-import contextlib
 import importlib.util
-import json
 import sys
 from pathlib import Path
 
-from tests.conftest import patch_orchestrate_worktree
+from tests.conftest import bind_plan, patch_orchestrate_worktree
 
 ROOT = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
@@ -56,6 +54,7 @@ def test_hitl_plan_does_not_subprocess_implement(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
     monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)
     monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: None)
+    bind_plan("fix-bar")
 
     with patch_orchestrate_worktree(orchestrate, tmp_path):
         rc = orchestrate.run_orchestrate("holding", [hitl, afk], harness=None, model=None, dry_run=False)
@@ -74,19 +73,10 @@ def test_hitl_emits_chunk_spawned_hitl_in_session(tmp_path, monkeypatch):
 
     emitted: list[tuple[str, dict]] = []
 
-    def fake_emit(cmd, *a, **kw):
-        if isinstance(cmd, list) and len(cmd) >= 6 and cmd[2] == "emit":
-            with contextlib.suppress(IndexError, json.JSONDecodeError):
-                emitted.append((cmd[4], json.loads(cmd[5])))
+    def capture_emit(event, payload):
+        emitted.append((event, payload))
 
-        class _R:
-            returncode = 0
-            stderr = ""
-            stdout = ""
-
-        return _R()
-
-    monkeypatch.setattr(orchestrate.subprocess, "run", fake_emit)
+    monkeypatch.setattr(orchestrate._utils, "emit_event", capture_emit)
     monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [])
     monkeypatch.setattr(orchestrate._land_queue, "drain", lambda chunks, **kw: [])
     monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)

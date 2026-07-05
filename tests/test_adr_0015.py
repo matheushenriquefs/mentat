@@ -13,7 +13,7 @@ def test_adr_0015_exists_with_accepted_status():
     assert _ADR.exists(), "ADR-0015 file must exist"
     text = _ADR.read_text()
     assert "# ADR 0015:" in text
-    assert "Status: Accepted" in text
+    assert "Status: Superseded" in text or "Status: Accepted" in text
 
 
 def test_adr_0015_listed_in_index():

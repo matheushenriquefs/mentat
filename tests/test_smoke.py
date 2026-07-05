@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -82,24 +81,26 @@ def test_smoke_land_queue_emits_all_event_types(fixture_batch):
 
 
 def test_smoke_doctor_produces_clean_verdict(fixture_batch, tmp_path):
-    doctor = load_module_from(REPO_ROOT / ".agents/skills/mentat-session/scripts/doctor.py", "doctor")
+    diagnose = load_module_from(REPO_ROOT / ".agents/skills/mentat-session/scripts/diagnose.py", "diagnose")
 
-    session_dir = fixture_batch["log_dir"]
-    log_file = session_dir / "mentat-orchestrate-chunk.jsonl"
-    log_file.write_text(
-        json.dumps(
+    from tests.conftest import seed_agent_events
+
+    seed_agent_events(
+        tmp_path,
+        "fixture-repo",
+        "smoke-session",
+        [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "agent": "mentat-orchestrate",
-                "session": "smoke-session",
                 "event": "chunk.landed",
                 "payload": {"slug": "afk-slice", "sha": "abc123", "holding": "main"},
             }
-        )
-        + "\n"
+        ],
+        harness="mentat-orchestrate",
     )
+    session_dir = fixture_batch["log_dir"]
 
-    verdict = doctor.build_verdict(session_dir)
+    verdict = diagnose.build_verdict(session_dir)
     assert "chunk.landed" in verdict or "landed" in verdict.lower()
     assert "## Verdict" in verdict
     assert "## Regression" in verdict

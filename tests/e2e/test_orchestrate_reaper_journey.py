@@ -146,7 +146,6 @@ def test_run_orchestrate_failing_batch_reports_stall_cascade_and_ejects(monkeypa
     monkeypatch.setattr(orch, "_load_plans", lambda paths: [gate, core, ui])
     monkeypatch.setattr(orch, "_prune_stale_containers", lambda: None)
     monkeypatch.setattr(orch, "_prune_stale_worktrees", lambda *, preserve=None: None)
-    monkeypatch.setattr(orch, "_spawn_batch_doctor", lambda: None)
     monkeypatch.setattr(orch, "_worktree_for_slug", lambda slug: tmp_path / slug)
     # Auto chunk fails (rc=1) → real _partition_fanout ejects it + cascades to ui.
     monkeypatch.setattr(orch, "_fan_out_plans", lambda auto, *, harness, model: [(core, 1)])

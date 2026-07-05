@@ -37,7 +37,6 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib import config as _config  # noqa: E402
 from lib.events import bind  # noqa: E402
-from lib.session import session_dir as _session_dir  # noqa: E402
 
 _emit_event = bind("mentat-orchestrate")
 
@@ -151,35 +150,10 @@ def _notify(message: str) -> None:
 
 
 def attempt_count(session_id: str, slug: str) -> int:
-    """Prior recovery respawns for ``slug``, replayed from the durable audit log.
+    """Prior recovery respawns for ``slug``, replayed from the canonical store."""
+    from lib import store
 
-    Counts ``chunk.spawned`` rows carrying ``trigger:"recovery"`` for this slug
-    across the session's NDJSON log dir. Log-derived so the count survives a
-    resume — the sqlite projection is disposable, the log is the truth (ADR-0007).
-    """
-    log_dir = _session_dir(session_id)
-    if not log_dir.exists():
-        return 0
-    count = 0
-    for log_file in sorted(log_dir.glob("*.jsonl")):
-        try:
-            lines = log_file.read_text().splitlines()
-        except OSError:
-            continue
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if row.get("event") != "chunk.spawned":
-                continue
-            payload = row.get("payload") or {}
-            if payload.get("slug") == slug and payload.get("trigger") == "recovery":
-                count += 1
-    return count
+    return store.attempt_count(session_id, slug)
 
 
 _PROMPT_TEMPLATE = """You are a mentat recovery agent. A parallel AFK chunk was ejected for a \

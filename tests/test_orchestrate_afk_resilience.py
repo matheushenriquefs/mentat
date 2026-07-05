@@ -48,6 +48,7 @@ def test_signal_exit_base_constant_is_128():
 def _run_partition(tmp_path, rc: int) -> tuple[list, set]:
     """Helper: run _partition_fanout with a single plan returning rc."""
     orch = load_module("orchestrate")
+    bind_plan("slug-a")
     plan = _make_plan_obj(tmp_path, "slug-a")
     ejected: list[str] = []
 
@@ -463,72 +464,6 @@ def test_partition_fanout_transient_chunks_not_marked_ejected_by_partition(tmp_p
     assert marked == [], "partition must not mark_ejected transient chunks"
 
 
-# ── Slice 3: doctor handoff argv parses cleanly ───────────────────────────────
-
-
-def test_spawn_batch_doctor_argv_parses_cleanly():
-    """argv built by _spawn_batch_doctor must parse without argparse error."""
-    orch = load_module("orchestrate")
-    session_script = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-session/scripts/session.py"
-    if not session_script.exists():
-        import pytest
-
-        pytest.skip("session.py not found")
-
-    session_mod = load_script(session_script, "session_for_test")
-    parser = session_mod.build_parser()
-
-    # Simulate what _spawn_batch_doctor builds: ["python3", "session.py", "doctor"]
-    # (no --reason= flag after the fix)
-    captured_argv: list[list[str]] = []
-
-    def fake_popen(argv, **kwargs):
-        captured_argv.append(argv)
-        raise OSError("intercepted")  # suppress actual spawn
-
-    with patch.object(orch.subprocess, "Popen", fake_popen):
-        with patch("pathlib.Path.exists", return_value=True):
-            orch._spawn_batch_doctor()
-
-    assert captured_argv, "Popen must have been called"
-    argv = captured_argv[0]
-    # Find "doctor" and everything after
-    try:
-        doc_idx = argv.index("doctor")
-    except ValueError:
-        raise AssertionError(f"'doctor' not in argv: {argv}") from None
-
-    sub_argv = argv[doc_idx:]  # ["doctor", ...]
-    # Must parse cleanly — no SystemExit
-    try:
-        parser.parse_args(sub_argv)
-    except SystemExit as e:
-        raise AssertionError(
-            f"doctor argv {sub_argv!r} fails to parse (exit {e.code}): likely --reason= present"
-        ) from e
-
-
-def test_spawn_batch_doctor_no_reason_flag():
-    """_spawn_batch_doctor must NOT pass --reason to doctor subcommand."""
-    orch = load_module("orchestrate")
-
-    captured_argv: list[list[str]] = []
-
-    def fake_popen(argv, **kwargs):
-        captured_argv.append(argv)
-        raise OSError("intercepted")
-
-    with patch.object(orch.subprocess, "Popen", fake_popen):
-        with patch("pathlib.Path.exists", return_value=True):
-            orch._spawn_batch_doctor()
-
-    if not captured_argv:
-        return  # Popen wasn't reached (session.py missing) — skip
-
-    argv = captured_argv[0]
-    assert not any("--reason" in a for a in argv), f"--reason must not appear in argv: {argv}"
-
-
 # ── Slice 4: eject summary on stdout ─────────────────────────────────────────
 
 
@@ -548,7 +483,6 @@ def test_run_orchestrate_names_ejected_chunks_on_failure(tmp_path, capsys):
         patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
         patch.object(orch._utils, "emit_event", lambda *a, **k: None),
         patch.object(orch, "_emit_event", lambda *a, **k: None),
-        patch.object(orch, "_spawn_batch_doctor", lambda: None),
     ):
         rc = orch.run_orchestrate(
             holding="main",
@@ -576,7 +510,6 @@ def test_run_orchestrate_all_green_no_eject_summary(tmp_path, capsys):
         patch.object(orch, "_prune_stale_containers", lambda: None),
         patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
         patch.object(orch._utils, "emit_event", lambda *a, **k: None),
-        patch.object(orch, "_spawn_batch_doctor", lambda: None),
     ):
         rc = orch.run_orchestrate(
             holding="main",

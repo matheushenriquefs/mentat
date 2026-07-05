@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 import json
 import sys
-import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TypedDict, cast
@@ -58,12 +57,14 @@ def _humanize_age(age_secs: float) -> str:
 
 
 def latest_session(repo_dir: Path) -> str | None:
-    """Return the most recently modified session dir, excluding ad-hoc `mentat-manual-*` runs."""
-    dirs = [d for d in repo_dir.iterdir() if d.is_dir() and not d.name.startswith("mentat-manual-")]
-    dated = [(m, d.name) for d in dirs if (m := _safe_mtime(d)) is not None]
-    if not dated:
-        return None
-    return max(dated)[1]
+    """Return the most recently modified agent dir (legacy name)."""
+    return get_latest_agent(repo_dir)
+
+
+def get_latest_agent(repo_dir: Path) -> str | None:
+    from lib import store
+
+    return store.get_latest_agent(repo_dir.name)
 
 
 def sessions_for_repo(repo_dir: Path) -> list[str]:
@@ -97,10 +98,13 @@ def iter_rows(log_file: Path) -> Iterator[dict[str, object]]:
 
 
 def all_events(session_dir: Path) -> list[dict[str, object]]:
-    events: list[dict[str, object]] = []
-    for log_file in sorted(session_dir.glob("*.jsonl")):
-        events.extend(iter_rows(log_file))
-    return sorted(events, key=lambda e: str(e.get("ts", "")))
+    return list_events(session_dir)
+
+
+def list_events(session_dir: Path) -> list[dict[str, object]]:
+    from lib import store
+
+    return store.list_events(session_dir.name)
 
 
 # ── repo-wide registry ────────────────────────────────────────────────────────
@@ -256,28 +260,20 @@ def list_sessions(
     stale_secs: float = STALE_SECS,
     active_only: bool = True,
 ) -> list[SessionRecord]:
-    """Scan one repo's log dir into attention-ordered status records.
+    return list_agents(repo_dir, now=now, stale_secs=stale_secs, active_only=active_only)
 
-    Each record: {session, status, mtime, age, last_event}. Sorted by (rank, age)
-    so attention-needing sessions (waiting > idle > ? > working) float to the top.
-    Race-safe: a session dir/file removed mid-scan is skipped, never raised. Each
-    session's logs are read once (audit tail + newest tail), not per-field.
 
-    When active_only=True (default), only working/waiting sessions and sessions
-    last active within _RECENCY_SECS are returned. Pass active_only=False for the
-    full history (--all flag).
-    """
-    if not repo_dir.is_dir():
-        return []
-    clock = time.time() if now is None else now
-    subs: list[Path] = []
-    with contextlib.suppress(OSError):
-        subs = [s for s in repo_dir.iterdir() if s.is_dir()]
-    records: list[SessionRecord] = [r for sub in subs if (r := _build_record(sub, clock, stale_secs)) is not None]
-    if active_only:
-        records = [r for r in records if r["status"] in ("working", "waiting") or r["age"] <= _RECENCY_SECS]
-    records.sort(key=lambda r: (STATUS_RANK.get(r["status"], 99), r["age"]))
-    return records
+def list_agents(
+    repo_dir: Path,
+    *,
+    now: float | None = None,
+    stale_secs: float = STALE_SECS,
+    active_only: bool = True,
+) -> list[SessionRecord]:
+    from lib import store
+
+    rows = store.list_track_entries(repo_dir.name, active_only=active_only, now=now)
+    return [cast("SessionRecord", r) for r in rows]
 
 
 def session_stream_tools(session_dir: Path, *, limit: int = 20) -> list[str]:

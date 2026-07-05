@@ -10,13 +10,12 @@ emitted task.* audit rows. In-process so the tasks dispatch is measured.
 
 from __future__ import annotations
 
-import json
 from io import StringIO
 from pathlib import Path
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import event_kinds, load_script
 
 pytestmark = pytest.mark.e2e
 
@@ -60,17 +59,8 @@ def _fm(path: Path) -> dict[str, str]:
     return fm
 
 
-def _emitted_events(log_root: Path) -> list[str]:
-    events: list[str] = []
-    for f in log_root.rglob("*.jsonl"):
-        for line in f.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            row = json.loads(line)
-            if isinstance(row, dict) and "event" in row:
-                events.append(row["event"])
-    return events
+def _emitted_events(session_id: str) -> list[str]:
+    return event_kinds(session_id)
 
 
 def test_tasks_create_claim_refresh_done_lifecycle(store, capsys):
@@ -120,7 +110,7 @@ def test_tasks_create_claim_refresh_done_lifecycle(store, capsys):
     assert _run(t, ["list", "--status", "todo"]) == 0
     assert "T001" not in capsys.readouterr().out
 
-    events = _emitted_events(log_root)
+    events = _emitted_events("orchestrate-main-1")
     assert "task.created" in events
     assert "task.claimed" in events
     assert "task.done" in events
@@ -139,7 +129,7 @@ def test_tasks_release_returns_to_todo(store):
     assert fm["status"] == "todo"
     assert fm["claimed_by"] == ""
     assert not task_file.with_suffix(".md.lock").exists()
-    assert "task.released" in _emitted_events(log_root)
+    assert "task.released" in _emitted_events("orchestrate-main-1")
 
 
 def test_tasks_wontfix_after_claim(store):
@@ -152,7 +142,7 @@ def test_tasks_wontfix_after_claim(store):
 
     assert _run(t, ["wontfix", str(task_file)]) == 0
     assert _fm(task_file)["status"] == "wontfix"
-    assert "task.wontfix" in _emitted_events(log_root)
+    assert "task.wontfix" in _emitted_events("orchestrate-main-1")
 
 
 def test_tasks_done_on_todo_is_illegal(store, capsys):

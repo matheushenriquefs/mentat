@@ -68,7 +68,7 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 : A chunk's unique id — also its worktree dirname and `mentat_slug` container label. Format: `mentat-<epoch>-<pid>-<rand>`. _Avoid_: "id", "name", "tag".
 
 **Summary file status vocabulary**
-: `summary.md` in the session log dir carries a `status:` frontmatter field that disambiguates outcome. Canonical values: `succeeded` (plan completed cleanly), `failed` (TDD/gate failure), `blocked` (AFK hit an unresolvable design call — operator must resolve), `hitl-required` (same intent, used in audit payloads). The file is written by the AFK agent (blocked) or by `mentat-session doctor` (succeeded/failed). _Avoid_: "completed" (hides outcome), custom strings outside this set.
+: `summary.md` in the agent log dir carries a `status:` frontmatter field that disambiguates outcome. Canonical values: `succeeded` (plan completed cleanly), `failed` (TDD/gate failure), `blocked` (AFK hit an unresolvable design call — operator must resolve), `hitl-required` (same intent, used in audit payloads). The file is written by the AFK agent (blocked) or by `mentat-session report` (succeeded/failed). _Avoid_: "completed" (hides outcome), custom strings outside this set.
 
 ## Relationships
 
@@ -133,7 +133,7 @@ Present-tense facts, not promises of future work.
 | [0004](docs/adr/0004-parallel-orchestration.md) | Parallel-slicing orchestration | Fan-out parallel, land serial. Cap 3 chunks. Re-gate after land rebase. Docker required. Driver names no project tool. |
 | [0005](docs/adr/0005-ubiquitous-lexicon.md) | Ubiquitous lexicon | Slice/chunk/batch vocabulary. One Laravel borrow (batch, noun only). |
 | [0006](docs/adr/0006-soft-readonly-test-enforcement.md) | Soft read-only tests | No kernel mount. Impl-only-after-red contract + runner-redirection blacklist entry. Both agnostic. |
-| [0007](docs/adr/0007-audit-envelope.md) | Audit envelope | 9-event canonical catalog, NDJSON envelope, `~/.mentat/logs/<repo>/<session>/` layout. |
+| [0007](docs/adr/0007-audit-envelope.md) | Audit envelope | 16-event catalog, SQLite canonical store (`mentat.db`), transcript at `~/.mentat/logs/<repo>/<agent_id>/`. |
 | [0008](docs/adr/0008-python-runtime.md) | Python runtime | Stdlib-only at the bin layer; uv/ruff/pyright/pytest at the dev layer. Container-required Python 3.11+. |
 | [0009](docs/adr/0009-plugin-api.md) | Plugin API | Vite-derived, one slot (harness), entry-point discovery. Mentat core stays minimal. |
 | [0010](docs/adr/0010-readonly-test-mount.md) | Read-only test mount | OCP `<plan>.tests.json` manifest + container bind-mount with `readonly` flag. |

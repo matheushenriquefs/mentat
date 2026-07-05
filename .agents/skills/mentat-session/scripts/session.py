@@ -21,7 +21,6 @@ from lib.session import repo_name as _repo
 from lib.session import resolve_agent_dir as _resolve_agent_dir
 
 _sessions = load_sibling(__file__, "sessions")
-_doctor = load_sibling(__file__, "doctor")
 _track = load_sibling(__file__, "track")
 _diagnose = load_sibling(__file__, "diagnose")
 
@@ -49,12 +48,11 @@ def cmd_track(session_id: str | None, all_sessions: bool = False) -> int:
 def _resolve_session(session_id: str | None) -> Path | int:
     """Resolve session_id to an existing session dir, or return an exit code."""
     repo = _repo()
-    repo_dir = _log_root() / repo
     sd = _resolve_agent_dir(session_id) if session_id else None
     if session_id is not None and sd is None:
         sd = _agent_dir_fn(session_id)
     if session_id is None:
-        session_id = _sessions.latest_session(repo_dir)
+        session_id = _store.get_latest_agent(repo)
     if session_id is None:
         print("mentat-session: no sessions found", file=sys.stderr)
         return 1
@@ -70,18 +68,17 @@ def cmd_doctor(session_id: str | None) -> int:
     sd = _resolve_session(session_id)
     if isinstance(sd, int):
         return sd
-    diag = _doctor.write_diagnosis(sd)
-    print(diag.read_text())
+    print(_diagnose.build_verdict(sd))
     return 0
 
 
 def cmd_report(session_id: str | None) -> int:
-    """Render the success-side report-back summary (twin of doctor). Operator
-    sees what an AFK session implemented without asking the main harness."""
+    """Render the success-side report-back summary. Operator sees what an AFK
+    session implemented without asking the main harness."""
     sd = _resolve_session(session_id)
     if isinstance(sd, int):
         return sd
-    summary = _doctor.write_summary(sd)
+    summary = _diagnose.write_summary(sd)
     print(summary.read_text())
     return 0
 
@@ -96,11 +93,9 @@ _STATUS_MARK = {"waiting": "◆", "idle": "✓", "?": "?", "working": "•"}
 
 
 def cmd_list(all_sessions: bool = False) -> int:
-    """Repo-wide session registry: scan ~/.mentat/logs/<repo>/*, status pulled from
-    each session's newest jsonl tail, attention-needing sessions on top."""
+    """Repo-wide agent registry from the canonical store."""
     repo = _repo()
-    repo_dir = _log_root() / repo
-    rows = _sessions.list_sessions(repo_dir, active_only=not all_sessions)
+    rows = _store.list_track_entries(repo, active_only=not all_sessions)
     if not rows:
         print(f"mentat-session: no sessions for {repo}")
         return 0

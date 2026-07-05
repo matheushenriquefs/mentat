@@ -1,7 +1,8 @@
-"""SQLite canonical store for mentat runtime state (ADR-0017 V1).
+"""SQLite canonical store for mentat runtime state (ADR-0017).
 
-WAL-durable source of truth for agents, chunks, slices, and events. The NDJSON
-audit file stays dual-written in V1; readers flip to SQLite in V2.
+WAL-durable source of truth for agents, chunks, slices, and events. Audit NDJSON
+is export-only via ``mentat-log list --format=jsonl``; nothing writes ``*.jsonl``
+audit files.
 """
 
 from __future__ import annotations
@@ -571,6 +572,10 @@ def record_emit(env: dict[str, str], event: str, payload: dict[str, object]) -> 
 
 
 _CHUNK_TERMINAL_KINDS = frozenset({"chunk_landed", "chunk_ejected", "plan_succeeded", "plan_failed"})
+_TERMINAL_DISPLAY = frozenset({"chunk.landed", "plan.succeeded", "plan.failed", "chunk.teardown", "batch.reviewed"})
+_RECENCY_SECS = 86400
+_STALE_SECS = 300
+_STATUS_RANK = {"waiting": 0, "idle": 1, "?": 2, "working": 3, "reaped": 99}
 
 
 def display_kind(kind: str) -> str:
@@ -596,13 +601,20 @@ def reconcile_liveness() -> None:
         conn.close()
 
 
-def _track_status(agent: Agent) -> str:
+def _track_status(agent: Agent, events: list[Event]) -> str:
     if agent.status == "reaped":
         return "reaped"
-    if agent.status in ("stopped",):
-        return "idle"
+    if events:
+        last_kind = display_kind(events[-1].kind)
+        payload = events[-1].payload
+        if last_kind == "chunk.ejected" and isinstance(payload, dict) and payload.get("reason") == "hitl-required":
+            return "waiting"
+        if last_kind in _TERMINAL_DISPLAY or last_kind == "chunk.ejected":
+            return "idle"
     if agent.status in ("pending", "running"):
         return "working"
+    if agent.status == "stopped":
+        return "idle"
     return "?"
 
 
@@ -622,13 +634,11 @@ def list_track_entries(
     try:
         agents = AgentDAO(conn)
         events = EventDAO(conn)
-        pool = agents.list_visible() if not active_only else agents.list_running()
+        pool = agents.list_visible()
         out: list[dict[str, object]] = []
         for agent in pool:
             log_dir = root / agent.id.replace("/", "-")
             if not log_dir.is_dir():
-                continue
-            if active_only and agent.status == "reaped":
                 continue
             evs = events.list_by_agent(agent.id)
             last_event = display_kind(evs[-1].kind) if evs else None
@@ -638,20 +648,26 @@ def list_track_entries(
                 started = clock
             mtime = started
             if evs:
-                try:
+                with contextlib.suppress(ValueError):
                     mtime = datetime.fromisoformat(evs[-1].ts).timestamp()
-                except ValueError:
-                    pass
+            age = max(0.0, clock - mtime)
+            status = _track_status(agent, evs)
+            if status == "working" and age > _STALE_SECS:
+                status = "?"
+            if active_only and status not in ("working", "waiting") and age > _RECENCY_SECS:
+                continue
+            if active_only and status == "reaped":
+                continue
             out.append(
                 {
                     "session": agent.id,
-                    "status": _track_status(agent),
+                    "status": status,
                     "mtime": mtime,
-                    "age": max(0.0, clock - mtime),
+                    "age": age,
                     "last_event": last_event,
                 }
             )
-        out.sort(key=lambda r: (r["status"] != "working", -(cast("float", r["mtime"]))))
+        out.sort(key=lambda r: (_STATUS_RANK.get(str(r["status"]), 99), cast("float", r["age"])))
         return out
     finally:
         conn.close()
@@ -664,3 +680,63 @@ def get_agent(agent_id: str) -> Agent | None:
         return AgentDAO(conn).get_by_id(agent_id)
     finally:
         conn.close()
+
+
+def audit_row(ev: Event, *, skill: str | None = None) -> dict[str, object]:
+    """Map a canonical event row to the ADR-0007 wire envelope (jsonl export)."""
+    return {
+        "ts": ev.ts,
+        "agent": skill or "unknown",
+        "session": ev.agent_id or "",
+        "event": display_kind(ev.kind),
+        "payload": ev.payload,
+    }
+
+
+def list_events(agent_id: str) -> list[dict[str, object]]:
+    """All audit events for one agent, in log-cursor order."""
+    conn = connect()
+    try:
+        agent = AgentDAO(conn).get_by_id(agent_id)
+        skill = agent.harness if agent else "unknown"
+        rows = EventDAO(conn).list_by_agent(agent_id)
+        return [audit_row(ev, skill=skill) for ev in rows]
+    finally:
+        conn.close()
+
+
+def attempt_count(agent_id: str, slug: str) -> int:
+    """Prior recovery respawns for ``slug``, replayed from the canonical store."""
+    count = 0
+    for row in list_events(agent_id):
+        if row.get("event") != "chunk.spawned":
+            continue
+        payload = row.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("slug") == slug and payload.get("trigger") == "recovery":
+            count += 1
+    return count
+
+
+def get_latest_agent(repo: str) -> str | None:
+    """Most recently active agent for ``repo``, excluding ad-hoc manual runs."""
+    from lib.session import log_root
+
+    repo_dir = log_root() / repo
+    if not repo_dir.is_dir():
+        return None
+    entries = [
+        e for e in list_track_entries(repo, active_only=False) if not str(e["session"]).startswith("mentat-manual-")
+    ]
+    if entries:
+        return str(max(entries, key=lambda e: cast("float", e["mtime"]))["session"])
+    dated: list[tuple[float, str]] = []
+    for d in repo_dir.iterdir():
+        if not d.is_dir() or d.name.startswith("mentat-manual-"):
+            continue
+        with contextlib.suppress(OSError):
+            dated.append((d.stat().st_mtime, d.name))
+    if not dated:
+        return None
+    return max(dated)[1]

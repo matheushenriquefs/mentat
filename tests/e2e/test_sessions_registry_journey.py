@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import load_script, seed_agent_events
 
 pytestmark = pytest.mark.e2e
 
@@ -57,10 +57,12 @@ def test_session_stream_tools_extracts_tail(tmp_path):
 
 def test_session_worktree_from_spawn_audit(tmp_path):
     ss = _sessions()
-    sd = tmp_path / "sess"
-    _seed(
-        sd,
-        events=[
+    agent_id = "sess"
+    seed_agent_events(
+        tmp_path,
+        "repo",
+        agent_id,
+        [
             {
                 "ts": "2026-06-30T00:00:00Z",
                 "event": "chunk.spawned",
@@ -73,22 +75,44 @@ def test_session_worktree_from_spawn_audit(tmp_path):
             },
         ],
     )
+    sd = tmp_path / "logs" / "repo" / agent_id
+    sd.mkdir(parents=True, exist_ok=True)
     assert ss.session_worktree(sd) == "/wt/two", "latest spawn's worktree wins"
 
 
 def test_session_worktree_none_without_spawn(tmp_path):
     ss = _sessions()
-    sd = tmp_path / "sess"
-    _seed(sd, events=[{"ts": "2026-06-30T00:00:00Z", "event": "plan.started", "payload": {"path": "p.md"}}])
+    agent_id = "sess"
+    seed_agent_events(
+        tmp_path,
+        "repo",
+        agent_id,
+        [{"ts": "2026-06-30T00:00:00Z", "event": "plan.started", "payload": {"path": "p.md"}}],
+    )
+    sd = tmp_path / "logs" / "repo" / agent_id
+    sd.mkdir(parents=True, exist_ok=True)
     assert ss.session_worktree(sd) is None
 
 
-def test_latest_session_picks_newest_dir(tmp_path):
+def test_latest_session_picks_newest_dir(tmp_path, monkeypatch):
     ss = _sessions()
-    repo_dir = tmp_path / "repo"
-    _seed(repo_dir / "old", events=[{"ts": "t", "event": "plan.started", "payload": {"path": "p"}}], age=600)
-    _seed(repo_dir / "new", events=[{"ts": "t", "event": "plan.started", "payload": {"path": "p"}}])
-    # mentat-manual-* sessions are excluded from the "latest" pick.
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    repo_dir = tmp_path / "logs" / "repo"
+    seed_agent_events(
+        tmp_path,
+        "repo",
+        "old",
+        [{"ts": "2026-01-01T00:00:00Z", "event": "plan.started", "payload": {"path": "p"}}],
+    )
+    seed_agent_events(
+        tmp_path,
+        "repo",
+        "new",
+        [{"ts": "2026-07-01T00:00:00Z", "event": "plan.started", "payload": {"path": "p"}}],
+    )
+    (repo_dir / "old").mkdir(parents=True, exist_ok=True)
+    (repo_dir / "new").mkdir(parents=True, exist_ok=True)
     _seed(repo_dir / "mentat-manual-x", events=[{"ts": "t", "event": "plan.started", "payload": {"path": "p"}}])
     assert ss.latest_session(repo_dir) == "new"
 
@@ -121,22 +145,29 @@ def test_chunks_and_sessions_listing(tmp_path):
     assert [p.name for p in chunks] == ["session.jsonl"]
 
 
-def test_list_sessions_ranks_attention_to_top(tmp_path):
+def test_list_sessions_ranks_attention_to_top(tmp_path, monkeypatch):
     ss = _sessions()
-    repo_dir = tmp_path / "repo"
-    # waiting (AskUserQuestion, fresh) must outrank an idle landed session.
-    _seed(
-        repo_dir / "waiter",
-        stream=[
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    repo_dir = tmp_path / "logs" / "repo"
+    seed_agent_events(
+        tmp_path,
+        "repo",
+        "waiter",
+        [
             {
-                "type": "assistant",
-                "message": {"content": [{"type": "tool_use", "name": "AskUserQuestion", "input": {}}]},
+                "event": "chunk.ejected",
+                "payload": {"slug": "s", "reason": "hitl-required", "where": "/wt"},
             },
         ],
+        status="running",
     )
-    _seed(
-        repo_dir / "done",
-        events=[
+    (repo_dir / "waiter").mkdir(parents=True, exist_ok=True)
+    seed_agent_events(
+        tmp_path,
+        "repo",
+        "done",
+        [
             {
                 "ts": "2026-06-30T00:00:00Z",
                 "event": "chunk.landed",
@@ -144,6 +175,7 @@ def test_list_sessions_ranks_attention_to_top(tmp_path):
             },
         ],
     )
+    (repo_dir / "done").mkdir(parents=True, exist_ok=True)
     records = ss.list_sessions(repo_dir, active_only=False)
     order = [r["session"] for r in records]
     assert order.index("waiter") < order.index("done"), "waiting floats above idle"

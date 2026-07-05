@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from tests.conftest import load_script
+from tests.conftest import bind_plan, load_script, seed_agent_events
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 IMPL_SCRIPTS = REPO_ROOT / ".agents/skills/mentat-implement/scripts"
@@ -40,8 +40,8 @@ def _scheduler():
     return load_script(ORCH_SCRIPTS / "scheduler.py", "sched_wedge")
 
 
-def _doctor():
-    return load_script(SESSION_SCRIPTS / "doctor.py", "doctor_wedge")
+def _diagnose():
+    return load_script(SESSION_SCRIPTS / "diagnose.py", "diagnose_wedge")
 
 
 def _write_plan(tmp_path: Path, slug: str, class_: str = "AFK") -> Path:
@@ -190,6 +190,8 @@ def test_hitl_exit_excluded_from_worktree_teardown():
 def test_partition_fanout_excludes_hitl_children_from_landing():
     orch = _orch()
     sched = _scheduler()
+    bind_plan("a")
+    bind_plan("b")
     plan_a = sched.Plan(slug="a", class_="AFK", blocked_by=[], path=Path("/p/a.md"))
     plan_b = sched.Plan(slug="b", class_="AFK", blocked_by=[], path=Path("/p/b.md"))
 
@@ -214,6 +216,8 @@ def test_partition_fanout_excludes_hitl_children_from_landing():
 def test_partition_fanout_all_clean_lands_all():
     orch = _orch()
     sched = _scheduler()
+    bind_plan("x")
+    bind_plan("y")
     plans = [sched.Plan(slug=s, class_="AFK", blocked_by=[], path=Path(f"/p/{s}.md")) for s in ("x", "y")]
     with patch.object(orch, "_emit_event", lambda e, p: None):
         with patch.object(orch, "_worktree_for_slug", side_effect=lambda s: Path(f"/wt/{s}")):
@@ -257,20 +261,15 @@ def test_ensure_session_freezes_mentat_repo(tmp_path, monkeypatch):
 # ── doctor / report surface the blocker ───────────────────────────────────────
 
 
-def _write_audit(session_dir: Path, rows: list[dict]) -> None:
-    import json
-
-    session_dir.mkdir(parents=True, exist_ok=True)
-    with (session_dir / "mentat-implement.jsonl").open("w") as fh:
-        for r in rows:
-            fh.write(json.dumps(r) + "\n")
+def _write_audit(tmp_path: Path, session_id: str, rows: list[dict]) -> Path:
+    return seed_agent_events(tmp_path, "testrepo", session_id, rows, harness="mentat-implement")
 
 
 def test_doctor_verdict_names_hitl_blocker(tmp_path):
-    doctor = _doctor()
-    sd = tmp_path / "s-hitl"
-    _write_audit(
-        sd,
+    diagnose = _diagnose()
+    sd = _write_audit(
+        tmp_path,
+        "s-hitl",
         [
             {"event": "chunk.spawned", "ts": "t0", "payload": {"slug": "p", "plan": "/p/p.md"}},
             {
@@ -280,16 +279,16 @@ def test_doctor_verdict_names_hitl_blocker(tmp_path):
             },
         ],
     )
-    verdict = doctor.build_verdict(sd)
+    verdict = diagnose.build_verdict(sd)
     assert "hitl-required" in verdict
     assert "OAuth or SAML?" in verdict, "doctor must surface the blocker summary"
 
 
 def test_report_summary_names_hitl_blocker(tmp_path):
-    doctor = _doctor()
-    sd = tmp_path / "s-rep"
-    _write_audit(
-        sd,
+    diagnose = _diagnose()
+    sd = _write_audit(
+        tmp_path,
+        "s-rep",
         [
             {"event": "chunk.spawned", "ts": "t0", "payload": {"slug": "p", "plan": "/p/p.md"}},
             {
@@ -299,7 +298,7 @@ def test_report_summary_names_hitl_blocker(tmp_path):
             },
         ],
     )
-    summary = doctor.build_summary(sd)
+    summary = diagnose.build_summary(sd)
     assert "hitl-required" in summary
     assert "pick a queue" in summary
 

@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-from tests.conftest import load_script
+from tests.conftest import load_script, seed_agent_events
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / ".agents/skills/mentat-session/scripts"
@@ -151,18 +151,7 @@ def test_session_stream_tools_empty_when_absent(tmp_path):
 
 def test_session_worktree_from_spawn_event(tmp_path):
     sessions = load_module("sessions")
-    sd = tmp_path / "s-1"
-    sd.mkdir(parents=True)
-    (sd / "mentat-implement.jsonl").write_text(
-        json.dumps(
-            {
-                "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.spawned",
-                "payload": {"slug": "x", "worktree": "/wt/x"},
-            }
-        )
-        + "\n"
-    )
+    sd = _seed_spawn(tmp_path, "s-1", "/wt/x")
     assert sessions.session_worktree(sd) == "/wt/x"
 
 
@@ -683,16 +672,24 @@ def test_on_sigterm_sets_terminate_flag():
     track._TERMINATE = False
 
 
-def _seed_spawn(session_dir: Path, worktree: str) -> None:
-    session_dir.mkdir(parents=True, exist_ok=True)
-    row = {"ts": "1", "event": "chunk.spawned", "payload": {"worktree": worktree}}
-    (session_dir / "audit.jsonl").write_text(json.dumps(row) + "\n")
+def _seed_spawn(tmp_path: Path, agent_id: str, worktree: str) -> Path:
+    return seed_agent_events(
+        tmp_path,
+        "testrepo",
+        agent_id,
+        [
+            {
+                "ts": "2026-01-01T00:00:00+00:00",
+                "event": "chunk.spawned",
+                "payload": {"slug": "x", "plan": "p", "harness": "h", "worktree": worktree},
+            }
+        ],
+    )
 
 
 def test_kill_removes_worktree_via_git(tmp_path, monkeypatch):
     track = load_module("track")
-    sd = tmp_path / "s-kill"
-    _seed_spawn(sd, "/wt/x")
+    sd = _seed_spawn(tmp_path, "s-kill", "/wt/x")
     calls: list[tuple] = []
     monkeypatch.setattr(track.subprocess, "run", lambda *a, **k: calls.append(a))
     track._kill(sd)
@@ -712,8 +709,7 @@ def test_kill_noop_when_no_worktree(tmp_path, monkeypatch):
 
 def test_kill_swallows_git_error(tmp_path, monkeypatch):
     track = load_module("track")
-    sd = tmp_path / "s-killerr"
-    _seed_spawn(sd, "/wt/y")
+    sd = _seed_spawn(tmp_path, "s-killerr", "/wt/y")
 
     def _boom(*a, **k):
         raise OSError("git missing")

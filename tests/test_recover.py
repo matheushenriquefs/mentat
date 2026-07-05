@@ -9,11 +9,12 @@ audit log so it survives a resume.
 from __future__ import annotations
 
 import importlib.util
-import json
 import sys
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import seed_agent_events
 
 ORCH_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
@@ -67,17 +68,26 @@ def _wire(recover, monkeypatch, *, calls):
 # ── attempt_count: log-replayed, resume-safe ──────────────────────────────────
 
 
-def _write_recovery_spawn(log_dir: Path, slug: str) -> None:
-    log_dir.mkdir(parents=True, exist_ok=True)
-    row = {
-        "ts": "2026-07-02T00:00:00+00:00",
-        "agent": "mentat-orchestrate",
-        "session": "s1",
-        "event": "chunk.spawned",
-        "payload": {"slug": slug, "plan": "p", "harness": "d", "worktree": "w", "trigger": "recovery", "attempt": 1},
-    }
-    with (log_dir / "a-x.jsonl").open("a") as f:
-        f.write(json.dumps(row) + "\n")
+def _write_recovery_spawn(tmp_path: Path, repo: str, session_id: str, slug: str) -> None:
+    seed_agent_events(
+        tmp_path,
+        repo,
+        session_id,
+        [
+            {
+                "ts": "2026-07-02T00:00:00+00:00",
+                "event": "chunk.spawned",
+                "payload": {
+                    "slug": slug,
+                    "plan": "p",
+                    "harness": "d",
+                    "worktree": "w",
+                    "trigger": "recovery",
+                    "attempt": 1,
+                },
+            }
+        ],
+    )
 
 
 def test_attempt_count_zero_when_no_log(recover, monkeypatch, tmp_path):
@@ -87,35 +97,39 @@ def test_attempt_count_zero_when_no_log(recover, monkeypatch, tmp_path):
 
 
 def test_attempt_count_replays_recovery_spawns_across_resume(recover, monkeypatch, tmp_path):
-    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    log_dir = tmp_path / "repo" / "s1"
-    _write_recovery_spawn(log_dir, "a")
-    _write_recovery_spawn(log_dir, "a")
-    _write_recovery_spawn(log_dir, "b")  # different slug — not counted
-    # A "resume" is just a fresh read of the durable log.
+    _write_recovery_spawn(tmp_path, "repo", "s1", "a")
+    _write_recovery_spawn(tmp_path, "repo", "s1", "a")
+    _write_recovery_spawn(tmp_path, "repo", "s1", "b")
     assert recover.attempt_count("s1", "a") == 2
     assert recover.attempt_count("s1", "b") == 1
 
 
 def test_attempt_count_ignores_non_recovery_spawns(recover, monkeypatch, tmp_path):
-    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    log_dir = tmp_path / "repo" / "s1"
-    log_dir.mkdir(parents=True)
-    plain = {"event": "chunk.spawned", "payload": {"slug": "a", "plan": "p", "harness": "d", "worktree": "w"}}
-    other = {"event": "chunk.landed", "payload": {"slug": "a", "sha": "x", "holding": "h"}}
-    (log_dir / "a.jsonl").write_text(json.dumps(plain) + "\n" + json.dumps(other) + "\n\nnot-json\n")
+    seed_agent_events(
+        tmp_path,
+        "repo",
+        "s1",
+        [
+            {
+                "event": "chunk.spawned",
+                "payload": {"slug": "a", "plan": "p", "harness": "d", "worktree": "w"},
+            },
+            {
+                "event": "chunk.landed",
+                "payload": {"slug": "a", "sha": "x", "holding": "h"},
+            },
+        ],
+    )
     assert recover.attempt_count("s1", "a") == 0
 
 
 def test_attempt_count_skips_unreadable_log_file(recover, monkeypatch, tmp_path):
-    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    log_dir = tmp_path / "repo" / "s1"
-    log_dir.mkdir(parents=True)
-    # A directory named like a log file → read_text raises OSError, must be skipped.
-    (log_dir / "d.jsonl").mkdir()
     assert recover.attempt_count("s1", "a") == 0
 
 
@@ -305,8 +319,8 @@ def test_recover_never_respawns_hitl(recover, monkeypatch, tmp_path):
 def test_recover_cap_exhausted_dead_letters(recover, monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    _write_recovery_spawn(tmp_path / "repo" / "s1", "core")
-    _write_recovery_spawn(tmp_path / "repo" / "s1", "core")  # already 2 prior attempts
+    _write_recovery_spawn(tmp_path, "repo", "s1", "core")
+    _write_recovery_spawn(tmp_path, "repo", "s1", "core")
     calls: dict = {}
     prim = _wire(recover, monkeypatch, calls=calls)
     out = recover.recover(
@@ -567,8 +581,8 @@ def test_recover_abandon_notifies(recover, monkeypatch, tmp_path):
 def test_recover_attempt_cap_notifies(recover, monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    _write_recovery_spawn(tmp_path / "repo" / "s1", "a")
-    _write_recovery_spawn(tmp_path / "repo" / "s1", "a")
+    _write_recovery_spawn(tmp_path, "repo", "s1", "a")
+    _write_recovery_spawn(tmp_path, "repo", "s1", "a")
     calls: dict = {}
     prim = _wire(recover, monkeypatch, calls=calls)
     notes: list = []

@@ -75,9 +75,9 @@ See [ADR-0004](./adr/0004-parallel-orchestration.md).
 
 ## Audit envelope
 
-Commands emit events through `mentat-log emit`. Nine canonical event types — `plan.started`, `plan.succeeded`, `plan.failed`, `chunk.spawned`, `chunk.landed`, `chunk.ejected`, `gate.evaluated`, `review.submitted`, `batch.reviewed` — written NDJSON to `~/.mentat/logs/<repo>/<session>/<agent>-<slug>.jsonl`. Raw harness stdout goes to a sibling `.stdout` file (opaque). Subprocess stderr goes to `.stderr/<...>.stderr`. The catalog is defined once in `mentat-log/scripts/log.py` as `EVENT_CATALOG`.
+Commands emit events through `mentat-log emit`. Sixteen canonical event types (see ADR-0007) append to `~/.mentat/mentat.db` via `lib/store.py`. Export for grep: `mentat-log list <agent-id> --format=jsonl`. Harness transcripts live at `~/.mentat/logs/<repo>/<agent_id>/transcript.jsonl` (not in sqlite). Subprocess stderr on emit reject goes to `.stderr/<skill>-<slug>.stderr`. The catalog is defined once in `mentat-log/scripts/log.py` as `EVENT_CATALOG`.
 
-`mentat-session track` watches the live JSONL. `mentat-session doctor` writes a per-session diagnosis markdown after the batch.
+`mentat-session track` reads the canonical store and transcript file. `mentat-session diagnose` renders a verdict from store events.
 
 See [ADR-0007](./adr/0007-audit-envelope.md).
 

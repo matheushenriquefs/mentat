@@ -10,14 +10,13 @@ ejection to downstream chunks. Real chunk.landed / chunk.ejected audit rows thro
 
 from __future__ import annotations
 
-import json
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import events_by_kind, load_script
 
 pytestmark = pytest.mark.e2e
 
@@ -62,33 +61,26 @@ def _setup(tmp_path: Path, slugs: list[str]):
     return main_repo, worktrees
 
 
-def _configure_env(monkeypatch, tmp_path: Path, main_repo: Path) -> Path:
+def _configure_env(monkeypatch, tmp_path: Path, main_repo: Path) -> str:
     log_root = tmp_path / "logs"
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    monkeypatch.setenv("MENTAT_SESSION", "orchestrate-holding-1")
+    session = "orchestrate-holding-1"
+    monkeypatch.setenv("MENTAT_AGENT", session)
+    monkeypatch.setenv("MENTAT_SESSION", session)
     monkeypatch.chdir(main_repo)
-    return log_root
+    return session
 
 
-def _events(log_root: Path, name: str) -> list[dict]:
-    out: list[dict] = []
-    for f in log_root.rglob("*.jsonl"):
-        for line in f.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            row = json.loads(line)
-            if isinstance(row, dict) and row.get("event") == name:
-                out.append(row)
-    return out
+def _events(session_id: str, name: str) -> list[dict]:
+    return events_by_kind(session_id, name)
 
 
 def test_drain_lands_clean_and_ejects_blocked(tmp_path, monkeypatch):
     lq = load_script(SCRIPTS / "land_queue.py", "e2e_lq")
     main_repo, wts = _setup(tmp_path, ["good", "bad"])
-    log_root = _configure_env(monkeypatch, tmp_path, main_repo)
+    session = _configure_env(monkeypatch, tmp_path, main_repo)
 
     before = int(_git(["rev-list", "--count", "refs/heads/holding"], cwd=main_repo))
 
@@ -114,14 +106,14 @@ def test_drain_lands_clean_and_ejects_blocked(tmp_path, monkeypatch):
     assert "bad.txt" not in tree, "a blocked chunk must not land"
 
     # Real audit rows: one landing, one ejection.
-    assert {e["payload"]["slug"] for e in _events(log_root, "chunk.landed")} == {"good"}
-    assert {e["payload"]["slug"] for e in _events(log_root, "chunk.ejected")} == {"bad"}
+    assert {e["payload"]["slug"] for e in _events(session, "chunk.landed")} == {"good"}
+    assert {e["payload"]["slug"] for e in _events(session, "chunk.ejected")} == {"bad"}
 
 
 def test_drain_cascades_ejection_to_dependents(tmp_path, monkeypatch):
     lq = load_script(SCRIPTS / "land_queue.py", "e2e_lq_cascade")
     main_repo, wts = _setup(tmp_path, ["root", "child"])
-    log_root = _configure_env(monkeypatch, tmp_path, main_repo)
+    session = _configure_env(monkeypatch, tmp_path, main_repo)
 
     chunks = [lq.Chunk("root", wts["root"]), lq.Chunk("child", wts["child"])]
 
@@ -149,7 +141,7 @@ def test_drain_cascades_ejection_to_dependents(tmp_path, monkeypatch):
     # holding never advanced — nothing landed.
     assert int(_git(["rev-list", "--count", "refs/heads/holding"], cwd=main_repo)) == 1
 
-    ejects = {e["payload"]["slug"]: e["payload"] for e in _events(log_root, "chunk.ejected")}
+    ejects = {e["payload"]["slug"]: e["payload"] for e in _events(session, "chunk.ejected")}
     assert ejects["root"]["reason"] == lq.EjectReason.GATE_FAILED
     assert ejects["child"]["reason"] == lq.EjectReason.UPSTREAM_EJECTED
     assert ejects["child"]["upstream"] == "root"

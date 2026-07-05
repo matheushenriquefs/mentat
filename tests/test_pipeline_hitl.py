@@ -15,9 +15,7 @@ At no point is `claude --headless` invoked.
 
 from __future__ import annotations
 
-import contextlib
 import importlib.util
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -68,27 +66,12 @@ def test_pipeline_hitl_lands_chunk_without_claude_headless(tmp_path, monkeypatch
     plan.write_text(f"---\nid: {slug}\nstatus: ready\nclass: HITL\nblocked_by: []\n---\n# {slug}\n")
 
     emitted: list[tuple[str, dict]] = []
-    real_run = subprocess.run
 
-    def recorder(cmd, *a, **kw):
-        if isinstance(cmd, (list, tuple)):
-            cmd_list = list(cmd)
-            for x in cmd_list:
-                if isinstance(x, str) and "claude" in x.lower() and "--headless" in cmd_list:
-                    raise AssertionError(f"claude --headless invoked: {cmd_list}")
-            if len(cmd_list) >= 6 and cmd_list[0] == "python3" and cmd_list[2] == "emit":
-                with contextlib.suppress(IndexError, json.JSONDecodeError):
-                    emitted.append((cmd_list[4], json.loads(cmd_list[5])))
+    def record(event: str, payload: dict) -> None:
+        emitted.append((event, payload))
 
-                class _R:
-                    returncode = 0
-                    stderr = ""
-                    stdout = ""
-
-                return _R()
-        return real_run(cmd, *a, **kw)
-
-    monkeypatch.setattr(subprocess, "run", recorder)
+    monkeypatch.setattr(orchestrate._utils, "emit_event", record)
+    monkeypatch.setattr(land_queue, "_emit_event", record)
     monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [])
 
     # --- Phase 1: orchestrate emits chunk.spawned{hitl-in-session}, no land ---

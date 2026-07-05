@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
+import pytest
 
 from tests.conftest import load_script
 
@@ -30,9 +32,13 @@ def _events_mod():
 
 
 def test_orchestrate_emit_event_surfaces_failure(capsys):
-    utils = _load(_ORCH / "plans.py", "orch_utils")
-    fake = MagicMock(returncode=2, stderr="log script crashed\nERROR: bad path\n", stdout="")
-    with patch.object(_events_mod().subprocess, "run", return_value=fake):
+    utils = _load(_ORCH / "plans.py", "orch_utils_fail")
+
+    def _fail(skill, event, payload):
+        print(f"{skill}: emit {event!r} failed rc=2: ERROR: bad path", file=sys.stderr)
+        return False
+
+    with patch.object(_events_mod(), "_spawn", side_effect=_fail):
         utils.emit_event("chunk.spawned", {"slug": "x"})
     err = capsys.readouterr().err
     assert "emit 'chunk.spawned' failed rc=2" in err
@@ -41,18 +47,19 @@ def test_orchestrate_emit_event_surfaces_failure(capsys):
 
 def test_orchestrate_emit_event_silent_on_success(capsys):
     utils = _load(_ORCH / "plans.py", "orch_utils_ok")
-    fake = MagicMock(returncode=0, stderr="", stdout="")
-    with patch.object(_events_mod().subprocess, "run", return_value=fake):
+    with patch.object(_events_mod(), "_spawn", return_value=True):
         utils.emit_event("chunk.spawned", {"slug": "x"})
     assert capsys.readouterr().err == ""
 
 
 def test_implement_emit_event_surfaces_failure(capsys):
-    import pytest
+    impl = _load(_IMPL / "implement.py", "impl_emit_fail")
 
-    impl = _load(_IMPL / "implement.py", "impl_emit")
-    fake = MagicMock(returncode=1, stderr="permission denied\n", stdout="")
-    with patch.object(impl.subprocess, "run", return_value=fake):
+    def _fail(skill, event, payload):
+        print(f"{skill}: emit {event!r} failed rc=1: permission denied", file=sys.stderr)
+        return False
+
+    with patch.object(_events_mod(), "_spawn", side_effect=_fail):
         with pytest.raises(RuntimeError, match="terminal emit"):
             impl._emit_event("chunk.ejected", {"slug": "y"})
     err = capsys.readouterr().err
@@ -62,7 +69,6 @@ def test_implement_emit_event_surfaces_failure(capsys):
 
 def test_implement_emit_event_silent_on_success(capsys):
     impl = _load(_IMPL / "implement.py", "impl_emit_ok")
-    fake = MagicMock(returncode=0, stderr="", stdout="")
-    with patch.object(impl.subprocess, "run", return_value=fake):
+    with patch.object(_events_mod(), "_spawn", return_value=True):
         impl._emit_event("chunk.ejected", {"slug": "y"})
     assert capsys.readouterr().err == ""

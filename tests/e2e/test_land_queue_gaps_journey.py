@@ -10,14 +10,13 @@ worktrees; the docker seam is stubbed — never a real container.
 
 from __future__ import annotations
 
-import json
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 
-from tests.conftest import TEST_CHUNK_ID, load_script
+from tests.conftest import TEST_CHUNK_ID, events_by_kind, load_script
 
 pytestmark = pytest.mark.e2e
 
@@ -61,27 +60,20 @@ def _setup(tmp_path: Path, slugs: list[str]):
     return main_repo, worktrees
 
 
-def _configure_env(monkeypatch, tmp_path: Path, main_repo: Path) -> Path:
+def _configure_env(monkeypatch, tmp_path: Path, main_repo: Path) -> str:
     log_root = tmp_path / "logs"
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    monkeypatch.setenv("MENTAT_SESSION", "orchestrate-holding-gaps")
+    session = "orchestrate-holding-gaps"
+    monkeypatch.setenv("MENTAT_AGENT", session)
+    monkeypatch.setenv("MENTAT_SESSION", session)
     monkeypatch.chdir(main_repo)
-    return log_root
+    return session
 
 
-def _events(log_root: Path, name: str) -> list[dict]:
-    out: list[dict] = []
-    for f in log_root.rglob("*.jsonl"):
-        for line in f.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            row = json.loads(line)
-            if isinstance(row, dict) and row.get("event") == name:
-                out.append(row)
-    return out
+def _events(session_id: str, name: str) -> list[dict]:
+    return events_by_kind(session_id, name)
 
 
 # ── _run_gates: the un-patched delegation to the plans util (line 37) ─────────
@@ -113,14 +105,16 @@ def test_teardown_container_fires_real_teardown_event(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    monkeypatch.setenv("MENTAT_SESSION", "orchestrate-teardown-gaps")
+    session = "orchestrate-teardown-gaps"
+    monkeypatch.setenv("MENTAT_AGENT", session)
+    monkeypatch.setenv("MENTAT_SESSION", session)
 
     from lib import devcontainer
 
     with _patch_attr(devcontainer, "down", lambda slug: True):
         lq._teardown_container(lq.Chunk(slug="dead-slug", worktree=tmp_path / "wt", chunk_id=TEST_CHUNK_ID))
 
-    rows = _events(log_root, "chunk.teardown")
+    rows = _events(session, "chunk.teardown")
     assert any(r["payload"]["slug"] == "dead-slug" and r["payload"]["ok"] is True for r in rows), rows
 
 
@@ -130,7 +124,7 @@ def test_teardown_container_fires_real_teardown_event(tmp_path, monkeypatch):
 def test_land_ejects_not_ff_when_ff_merge_reports_not_ff(tmp_path, monkeypatch):
     lq = load_script(SCRIPTS / "land_queue.py", "e2e_lq_gaps_notff")
     main_repo, wts = _setup(tmp_path, ["moved"])
-    log_root = _configure_env(monkeypatch, tmp_path, main_repo)
+    session = _configure_env(monkeypatch, tmp_path, main_repo)
 
     with (
         _patch_attr(lq, "_run_gates", lambda chunk: ("pass", "")),
@@ -141,7 +135,7 @@ def test_land_ejects_not_ff_when_ff_merge_reports_not_ff(tmp_path, monkeypatch):
 
     assert verdict["status"] == "eject"
     assert verdict["reason"] == lq.EjectReason.NOT_FF
-    ejects = _events(log_root, "chunk.ejected")
+    ejects = _events(session, "chunk.ejected")
     assert {e["payload"]["reason"] for e in ejects} == {lq.EjectReason.NOT_FF}
 
 
@@ -169,7 +163,7 @@ def test_land_ejects_git_error_when_ff_merge_reports_other_error(tmp_path, monke
 def test_drain_cascade_skips_downstream_not_in_pending(tmp_path, monkeypatch):
     lq = load_script(SCRIPTS / "land_queue.py", "e2e_lq_gaps_cascade")
     main_repo, wts = _setup(tmp_path, ["root", "child"])
-    log_root = _configure_env(monkeypatch, tmp_path, main_repo)
+    session = _configure_env(monkeypatch, tmp_path, main_repo)
 
     chunks = [lq.Chunk("root", wts["root"]), lq.Chunk("child", wts["child"])]
 
@@ -194,5 +188,5 @@ def test_drain_cascade_skips_downstream_not_in_pending(tmp_path, monkeypatch):
     assert by_slug["child"]["reason"] == lq.EjectReason.UPSTREAM_EJECTED
     assert "ghost" not in by_slug, "a cascaded slug not in pending yields no result row"
     # And no chunk.ejected audit row was written for the phantom either.
-    ejected_slugs = {e["payload"]["slug"] for e in _events(log_root, "chunk.ejected")}
+    ejected_slugs = {e["payload"]["slug"] for e in _events(session, "chunk.ejected")}
     assert "ghost" not in ejected_slugs

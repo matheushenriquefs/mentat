@@ -11,12 +11,11 @@ HITL skips.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import load_script, seed_agent_events
 
 pytestmark = pytest.mark.e2e
 
@@ -139,24 +138,23 @@ def test_budget_gates_and_accrues():
 
 def test_attempt_count_replays_recovery_spawns(monkeypatch, tmp_path):
     m = _recover()
-    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
 
-    # No log dir yet → zero.
     assert m.attempt_count("no-session", "core") == 0
 
-    d = m._session_dir("s1")
-    d.mkdir(parents=True)
-    rows = [
-        {"event": "chunk.spawned", "payload": {"slug": "core", "trigger": "recovery"}},
-        {"event": "chunk.spawned", "payload": {"slug": "core", "trigger": "recovery"}},
-        {"event": "chunk.spawned", "payload": {"slug": "core"}},  # non-recovery → ignored
-        {"event": "chunk.landed", "payload": {"slug": "core", "trigger": "recovery"}},  # wrong event
-        {"event": "chunk.spawned", "payload": {"slug": "other", "trigger": "recovery"}},  # wrong slug
-        "not-json",  # unparseable → skipped
-        "",  # blank → skipped
-    ]
-    (d / "agent-a.jsonl").write_text("\n".join(json.dumps(r) if isinstance(r, dict) else r for r in rows) + "\n")
+    seed_agent_events(
+        tmp_path,
+        "repo",
+        "s1",
+        [
+            {"event": "chunk.spawned", "payload": {"slug": "core", "trigger": "recovery"}},
+            {"event": "chunk.spawned", "payload": {"slug": "core", "trigger": "recovery"}},
+            {"event": "chunk.spawned", "payload": {"slug": "core"}},
+            {"event": "chunk.landed", "payload": {"slug": "core", "trigger": "recovery"}},
+            {"event": "chunk.spawned", "payload": {"slug": "other", "trigger": "recovery"}},
+        ],
+    )
 
     assert m.attempt_count("s1", "core") == 2
 
@@ -252,16 +250,16 @@ def test_recover_skips_unknown_and_hitl(monkeypatch, tmp_path):
 
 def test_recover_attempt_cap_dead_letters(monkeypatch, tmp_path):
     m = _recover()
-    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    # Seed two prior recovery respawns so attempt 3 > cap 2.
-    d = m._session_dir("s1")
-    d.mkdir(parents=True)
-    (d / "a.jsonl").write_text(
-        "\n".join(
-            json.dumps({"event": "chunk.spawned", "payload": {"slug": "core", "trigger": "recovery"}}) for _ in range(2)
-        )
-        + "\n"
+    seed_agent_events(
+        tmp_path,
+        "repo",
+        "s1",
+        [
+            {"event": "chunk.spawned", "payload": {"slug": "core", "trigger": "recovery"}},
+            {"event": "chunk.spawned", "payload": {"slug": "core", "trigger": "recovery"}},
+        ],
     )
     out, calls = _run(m, {"core"}, {"core": _Plan("core")}, monkeypatch=monkeypatch, tmp_path=tmp_path)
     assert out[0]["recovery"] == "dead-lettered" and out[0]["reason"] == "attempt-cap"

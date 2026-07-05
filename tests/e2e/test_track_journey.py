@@ -21,6 +21,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import seed_agent_events
+
 pytestmark = pytest.mark.e2e
 
 _AGENTS = Path(__file__).resolve().parents[2] / ".agents"
@@ -74,7 +76,12 @@ def _seed_tree(log_root: Path, repo: str) -> Path:
 
 def _run(args: list[str], log_root: Path, repo: str) -> str:
     """Run the mentat-session CLI non-interactively (stdin not a tty → one-shot path)."""
-    env = {**os.environ, "MENTAT_LOG_PATH": str(log_root), "MENTAT_REPO": repo}
+    env = {
+        **os.environ,
+        "MENTAT_LOG_PATH": str(log_root),
+        "MENTAT_REPO": repo,
+        "MENTAT_DB": str(log_root.parent / "mentat.db"),
+    }
     proc = subprocess.run(
         [sys.executable, str(SESSION_PY), *args],
         env=env,
@@ -105,10 +112,43 @@ def test_track_all_lists_every_seeded_session(tmp_path, monkeypatch):
         assert status in line, f"{session} wrong status (want {status!r}):\n{line!r}"
 
 
-def test_list_lists_every_seeded_session(tmp_path):
+def test_list_lists_every_seeded_session(tmp_path, monkeypatch):
     repo = "trackrepo"
     log_root = tmp_path / "logs"
-    _seed_tree(log_root, repo)
+    monkeypatch.setenv("MENTAT_DB", str(tmp_path / "mentat.db"))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
+    monkeypatch.setenv("MENTAT_REPO", repo)
+
+    stale_ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - _STALE_AGE))
+    for agent_id, event, status, ts in (
+        ("live-sess", "chunk.spawned", "running", None),
+        ("idle-sess", "plan.succeeded", "stopped", None),
+        ("stale-sess", "chunk.spawned", "running", stale_ts),
+    ):
+        row = {"event": event, "payload": {"path": "p", "slug": "x"}}
+        if ts:
+            row["ts"] = ts
+        seed_agent_events(
+            tmp_path,
+            repo,
+            agent_id,
+            [row],
+            status=status,
+        )
+        sd = log_root / repo / agent_id
+        sd.mkdir(parents=True, exist_ok=True)
+        if agent_id == "live-sess":
+            (sd / "session.jsonl").write_text(
+                json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "thinking"}]}}) + "\n"
+            )
+        if agent_id == "stale-sess":
+            old = time.time() - _STALE_AGE
+            os.utime(sd, (old, old))
+            (sd / "session.jsonl").write_text(
+                json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "mid-flight"}]}})
+                + "\n"
+            )
+            os.utime(sd / "session.jsonl", (old, old))
 
     out = _run(["list"], log_root, repo)
 

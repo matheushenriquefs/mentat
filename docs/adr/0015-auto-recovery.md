@@ -1,6 +1,6 @@
 # ADR 0015: Model-driven auto-recovery
 
-Status: Accepted
+Status: Superseded by ADR-0007 v7 (SQLite canonical store)
 Date: 2026-07-03
 
 ## Context
@@ -65,9 +65,8 @@ gives a retried payment.
 **Guardrails — three give-up rungs (Erlang/OTP, OpenHands, Akka/Azure DLQ).**
 
 - **Per-slug attempt cap** — `recovery_attempts` (default 2), replayed from the
-  durable audit log (`chunk.spawned{trigger:"recovery", attempt:N}`), so the count
-  survives a resume (ADR-0007: the log is truth, the sqlite projection is
-  disposable).
+  canonical store (`chunk.spawned{trigger:"recovery", attempt:N}` via `EventDAO`),
+  so the count survives a resume.
 - **Batch-wide restart-storm cap** — `StormGuard`, the OTP supervisor
   `MaxR`/`MaxT` intensity: at most `recovery_max_restarts` (default 3) respawns per
   `recovery_restart_window` (default 60s). A breach stops the whole pass and
@@ -91,9 +90,7 @@ the recovery pass from re-storming it afterward.
 **Audit is payload-only (ADR-0007).** A respawn is a `chunk.spawned` with
 `trigger:"recovery"` and the 1-based `attempt` (declared in mentat-log's
 `EVENT_OPTIONAL_FIELDS`); the outcome rides the existing `chunk.landed` /
-`chunk.ejected` events. No new event type. End-of-batch, the failed session is
-handed to the doctor (output captured to `<session>/doctor.out`, not DEVNULL) and
-the sqlite projection is rebuilt from the log.
+`chunk.ejected` events. No new event type.
 
 Industry grounding: Erlang/OTP supervisor restart intensity, Netflix Zuul
 speculative/NNFI re-test, Temporal durable retries, Nygard's circuit breaker,

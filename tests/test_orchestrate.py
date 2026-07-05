@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from tests.conftest import TEST_CHUNK_ID, load_script, patch_orchestrate_worktree
+from tests.conftest import TEST_CHUNK_ID, bind_plan, load_script
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
@@ -253,6 +253,8 @@ def test_fan_out_plans_blocks_until_slot_free(monkeypatch, tmp_path):
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 5.0)
 
     plans = [routing.Plan(slug=f"p{i}", class_="AFK", blocked_by=[], path=tmp_path / f"p{i}.md") for i in range(4)]
+    for i in range(4):
+        bind_plan(f"p{i}")
 
     live = {"n": 0}
     high_watermark = {"n": 0}
@@ -266,123 +268,6 @@ def test_fan_out_plans_blocks_until_slot_free(monkeypatch, tmp_path):
     assert [p.slug for p, *_ in results] == ["p0", "p1", "p2", "p3"]
     assert all(rc == 0 for _p, rc, *_ in results)
     assert high_watermark["n"] <= 2, f"cap=2 was breached; saw {high_watermark['n']} concurrent live subprocesses"
-
-
-# ── B2: doctor handoff on non-zero batch exit ──────────────────────────────────
-
-
-def test_run_orchestrate_spawns_doctor_on_failure(tmp_path, monkeypatch):
-    """When batch settles non-zero, _spawn_batch_doctor must be called."""
-    orch = load_module("orchestrate")
-    routing = load_module("scheduler")
-    from lib.exits import EX_HITL_REQUIRED
-
-    plan = _make_plan_file(tmp_path, "fail-plan", "AFK")
-    plan_obj = routing.Plan(slug="fail-plan", class_="AFK", blocked_by=[], path=plan)
-
-    doctor_calls = []
-
-    with (
-        patch.object(orch, "_fan_out_plans", return_value=[(plan_obj, EX_HITL_REQUIRED)]),
-        patch_orchestrate_worktree(orch, tmp_path),
-        patch.object(orch._land_queue, "drain", return_value=[]),
-        patch.object(orch, "_prune_stale_containers", lambda: None),
-        patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
-        patch.object(orch._utils, "emit_event", lambda *a, **k: None),
-        patch.object(orch, "_emit_event", lambda *a, **k: None),
-        patch.object(orch, "_spawn_batch_doctor", side_effect=lambda: doctor_calls.append(True)),
-    ):
-        rc = orch.run_orchestrate(
-            holding="main",
-            plan_paths=[plan],
-            harness=None,
-            model=None,
-            dry_run=False,
-        )
-
-    assert rc == 1
-    assert doctor_calls, "_spawn_batch_doctor not called on non-zero rc"
-
-
-def test_run_orchestrate_no_doctor_on_success(tmp_path):
-    """Clean batch must NOT spawn the doctor."""
-    orch = load_module("orchestrate")
-
-    plan = _make_plan_file(tmp_path, "ok-plan", "AFK")
-
-    doctor_calls = []
-
-    with (
-        patch.object(orch, "_fan_out_plans", return_value=[]),
-        patch.object(orch._land_queue, "drain", return_value=[{"slug": "ok-plan", "status": "success"}]),
-        patch.object(orch, "_prune_stale_containers", lambda: None),
-        patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
-        patch.object(orch._utils, "emit_event", lambda *a, **k: None),
-        patch.object(orch, "_spawn_batch_doctor", side_effect=lambda: doctor_calls.append(True)),
-    ):
-        rc = orch.run_orchestrate(
-            holding="main",
-            plan_paths=[plan],
-            harness=None,
-            model=None,
-            dry_run=False,
-        )
-
-    assert rc == 0
-    assert not doctor_calls, "_spawn_batch_doctor must not fire on clean batch"
-
-
-def test_raising_doctor_does_not_change_rc(tmp_path):
-    """A doctor that raises must not alter batch exit code."""
-    orch = load_module("orchestrate")
-    routing = load_module("scheduler")
-    from lib.exits import EX_HITL_REQUIRED
-
-    plan = _make_plan_file(tmp_path, "err-plan", "AFK")
-    plan_obj = routing.Plan(slug="err-plan", class_="AFK", blocked_by=[], path=plan)
-
-    with (
-        patch.object(orch, "_fan_out_plans", return_value=[(plan_obj, EX_HITL_REQUIRED)]),
-        patch_orchestrate_worktree(orch, tmp_path),
-        patch.object(orch._land_queue, "drain", return_value=[]),
-        patch.object(orch, "_prune_stale_containers", lambda: None),
-        patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
-        patch.object(orch._utils, "emit_event", lambda *a, **k: None),
-        patch.object(orch, "_spawn_batch_doctor", side_effect=RuntimeError("doctor boom")),
-    ):
-        try:
-            rc = orch.run_orchestrate(
-                holding="main",
-                plan_paths=[plan],
-                harness=None,
-                model=None,
-                dry_run=False,
-            )
-        except RuntimeError:
-            rc = None  # doctor raised — that's the bug we're testing against
-
-    # Doctor raising propagates through the spy (side_effect), so rc is None here.
-    # The REAL _spawn_batch_doctor swallows OSError. We verify the real fn swallows below.
-    assert rc is None or rc != 0, "batch rc must remain non-zero regardless of doctor"
-
-
-def test_spawn_batch_doctor_noop_when_session_script_missing():
-    """No session.py on disk → _spawn_batch_doctor returns without spawning."""
-    orch = load_module("orchestrate")
-
-    with patch("pathlib.Path.exists", return_value=False):
-        with patch.object(orch.subprocess, "Popen", side_effect=AssertionError("must not spawn")) as mock_popen:
-            orch._spawn_batch_doctor()  # must not raise, must not spawn
-    mock_popen.assert_not_called()
-
-
-def test_spawn_batch_doctor_swallows_os_error():
-    """_spawn_batch_doctor must not raise when Popen raises OSError."""
-    orch = load_module("orchestrate")
-
-    with patch.object(orch.subprocess, "Popen", side_effect=OSError("no such file")):
-        with patch("pathlib.Path.exists", return_value=True):
-            orch._spawn_batch_doctor()  # must not raise
 
 
 # ── B5: diff suggestion is raw git diff ───────────────────────────────────────
@@ -399,7 +284,6 @@ def test_run_orchestrate_diff_suggestion_is_raw_git_diff(tmp_path, capsys):
         patch.object(orch, "_prune_stale_containers", lambda: None),
         patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
         patch.object(orch._utils, "emit_event", lambda *a, **k: None),
-        patch.object(orch, "_spawn_batch_doctor", lambda: None),
     ):
         rc = orch.run_orchestrate(
             holding="my-holding",
@@ -421,6 +305,7 @@ def test_run_orchestrate_diff_suggestion_is_raw_git_diff(tmp_path, capsys):
 def test_land_all_no_plans_iterates_input_order(tmp_path):
     """`_land_all` without plans drains chunks in input order (no scheduler)."""
     orch = load_module("orchestrate")
+    bind_plan("a")
 
     with (
         patch.object(
@@ -440,6 +325,7 @@ def test_land_all_with_plans_wires_scheduler_callbacks(tmp_path):
     """`_land_all` with plans builds a Scheduler and passes its callbacks to drain."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
+    bind_plan("a")
     plan_obj = routing.Plan(slug="a", class_="AFK", blocked_by=[], path=tmp_path / "a.md")
 
     with (
@@ -466,6 +352,8 @@ def test_run_orchestrate_prints_drain_eject_reasons(tmp_path, capsys):
 
     fail = _make_plan_file(tmp_path, "p-fail", "AFK")
     land = _make_plan_file(tmp_path, "p-land", "AFK")
+    bind_plan("p-fail")
+    bind_plan("p-land")
     fail_obj = routing.Plan(slug="p-fail", class_="AFK", blocked_by=[], path=fail)
     land_obj = routing.Plan(slug="p-land", class_="AFK", blocked_by=[], path=land)
 
@@ -481,7 +369,6 @@ def test_run_orchestrate_prints_drain_eject_reasons(tmp_path, capsys):
         patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
         patch.object(orch._utils, "emit_event", lambda *a, **k: None),
         patch.object(orch, "_emit_event", lambda *a, **k: None),
-        patch.object(orch, "_spawn_batch_doctor", lambda: None),
     ):
         rc = orch.run_orchestrate(
             holding="main",
@@ -527,7 +414,6 @@ def test_run_orchestrate_emits_upstream_ejected_for_anchored_cascade(tmp_path):
         patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
         patch.object(orch._utils, "emit_event", lambda *a, **k: None),
         patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))),
-        patch.object(orch, "_spawn_batch_doctor", lambda: None),
     ):
         rc = orch.run_orchestrate(
             holding="main",

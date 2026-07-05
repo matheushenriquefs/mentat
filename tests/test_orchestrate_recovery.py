@@ -8,6 +8,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+from tests.conftest import bind_plan
+
 ORCH_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
 
@@ -115,6 +117,7 @@ def test_spawn_implement_in_worktree_reuses_worktree(monkeypatch, tmp_path):
 
 def test_recovery_respawn_lands_on_success(monkeypatch, tmp_path):
     orch = _load("orchestrate")
+    bind_plan("core")
     monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path)
     monkeypatch.setattr(orch._git, "discard_path", lambda *a, **k: None)
     monkeypatch.setattr(orch._git, "rebase_ff_only", lambda *a, **k: (None, None))
@@ -270,8 +273,6 @@ def test_run_orchestrate_invokes_recovery_for_worker_died(tmp_path, monkeypatch)
     monkeypatch.setattr(orch, "_prune_stale_containers", lambda: None)
     monkeypatch.setattr(orch, "_prune_stale_worktrees", lambda **kw: None)
     monkeypatch.setattr(orch, "_gc_preserved_worktrees", lambda **kw: None)
-    monkeypatch.setattr(orch, "_rebuild_projection", lambda: None)
-    monkeypatch.setattr(orch, "_spawn_batch_doctor", lambda: None)
     monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
     monkeypatch.setattr(orch._utils, "emit_event", lambda *a, **k: None)
 
@@ -302,63 +303,6 @@ def test_run_recovery_abandon_dead_letters(monkeypatch, tmp_path):
     )
     assert ok == set() and dead == {"core"}
     assert any(ev == "chunk.ejected" and p["reason"] == "hitl-required" for ev, p in emitted)
-
-
-# ── _rebuild_projection + _spawn_batch_doctor ─────────────────────────────────
-
-
-def test_rebuild_projection_calls_state_rebuild(monkeypatch):
-    orch = _load("orchestrate")
-    from lib import state as state_mod
-
-    calls = []
-    monkeypatch.setattr(state_mod, "rebuild", lambda root, **k: calls.append(root) or {"projected": 0, "pruned": 0})
-    orch._rebuild_projection()
-    assert calls  # rebuild invoked
-
-
-def test_spawn_batch_doctor_captures_to_session_dir(monkeypatch, tmp_path):
-    orch = _load("orchestrate")
-    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
-    monkeypatch.setenv("MENTAT_REPO", "repo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-doc")
-    captured = {}
-
-    class _P:
-        pass
-
-    def fake_popen(cmd, *, stdout=None, stderr=None):
-        captured["cmd"] = cmd
-        captured["stdout_named"] = getattr(stdout, "name", None)
-        return _P()
-
-    monkeypatch.setattr(orch.subprocess, "Popen", fake_popen)
-    orch._spawn_batch_doctor()
-    assert captured["cmd"][-1] == "sess-doc"  # session-scoped
-    assert captured["stdout_named"] and captured["stdout_named"].endswith("doctor.out")
-
-
-def test_spawn_batch_doctor_without_session_uses_devnull(monkeypatch, tmp_path):
-    """No MENTAT_SESSION → the doctor runs unscoped, cmd carries no session id, and
-    output goes to DEVNULL rather than a session dir (orchestrate.py 707->709,
-    710->716, 716)."""
-    orch = _load("orchestrate")
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
-    captured = {}
-
-    class _P:
-        pass
-
-    def fake_popen(cmd, *, stdout=None, stderr=None):
-        captured["cmd"] = cmd
-        captured["stdout"] = stdout
-        return _P()
-
-    monkeypatch.setattr(orch.subprocess, "Popen", fake_popen)
-    orch._spawn_batch_doctor()
-
-    assert captured["cmd"][-1] == "doctor", "no session id appended when unscoped"
-    assert captured["stdout"] is orch.subprocess.DEVNULL
 
 
 def test_run_recovery_retry_without_success_not_marked_recovered(monkeypatch, tmp_path):

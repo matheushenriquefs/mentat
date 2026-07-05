@@ -1,10 +1,8 @@
-"""E2E: the mentat-log emit → validate → query → prune lifecycle, driven in-process.
+"""E2E: the mentat-log emit → validate → list → prune lifecycle, driven in-process.
 
 Drives the actual ``log.py`` CLI over a temp log root by parsing real argv and calling
-``main()`` (the same entry the shell hits), so the whole dispatch runs for real: emit a
-spawn then a landing, validate the resulting jsonl, query it back (unfiltered and filtered
-by event/agent), then prune the whole session dir by date. Every step reads and writes
-real audit artifacts. In-process (not a subprocess) so the run is measured.
+``main()`` dispatch. Emit writes to the canonical sqlite store; list reads it back.
+Validate still checks export jsonl files.
 """
 
 from __future__ import annotations
@@ -14,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import agent_events, load_script
 
 pytestmark = pytest.mark.e2e
 
@@ -24,15 +22,20 @@ LOG_PY = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-log/script
 def _log_env(monkeypatch, log_root: Path, repo: str, session: str) -> None:
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", repo)
+    monkeypatch.setenv("MENTAT_AGENT", session)
     monkeypatch.setenv("MENTAT_SESSION", session)
 
 
 def _dispatch(log, argv: list[str]) -> int:
     """Run one log.py subcommand through its real argparse dispatch, returning rc."""
     args = log.build_parser().parse_args(argv)
-    return {"emit": log.cmd_emit, "validate": log.cmd_validate, "query": log.cmd_query, "prune": log.cmd_prune}[
-        args.cmd
-    ](args)
+    return {
+        "emit": log.cmd_emit,
+        "validate": log.cmd_validate,
+        "list": log.cmd_list,
+        "query": log.cmd_list,
+        "prune": log.cmd_prune,
+    }[args.cmd if args.cmd != "query" else "list"](args)
 
 
 def test_log_emit_validate_query_prune_lifecycle(tmp_path, monkeypatch, capsys):
@@ -41,7 +44,6 @@ def test_log_emit_validate_query_prune_lifecycle(tmp_path, monkeypatch, capsys):
     repo, session = "logrepo", "orchestrate-main-1"
     _log_env(monkeypatch, log_root, repo, session)
 
-    # emit: a spawn then a landing — two real audit rows under one session.
     assert (
         _dispatch(
             log,
@@ -67,30 +69,31 @@ def test_log_emit_validate_query_prune_lifecycle(tmp_path, monkeypatch, capsys):
         == 0
     )
 
+    rows = agent_events(session)
+    assert len(rows) == 2
+    assert rows[0]["event"] == "chunk.spawned"
+    assert rows[1]["event"] == "chunk.landed"
+
     session_dir = log_root / repo / session
-    jsonls = list(session_dir.glob("*.jsonl"))
-    assert jsonls, "emit must write a jsonl into the session dir"
+    assert session_dir.is_dir(), "emit must ensure the session dir exists"
 
-    # validate: the freshly-written log passes.
-    assert _dispatch(log, ["validate", str(jsonls[0])]) == 0
+    export = tmp_path / "export.jsonl"
+    export.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    assert _dispatch(log, ["validate", str(export)]) == 0
 
-    # query: both events come back unfiltered.
     capsys.readouterr()
-    assert _dispatch(log, ["query", session]) == 0
+    assert _dispatch(log, ["list", session]) == 0
     events = [json.loads(ln)["event"] for ln in capsys.readouterr().out.splitlines() if ln.strip()]
     assert events == ["chunk.spawned", "chunk.landed"]
 
-    # query --event: filter to just the landing.
-    assert _dispatch(log, ["query", session, "--event", "chunk.landed"]) == 0
-    rows = [json.loads(ln) for ln in capsys.readouterr().out.splitlines() if ln.strip()]
-    assert [r["event"] for r in rows] == ["chunk.landed"]
-    assert rows[0]["payload"]["sha"] == "cafe"
+    assert _dispatch(log, ["list", session, "--event", "chunk.landed"]) == 0
+    rows_out = [json.loads(ln) for ln in capsys.readouterr().out.splitlines() if ln.strip()]
+    assert [r["event"] for r in rows_out] == ["chunk.landed"]
+    assert rows_out[0]["payload"]["sha"] == "cafe"
 
-    # query --agent: filter by emitting agent.
-    assert _dispatch(log, ["query", session, "--agent", "mentat-orchestrate"]) == 0
+    assert _dispatch(log, ["list", session, "--agent", "mentat-orchestrate"]) == 0
     assert len([ln for ln in capsys.readouterr().out.splitlines() if ln.strip()]) == 2
 
-    # prune: a cutoff after the session's mtime removes it.
     assert _dispatch(log, ["prune", "--before", "2999-01-01"]) == 0
     assert "pruned 1 session" in capsys.readouterr().out
     assert not session_dir.exists(), "prune must remove the aged session dir"
@@ -110,7 +113,6 @@ def test_log_emit_rejects_missing_payload_field(tmp_path, monkeypatch, capsys):
     repo, session = "logrepo", "orchestrate-main-2"
     _log_env(monkeypatch, log_root, repo, session)
 
-    # chunk.landed requires sha + holding; omit them → reject with a sidecar.
     rc = _dispatch(log, ["emit", "mentat-orchestrate", "chunk.landed", json.dumps({"slug": "s1"})])
     assert rc == 1
     assert "reject" in capsys.readouterr().err
@@ -180,9 +182,9 @@ def test_log_validate_missing_file(tmp_path, monkeypatch, capsys):
 def test_log_query_missing_session(tmp_path, monkeypatch, capsys):
     log = load_script(LOG_PY, "e2e_log_qmissing")
     _log_env(monkeypatch, tmp_path / "logs", "r", "s")
-    rc = _dispatch(log, ["query", "ghost"])
+    rc = _dispatch(log, ["list", "ghost"])
     assert rc == 1
-    assert "session dir not found" in capsys.readouterr().err
+    assert "agent not found" in capsys.readouterr().err
 
 
 def test_log_prune_bad_date_and_missing_repo(tmp_path, monkeypatch, capsys):
@@ -190,9 +192,7 @@ def test_log_prune_bad_date_and_missing_repo(tmp_path, monkeypatch, capsys):
     log_root = tmp_path / "logs"
     _log_env(monkeypatch, log_root, "pruner", "s")
 
-    # invalid date → rc 1.
     assert _dispatch(log, ["prune", "--before", "nope"]) == 1
     assert "invalid date" in capsys.readouterr().err
 
-    # valid date but no repo dir yet → clean no-op rc 0.
     assert _dispatch(log, ["prune", "--before", "2020-01-01"]) == 0

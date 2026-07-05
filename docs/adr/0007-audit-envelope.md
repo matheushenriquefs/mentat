@@ -7,36 +7,42 @@ Amended: 2026-06-10 (v3 — Stripe-style naming policy; reasons live in payload,
 Amended: 2026-06-11 (v4 — chunk.teardown added, 10 events)
 Amended: 2026-06-12 (v5 — task.* + session.prune added, 16 events)
 Amended: 2026-06-20 (v6 — F1: summary.md is one status-bearing file in the session log dir)
+Amended: 2026-07-05 (v7 — SQLite canonical store; NDJSON export-only)
 
 ## Context
 
-Mentat skills emit structured audit records so sessions can be replayed, scored,
+Mentat skills emit structured audit records so agents can be replayed, scored,
 and pruned. Without a canonical schema records drift across agents, making log
 rotation and tooling brittle. Shell-era surfaces (JSONC schema + `audit.sh` + pydantic
 loader) replaced by a Python-only SSOT.
 
 ## Decision
 
-**All audit events routed through `mentat-log emit`.** No skill writes JSONL directly.
+**All audit events routed through `mentat-log emit`.** No skill writes audit rows directly.
 
-Envelope schema (JSONL, one row per event):
+**Canonical store:** `~/.mentat/mentat.db` (SQLite WAL, `lib/store.py`). The `event`
+table is append-only truth; `agent`/`chunk`/`slice` are projections. Emit validates
+against `EVENT_CATALOG`, then appends via `store.record_emit`.
+
+**Wire envelope** (export shape for grep; `mentat-log list --format=jsonl`):
+
 ```
 {ts, agent, session, event, payload}
 ```
-- `ts`: ISO-8601 UTC (`datetime.now(UTC).isoformat()`).
-- `agent`: agent slug (e.g. `mentat-orchestrate`).
-- `session`: `$MENTAT_SESSION` (`<epoch>-<pid>`).
+
+- `ts`: ISO-8601 UTC.
+- `agent`: emitting skill name (e.g. `mentat-orchestrate`).
+- `session`: agent id (`$MENTAT_AGENT` / legacy `$MENTAT_SESSION`).
 - `event`: past-tense verb (e.g. `plan.started`, `chunk.landed`).
 - `payload`: JSON object — verdicts, scores, file:line refs only. Never raw diff.
 
-**Log path:** `~/.mentat/logs/<repo>/<session>/<agent>-<slug>.jsonl`  
-**Stderr sidecar:** `<base>/.stderr/<agent>-<slug>.stderr`  
-**Summary file (F1):** `~/.mentat/logs/<repo>/<session>/summary.md` — one status-bearing file
-per session. Frontmatter `status:` ∈ `{succeeded, failed, blocked, hitl-required}`.
-`blocked` / `hitl-required` indicate an AFK wedge; `succeeded` / `failed` are set by
-`mentat-session doctor`. The AFK agent writes here via `$MENTAT_SESSION_LOG` (parent dir);
-`implement.py` reads it via `lib.session.summary_file(sid)`. Replaces the previous two-location
-scheme (worktree root + session log dir).
+**Transcript file:** `~/.mentat/logs/<repo>/<agent_id>/transcript.jsonl` — harness-owned,
+append-only, not in sqlite.
+
+**Stderr sidecar:** `<agent_log_dir>/.stderr/<skill>-<slug>.stderr` on emit reject.
+
+**Summary file (F1):** `~/.mentat/logs/<repo>/<agent_id>/summary.md` — one status-bearing
+file per agent. Frontmatter `status:` ∈ `{succeeded, failed, blocked, hitl-required}`.
 
 **`EVENT_CATALOG`** lives in `.agents/skills/mentat-log/scripts/log.py` as
 `dict[str, list[str]]` (event name → required fields). Stdlib only, no pydantic, no jsonc.
@@ -61,7 +67,7 @@ scheme (worktree root + session log dir).
 | `task.wontfix` | `id` |
 | `session.prune` | `reclaimed_bytes` |
 
-`chunk.ejected.reason ∈ {implement-failed, gate-failed, rebase-conflicted, not-ff, hitl-required}`
+`chunk.ejected.reason` — see `lib.events.EJECT_REASONS`.
 
 Log dir: `mode=0o700` on first write.
 
@@ -70,16 +76,15 @@ Log dir: `mode=0o700` on first write.
 Events follow Stripe webhook convention (https://docs.stripe.com/api/events/types):
 
 - **Past-tense verbs.** `plan.started`, `chunk.landed`, `gate.evaluated`.
-- **`resource.action` shape.** Subresources extend to `resource.subresource.action` (e.g., `chunk.dispute.created` if ever needed).
-- **Reasons live in payload, not name.** `chunk.ejected{reason: "preflight"}` — never `chunk.ejected.preflight_failed`. Stripe emits `charge.failed` with `failure_code`; they do not emit `charge.failed.insufficient_funds`.
-- **New event name only when handler diverges.** If consumers must wire a different `case`/`if` branch, justify a new name. Otherwise extend payload.
+- **`resource.action` shape.** Subresources extend to `resource.subresource.action`.
+- **Reasons live in payload, not name.**
+- **New event name only when handler diverges.**
 
-Industry corroboration: Sentry fingerprinting consolidates sub-reasons rather than splitting names; Datadog facets/tags carry sub-reasons over stable log sources; New Relic custom attributes attach to existing events.
-
-Catalog at 16 events; future growth still prefers payload extension over new names (Stripe convention). Consumer skills extend via payload fields (e.g. `chunk.ejected.payload.logs_path` for doctor bundle), never via new event names.
+Catalog at 16 events; future growth still prefers payload extension over new names.
 
 ## Consequences
 
 All bins subprocess to `mentat-log emit`. Schema changes: amend `EVENT_CATALOG`
-dict in one file. Old log path `~/.agents/mentat/logs/` is stale;
-`mentat-install` reports it for cleanup.
+in one file. Readers query SQLite (`mentat-log list`, `mentat-session track`,
+`recover.attempt_count`, `diagnose`). NDJSON audit files are not stored; export
+on stdout when a human greps. DDL and DAO rules: `.agents/rules/database.md`.

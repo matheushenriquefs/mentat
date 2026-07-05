@@ -67,6 +67,7 @@ def _isolate_state_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Redirect sqlite stores to throwaway paths for every test."""
     monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "state.db"))
     monkeypatch.setenv("MENTAT_DB", str(tmp_path / "mentat.db"))
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     for key in (
         "MENTAT_AGENT",
         "MENTAT_SESSION",
@@ -78,8 +79,59 @@ def _isolate_state_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "MENTAT_SESSION_SLUG",
         "MENTAT_SESSION_BRANCH",
         "MENTAT_SLUG",
+        "MENTAT_REPO",
     ):
         monkeypatch.delenv(key, raising=False)
+
+
+def seed_agent_events(
+    tmp_path: Path,
+    repo: str,
+    agent_id: str,
+    events: list[dict],
+    *,
+    harness: str = "mentat-orchestrate",
+    status: str = "running",
+) -> Path:
+    """Seed the canonical store and agent log dir for tests."""
+    import os
+
+    from lib import store
+
+    log_path = tmp_path / "logs"
+    session_dir = log_path / repo / agent_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+    conn = store.connect()
+    agents = store.AgentDAO(conn)
+    if agents.get_by_id(agent_id) is None:
+        started = str(events[0].get("ts", store.iso_now())) if events else store.iso_now()
+        agents.insert(
+            store.Agent(
+                id=agent_id,
+                supervisor_id=None,
+                resumed_from_id=None,
+                forked_from_id=None,
+                harness=harness,
+                pid=os.getpid() if status == "running" else None,
+                status=status,  # type: ignore[arg-type]
+                status_reason=None,
+                started_at=started,
+                ended_at=None,
+            )
+        )
+    edao = store.EventDAO(conn)
+    for ev in events:
+        payload = ev.get("payload")
+        if payload is None:
+            payload = {k: v for k, v in ev.items() if k not in ("ts", "agent", "session", "event")}
+        edao.append(
+            kind=str(ev["event"]),
+            payload=dict(payload),
+            agent_id=agent_id,
+            ts=ev.get("ts"),
+        )
+    conn.close()
+    return session_dir
 
 
 @pytest.fixture
@@ -183,3 +235,18 @@ def chunk_worktree_target(parent: Path, slug: str, chunk_id: str = TEST_CHUNK_ID
 
 def holding_branch(slug: str, chunk_id: str = TEST_CHUNK_ID) -> str:
     return f"mentat/{chunk_id}/{slug}"
+
+
+def agent_events(agent_id: str) -> list[dict]:
+    """Read canonical audit rows for one agent from the sqlite store."""
+    from lib import store
+
+    return store.list_events(agent_id)
+
+
+def event_kinds(agent_id: str) -> list[str]:
+    return [str(e.get("event", "")) for e in agent_events(agent_id)]
+
+
+def events_by_kind(agent_id: str, kind: str) -> list[dict]:
+    return [e for e in agent_events(agent_id) if e.get("event") == kind]

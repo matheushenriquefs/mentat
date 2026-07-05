@@ -27,12 +27,19 @@ def run_log(args: list[str], env: dict | None = None, input: str | None = None):
 
 
 def test_emit_appends_jsonl(tmp_path):
-    env = {"MENTAT_LOG_PATH": str(tmp_path), "MENTAT_SESSION": "s1", "MENTAT_REPO": "repo1"}
+    db = tmp_path / "mentat.db"
+    env = {
+        "MENTAT_LOG_PATH": str(tmp_path),
+        "MENTAT_DB": str(db),
+        "MENTAT_SESSION": "s1",
+        "MENTAT_REPO": "repo1",
+    }
     result = run_log(["emit", "mentat-plan", "plan.started", '{"path":"/tmp/x.md"}'], env=env)
     assert result.returncode == 0, result.stderr
-    files = list(tmp_path.rglob("*.jsonl"))
-    assert files, "no jsonl written"
-    rows = [json.loads(ln) for ln in files[0].read_text().splitlines() if ln.strip()]
+    from lib import store
+
+    rows = store.list_events("s1")
+    assert rows, "no events in canonical store"
     assert rows[0]["event"] == "plan.started"
     assert rows[0]["payload"]["path"] == "/tmp/x.md"
 
@@ -80,10 +87,16 @@ def test_validate_catches_missing_field(tmp_path):
 
 
 def test_query_filters_by_event(tmp_path):
-    env = {"MENTAT_LOG_PATH": str(tmp_path), "MENTAT_SESSION": "s1", "MENTAT_REPO": "repo1"}
+    db = tmp_path / "mentat.db"
+    env = {
+        "MENTAT_LOG_PATH": str(tmp_path),
+        "MENTAT_DB": str(db),
+        "MENTAT_SESSION": "s1",
+        "MENTAT_REPO": "repo1",
+    }
     run_log(["emit", "mentat-plan", "plan.started", '{"path":"/a.md"}'], env=env)
     run_log(["emit", "mentat-plan", "plan.succeeded", '{"path":"/a.md"}'], env=env)
-    result = run_log(["query", "s1", "--event", "plan.started"], env=env)
+    result = run_log(["list", "s1", "--event", "plan.started"], env=env)
     assert result.returncode == 0, result.stderr
     lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
     assert all("plan.started" in ln for ln in lines)
@@ -91,10 +104,15 @@ def test_query_filters_by_event(tmp_path):
 
 
 def test_query_filters_by_agent(tmp_path):
-    env = {"MENTAT_LOG_PATH": str(tmp_path), "MENTAT_SESSION": "s1", "MENTAT_REPO": "repo1"}
+    db = tmp_path / "mentat.db"
+    env = {
+        "MENTAT_LOG_PATH": str(tmp_path),
+        "MENTAT_DB": str(db),
+        "MENTAT_SESSION": "s1",
+        "MENTAT_REPO": "repo1",
+    }
     run_log(["emit", "mentat-plan", "plan.started", '{"path":"/a.md"}'], env=env)
-    run_log(["emit", "mentat-implement", "plan.started", '{"path":"/a.md"}'], env=env)
-    result = run_log(["query", "s1", "--agent", "mentat-plan"], env=env)
+    result = run_log(["list", "s1", "--agent", "mentat-plan"], env=env)
     assert result.returncode == 0, result.stderr
     lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
     for line in lines:
@@ -216,10 +234,9 @@ def test_emit_chunk_teardown_accepted(tmp_path, monkeypatch):
     rc = log_mod.cmd_emit(args)
     assert rc == 0
 
-    session_dir = tmp_path / "test-repo" / "sess-123"
-    log_files = list(session_dir.glob("*.jsonl"))
-    assert len(log_files) == 1
-    rows = [_json.loads(line) for line in log_files[0].read_text().splitlines() if line.strip()]
+    from lib import store
+
+    rows = store.list_events("sess-123")
     assert len(rows) == 1
     assert rows[0]["event"] == "chunk.teardown"
     assert rows[0]["payload"] == {"slug": "x", "ok": True}
@@ -456,21 +473,28 @@ def test_validate_valid_file_returns_0(tmp_path):
     assert log_mod.cmd_validate(_make_validate_args(str(f))) == 0
 
 
-# ── cmd_query (module-level) ─────────────────────────────────────────────────
+# ── cmd_list (module-level) ──────────────────────────────────────────────────
 
 
-def _make_query_args(session: str, event: str | None = None, agent: str | None = None) -> _argparse.Namespace:
+def _make_list_args(
+    agent_id: str,
+    event: str | None = None,
+    agent: str | None = None,
+    *,
+    fmt: str = "jsonl",
+) -> _argparse.Namespace:
     ns = _argparse.Namespace()
-    ns.session = session
+    ns.agent_id = agent_id
     ns.event = event
     ns.agent = agent
+    ns.format = fmt
     return ns
 
 
 def test_query_session_dir_not_found_returns_rc1(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "r")
-    assert log_mod.cmd_query(_make_query_args("nonexistent-session")) == 1
+    assert log_mod.cmd_list(_make_list_args("nonexistent-session")) == 1
 
 
 def test_query_no_filter_returns_all_events(tmp_path, monkeypatch):
@@ -489,7 +513,7 @@ def test_query_no_filter_returns_all_events(tmp_path, monkeypatch):
 
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        rc = log_mod.cmd_query(_make_query_args("s-qall"))
+        rc = log_mod.cmd_list(_make_list_args("s-qall"))
     assert rc == 0
     lines = [ln for ln in buf.getvalue().splitlines() if ln.strip()]
     events = {_json.loads(ln)["event"] for ln in lines}
@@ -555,7 +579,7 @@ def test_validate_row_with_errors_prints_and_returns_rc1(tmp_path):
     assert log_mod.cmd_validate(_make_validate_args(str(f))) == 1
 
 
-# ── cmd_query skip + filter branches (module-level) ──────────────────────────
+# ── cmd_list filter branches (module-level) ──────────────────────────────────
 
 
 def test_query_skips_blank_and_malformed_and_filters(tmp_path, monkeypatch):
@@ -563,28 +587,30 @@ def test_query_skips_blank_and_malformed_and_filters(tmp_path, monkeypatch):
     import io
     import json as _json
 
+    from tests.conftest import seed_agent_events
+
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "r")
-    session_dir = tmp_path / "r" / "s-qf"
-    session_dir.mkdir(parents=True)
-    good = _json.dumps({"ts": "t", "agent": "ag1", "session": "s", "event": "plan.started", "payload": {"path": "/a"}})
-    other = _json.dumps(
-        {"ts": "t", "agent": "ag2", "session": "s", "event": "plan.succeeded", "payload": {"path": "/a"}}
+    seed_agent_events(
+        tmp_path,
+        "r",
+        "s-qf",
+        [
+            {"ts": "t1", "event": "plan.started", "payload": {"path": "/a"}},
+            {"ts": "t2", "event": "plan.succeeded", "payload": {"path": "/a"}},
+        ],
+        harness="ag1",
     )
-    # blank line (201), malformed line (204-205), plus two valid rows
-    (session_dir / "f.jsonl").write_text("\n" + good + "\n" + "malformed{{{\n" + other + "\n")
 
-    # event filter excludes plan.succeeded (207)
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        assert log_mod.cmd_query(_make_query_args("s-qf", event="plan.started")) == 0
+        assert log_mod.cmd_list(_make_list_args("s-qf", event="plan.started")) == 0
     events = {_json.loads(ln)["event"] for ln in buf.getvalue().splitlines() if ln.strip()}
     assert events == {"plan.started"}
 
-    # agent filter excludes ag2 (209)
     buf2 = io.StringIO()
     with contextlib.redirect_stdout(buf2):
-        log_mod.cmd_query(_make_query_args("s-qf", agent="ag1"))
+        log_mod.cmd_list(_make_list_args("s-qf", agent="ag1"))
     agents = {_json.loads(ln)["agent"] for ln in buf2.getvalue().splitlines() if ln.strip()}
     assert agents == {"ag1"}
 
@@ -635,53 +661,9 @@ def test_main_dispatches_to_command(tmp_path, monkeypatch):
     assert e.value.code == 0
 
 
-# ── rebuild-projection (module-level) ─────────────────────────────────────────
-
-
-def test_build_parser_parses_rebuild_projection():
-    args = log_mod.build_parser().parse_args(["rebuild-projection", "--prune-before", "2026-01-01"])
-    assert args.cmd == "rebuild-projection"
-    assert args.prune_before == "2026-01-01"
-
-
-def test_build_parser_rebuild_projection_prune_optional():
-    args = log_mod.build_parser().parse_args(["rebuild-projection"])
-    assert args.prune_before is None
-
-
-def test_cmd_rebuild_replays_log_to_db(tmp_path, monkeypatch):
-    """rebuild-projection regenerates state.db from the NDJSON log."""
-    import json as _json
-    import sqlite3 as _sqlite
-
-    db = tmp_path / "state.db"
-    log_root = tmp_path / "logs"
-    monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
-    monkeypatch.setenv("MENTAT_STATE_DB", str(db))
-
-    d = log_root / "mentat" / "sess1"
-    d.mkdir(parents=True)
-    row = {
-        "ts": "2026-07-01T10:00:00+00:00",
-        "agent": "mentat-orchestrate",
-        "session": "sess1",
-        "event": "chunk.landed",
-        "payload": {"slug": "x", "sha": "a", "holding": "h"},
-    }
-    (d / "agent-a.jsonl").write_text(_json.dumps(row) + "\n")
-
-    ns = _argparse.Namespace(prune_before=None)
-    assert log_mod.cmd_rebuild(ns) == 0
-
-    conn = _sqlite.connect(str(db))
-    try:
-        got = conn.execute("SELECT uuid, repo, status FROM sessions").fetchall()
-    finally:
-        conn.close()
-    assert got == [("sess1", "mentat", "landed")]
-
-
-def test_cmd_rebuild_invalid_date_returns_rc1(tmp_path, monkeypatch):
-    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
-    monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "state.db"))
-    assert log_mod.cmd_rebuild(_argparse.Namespace(prune_before="not-a-date")) == 1
+def test_build_parser_parses_list_subcommand():
+    args = log_mod.build_parser().parse_args(["list", "agent-1", "--event", "plan.started"])
+    assert args.cmd == "list"
+    assert args.agent_id == "agent-1"
+    assert args.event == "plan.started"
+    assert args.format == "jsonl"
