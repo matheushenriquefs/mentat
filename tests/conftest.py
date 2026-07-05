@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import importlib.util
 import subprocess
+import types
 from collections.abc import Generator
 from pathlib import Path
 from types import ModuleType
+from unittest.mock import patch
 
 import pytest
+
+TEST_CHUNK_ID = "b" * 32
 
 
 def load_script(path: Path, key: str | None = None) -> ModuleType:
@@ -47,6 +51,15 @@ def init_git_repo(path: Path, *, initial_branch: str = "main") -> None:
     (path / "README").write_text("hi\n")
     subprocess.run(["git", "add", "."], cwd=path, check=True, capture_output=True)
     subprocess.run(["git", "commit", "-m", "init"], cwd=path, check=True, capture_output=True)
+
+
+@pytest.fixture(autouse=True)
+def _clear_chunk_registry() -> None:
+    import lib.chunk as chunk_mod
+
+    chunk_mod.clear_plan_chunks()
+    yield
+    chunk_mod.clear_plan_chunks()
 
 
 @pytest.fixture(autouse=True)
@@ -95,3 +108,65 @@ def fixture_repo(tmp_path: Path) -> Generator[Path]:
         cwd=repo,
     )
     yield repo
+
+
+def bind_chunk_worktrees(plans, root: Path, *, chunk_id: str | None = None) -> dict[str, Path]:
+    """Bind ephemeral chunk ids for plan slugs and return slug→worktree paths."""
+    import lib.chunk as chunk_mod
+
+    out: dict[str, Path] = {}
+    for plan in plans:
+        slug = plan.slug if hasattr(plan, "slug") else str(plan)
+        cid = chunk_id or chunk_mod.make_chunk_id()
+        chunk_mod.bind_plan_chunk(slug, cid)
+        wt = root / ".mentat" / "worktrees" / cid / slug
+        wt.mkdir(parents=True, exist_ok=True)
+        out[slug] = wt
+    return out
+
+
+def fake_plan(path: Path, slug: str | None = None) -> types.SimpleNamespace:
+    slug = slug or path.stem
+    return types.SimpleNamespace(slug=slug, path=path)
+
+
+def bind_plan(slug: str, chunk_id: str = TEST_CHUNK_ID) -> str:
+    import lib.chunk as chunk_mod
+
+    chunk_mod.bind_plan_chunk(slug, chunk_id)
+    return chunk_id
+
+
+def chunk_label(slug: str, chunk_id: str = TEST_CHUNK_ID) -> str:
+    return f"{chunk_id}/{slug}"
+
+
+def mock_fan_out_worktree(monkeypatch, fan_out_mod, worktree: Path) -> None:
+    monkeypatch.setattr(fan_out_mod, "_ensure_chunk_worktree", lambda slug, cid: worktree)
+
+
+def patch_orchestrate_worktree(orch, root: Path):
+    """Patch orchestrate._worktree_for_slug to chunk-keyed paths under root."""
+    return patch.object(
+        orch,
+        "_worktree_for_slug",
+        side_effect=lambda s: root / ".mentat" / "worktrees" / TEST_CHUNK_ID / s,
+    )
+
+
+def async_spawner(procs, worktree: Path):
+    """Return spawn_async fake yielding (session_id, proc, worktree) per plan."""
+    it = iter(procs)
+
+    async def spawn_async(plan, *, harness=None, model=None, seed_summary=None):
+        return (f"sess-{plan.slug}", next(it), worktree)
+
+    return spawn_async
+
+
+def chunk_worktree_target(parent: Path, slug: str, chunk_id: str = TEST_CHUNK_ID) -> Path:
+    return (parent / chunk_id / slug).resolve()
+
+
+def holding_branch(slug: str, chunk_id: str = TEST_CHUNK_ID) -> str:
+    return f"mentat/{chunk_id}/{slug}"

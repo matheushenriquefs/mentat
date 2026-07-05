@@ -25,6 +25,32 @@ _emit_event = bind("mentat-orchestrate")
 class Chunk(NamedTuple):
     slug: str
     worktree: Path
+    chunk_id: str = ""
+
+
+def _chunk_label(chunk: Chunk) -> str:
+    if chunk.chunk_id:
+        from lib.chunk import chunk_slug
+
+        return chunk_slug(chunk.chunk_id, chunk.slug)
+    from lib.chunk import chunk_slug_from_worktree
+    from lib.git import repo_root
+
+    root = repo_root(chunk.worktree)
+    if root is not None:
+        try:
+            return chunk_slug_from_worktree(chunk.worktree, root)
+        except ValueError:
+            pass
+    return chunk.slug
+
+
+def _teardown_container(chunk: Chunk) -> None:
+    from lib import devcontainer
+
+    label_val = _chunk_label(chunk)
+    ok = devcontainer.down(label_val)
+    _emit_event("chunk.teardown", {"slug": chunk.slug, "chunk": label_val, "ok": ok})
 
 
 def _rebase_chunk(chunk: Chunk, holding: str) -> tuple[str | None, str | None]:
@@ -48,13 +74,6 @@ def _ff_merge(chunk: Chunk, holding: str) -> str | None:
     return _git.ff_merge(chunk.worktree, holding)
 
 
-def _teardown_container(slug: str) -> None:
-    from lib import devcontainer
-
-    ok = devcontainer.down(slug)
-    _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
-
-
 def _concurrency_cap() -> int:
     """Effective max parallel gate workers: config ``concurrency`` (default 3)
     clamped to machine headroom ``max(1, cpu_count // 2)`` (ADR-0004).
@@ -66,7 +85,7 @@ def _concurrency_cap() -> int:
     raw = _utils.read_config().get("concurrency", 3)
     try:
         want = max(1, int(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         want = 3
     cores = os.cpu_count() or 1
     return min(want, max(1, cores // 2))
@@ -151,7 +170,7 @@ def _drain_serial(chunks: list[Chunk], *, holding: str) -> list[dict[str, object
     for chunk in chunks:
         verdict = land(chunk, holding=holding)
         results.append(verdict)
-        _teardown_container(chunk.slug)
+        _teardown_container(chunk)
     return results
 
 
@@ -205,7 +224,7 @@ def _drain_speculative(chunks: list[Chunk], *, holding: str) -> list[dict[str, o
             {"slug": chunk.slug, "sha": tip or "", "holding": holding},
         )
         results.append({"slug": chunk.slug, "status": "success", "tip": tip})
-        _teardown_container(chunk.slug)
+        _teardown_container(chunk)
     return results
 
 
@@ -250,7 +269,7 @@ def drain(
         if ready is None:
             stalled_pending = list(pending)
             for slug in stalled_pending:
-                _teardown_container(slug)
+                _teardown_container(by_slug[slug])
             results.append(
                 {
                     "slug": None,
@@ -261,7 +280,7 @@ def drain(
             return results
         verdict = land(by_slug[ready], holding=holding)
         results.append(verdict)
-        _teardown_container(ready)
+        _teardown_container(by_slug[ready])
         pending.remove(ready)
         if verdict.get("status") == "success":
             _on_landed(ready)
@@ -289,6 +308,6 @@ def drain(
                 }
             )
             pending.remove(downstream)
-            _teardown_container(downstream)
+            _teardown_container(chunk)
 
     return results

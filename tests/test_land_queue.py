@@ -61,7 +61,8 @@ def test_land_queue_serializes_landings():
         return {"status": "success", "tip": "abc", "slug": chunk.slug}
 
     with patch.object(lq, "land", side_effect=fake_land):
-        results = lq.drain(chunks, holding="main")
+        with patch.object(lq, "_teardown_container", lambda chunk: None):
+            results = lq.drain(chunks, holding="main")
 
     assert call_order == ["c0", "c1", "c2"]
     assert len(results) == 3

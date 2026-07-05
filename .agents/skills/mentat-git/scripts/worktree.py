@@ -18,6 +18,7 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import git as _git_lib  # noqa: E402
+from lib.chunk import chunk_slug, holding_branch, make_chunk_id  # noqa: E402
 from lib.exits import EX_DATAERR, EX_NOINPUT, EX_SOFTWARE  # noqa: E402
 from lib.worktrees import is_dirty, worktrees_root  # noqa: E402
 
@@ -168,8 +169,14 @@ def cmd_worktree_sweep(*, dry_run: bool = True) -> int:
     return 0
 
 
-def cmd_worktree_create(slug: str, *, base: str | None = None, parent: Path | None = None) -> int:
-    """Create sibling worktree at <parent>/<slug> on new branch <slug> from <base>.
+def cmd_worktree_create(
+    slug: str,
+    *,
+    chunk_id: str | None = None,
+    base: str | None = None,
+    parent: Path | None = None,
+) -> int:
+    """Create sibling worktree at ``<parent>/<chunk_id>/<slug>`` on ``mentat/<chunk_id>/<slug>``.
 
     Exit codes:
       0  success or idempotent no-op
@@ -183,9 +190,16 @@ def cmd_worktree_create(slug: str, *, base: str | None = None, parent: Path | No
         print("mentat-git: not inside a git repo", file=sys.stderr)
         return EX_SOFTWARE
 
+    _git_lib.sweep_bare_holding_refs(cwd=main_root)
+
+    if chunk_id is None:
+        chunk_id = make_chunk_id()
+
     if parent is None:
         parent = main_root / ".mentat" / "worktrees"
-    target = (parent / slug).resolve()
+    cs = chunk_slug(chunk_id, slug)
+    branch = holding_branch(cs)
+    target = (parent / chunk_id / slug).resolve()
 
     # If the target has a stale admin record (prunable — dir is gone but record lingers),
     # prune it before the idempotency check so we don't return rc=0 with a missing dir.
@@ -211,14 +225,13 @@ def cmd_worktree_create(slug: str, *, base: str | None = None, parent: Path | No
         return EX_NOINPUT
 
     parent.mkdir(parents=True, exist_ok=True)
+    target.parent.mkdir(parents=True, exist_ok=True)
 
-    # If the branch already exists (e.g. from a prior killed/failed run), attach
-    # the new worktree to it without -b rather than trying to create it again.
-    if _branch_exists(main_root, slug):
-        r = _git(["worktree", "add", str(target), slug], cwd=main_root)
+    if _branch_exists(main_root, branch):
+        r = _git(["worktree", "add", str(target), branch], cwd=main_root)
     else:
         r = _git(
-            ["worktree", "add", "-b", slug, str(target), base],
+            ["worktree", "add", "-b", branch, str(target), base],
             cwd=main_root,
         )
     if r.returncode != 0:
@@ -228,8 +241,7 @@ def cmd_worktree_create(slug: str, *, base: str | None = None, parent: Path | No
         # an opaque "unexpected git error".
         stderr_lower = (r.stderr or "").lower()
         if "a branch named" in stderr_lower and "already exists" in stderr_lower:
-            # Branch appeared in TOCTOU window — retry without -b.
-            r = _git(["worktree", "add", str(target), slug], cwd=main_root)
+            r = _git(["worktree", "add", str(target), branch], cwd=main_root)
             if r.returncode == 0:
                 print(str(target))
                 return 0

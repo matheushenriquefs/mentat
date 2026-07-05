@@ -1,5 +1,5 @@
 {
-  "name": "mentat",
+  "name": "mentat-run-isolation",
   "build": {
     "dockerfile": "Dockerfile"
   },
@@ -10,11 +10,14 @@
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
   },
   "onCreateCommand": "sudo apt-get update && sudo apt-get install -y jq shellcheck && curl -LsSf https://astral.sh/uv/install.sh | sh",
-  "postCreateCommand": "cd /workspaces/mentat && ~/.local/bin/uv sync --group dev && npm install -g promptfoo lefthook && (lefthook install --force || true) && python3 .agents/skills/mentat-install/scripts/install.py",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/mentat,type=bind,consistency=cached",
-  "workspaceFolder": "/workspaces/mentat",
+  "postCreateCommand": "cd /workspaces/mentat-run-isolation && ~/.local/bin/uv sync --group dev && npm install -g promptfoo lefthook && (lefthook install --force || true) && python3 .agents/skills/mentat-install/scripts/install.py",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/mentat-run-isolation,type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/mentat-run-isolation",
   "runArgs": [
     "--init"
   ],
-  "remoteUser": "vscode"
+  "remoteUser": "vscode",
+  "mounts": [
+    "source=/Users/matheushenrique/Workspace/personal/mentat/.git,target=/Users/matheushenrique/Workspace/personal/mentat/.git,type=bind"
+  ]
 }

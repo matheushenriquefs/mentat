@@ -44,8 +44,8 @@ def test_fan_out_paths():
     assert mod._LOG_SCRIPT.is_file(), mod._LOG_SCRIPT
     _no_double(mod._IMPLEMENT_SCRIPT)
     assert mod._IMPLEMENT_SCRIPT.is_file(), mod._IMPLEMENT_SCRIPT
-    _no_double(mod._CONTAINER_SCRIPT)
-    assert mod._CONTAINER_SCRIPT.is_file(), mod._CONTAINER_SCRIPT
+    _no_double(mod._GIT_SCRIPT)
+    assert mod._GIT_SCRIPT.is_file(), mod._GIT_SCRIPT
 
 
 def test_orchestrate_no_double_prefix():

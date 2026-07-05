@@ -139,7 +139,7 @@ def _compaction_threshold() -> int | None:
         data = _load_cfg(cfg_path)
         val = data.get("compaction_threshold_tokens")
         return int(val) if val is not None else None
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
 
 
@@ -196,8 +196,14 @@ def _teardown_worktree(target: Path) -> None:
     """On implement's own failure: drop a clean worktree + its container,
     preserve a dirty one (it holds un-landed work the operator must finish)."""
     from lib import devcontainer, worktrees
+    from lib.chunk import chunk_slug_from_worktree
 
-    devcontainer.down(target.name)
+    root = _repo_root_from_worktree(target)
+    try:
+        cs = chunk_slug_from_worktree(target, root)
+    except ValueError:
+        cs = target.name
+    devcontainer.down(cs)
     if worktrees.teardown(target):
         print(f"mentat-implement: removed clean worktree {target}", file=sys.stderr)
     else:
@@ -283,7 +289,7 @@ def _in_shared_main_tree() -> bool:
 
 
 def preflight_worktree(slug: str) -> tuple[int, Path | None]:
-    """Auto-create a worktree for slug if cwd is the main worktree.
+    """Auto-create a chunk-keyed worktree for slug if cwd is the main worktree.
 
     Returns (rc, target). rc=0 → success (target valid or skipped intentionally).
     rc=65 → path conflict. rc=66 → base branch missing. Other → bubble up.
@@ -297,14 +303,17 @@ def preflight_worktree(slug: str) -> tuple[int, Path | None]:
         return (0, None)
     if not _GIT_SCRIPT.exists():
         return (0, None)
-    # Only the shared main tree needs a worktree carved out; a non-repo cwd or an
-    # already-isolated sibling worktree is left alone. Same predicate the leak
-    # guard uses — one source of truth for "is this the live main tree".
     if not _in_shared_main_tree():
         return (0, None)
 
+    from lib.chunk import bind_plan_chunk, make_chunk_id
+
+    chunk_id = os.environ.get("MENTAT_CHUNK_ID", "").strip() or make_chunk_id()
+    os.environ["MENTAT_CHUNK_ID"] = chunk_id
+    bind_plan_chunk(slug, chunk_id)
+
     result = subprocess.run(
-        ["python3", str(_GIT_SCRIPT), "worktree", "create", slug],
+        ["python3", str(_GIT_SCRIPT), "worktree", "create", slug, "--chunk-id", chunk_id],
         capture_output=True,
         text=True,
     )
@@ -595,7 +604,8 @@ def _land_and_review(slug: str, worktree: Path, holding: str) -> dict[str, objec
     """
     _land_script = paths.SKILLS_DIR / "mentat-orchestrate/scripts/land_queue.py"
     land_queue = _load_mod("land_queue", _land_script)
-    chunk = land_queue.Chunk(slug=slug, worktree=worktree)
+    chunk_id = os.environ.get("MENTAT_CHUNK_ID", "").strip()
+    chunk = land_queue.Chunk(slug=slug, worktree=worktree, chunk_id=chunk_id)
     verdict = _do_land(chunk, holding=holding, land_queue=land_queue)
     return {
         "status": verdict.get("status"),

@@ -16,6 +16,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+from tests.conftest import patch_orchestrate_worktree
+
 ORCH_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
 
@@ -63,13 +65,14 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
-    rc = orchestrate.run_orchestrate(
-        "holding",
-        [a_path, b_path],
-        harness=None,
-        model=None,
-        dry_run=False,
-    )
+    with patch_orchestrate_worktree(orchestrate, tmp_path):
+        rc = orchestrate.run_orchestrate(
+            "holding",
+            [a_path, b_path],
+            harness=None,
+            model=None,
+            dry_run=False,
+        )
     assert rc == 0
 
     chunks = captured["chunks"]
@@ -111,6 +114,7 @@ def test_run_orchestrate_independent_afks_keep_plan_slug_identity(tmp_path, monk
     monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
-    orchestrate.run_orchestrate("holding", [a_path, b_path], harness=None, model=None, dry_run=False)
+    with patch_orchestrate_worktree(orchestrate, tmp_path):
+        orchestrate.run_orchestrate("holding", [a_path, b_path], harness=None, model=None, dry_run=False)
 
     assert captured_slugs == ["a", "b"], f"independent AFKs must reach land queue by plan slug; got {captured_slugs}"

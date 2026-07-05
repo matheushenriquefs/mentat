@@ -55,7 +55,7 @@ def _spawner(tmp_path: Path, behavior: dict[str, tuple[float, int]]):
             str(code),
             start_new_session=True,
         )
-        return f"sess-{plan.slug}", proc
+        return f"sess-{plan.slug}", proc, tmp_path / plan.slug
 
     return fake_spawn
 

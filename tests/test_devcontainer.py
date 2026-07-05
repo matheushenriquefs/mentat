@@ -40,7 +40,7 @@ def test_prune_invokes_docker_with_label_filter(monkeypatch):
         "prune",
         "-f",
         "--filter",
-        "label=mentat_slug",
+        "label=mentat_chunk",
         "--filter",
         "until=1h",
     ]

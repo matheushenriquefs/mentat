@@ -19,6 +19,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+from tests.conftest import bind_chunk_worktrees
+
 ORCH_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
 
@@ -30,12 +32,14 @@ def _load(name: str):
     return mod
 
 
-def _wire(orchestrate, monkeypatch):
+def _wire(orchestrate, monkeypatch, tmp_path):
     """Record fan-out waves; make drain land every chunk (advances the scheduler)."""
     waves: list[list[str]] = []
+    worktrees: dict[str, Path] = {}
 
     def fake_fan_out_plans(plans, *, harness=None, model=None):
         waves.append([p.slug for p in plans])
+        worktrees.update(bind_chunk_worktrees(plans, tmp_path))
         return [(p, 0) for p in plans]
 
     def fake_drain(chunks, *, holding, on_landed=None, on_ejected=None, next_ready=None, **kw):
@@ -47,6 +51,7 @@ def _wire(orchestrate, monkeypatch):
         return results
 
     monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out_plans)
+    monkeypatch.setattr(orchestrate, "_worktree_for_slug", lambda slug: worktrees[slug])
     monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
     monkeypatch.setattr(orchestrate, "_emit_event", lambda *a, **k: None)
@@ -67,7 +72,7 @@ def test_blocked_chunk_not_spawned_until_upstream_lands(tmp_path, monkeypatch):
     a.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
     b.write_text("---\nid: b\nstatus: ready\nclass: AFK\nblocked_by: [a]\n---\n# b\n")
 
-    waves = _wire(orchestrate, monkeypatch)
+    waves = _wire(orchestrate, monkeypatch, tmp_path)
     rc = orchestrate.run_orchestrate("holding", [a, b], harness=None, model=None, dry_run=False)
 
     assert rc == 0
@@ -85,7 +90,7 @@ def test_shared_write_set_chunks_never_spawn_concurrently(tmp_path, monkeypatch)
     a.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\ntouches: [src/routes.py]\n---\n# a\n")
     b.write_text("---\nid: b\nstatus: ready\nclass: AFK\nblocked_by: []\ntouches: [src/routes.py]\n---\n# b\n")
 
-    waves = _wire(orchestrate, monkeypatch)
+    waves = _wire(orchestrate, monkeypatch, tmp_path)
     orchestrate.run_orchestrate("holding", [a, b], harness=None, model=None, dry_run=False)
 
     for w in waves:
@@ -93,7 +98,7 @@ def test_shared_write_set_chunks_never_spawn_concurrently(tmp_path, monkeypatch)
     assert sorted(s for w in waves for s in w) == ["a", "b"], f"both must eventually spawn; got {waves}"
 
 
-def test_run_batch_stalls_when_dep_never_resolves(monkeypatch):
+def test_run_batch_stalls_when_dep_never_resolves(tmp_path, monkeypatch):
     """Anti-hang guard: a pending auto plan whose known dep never lands → stalled row,
     loop breaks (no infinite spin). Driven at the _run_batch seam with a dep (A) that
     is in known_slugs but not among the fanned auto plans, so it never resolves."""
@@ -104,7 +109,14 @@ def test_run_batch_stalls_when_dep_never_resolves(monkeypatch):
     B = scheduler.Plan(slug="B", class_="AFK", blocked_by=["A"], path=Path("/tmp/B.md"))
     sched = scheduler.Scheduler([A, B])
 
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [(p, 0) for p in plans])
+    wt_map: dict[str, Path] = {}
+
+    def fake_fan_out(plans, **kw):
+        wt_map.update(bind_chunk_worktrees(plans, tmp_path))
+        return [(p, 0) for p in plans]
+
+    monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out)
+    monkeypatch.setattr(orchestrate, "_worktree_for_slug", lambda slug: wt_map[slug])
     monkeypatch.setattr(orchestrate._land_queue, "drain", lambda chunks, **kw: [])
 
     results, hitl, transient = orchestrate._run_batch(
@@ -124,7 +136,7 @@ def test_independent_chunks_fan_out_in_one_wave(tmp_path, monkeypatch):
     a.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
     b.write_text("---\nid: b\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# b\n")
 
-    waves = _wire(orchestrate, monkeypatch)
+    waves = _wire(orchestrate, monkeypatch, tmp_path)
     orchestrate.run_orchestrate("holding", [a, b], harness=None, model=None, dry_run=False)
 
     assert waves == [["a", "b"]], f"independent chunks must fan out in one wave; got {waves}"

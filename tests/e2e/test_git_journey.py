@@ -138,22 +138,22 @@ def test_worktree_list_reports_prunable_after_dir_removed(tmp_path: Path):
 # ── worktree_for_slug ────────────────────────────────────────────────────────
 
 
-def test_worktree_for_slug_matches_branch(tmp_path: Path):
+def test_worktree_for_chunk_matches_branch(tmp_path: Path):
     repo = tmp_path / "repo"
     init_git_repo(repo)
     linked = tmp_path / "feature-wt"
-    _git("worktree", "add", str(linked), "-b", "feature", cwd=repo)
+    _git("worktree", "add", str(linked), "-b", "mentat/deadbeef/my-plan", cwd=repo)
 
-    found = git.worktree_for_slug("feature", cwd=repo)
+    found = git.worktree_for_chunk("deadbeef", "my-plan", cwd=repo)
     assert found.resolve() == linked.resolve()
 
 
-def test_worktree_for_slug_unknown_falls_back_to_cwd(tmp_path: Path):
+def test_worktree_for_chunk_unknown_raises(tmp_path: Path):
     repo = tmp_path / "repo"
     init_git_repo(repo)
 
-    found = git.worktree_for_slug("does-not-exist", cwd=repo)
-    assert found == Path.cwd()
+    with pytest.raises(git.GitError):
+        git.worktree_for_chunk("missing", "slug", cwd=repo)
 
 
 # ── is_dirty ─────────────────────────────────────────────────────────────────

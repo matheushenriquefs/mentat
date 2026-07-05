@@ -11,6 +11,8 @@ import stat
 import sys
 from pathlib import Path
 
+from tests.conftest import fake_plan, mock_fan_out_worktree
+
 _HERE = Path(__file__).resolve().parent
 ORCH_SCRIPTS = _HERE.parent / ".agents/skills/mentat-orchestrate/scripts"
 IMPL_SCRIPTS = _HERE.parent / ".agents/skills/mentat-implement/scripts"
@@ -41,9 +43,13 @@ class _FakeProc:
 def test_fan_out_creates_log_dir_and_exports_env(tmp_path, monkeypatch):
     fan_out = _load(ORCH_SCRIPTS / "fan_out.py", "fan_out")
     plan_path = _write_plan(tmp_path, "afk-plan")
+    plan = fake_plan(plan_path, "afk-plan")
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "fake-repo")
+    mock_fan_out_worktree(monkeypatch, fan_out, worktree)
 
     captured_env: dict[str, str] = {}
 
@@ -53,7 +59,7 @@ def test_fan_out_creates_log_dir_and_exports_env(tmp_path, monkeypatch):
 
     monkeypatch.setattr(fan_out.subprocess, "Popen", fake_popen)
 
-    session_id, proc = fan_out._spawn_worktree_subprocess(plan_path)
+    session_id, proc, _wt = fan_out._spawn_worktree_subprocess(plan)
 
     import re
 

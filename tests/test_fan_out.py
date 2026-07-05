@@ -34,7 +34,7 @@ def test_fan_out_spawns_worktree_and_subprocess(tmp_path):
 
     def fake_spawn(p, harness=None, model=None, seed_summary=None):
         spawn_calls.append(p)
-        return ("sess-abc", _FakePopen())
+        return ("sess-abc", _FakePopen(), tmp_path / "wt")
 
     with patch.object(fan_out, "_spawn_worktree_subprocess", side_effect=fake_spawn):
         with patch.object(fan_out, "_emit_event"):
@@ -51,7 +51,9 @@ def test_fan_out_prints_track_command_immediately(tmp_path):
 
     fake_session_id = "session-123"
 
-    with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=(fake_session_id, _FakePopen())):
+    with patch.object(
+        fan_out, "_spawn_worktree_subprocess", return_value=(fake_session_id, _FakePopen(), tmp_path / "wt")
+    ):
         buf = io.StringIO()
         with redirect_stdout(buf):
             session_id = fan_out.spawn(plan)
@@ -67,7 +69,7 @@ def test_fan_out_emits_chunk_spawned(tmp_path):
     routing = load_module("scheduler")
     plan = routing.Plan(slug="my-plan", class_="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
 
-    with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=("sess-1", _FakePopen())):
+    with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=("sess-1", _FakePopen(), tmp_path / "wt")):
         with patch.object(fan_out, "_emit_event") as mock_emit:
             fan_out.spawn(plan)
 
@@ -83,7 +85,7 @@ def test_fan_out_stdout_emits_chunk_slugs_newline_delim(tmp_path):
         routing.Plan(slug=f"plan-{i}", class_="AFK", blocked_by=[], path=tmp_path / f"plan-{i}.md") for i in range(3)
     ]
 
-    with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=("sess-x", _FakePopen())):
+    with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=("sess-x", _FakePopen(), tmp_path / "wt")):
         buf = io.StringIO()
         with redirect_stdout(buf):
             for p in plans:
@@ -103,7 +105,9 @@ def test_fan_out_track_suggestion_is_bin_form(tmp_path):
     routing = load_module("scheduler")
     plan = routing.Plan(slug="p", class_="AFK", blocked_by=[], path=tmp_path / "p.md")
 
-    with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=("sess-binform", _FakePopen())):
+    with patch.object(
+        fan_out, "_spawn_worktree_subprocess", return_value=("sess-binform", _FakePopen(), tmp_path / "wt")
+    ):
         with patch.object(fan_out, "_emit_event", lambda *a, **k: None):
             buf = io.StringIO()
             with redirect_stdout(buf):
@@ -134,13 +138,15 @@ def test_spawn_async_emits_prints_and_returns_process(tmp_path, monkeypatch):
         captured["new_session"] = kwargs.get("start_new_session")
         return fake_proc
 
-    monkeypatch.setattr(fan_out, "_build_spawn_cmd", lambda p, **kw: ("sess-async", ["python3", "impl"], {}))
+    monkeypatch.setattr(
+        fan_out, "_prepare_chunk_spawn", lambda plan, **kw: ("sess-async", ["python3", "impl"], {}, tmp_path / "wt")
+    )
     monkeypatch.setattr(fan_out.asyncio, "create_subprocess_exec", fake_exec)
 
     with patch.object(fan_out, "_emit_event") as mock_emit:
         buf = io.StringIO()
         with redirect_stdout(buf):
-            sid, proc = asyncio.run(fan_out.spawn_async(plan))
+            sid, proc, _wt = asyncio.run(fan_out.spawn_async(plan))
         output = buf.getvalue()
 
     assert sid == "sess-async"
@@ -157,9 +163,19 @@ def test_spawn_async_emits_prints_and_returns_process(tmp_path, monkeypatch):
 def test_spawn_worktree_subprocess_wires_harness_model_and_seed(tmp_path, monkeypatch):
     """harness/model append CLI flags; seed_summary injects MENTAT_SEED_SUMMARY."""
     fan_out = load_module("fan_out")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="wire", class_="AFK", blocked_by=[], path=tmp_path / "p.md")
 
-    monkeypatch.setattr(fan_out, "make_agent_id", lambda kind, stem: "sess-wire")
-    monkeypatch.setattr(fan_out, "_log_dir_for", lambda sid: tmp_path)
+    monkeypatch.setattr(
+        fan_out,
+        "_prepare_chunk_spawn",
+        lambda p, **kw: (
+            "sess-wire",
+            ["python3", "impl", "--harness", "cursor", "--model", "opus"],
+            {"MENTAT_SESSION": "sess-wire", "MENTAT_SEED_SUMMARY": "prior ctx", "MENTAT_CHUNK_ID": "c" * 32},
+            tmp_path / "wt",
+        ),
+    )
 
     captured: dict[str, object] = {}
 
@@ -167,15 +183,15 @@ def test_spawn_worktree_subprocess_wires_harness_model_and_seed(tmp_path, monkey
         captured["cmd"] = cmd
         captured["env"] = kwargs.get("env")
         captured["new_session"] = kwargs.get("start_new_session")
+        captured["cwd"] = kwargs.get("cwd")
         return _FakePopen()
 
     monkeypatch.setattr(fan_out.subprocess, "Popen", fake_popen)
 
-    sid, proc = fan_out._spawn_worktree_subprocess(
-        tmp_path / "p.md", harness="cursor", model="opus", seed_summary="prior ctx"
-    )
+    sid, proc, wt = fan_out._spawn_worktree_subprocess(plan, harness="cursor", model="opus", seed_summary="prior ctx")
 
     assert sid == "sess-wire"
+    assert wt == tmp_path / "wt"
     cmd = captured["cmd"]
     assert "--harness" in cmd and cmd[cmd.index("--harness") + 1] == "cursor"
     assert "--model" in cmd and cmd[cmd.index("--model") + 1] == "opus"
@@ -188,9 +204,19 @@ def test_spawn_worktree_subprocess_wires_harness_model_and_seed(tmp_path, monkey
 def test_spawn_worktree_subprocess_omits_flags_when_unset(tmp_path, monkeypatch):
     """No harness/model/seed → no flags and no MENTAT_SEED_SUMMARY env key."""
     fan_out = load_module("fan_out")
+    routing = load_module("scheduler")
+    plan = routing.Plan(slug="bare", class_="AFK", blocked_by=[], path=tmp_path / "p.md")
 
-    monkeypatch.setattr(fan_out, "make_agent_id", lambda kind, stem: "sess-bare")
-    monkeypatch.setattr(fan_out, "_log_dir_for", lambda sid: tmp_path)
+    monkeypatch.setattr(
+        fan_out,
+        "_prepare_chunk_spawn",
+        lambda p, **kw: (
+            "sess-bare",
+            ["python3", "impl"],
+            {"MENTAT_SESSION": "sess-bare", "MENTAT_CHUNK_ID": "d" * 32},
+            tmp_path / "wt",
+        ),
+    )
 
     captured: dict[str, object] = {}
 
@@ -201,7 +227,7 @@ def test_spawn_worktree_subprocess_omits_flags_when_unset(tmp_path, monkeypatch)
 
     monkeypatch.setattr(fan_out.subprocess, "Popen", fake_popen)
 
-    fan_out._spawn_worktree_subprocess(tmp_path / "p.md")
+    fan_out._spawn_worktree_subprocess(plan)
 
     cmd = captured["cmd"]
     assert "--harness" not in cmd

@@ -12,6 +12,15 @@ from tests.conftest import init_git_repo, load_script
 
 _SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-git/scripts"
 
+_CID = "a" * 32
+
+
+@pytest.fixture(autouse=True)
+def _fixed_chunk_id(monkeypatch):
+    import lib.chunk as chunk_mod
+
+    monkeypatch.setattr(chunk_mod, "make_chunk_id", lambda: _CID)
+
 
 def _load_worktree():
     return load_script(_SCRIPTS / "worktree.py", "wt_mod")
@@ -36,13 +45,12 @@ def repo(tmp_path, monkeypatch):
 
 def test_creates_sibling_worktree(repo, capsys):
     wt = _load_worktree()
-    rc = wt.cmd_worktree_create("feat-x")
+    rc = wt.cmd_worktree_create("feat-x", chunk_id=_CID)
     assert rc == 0
-    target = repo / ".mentat" / "worktrees" / "feat-x"
+    target = repo / ".mentat" / "worktrees" / _CID / "feat-x"
     assert target.is_dir()
     branches = subprocess.run(["git", "branch"], cwd=repo, capture_output=True, text=True).stdout
-    assert "feat-x" in branches
-    # cmd_worktree_create prints the target path on success — preflight reads this.
+    assert f"mentat/{_CID}/feat-x" in branches
     out = capsys.readouterr().out.strip()
     assert out.endswith("feat-x")
     assert Path(out).resolve() == target.resolve()
@@ -50,9 +58,9 @@ def test_creates_sibling_worktree(repo, capsys):
 
 def test_idempotent_prints_same_path(repo, capsys):
     wt = _load_worktree()
-    wt.cmd_worktree_create("feat-x")
+    wt.cmd_worktree_create("feat-x", chunk_id=_CID)
     first = capsys.readouterr().out.strip()
-    wt.cmd_worktree_create("feat-x")
+    wt.cmd_worktree_create("feat-x", chunk_id=_CID)
     second = capsys.readouterr().out.strip()
     assert first == second
     assert first.endswith("feat-x")
@@ -60,15 +68,15 @@ def test_idempotent_prints_same_path(repo, capsys):
 
 def test_idempotent_when_worktree_already_exists(repo):
     wt = _load_worktree()
-    assert wt.cmd_worktree_create("feat-x") == 0
-    assert wt.cmd_worktree_create("feat-x") == 0
+    assert wt.cmd_worktree_create("feat-x", chunk_id=_CID) == 0
+    assert wt.cmd_worktree_create("feat-x", chunk_id=_CID) == 0
 
 
 def test_conflict_when_path_exists_unregistered(repo):
     wt = _load_worktree()
-    conflict = repo / ".mentat" / "worktrees" / "feat-conflict"
+    conflict = repo / ".mentat" / "worktrees" / _CID / "feat-conflict"
     conflict.mkdir(parents=True)
-    rc = wt.cmd_worktree_create("feat-conflict")
+    rc = wt.cmd_worktree_create("feat-conflict", chunk_id=_CID)
     assert rc == 65
 
 
@@ -81,9 +89,9 @@ def test_missing_base_branch(repo):
 def test_custom_parent(repo, tmp_path):
     wt = _load_worktree()
     custom = tmp_path / "wts"
-    rc = wt.cmd_worktree_create("feat-z", parent=custom)
+    rc = wt.cmd_worktree_create("feat-z", parent=custom, chunk_id=_CID)
     assert rc == 0
-    assert (custom / "feat-z").is_dir()
+    assert (custom / _CID / "feat-z").is_dir()
 
 
 def test_not_in_git_repo(tmp_path, monkeypatch):
@@ -95,13 +103,21 @@ def test_not_in_git_repo(tmp_path, monkeypatch):
 
 def test_cli_dispatch(repo):
     result = subprocess.run(
-        ["python3", str(_SCRIPTS / "git.py"), "worktree", "create", "feat-cli"],
+        [
+            "python3",
+            str(_SCRIPTS / "git.py"),
+            "worktree",
+            "create",
+            "feat-cli",
+            "--chunk-id",
+            _CID,
+        ],
         capture_output=True,
         text=True,
         cwd=repo,
     )
     assert result.returncode == 0
-    target = repo / ".mentat" / "worktrees" / "feat-cli"
+    target = repo / ".mentat" / "worktrees" / _CID / "feat-cli"
     assert target.is_dir()
     out_path = Path(result.stdout.strip().splitlines()[-1])
     assert out_path.resolve() == target.resolve()
@@ -133,7 +149,8 @@ def test_race_window_path_conflict_maps_to_65(repo, monkeypatch):
     # Make pre-checks lie: pretend target does NOT exist, then create it
     # right before `git worktree add` runs (simulating a racing process).
     def fake_exists(self):
-        if self == (target_parent / "race-target").resolve():
+        race = (target_parent / _CID / "race-target").resolve()
+        if self == race:
             return False
         return real_target_exists_check(self)
 
@@ -144,8 +161,7 @@ def test_race_window_path_conflict_maps_to_65(repo, monkeypatch):
 
     def racing_git(args, *, cwd=None):
         if args[:2] == ["worktree", "add"]:
-            # Race: path appears with a sentinel file (git refuses non-empty dirs)
-            rc = target_parent / "race-target"
+            rc = target_parent / _CID / "race-target"
             rc.mkdir(parents=True, exist_ok=True)
             (rc / "stranger.txt").write_text("racer wrote this\n")
         return real_git(args, cwd=cwd)
@@ -184,7 +200,7 @@ def test_create_worktree_when_branch_already_exists(repo, capsys):
 
     # Create the branch manually (simulates a prior killed/failed implement run)
     subprocess.run(
-        ["git", "branch", "feat-existing", "main"],
+        ["git", "branch", f"mentat/{_CID}/feat-existing", "main"],
         cwd=repo,
         check=True,
         capture_output=True,
@@ -193,7 +209,7 @@ def test_create_worktree_when_branch_already_exists(repo, capsys):
     rc = wt.cmd_worktree_create("feat-existing")
 
     assert rc == 0, f"must succeed when branch exists but worktree does not, got rc={rc}"
-    target = repo / ".mentat" / "worktrees" / "feat-existing"
+    target = repo / ".mentat" / "worktrees" / _CID / "feat-existing"
     assert target.is_dir(), "worktree directory must be created"
     out = capsys.readouterr().out.strip()
     assert out.endswith("feat-existing"), f"must print target path, got: {out!r}"
@@ -217,7 +233,7 @@ def test_create_worktree_branch_exists_toctou(repo, monkeypatch):
 
     # Return False only for the slug check (to force the -b path), not for the base check.
     def fake_branch_exists(main_root, branch):
-        if branch == "feat-toctou-branch":
+        if branch == f"mentat/{_CID}/feat-toctou-branch":
             return False
         return real_branch_exists(main_root, branch)
 

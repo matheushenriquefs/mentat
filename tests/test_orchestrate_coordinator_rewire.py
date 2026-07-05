@@ -9,6 +9,8 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestr
 
 from lib.exits import EX_HITL_REQUIRED  # noqa: E402
 
+from tests.conftest import patch_orchestrate_worktree  # noqa: E402
+
 
 def _load(name: str):
     import importlib.util
@@ -45,7 +47,8 @@ def test_orchestrate_exit_codes_unchanged(tmp_path, monkeypatch):
         lambda plans, **kw: [(plan_obj, EX_HITL_REQUIRED)],
     )
     monkeypatch.setattr(orchestrate._land_queue, "drain", lambda chunks, **kw: [])
-    rc_eject = orchestrate.run_orchestrate("holding", [a_path], harness=None, model=None, dry_run=False)
+    with patch_orchestrate_worktree(orchestrate, tmp_path):
+        rc_eject = orchestrate.run_orchestrate("holding", [a_path], harness=None, model=None, dry_run=False)
     assert rc_eject == 1, f"hitl-required → exit 1; got {rc_eject}"
 
     # Success path: all chunks land cleanly → exit 0
@@ -59,5 +62,6 @@ def test_orchestrate_exit_codes_unchanged(tmp_path, monkeypatch):
         "drain",
         lambda chunks, **kw: [{"slug": c.slug, "status": "success"} for c in chunks],
     )
-    rc_ok = orchestrate.run_orchestrate("holding", [a_path], harness=None, model=None, dry_run=False)
+    with patch_orchestrate_worktree(orchestrate, tmp_path):
+        rc_ok = orchestrate.run_orchestrate("holding", [a_path], harness=None, model=None, dry_run=False)
     assert rc_ok == 0, f"all landed → exit 0; got {rc_ok}"

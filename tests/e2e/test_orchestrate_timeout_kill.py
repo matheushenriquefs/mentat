@@ -81,7 +81,7 @@ def test_timeout_group_kill_reaps_grandchild(monkeypatch, tmp_path):
             str(pidfile),
             start_new_session=True,
         )
-        return "sess-hung", proc
+        return "sess-hung", proc, tmp_path / "worktree"
 
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "1")
     monkeypatch.setattr(orch._fan_out, "spawn_async", fake_spawn)

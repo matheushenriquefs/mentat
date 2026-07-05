@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import fake_plan, load_script, mock_fan_out_worktree
 
 pytestmark = pytest.mark.e2e
 
@@ -50,13 +50,16 @@ def isolate_logs(monkeypatch, tmp_path):
         return proc
 
     monkeypatch.setattr(fan_out.subprocess, "Popen", fake_popen)
-    return types.SimpleNamespace(log_root=log_root, captured=captured)
+    worktree = tmp_path / "chunk-wt"
+    worktree.mkdir()
+    mock_fan_out_worktree(monkeypatch, fan_out, worktree)
+    return types.SimpleNamespace(log_root=log_root, captured=captured, worktree=worktree)
 
 
-def _plan_file(tmp_path: Path, name: str = "widget") -> Path:
+def _plan_file(tmp_path: Path, name: str = "widget"):
     p = tmp_path / f"{name}.md"
     p.write_text("# plan\n")
-    return p
+    return fake_plan(p, name)
 
 
 # ── _log_dir_for ──────────────────────────────────────────────────────────────
@@ -72,13 +75,13 @@ def test_log_dir_for_lands_under_tmp_log_root(isolate_logs):
 
 def test_spawn_worktree_session_id_shape(isolate_logs, tmp_path):
     plan = _plan_file(tmp_path)
-    session_id, _proc = fan_out._spawn_worktree_subprocess(plan)
+    session_id, _proc, _wt = fan_out._spawn_worktree_subprocess(plan)
     assert re.fullmatch(r"[0-9a-f]{32}", session_id), f"expected uuid session id, got {session_id!r}"
 
 
 def test_spawn_worktree_creates_log_dir_0700(isolate_logs, tmp_path):
     plan = _plan_file(tmp_path)
-    session_id, _proc = fan_out._spawn_worktree_subprocess(plan)
+    session_id, _proc, _wt = fan_out._spawn_worktree_subprocess(plan)
     log_dir = isolate_logs.log_root / "fixrepo" / session_id
     assert log_dir.exists()
     assert log_dir.stat().st_mode & 0o777 == 0o700
@@ -88,7 +91,7 @@ def test_spawn_worktree_cmd_is_bare_when_no_harness_or_model(isolate_logs, tmp_p
     plan = _plan_file(tmp_path)
     fan_out._spawn_worktree_subprocess(plan)
     proc = isolate_logs.captured["proc"]
-    assert proc.cmd == ["python3", str(fan_out._IMPLEMENT_SCRIPT), str(plan)]
+    assert proc.cmd == ["python3", str(fan_out._IMPLEMENT_SCRIPT), str(plan.path)]
 
 
 def test_spawn_worktree_cmd_appends_harness_and_model(isolate_logs, tmp_path):
@@ -98,7 +101,7 @@ def test_spawn_worktree_cmd_appends_harness_and_model(isolate_logs, tmp_path):
     assert proc.cmd == [
         "python3",
         str(fan_out._IMPLEMENT_SCRIPT),
-        str(plan),
+        str(plan.path),
         "--harness",
         "claude",
         "--model",
@@ -108,7 +111,7 @@ def test_spawn_worktree_cmd_appends_harness_and_model(isolate_logs, tmp_path):
 
 def test_spawn_worktree_env_carries_session_and_log(isolate_logs, tmp_path):
     plan = _plan_file(tmp_path)
-    session_id, _proc = fan_out._spawn_worktree_subprocess(plan)
+    session_id, _proc, _wt = fan_out._spawn_worktree_subprocess(plan)
     proc = isolate_logs.captured["proc"]
     assert proc.env["MENTAT_SESSION"] == session_id
     expected_log = isolate_logs.log_root / "fixrepo" / session_id / "session.jsonl"
@@ -137,7 +140,7 @@ def test_spawn_worktree_starts_new_session(isolate_logs, tmp_path):
 
 def test_spawn_worktree_returns_session_id_and_proc(isolate_logs, tmp_path):
     plan = _plan_file(tmp_path)
-    session_id, proc = fan_out._spawn_worktree_subprocess(plan)
+    session_id, proc, _wt = fan_out._spawn_worktree_subprocess(plan)
     assert isinstance(session_id, str)
     assert proc is isolate_logs.captured["proc"]
 
@@ -146,7 +149,9 @@ def test_spawn_worktree_returns_session_id_and_proc(isolate_logs, tmp_path):
 
 
 def _fake_plan(tmp_path: Path):
-    return types.SimpleNamespace(slug="s", path=_plan_file(tmp_path))
+    p = tmp_path / "widget.md"
+    p.write_text("# plan\n")
+    return fake_plan(p, "s")
 
 
 def test_spawn_with_proc_emits_chunk_spawned_default_harness(isolate_logs, tmp_path, monkeypatch):

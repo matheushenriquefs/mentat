@@ -13,6 +13,8 @@ import json
 import sys
 from pathlib import Path
 
+from tests.conftest import patch_orchestrate_worktree
+
 ROOT = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
 
@@ -55,7 +57,8 @@ def test_hitl_plan_does_not_subprocess_implement(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)
     monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: None)
 
-    rc = orchestrate.run_orchestrate("holding", [hitl, afk], harness=None, model=None, dry_run=False)
+    with patch_orchestrate_worktree(orchestrate, tmp_path):
+        rc = orchestrate.run_orchestrate("holding", [hitl, afk], harness=None, model=None, dry_run=False)
 
     assert rc == 0
     flat = [arg for call in calls for arg in call]

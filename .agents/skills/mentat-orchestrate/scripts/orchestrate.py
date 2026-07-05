@@ -41,6 +41,35 @@ _recover = load_sibling(__file__, "recover")
 _SIGNAL_EXIT_BASE = 128  # Shell-reported signal exit: 128 + signum
 
 
+def _down_plan_container(plan_slug: str) -> bool:
+    from lib.chunk import chunk_id_for_plan, chunk_slug
+
+    try:
+        cs = chunk_slug(chunk_id_for_plan(plan_slug), plan_slug)
+    except LookupError:
+        return False
+    return _devcontainer.down(cs)
+
+
+def _bind_chunk_from_worktree(plan_slug: str, worktree: Path) -> None:
+    from lib.chunk import bind_plan_chunk, chunk_id_for_plan, chunk_slug_from_worktree
+
+    try:
+        chunk_id_for_plan(plan_slug)
+        return
+    except LookupError:
+        pass
+    root = _git.repo_root(worktree)
+    if root is None:
+        return
+    try:
+        cs = chunk_slug_from_worktree(worktree, root)
+    except ValueError:
+        return
+    chunk_id, _slug = cs.split("/", 1)
+    bind_plan_chunk(plan_slug, chunk_id)
+
+
 def _parse_list_field(raw: str) -> list[str]:
     if not raw or raw in ("[]", ""):
         return []
@@ -139,7 +168,7 @@ def _concurrency_cap() -> int:
     raw = _utils.read_config().get("concurrency", 3)
     try:
         want = max(1, int(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         want = 3
     cores = os.cpu_count() or 1
     ceiling = max(1, cores // 2)
@@ -164,7 +193,7 @@ def _load_headroom_ok() -> bool:
     """
     try:
         load1 = os.getloadavg()[0]
-    except (OSError, AttributeError):
+    except OSError, AttributeError:
         return True
     cores = os.cpu_count() or 1
     return load1 < cores
@@ -186,7 +215,7 @@ def _chunk_timeout() -> int:
     raw = _utils.read_config().get("chunk_timeout", 1800)
     try:
         return max(1, int(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 1800
 
 
@@ -210,7 +239,7 @@ def _stall_timeout() -> int:
     raw = _utils.read_config().get("stall_timeout", 300)
     try:
         return int(raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 300
 
 
@@ -283,7 +312,7 @@ def _breaker_threshold() -> int:
     raw = _utils.read_config().get("breaker_threshold", 3)
     try:
         return max(1, int(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 3
 
 
@@ -292,7 +321,7 @@ def _breaker_cooldown() -> float:
     raw = _utils.read_config().get("breaker_cooldown", 30)
     try:
         return max(0.0, float(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 30.0
 
 
@@ -337,7 +366,7 @@ def _kill_proc_group(proc: object) -> None:
         return
     try:
         pgid = os.getpgid(pid)
-    except (ProcessLookupError, OSError):
+    except ProcessLookupError, OSError:
         with contextlib.suppress(Exception):
             proc.kill()  # type: ignore[attr-defined]
         return
@@ -367,7 +396,7 @@ def _group_teardown(children: dict[str, object]) -> None:
             _kill_proc_group(proc)
         ok = False
         with contextlib.suppress(Exception):
-            ok = bool(_devcontainer.down(slug))
+            ok = bool(_down_plan_container(slug))
         _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
         children.pop(slug, None)
 
@@ -443,7 +472,7 @@ async def _await_chunk(
             _kill_proc_group(proc)
         finally:
             with contextlib.suppress(Exception):
-                _devcontainer.down(plan.slug)
+                _down_plan_container(plan.slug)
             with contextlib.suppress(TimeoutError):
                 async with asyncio.timeout(grace_s):
                     await proc.wait()  # type: ignore[attr-defined]
@@ -492,7 +521,10 @@ async def _supervise_fanout(
                     file=sys.stderr,
                 )
             seed = shared["seed"]
-            session_id, proc = await _fan_out.spawn_async(plan, harness=harness, model=model, seed_summary=seed)
+            session_id, proc, worktree = await _fan_out.spawn_async(
+                plan, harness=harness, model=model, seed_summary=seed
+            )
+            _bind_chunk_from_worktree(plan.slug, worktree)
             live[plan.slug] = proc
             try:
                 rc, killed_reason = await _await_chunk(proc, deadline_s, plan, session_id=session_id, stall_s=stall_s)
@@ -564,7 +596,7 @@ def _teardown_ejected(slug: str) -> None:
     Best-effort — a docker failure must not abort partitioning."""
     ok = False
     with contextlib.suppress(Exception):
-        ok = _devcontainer.down(slug)
+        ok = _down_plan_container(slug)
     _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
 
 
@@ -641,7 +673,10 @@ def _partition_fanout(
             mark_ejected(plan.slug)
             _teardown_ejected(plan.slug)
         else:
-            chunks.append(_land_queue.Chunk(slug=plan.slug, worktree=worktree))
+            from lib.chunk import chunk_id_for_plan
+
+            chunk_id = chunk_id_for_plan(plan.slug)
+            chunks.append(_land_queue.Chunk(slug=plan.slug, worktree=worktree, chunk_id=chunk_id))
     return chunks, hitl, transient
 
 
@@ -730,9 +765,15 @@ def _rebuild_projection() -> None:
         _state.rebuild(_session_lib.log_root())
 
 
+def _chunk_id_for_land(plan_slug: str) -> str:
+    from lib.chunk import chunk_id_for_plan
+
+    return chunk_id_for_plan(plan_slug)
+
+
 def _worktree_for_slug(slug: str) -> Path:
-    """Find worktree path registered for branch <slug>. Falls back to cwd."""
-    return _git.worktree_for_slug(slug)
+    """Find chunk-keyed worktree for plan slug. Raises GitError on miss."""
+    return _git.worktree_for_plan(slug)
 
 
 def _land_all(
@@ -742,7 +783,9 @@ def _land_all(
     plans: list[_scheduler.Plan] | None = None,
 ) -> list[dict[str, object]]:
     """Land chunks onto holding branch serially (debug land-queue subcommand + dry-run)."""
-    chunks = [_land_queue.Chunk(slug=s, worktree=_worktree_for_slug(s)) for s in chunk_slugs]
+    chunks = [
+        _land_queue.Chunk(slug=s, worktree=_worktree_for_slug(s), chunk_id=_chunk_id_for_land(s)) for s in chunk_slugs
+    ]
     if plans is None:
         return _land_queue.drain(chunks, holding=holding)
     sched = _scheduler.Scheduler(plans)
@@ -905,7 +948,10 @@ def _recovery_respawn(
     if rc != 0:
         _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.IMPLEMENT_FAILED, str(worktree)))
         return [{"slug": plan.slug, "status": "eject", "reason": EjectReason.IMPLEMENT_FAILED}]
-    return _land_queue.drain([_land_queue.Chunk(slug=plan.slug, worktree=worktree)], holding=holding)
+    from lib.chunk import chunk_id_for_plan
+
+    chunk_id = chunk_id_for_plan(plan.slug)
+    return _land_queue.drain([_land_queue.Chunk(slug=plan.slug, worktree=worktree, chunk_id=chunk_id)], holding=holding)
 
 
 def _reslice_agent(plan: _scheduler.Plan, *, invoke: Callable[[str], str] | None = None) -> list[Path]:

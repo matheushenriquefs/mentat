@@ -150,13 +150,22 @@ class TestCmdWorktreeCreate:
         target = created_targets[0]
         assert ".mentat" in target.parts, f"expected .mentat/ in worktree path, got {target}"
         assert "worktrees" in target.parts, f"expected worktrees/ in worktree path, got {target}"
-        assert target.parent.parent.parent == tmp_path, f"expected <main_root>/.mentat/worktrees/<slug>, got {target}"
+        assert target.parent.parent.parent.parent == tmp_path, (
+            f"expected <main_root>/.mentat/worktrees/<chunk_id>/<slug>, got {target}"
+        )
 
 
 # ── container_id_for_cwd ─────────────────────────────────────────────────────
 
 
-def test_container_id_for_cwd_delegates(monkeypatch):
+def test_container_id_for_cwd_delegates(monkeypatch, tmp_path):
+    from tests.conftest import TEST_CHUNK_ID, init_git_repo
+
+    repo = tmp_path / "repo"
+    init_git_repo(repo)
+    wt = repo / ".mentat" / "worktrees" / TEST_CHUNK_ID / "my-slug"
+    wt.mkdir(parents=True)
+    monkeypatch.chdir(wt)
     monkeypatch.setattr(_dc_mod, "container_id_for_slug", lambda slug, **kw: "abc123")
     result = _utils_mod.container_id_for_cwd()
     assert result == "abc123"

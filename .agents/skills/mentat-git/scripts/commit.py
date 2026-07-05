@@ -11,7 +11,7 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import devcontainer  # noqa: E402
-from lib.exits import EX_UNAVAILABLE  # noqa: E402
+from lib.exits import EX_UNAVAILABLE, EX_USAGE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
 utils = load_sibling(__file__, "identity")
@@ -56,7 +56,13 @@ def cmd_commit(git_args: list[str]) -> int:
         capture_output=True,
         text=True,
     )
-    ws = f"/workspaces/{Path(wt_result.stdout.strip()).name}" if wt_result.returncode == 0 else "/workspaces/mentat"
+    if wt_result.returncode != 0:
+        print(
+            "mentat-git: cannot resolve git worktree toplevel for commit — refusing to guess",
+            file=sys.stderr,
+        )
+        return EX_USAGE
+    ws = f"/workspaces/{Path(wt_result.stdout.strip()).name}"
     slug = Path.cwd().name
     # `safe.directory=*`: bind-mounted workspace is owned by host UID; git-as-vscode
     # would otherwise refuse with "dubious ownership".

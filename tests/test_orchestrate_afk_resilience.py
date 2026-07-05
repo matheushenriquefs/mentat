@@ -14,7 +14,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.conftest import load_script
+from tests.conftest import async_spawner, bind_plan, chunk_label, load_script
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
@@ -216,12 +216,13 @@ def test_partition_fanout_tears_down_ejected_container(tmp_path):
     down_calls: list[str] = []
     emitted: list[tuple] = []
 
+    bind_plan("ej")
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch._devcontainer, "down", lambda slug: down_calls.append(slug) or True):
             with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
                 orch._partition_fanout([(plan, -9, "/logs/ej")], mark_ejected=lambda s: [])
 
-    assert down_calls == ["ej"], f"ejected chunk container must be torn down: {down_calls}"
+    assert down_calls == [chunk_label("ej")], f"ejected chunk container must be torn down: {down_calls}"
     teardowns = [p for ev, p in emitted if ev == "chunk.teardown"]
     assert teardowns and teardowns[0]["slug"] == "ej"
 
@@ -233,15 +234,16 @@ def test_supervisor_stops_container_on_timeout(monkeypatch, tmp_path):
     routing = load_module("scheduler")
     plan = routing.Plan(slug="hung-c", class_="AFK", blocked_by=[], path=tmp_path / "hung-c.md")
 
+    bind_plan("hung-c")
     down_calls: list[str] = []
     monkeypatch.setattr(orch._devcontainer, "down", lambda slug: down_calls.append(slug) or True)
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
     monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)]))
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)], tmp_path))
 
     orch._fan_out_plans([plan], harness=None, model=None)
 
-    assert "hung-c" in down_calls, f"reaper must docker-stop the timed-out slug: {down_calls}"
+    assert chunk_label("hung-c") in down_calls, f"reaper must docker-stop the timed-out slug: {down_calls}"
 
 
 # ── Slice 2: per-chunk wall-clock deadline ────────────────────────────────────
@@ -280,14 +282,8 @@ class FakeAsyncProc:
             self.returncode = -9
 
 
-def _async_spawner(procs: list[FakeAsyncProc]):
-    """Return an async spawn_async fake yielding one FakeAsyncProc per plan."""
-    it = iter(procs)
-
-    async def spawn_async(plan, *, harness=None, model=None, seed_summary=None):
-        return (f"sess-{plan.slug}", next(it))
-
-    return spawn_async
+def _async_spawner(procs: list[FakeAsyncProc], worktree: Path):
+    return async_spawner(procs, worktree)
 
 
 def test_chunk_timeout_default_is_1800(monkeypatch):
@@ -330,7 +326,7 @@ def test_fan_out_plans_kills_hung_child_within_deadline(monkeypatch, tmp_path):
 
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
     monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)]))
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)], tmp_path))
 
     results = orch._fan_out_plans([plan], harness=None, model=None)
 
@@ -352,7 +348,7 @@ def test_fan_out_plans_records_rc_for_finish_in_the_gap(monkeypatch, tmp_path):
 
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
     monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([proc]))
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([proc], tmp_path))
 
     results = orch._fan_out_plans([plan], harness=None, model=None)
     _p, rc = results[0][0], results[0][1]
@@ -370,7 +366,7 @@ def test_fan_out_plans_harvest_order_matches_submission(monkeypatch, tmp_path):
 
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.1)
     monkeypatch.setattr(orch, "_concurrency_cap", lambda: 2)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner(procs))
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner(procs, tmp_path))
 
     results = orch._fan_out_plans(plans, harness=None, model=None)
 
@@ -706,7 +702,7 @@ def test_fan_out_plans_hung_chunk_frees_slot_for_queued(monkeypatch, tmp_path):
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
     monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
     procs = [FakeAsyncProc(hang=True), FakeAsyncProc(sleep=0.01, rc=0)]
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner(procs))
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner(procs, tmp_path))
 
     results = orch._fan_out_plans(plans, harness=None, model=None)
 

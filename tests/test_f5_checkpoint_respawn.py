@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import fake_plan, load_script, mock_fan_out_worktree
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 IMPL_SCRIPTS = REPO_ROOT / ".agents/skills/mentat-implement/scripts"
@@ -136,9 +136,13 @@ def test_fan_out_spawn_injects_seed_summary_into_child_env(tmp_path: Path, monke
     fan_out = _fan_out()
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    mock_fan_out_worktree(monkeypatch, fan_out, worktree)
 
     plan_path = tmp_path / "myplan.md"
     plan_path.write_text("---\nid: myplan\n---\nbody\n")
+    plan = fake_plan(plan_path, "myplan")
 
     captured_env: list[dict] = []
 
@@ -150,7 +154,7 @@ def test_fan_out_spawn_injects_seed_summary_into_child_env(tmp_path: Path, monke
         return FakeProc()
 
     with patch("subprocess.Popen", fake_popen):
-        sid, proc = fan_out._spawn_worktree_subprocess(plan_path, seed_summary="prior summary text")
+        sid, proc, _wt = fan_out._spawn_worktree_subprocess(plan, seed_summary="prior summary text")
 
     assert captured_env, "Popen was not called"
     assert "MENTAT_SEED_SUMMARY" in captured_env[0], "MENTAT_SEED_SUMMARY not injected into child env"
@@ -163,9 +167,13 @@ def test_fan_out_spawn_no_seed_summary_absent_from_env(tmp_path: Path, monkeypat
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
     monkeypatch.delenv("MENTAT_SEED_SUMMARY", raising=False)
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    mock_fan_out_worktree(monkeypatch, fan_out, worktree)
 
     plan_path = tmp_path / "myplan.md"
     plan_path.write_text("---\nid: myplan\n---\nbody\n")
+    plan = fake_plan(plan_path, "myplan")
 
     captured_env: list[dict] = []
 
@@ -177,7 +185,7 @@ def test_fan_out_spawn_no_seed_summary_absent_from_env(tmp_path: Path, monkeypat
         return FakeProc()
 
     with patch("subprocess.Popen", fake_popen):
-        sid, proc = fan_out._spawn_worktree_subprocess(plan_path, seed_summary=None)
+        sid, proc, _wt = fan_out._spawn_worktree_subprocess(plan, seed_summary=None)
 
     assert captured_env, "Popen was not called"
     assert "MENTAT_SEED_SUMMARY" not in captured_env[0], (
@@ -233,7 +241,7 @@ def test_fan_out_plans_seeds_next_chunk_from_completed_summary(tmp_path: Path, m
         session_counter[0] += 1
         sid = f"implement-{plan.slug}-{session_counter[0]}"
         spawn_calls.append({"slug": plan.slug, "seed_summary": seed_summary, "session_id": sid})
-        return sid, FakeProc()
+        return sid, FakeProc(), tmp_path / "wt" / plan.slug
 
     # Write a summary file for plan-a's session after plan-a "completes"
     # We must know the session_id ahead of time to pre-write the file — use the first sid

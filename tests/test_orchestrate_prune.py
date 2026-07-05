@@ -17,6 +17,8 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]  # .agents/
 from lib import devcontainer as _dc_mod  # noqa: E402
 from lib.devcontainer import PruneResult  # noqa: E402
 
+from tests.conftest import patch_orchestrate_worktree  # noqa: E402
+
 
 def _load(name: str):
     spec = importlib.util.spec_from_file_location(name, ORCH_SCRIPTS / f"{name}.py")
@@ -56,13 +58,14 @@ def test_run_orchestrate_prunes_before_fanout(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
-    orchestrate.run_orchestrate(
-        "holding",
-        _make_plans(tmp_path),
-        harness=None,
-        model=None,
-        dry_run=False,
-    )
+    with patch_orchestrate_worktree(orchestrate, tmp_path):
+        orchestrate.run_orchestrate(
+            "holding",
+            _make_plans(tmp_path),
+            harness=None,
+            model=None,
+            dry_run=False,
+        )
 
     assert prune_called_before, "prune must be called"
     assert all(prune_called_before), "prune must be called before fan-out"
@@ -170,13 +173,14 @@ def test_prune_runs_at_session_end_not_start(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
-    orchestrate.run_orchestrate(
-        "holding",
-        _make_plans(tmp_path),
-        harness=None,
-        model=None,
-        dry_run=False,
-    )
+    with patch_orchestrate_worktree(orchestrate, tmp_path):
+        orchestrate.run_orchestrate(
+            "holding",
+            _make_plans(tmp_path),
+            harness=None,
+            model=None,
+            dry_run=False,
+        )
 
     assert "worktrees" in call_order, "_prune_stale_worktrees not called"
     assert "containers" in call_order, "_prune_stale_containers not called"
@@ -510,12 +514,13 @@ def test_prune_failure_does_not_abort(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
-    rc = orchestrate.run_orchestrate(
-        "holding",
-        _make_plans(tmp_path),
-        harness=None,
-        model=None,
-        dry_run=False,
-    )
+    with patch_orchestrate_worktree(orchestrate, tmp_path):
+        rc = orchestrate.run_orchestrate(
+            "holding",
+            _make_plans(tmp_path),
+            harness=None,
+            model=None,
+            dry_run=False,
+        )
 
     assert rc == 0, "orchestrate must complete even when prune subprocess fails"

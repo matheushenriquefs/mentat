@@ -18,6 +18,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+from tests.conftest import patch_orchestrate_worktree
+
 ORCH_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
 
@@ -110,7 +112,8 @@ def test_run_orchestrate_passes_all_plans_to_scheduler(tmp_path, monkeypatch) ->
     monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
-    orchestrate.run_orchestrate("holding", [a_path, c_path, d_path], harness=None, model=None, dry_run=False)
+    with patch_orchestrate_worktree(orchestrate, tmp_path):
+        orchestrate.run_orchestrate("holding", [a_path, c_path, d_path], harness=None, model=None, dry_run=False)
 
     nr = captured.get("next_ready")
     assert callable(nr), "next_ready must be passed"

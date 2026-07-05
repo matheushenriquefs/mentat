@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from tests.conftest import load_script
+from tests.conftest import TEST_CHUNK_ID, init_git_repo, load_script
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-git/scripts"
 
@@ -109,9 +109,13 @@ def test_host_identity_skips_unset_key(monkeypatch):
 
 
 def test_container_id_for_cwd_delegates_to_devcontainer(tmp_path, monkeypatch):
-    """container_id_for_cwd derives the slug from cwd and asks lib.devcontainer."""
+    """container_id_for_cwd derives the chunk slug from cwd and asks lib.devcontainer."""
     identity = load_module("identity")
-    monkeypatch.chdir(tmp_path)
+    repo = tmp_path / "repo"
+    init_git_repo(repo)
+    wt = repo / ".mentat" / "worktrees" / TEST_CHUNK_ID / "my-slug"
+    wt.mkdir(parents=True)
+    monkeypatch.chdir(wt)
 
     from lib import devcontainer
 
@@ -119,4 +123,4 @@ def test_container_id_for_cwd_delegates_to_devcontainer(tmp_path, monkeypatch):
         result = identity.container_id_for_cwd()
 
     assert result == "cid-xyz"
-    mock.assert_called_once_with(tmp_path.name)
+    mock.assert_called_once_with(f"{TEST_CHUNK_ID}/my-slug")

@@ -13,8 +13,17 @@ from lib.config import read_config  # noqa: E402, F401
 
 
 def container_id_for_cwd() -> str | None:
-    """Return container ID for the current worktree slug, or None."""
+    """Return container ID for the current chunk-keyed worktree, or None."""
     from lib import devcontainer
+    from lib.chunk import chunk_slug_from_worktree
+    from lib.git import repo_root
 
-    slug = Path.cwd().name
-    return devcontainer.container_id_for_slug(slug)
+    wt = Path.cwd()
+    root = repo_root(wt)
+    if root is None:
+        return None
+    try:
+        cs = chunk_slug_from_worktree(wt, root)
+    except ValueError:
+        return None
+    return devcontainer.container_id_for_slug(cs)

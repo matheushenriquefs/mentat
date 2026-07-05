@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import TEST_CHUNK_ID, load_script
 
 pytestmark = pytest.mark.e2e
 
@@ -118,10 +118,10 @@ def test_teardown_container_fires_real_teardown_event(tmp_path, monkeypatch):
     from lib import devcontainer
 
     with _patch_attr(devcontainer, "down", lambda slug: True):
-        lq._teardown_container("dead-slug")
+        lq._teardown_container(lq.Chunk(slug="dead-slug", worktree=tmp_path / "wt", chunk_id=TEST_CHUNK_ID))
 
     rows = _events(log_root, "chunk.teardown")
-    assert any(r["payload"] == {"slug": "dead-slug", "ok": True} for r in rows), rows
+    assert any(r["payload"]["slug"] == "dead-slug" and r["payload"]["ok"] is True for r in rows), rows
 
 
 # ── land: ff-merge failure eject arm — not-ff and git-error (88-93) ───────────
@@ -135,7 +135,7 @@ def test_land_ejects_not_ff_when_ff_merge_reports_not_ff(tmp_path, monkeypatch):
     with (
         _patch_attr(lq, "_run_gates", lambda chunk: ("pass", "")),
         _patch_attr(lq, "_ff_merge", lambda chunk, holding: "not-ff"),
-        _patch_attr(lq, "_teardown_container", lambda slug: None),
+        _patch_attr(lq, "_teardown_container", lambda chunk: None),
     ):
         verdict = lq.land(lq.Chunk("moved", wts["moved"]), holding="holding")
 
@@ -153,7 +153,7 @@ def test_land_ejects_git_error_when_ff_merge_reports_other_error(tmp_path, monke
     with (
         _patch_attr(lq, "_run_gates", lambda chunk: ("pass", "")),
         _patch_attr(lq, "_ff_merge", lambda chunk, holding: "git-error"),
-        _patch_attr(lq, "_teardown_container", lambda slug: None),
+        _patch_attr(lq, "_teardown_container", lambda chunk: None),
     ):
         verdict = lq.land(lq.Chunk("broken", wts["broken"]), holding="holding")
 

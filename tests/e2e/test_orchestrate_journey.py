@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import TEST_CHUNK_ID, bind_plan, load_script
 
 pytestmark = pytest.mark.e2e
 
@@ -54,9 +54,12 @@ def _setup_repo(tmp_path: Path) -> tuple[Path, Path, Path]:
 
     wt_root = main_repo / ".mentat" / "worktrees"
     wt_root.mkdir(parents=True)
-    wt_a, wt_b = wt_root / "a", wt_root / "b"
-    _git(["worktree", "add", "-b", "a", str(wt_a), "holding"], cwd=main_repo)
-    _git(["worktree", "add", "-b", "b", str(wt_b), "holding"], cwd=main_repo)
+    wt_a = wt_root / TEST_CHUNK_ID / "a"
+    wt_b = wt_root / TEST_CHUNK_ID / "b"
+    bind_plan("a", TEST_CHUNK_ID)
+    bind_plan("b", TEST_CHUNK_ID)
+    _git(["worktree", "add", "-b", f"mentat/{TEST_CHUNK_ID}/a", str(wt_a), "holding"], cwd=main_repo)
+    _git(["worktree", "add", "-b", f"mentat/{TEST_CHUNK_ID}/b", str(wt_b), "holding"], cwd=main_repo)
     return main_repo, wt_a, wt_b
 
 
@@ -75,7 +78,7 @@ def _fake_spawn(worktrees: dict[str, Path]):
         _git(["add", f"{plan.slug}.txt"], cwd=wt)
         _git(["commit", "-m", f"feat: {plan.slug}"], cwd=wt)
         proc = await asyncio.create_subprocess_exec(sys.executable, "-c", "")
-        return f"orchestrate-{plan.slug}", proc
+        return f"orchestrate-{plan.slug}", proc, wt
 
     return spawn_async
 
@@ -126,7 +129,7 @@ def test_orchestrate_run_lands_both_chunks_onto_holding(tmp_path, monkeypatch):
         stack.enter_context(_patch_attr(orch._fan_out, "spawn_async", _fake_spawn({"a": wt_a, "b": wt_b})))
         # Land-queue gate passes; container teardown is a no-op (no docker).
         stack.enter_context(_patch_attr(orch._land_queue, "_run_gates", lambda chunk: ("pass", "")))
-        stack.enter_context(_patch_attr(orch._land_queue, "_teardown_container", lambda slug: None))
+        stack.enter_context(_patch_attr(orch._land_queue, "_teardown_container", lambda chunk: None))
 
         rc = orch.run_orchestrate("holding", [plan_a, plan_b], harness=None, model=None, dry_run=False)
 

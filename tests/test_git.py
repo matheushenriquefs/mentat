@@ -88,7 +88,7 @@ def test_main_dispatches_worktree_create(monkeypatch):
         with pytest.raises(SystemExit) as exc:
             git.main()
     assert exc.value.code == 0
-    mock.assert_called_once_with("my-slug", base=None, parent=None)
+    mock.assert_called_once_with("my-slug", chunk_id=None, base=None, parent=None)
 
 
 def test_main_dispatches_worktree_sweep(monkeypatch):

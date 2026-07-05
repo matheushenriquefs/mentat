@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_LABEL = "mentat_slug"
+DEFAULT_LABEL = "mentat_chunk"
 DEFAULT_UNTIL = "1h"
 
 
@@ -84,15 +84,15 @@ def container_id_for_slug(slug: str, label: str = DEFAULT_LABEL) -> str | None:
     return lines[0] if lines else None
 
 
-def down(slug: str) -> bool:
-    """Remove all containers with the slug label. Returns True on success or if none found."""
+def down(slug: str, *, label: str = DEFAULT_LABEL) -> bool:
+    """Remove all containers with the chunk label. Returns True on success or if none found."""
     r = _run_docker(
         [
             "docker",
             "ps",
             "-aq",
             "--filter",
-            f"label={DEFAULT_LABEL}={slug}",
+            f"label={label}={slug}",
         ]
     )
     if r is None or r.returncode != 0:

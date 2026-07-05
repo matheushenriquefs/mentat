@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import init_git_repo, load_script
+from tests.conftest import TEST_CHUNK_ID, chunk_worktree_target, holding_branch, init_git_repo, load_script
 
 pytestmark = pytest.mark.e2e
 
@@ -393,14 +393,14 @@ def test_cmd_worktree_create_fresh_create(tmp_path: Path, monkeypatch, capsys):
     parent = tmp_path / "parent"
     monkeypatch.chdir(repo)
 
-    rc = git_worktree.cmd_worktree_create("mine", parent=parent)
+    rc = git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID)
 
     out = capsys.readouterr().out
-    target = parent / "mine"
+    target = chunk_worktree_target(parent, "mine")
     assert rc == 0
-    assert str(target.resolve()) in out
+    assert str(target) in out
     assert target.is_dir()
-    assert git_worktree._branch_exists(repo, "mine") is True
+    assert git_worktree._branch_exists(repo, holding_branch("mine")) is True
 
 
 def test_cmd_worktree_create_idempotent(tmp_path: Path, monkeypatch, capsys):
@@ -409,14 +409,14 @@ def test_cmd_worktree_create_idempotent(tmp_path: Path, monkeypatch, capsys):
     parent = tmp_path / "parent"
     monkeypatch.chdir(repo)
 
-    assert git_worktree.cmd_worktree_create("mine", parent=parent) == 0
+    assert git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID) == 0
     capsys.readouterr()  # drain
 
     # Second call on the existing worktree → no-op, still 0.
-    rc = git_worktree.cmd_worktree_create("mine", parent=parent)
+    rc = git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID)
     out = capsys.readouterr().out
     assert rc == 0
-    assert str((parent / "mine").resolve()) in out
+    assert str(chunk_worktree_target(parent, "mine")) in out
 
 
 def test_cmd_worktree_create_prunes_stale_then_recreates(tmp_path: Path, monkeypatch, capsys):
@@ -425,16 +425,16 @@ def test_cmd_worktree_create_prunes_stale_then_recreates(tmp_path: Path, monkeyp
     parent = tmp_path / "parent"
     monkeypatch.chdir(repo)
 
-    target = parent / "mine"
-    assert git_worktree.cmd_worktree_create("mine", parent=parent) == 0
+    target = chunk_worktree_target(parent, "mine")
+    assert git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID) == 0
     capsys.readouterr()
 
     # Delete the dir → stale prunable admin record lingers.
     _rmtree(target)
     assert git_worktree._is_prunable_target(repo, target) is True
 
-    # Branch "mine" still exists, so recreate attaches without -b after pruning.
-    rc = git_worktree.cmd_worktree_create("mine", parent=parent)
+    # Branch still exists, so recreate attaches without -b after pruning.
+    rc = git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID)
     assert rc == 0
     assert target.is_dir()
 
@@ -443,12 +443,12 @@ def test_cmd_worktree_create_path_exists_not_worktree_returns_dataerr(tmp_path: 
     repo = tmp_path / "repo"
     init_git_repo(repo)
     parent = tmp_path / "parent"
-    target = parent / "mine"
+    target = chunk_worktree_target(parent, "mine")
     target.mkdir(parents=True)
     (target / "junk.txt").write_text("not a worktree\n")
     monkeypatch.chdir(repo)
 
-    rc = git_worktree.cmd_worktree_create("mine", parent=parent)
+    rc = git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID)
     assert rc == EX_DATAERR
     assert "exists but is not a registered worktree" in capsys.readouterr().err
 
@@ -459,7 +459,7 @@ def test_cmd_worktree_create_missing_base_returns_noinput(tmp_path: Path, monkey
     parent = tmp_path / "parent"
     monkeypatch.chdir(repo)
 
-    rc = git_worktree.cmd_worktree_create("mine", base="nonexistent-branch", parent=parent)
+    rc = git_worktree.cmd_worktree_create("mine", base="nonexistent-branch", parent=parent, chunk_id=TEST_CHUNK_ID)
     assert rc == EX_NOINPUT
     assert "does not exist" in capsys.readouterr().err
 
@@ -469,12 +469,12 @@ def test_cmd_worktree_create_attaches_existing_branch_without_b(tmp_path: Path, 
     init_git_repo(repo)
     parent = tmp_path / "parent"
     # Branch exists but has no worktree → attach without -b.
-    _git("branch", "mine", cwd=repo)
+    _git("branch", holding_branch("mine"), cwd=repo)
     monkeypatch.chdir(repo)
 
-    rc = git_worktree.cmd_worktree_create("mine", parent=parent)
+    rc = git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID)
     out = capsys.readouterr().out
-    target = parent / "mine"
+    target = chunk_worktree_target(parent, "mine")
     assert rc == 0
     assert str(target.resolve()) in out
     assert target.is_dir()
@@ -491,7 +491,7 @@ def test_cmd_worktree_create_toctou_branch_exists_retries_without_b(tmp_path: Pa
 
     # Branch already exists (the TOCTOU race): the real retry `worktree add
     # <target> mine` needs it to succeed.
-    subprocess.run(["git", "branch", "mine"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "branch", holding_branch("mine")], cwd=repo, check=True, capture_output=True)
 
     # First `worktree add` fails with the branch-race stderr; the code retries
     # without -b. Script the FIRST add to fail, then fall through to the real
@@ -507,15 +507,15 @@ def test_cmd_worktree_create_toctou_branch_exists_retries_without_b(tmp_path: Pa
                     args=["git", *args],
                     returncode=128,
                     stdout="",
-                    stderr="fatal: a branch named 'mine' already exists",
+                    stderr=f"fatal: a branch named '{holding_branch('mine')}' already exists",
                 )
         return real(args, cwd=cwd)
 
     monkeypatch.setattr(git_worktree, "_git", shim)
 
-    rc = git_worktree.cmd_worktree_create("mine", parent=parent)
+    rc = git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID)
     out = capsys.readouterr().out
-    target = parent / "mine"
+    target = chunk_worktree_target(parent, "mine")
     assert rc == 0
     assert calls["add"] == 2  # -b attempt + retry
     assert str(target.resolve()) in out
@@ -534,7 +534,7 @@ def test_cmd_worktree_create_toctou_already_exists_returns_dataerr(tmp_path: Pat
         _fake_add_result(128, "fatal: '...' already exists"),
     )
 
-    rc = git_worktree.cmd_worktree_create("mine", parent=parent)
+    rc = git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID)
     assert rc == EX_DATAERR
     assert "exists but is not a registered worktree" in capsys.readouterr().err
 
@@ -551,7 +551,7 @@ def test_cmd_worktree_create_toctou_not_empty_directory_returns_dataerr(tmp_path
         _fake_add_result(128, "fatal: 'target' is not an empty directory"),
     )
 
-    rc = git_worktree.cmd_worktree_create("mine", parent=parent)
+    rc = git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID)
     assert rc == EX_DATAERR
 
 
@@ -567,7 +567,7 @@ def test_cmd_worktree_create_toctou_invalid_reference_returns_noinput(tmp_path: 
         _fake_add_result(128, "fatal: invalid reference: base"),
     )
 
-    rc = git_worktree.cmd_worktree_create("mine", parent=parent)
+    rc = git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID)
     assert rc == EX_NOINPUT
     assert "does not exist" in capsys.readouterr().err
 
@@ -584,7 +584,7 @@ def test_cmd_worktree_create_toctou_unknown_revision_returns_noinput(tmp_path: P
         _fake_add_result(128, "fatal: unknown revision or path not in the working tree"),
     )
 
-    assert git_worktree.cmd_worktree_create("mine", parent=parent) == EX_NOINPUT
+    assert git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID) == EX_NOINPUT
 
 
 def test_cmd_worktree_create_toctou_not_valid_object_returns_noinput(tmp_path: Path, monkeypatch):
@@ -599,7 +599,7 @@ def test_cmd_worktree_create_toctou_not_valid_object_returns_noinput(tmp_path: P
         _fake_add_result(128, "fatal: not a valid object name: base"),
     )
 
-    assert git_worktree.cmd_worktree_create("mine", parent=parent) == EX_NOINPUT
+    assert git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID) == EX_NOINPUT
 
 
 def test_cmd_worktree_create_toctou_opaque_stderr_returns_returncode(tmp_path: Path, monkeypatch, capsys):
@@ -614,7 +614,7 @@ def test_cmd_worktree_create_toctou_opaque_stderr_returns_returncode(tmp_path: P
         _fake_add_result(99, "fatal: something totally unexpected happened"),
     )
 
-    rc = git_worktree.cmd_worktree_create("mine", parent=parent)
+    rc = git_worktree.cmd_worktree_create("mine", parent=parent, chunk_id=TEST_CHUNK_ID)
     # `return r.returncode or EX_SOFTWARE`: the failure block is entered only
     # when returncode != 0, so returncode is always truthy here and 99 is
     # propagated. The `or EX_SOFTWARE` tail is dead code (see final report).

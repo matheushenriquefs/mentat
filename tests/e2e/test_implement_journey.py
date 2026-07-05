@@ -24,7 +24,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import TEST_CHUNK_ID, init_git_repo, load_script
 
 pytestmark = pytest.mark.e2e
 
@@ -589,18 +589,38 @@ def test_auto_summary_runs_report(impl, monkeypatch):
 def test_teardown_worktree_clean_removes(impl, monkeypatch, tmp_path, capsys):
     from lib import devcontainer, worktrees
 
+    repo = tmp_path / "repo"
+    init_git_repo(repo)
+    wt = repo / ".mentat" / "worktrees" / TEST_CHUNK_ID / "slug"
+    wt.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["git", "worktree", "add", "-b", f"mentat/{TEST_CHUNK_ID}/slug", str(wt), "main"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
     monkeypatch.setattr(devcontainer, "down", lambda name: None)
     monkeypatch.setattr(worktrees, "teardown", lambda target: True)
-    impl._teardown_worktree(tmp_path / "slug")
+    impl._teardown_worktree(wt)
     assert "removed clean" in capsys.readouterr().err
 
 
 def test_teardown_worktree_dirty_preserves(impl, monkeypatch, tmp_path, capsys):
     from lib import devcontainer, worktrees
 
+    repo = tmp_path / "repo"
+    init_git_repo(repo)
+    wt = repo / ".mentat" / "worktrees" / TEST_CHUNK_ID / "slug"
+    wt.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["git", "worktree", "add", "-b", f"mentat/{TEST_CHUNK_ID}/slug", str(wt), "main"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
     monkeypatch.setattr(devcontainer, "down", lambda name: None)
     monkeypatch.setattr(worktrees, "teardown", lambda target: False)
-    impl._teardown_worktree(tmp_path / "slug")
+    impl._teardown_worktree(wt)
     assert "preserving dirty" in capsys.readouterr().err
 
 
@@ -764,7 +784,7 @@ def test_preflight_worktree_non_dir_path_is_software(impl, monkeypatch, tmp_path
 
 def test_land_and_review_returns_verdict(impl, monkeypatch, tmp_path):
     fake_land_queue = SimpleNamespace(
-        Chunk=lambda slug, worktree: SimpleNamespace(slug=slug, worktree=worktree),
+        Chunk=lambda slug, worktree, chunk_id="": SimpleNamespace(slug=slug, worktree=worktree, chunk_id=chunk_id),
         land=lambda chunk, holding: {"status": "landed", "tip": "abc123"},
     )
     monkeypatch.setattr(impl, "_load_mod", lambda key, path: fake_land_queue)

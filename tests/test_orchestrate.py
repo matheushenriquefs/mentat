@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import TEST_CHUNK_ID, load_script, patch_orchestrate_worktree
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
@@ -53,18 +53,19 @@ def test_orchestrate_exits_1_on_any_ejection(tmp_path):
     plan_obj = routing.Plan(slug="plan-b", class_="AFK", blocked_by=[], path=plan)
 
     with patch.object(orch, "_fan_out_plans", return_value=[(plan_obj, EX_HITL_REQUIRED)]):
-        with patch.object(orch._land_queue, "drain", return_value=[]):
-            with patch.object(orch, "_prune_stale_containers", lambda: None):
-                with patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None):
-                    with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
-                        with patch.object(orch, "_emit_event", lambda *a, **k: None):
-                            rc = orch.run_orchestrate(
-                                holding="main",
-                                plan_paths=[plan],
-                                harness=None,
-                                model=None,
-                                dry_run=False,
-                            )
+        with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
+            with patch.object(orch._land_queue, "drain", return_value=[]):
+                with patch.object(orch, "_prune_stale_containers", lambda: None):
+                    with patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None):
+                        with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
+                            with patch.object(orch, "_emit_event", lambda *a, **k: None):
+                                rc = orch.run_orchestrate(
+                                    holding="main",
+                                    plan_paths=[plan],
+                                    harness=None,
+                                    model=None,
+                                    dry_run=False,
+                                )
     assert rc == 1
 
 
@@ -257,7 +258,7 @@ def test_fan_out_plans_blocks_until_slot_free(monkeypatch, tmp_path):
     high_watermark = {"n": 0}
 
     async def fake_spawn(plan, *, harness=None, model=None, seed_summary=None):
-        return (f"sess-{plan.slug}", _CountingAsyncProc(live, high_watermark))
+        return (f"sess-{plan.slug}", _CountingAsyncProc(live, high_watermark), tmp_path / plan.slug)
 
     monkeypatch.setattr(orch._fan_out, "spawn_async", fake_spawn)
 
@@ -283,6 +284,7 @@ def test_run_orchestrate_spawns_doctor_on_failure(tmp_path, monkeypatch):
 
     with (
         patch.object(orch, "_fan_out_plans", return_value=[(plan_obj, EX_HITL_REQUIRED)]),
+        patch_orchestrate_worktree(orch, tmp_path),
         patch.object(orch._land_queue, "drain", return_value=[]),
         patch.object(orch, "_prune_stale_containers", lambda: None),
         patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
@@ -341,6 +343,7 @@ def test_raising_doctor_does_not_change_rc(tmp_path):
 
     with (
         patch.object(orch, "_fan_out_plans", return_value=[(plan_obj, EX_HITL_REQUIRED)]),
+        patch_orchestrate_worktree(orch, tmp_path),
         patch.object(orch._land_queue, "drain", return_value=[]),
         patch.object(orch, "_prune_stale_containers", lambda: None),
         patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
@@ -420,7 +423,9 @@ def test_land_all_no_plans_iterates_input_order(tmp_path):
     orch = load_module("orchestrate")
 
     with (
-        patch.object(orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / s),
+        patch.object(
+            orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / ".mentat" / "worktrees" / TEST_CHUNK_ID / s
+        ),
         patch.object(orch._land_queue, "drain", return_value=[{"slug": "a", "status": "success"}]) as mock_drain,
     ):
         out = orch._land_all(["a"], holding="main")
@@ -438,7 +443,9 @@ def test_land_all_with_plans_wires_scheduler_callbacks(tmp_path):
     plan_obj = routing.Plan(slug="a", class_="AFK", blocked_by=[], path=tmp_path / "a.md")
 
     with (
-        patch.object(orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / s),
+        patch.object(
+            orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / ".mentat" / "worktrees" / TEST_CHUNK_ID / s
+        ),
         patch.object(orch._land_queue, "drain", return_value=[]) as mock_drain,
     ):
         orch._land_all(["a"], holding="main", plans=[plan_obj])
@@ -466,7 +473,9 @@ def test_run_orchestrate_prints_drain_eject_reasons(tmp_path, capsys):
 
     with (
         patch.object(orch, "_fan_out_plans", return_value=[(fail_obj, 1), (land_obj, 0)]),
-        patch.object(orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / s),
+        patch.object(
+            orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / ".mentat" / "worktrees" / TEST_CHUNK_ID / s
+        ),
         patch.object(orch._land_queue, "drain", return_value=drain_out),
         patch.object(orch, "_prune_stale_containers", lambda: None),
         patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
@@ -510,7 +519,9 @@ def test_run_orchestrate_emits_upstream_ejected_for_anchored_cascade(tmp_path):
         patch.object(orch, "_load_plans", return_value=[y, z, x]),
         patch.object(orch, "_emit_anchored_chunks", lambda *a, **k: []),
         patch.object(orch, "_fan_out_plans", return_value=[(y, 1)]),
-        patch.object(orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / s),
+        patch.object(
+            orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / ".mentat" / "worktrees" / TEST_CHUNK_ID / s
+        ),
         patch.object(orch._land_queue, "drain", return_value=[]),
         patch.object(orch, "_prune_stale_containers", lambda: None),
         patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),

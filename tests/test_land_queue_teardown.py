@@ -8,6 +8,8 @@ import land_queue
 import scheduler
 from lib import devcontainer as _dc_mod  # noqa: E402
 
+from tests.conftest import TEST_CHUNK_ID
+
 
 def _plan(slug: str, blocked_by: list[str] | None = None) -> scheduler.Plan:
     return scheduler.Plan(
@@ -19,9 +21,9 @@ def _plan(slug: str, blocked_by: list[str] | None = None) -> scheduler.Plan:
 
 
 def _chunk(slug: str, tmp_path: Path) -> land_queue.Chunk:
-    wt = tmp_path / slug
-    wt.mkdir(exist_ok=True)
-    return land_queue.Chunk(slug=slug, worktree=wt)
+    wt = tmp_path / ".mentat" / "worktrees" / TEST_CHUNK_ID / slug
+    wt.mkdir(parents=True, exist_ok=True)
+    return land_queue.Chunk(slug=slug, worktree=wt, chunk_id=TEST_CHUNK_ID)
 
 
 def _install_stubs(
@@ -47,8 +49,8 @@ def _install_stubs(
             return "not-ff"
         return None
 
-    def fake_teardown(slug: str) -> None:
-        torn_down.append(slug)
+    def fake_teardown(chunk: land_queue.Chunk) -> None:
+        torn_down.append(chunk.slug)
 
     monkeypatch.setattr(land_queue, "_rebase_chunk", fake_rebase)
     monkeypatch.setattr(land_queue, "_run_gates", fake_gates)
@@ -152,12 +154,14 @@ def test_teardown_failure_swallowed(tmp_path, monkeypatch) -> None:
 
 def test_teardown_delegates_to_devcontainer_down(monkeypatch):
     down_calls: list[str] = []
-    monkeypatch.setattr(_dc_mod, "down", lambda slug: down_calls.append(slug) or True)
+    monkeypatch.setattr(_dc_mod, "down", lambda slug, **kw: down_calls.append(slug) or True)
     monkeypatch.setattr(land_queue, "_emit_event", lambda *a, **kw: None)
 
-    land_queue._teardown_container("my-chunk")
+    land_queue._teardown_container(
+        land_queue.Chunk(slug="my-chunk", worktree=Path("/tmp/my-chunk"), chunk_id=TEST_CHUNK_ID)
+    )
 
-    assert down_calls == ["my-chunk"]
+    assert down_calls == [f"{TEST_CHUNK_ID}/my-chunk"]
 
 
 def test_drain_tears_down_all_pending_on_stall(tmp_path, monkeypatch) -> None:

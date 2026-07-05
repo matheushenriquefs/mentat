@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.conftest import load_script
+from tests.conftest import async_spawner, load_script
 
 SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 LIB = Path(__file__).resolve().parents[1] / ".agents/lib"
@@ -59,13 +59,8 @@ class FakeAsyncProc:
             self.returncode = -9
 
 
-def _async_spawner(procs):
-    it = iter(procs)
-
-    async def spawn_async(plan, *, harness=None, model=None, seed_summary=None):
-        return (f"sess-{plan.slug}", next(it))
-
-    return spawn_async
+def _async_spawner(procs, worktree: Path):
+    return async_spawner(procs, worktree)
 
 
 # ── S1: concurrency backpressure clamp ────────────────────────────────────────
@@ -200,7 +195,7 @@ def test_fan_out_plans_kills_stalled_chunk_before_wall(monkeypatch, tmp_path):
     monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
     monkeypatch.setattr(orch, "_event_age", lambda sid: 999.0)  # log gone silent
     monkeypatch.setattr(orch._devcontainer, "down", lambda slug: True)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)]))
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)], tmp_path))
 
     results = orch._fan_out_plans([plan], harness=None, model=None)
 
@@ -220,7 +215,7 @@ def test_fan_out_plans_progress_resets_stall_window(monkeypatch, tmp_path):
     monkeypatch.setattr(orch, "_stall_timeout", lambda: 0.05)
     monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
     monkeypatch.setattr(orch, "_event_age", lambda sid: 0.0)  # always fresh
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(sleep=0.15, rc=0)]))
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(sleep=0.15, rc=0)], tmp_path))
 
     results = orch._fan_out_plans([plan], harness=None, model=None)
 
@@ -372,7 +367,7 @@ def test_supervisor_releases_probe_on_kill(monkeypatch, tmp_path):
     monkeypatch.setattr(orch, "_stall_timeout", lambda: 0.05)  # tiny stall window
     monkeypatch.setattr(orch, "_event_age", lambda sid: 999.0)  # force a stall kill
     monkeypatch.setattr(orch._devcontainer, "down", lambda slug: True)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)]))
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)], tmp_path))
 
     orch._fan_out_plans([plan], harness=None, model=None)
 
@@ -396,7 +391,7 @@ def test_supervisor_short_circuits_when_breaker_open(monkeypatch, tmp_path):
 
     async def spy_spawn(plan, *, harness=None, model=None, seed_summary=None):
         launches.append(plan.slug)
-        return (f"sess-{plan.slug}", FakeAsyncProc(rc=0))
+        return (f"sess-{plan.slug}", FakeAsyncProc(rc=0), tmp_path)
 
     monkeypatch.setattr(orch._fan_out, "spawn_async", spy_spawn)
 
@@ -420,7 +415,9 @@ def test_supervisor_records_rc69_as_breaker_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 5.0)
     monkeypatch.setattr(orch, "_stall_timeout", lambda: 0)  # disable stall watchdog
     monkeypatch.setattr(orch._devcontainer, "down", lambda slug: True)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(rc=69), FakeAsyncProc(rc=69)]))
+    monkeypatch.setattr(
+        orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(rc=69), FakeAsyncProc(rc=69)], tmp_path)
+    )
 
     orch._fan_out_plans(plans, harness=None, model=None)
 
@@ -464,7 +461,11 @@ class _KillTrackingProc:
 def test_group_teardown_kills_downs_and_emits_for_every_child():
     """_group_teardown group-kills each live child, stops its container, emits
     chunk.teardown, and clears the registry (no double teardown)."""
+    from tests.conftest import TEST_CHUNK_ID, bind_plan, chunk_label
+
     orch = load_module("orchestrate")
+    bind_plan("c0", TEST_CHUNK_ID)
+    bind_plan("c1", TEST_CHUNK_ID)
     p0, p1 = _KillTrackingProc(), _KillTrackingProc()
     live = {"c0": p0, "c1": p1}
     down: list[str] = []
@@ -475,7 +476,7 @@ def test_group_teardown_kills_downs_and_emits_for_every_child():
             orch._group_teardown(live)
 
     assert p0.killed == 1 and p1.killed == 1, "every child's group must be killed"
-    assert set(down) == {"c0", "c1"}, f"every child's container must be downed: {down}"
+    assert set(down) == {chunk_label("c0"), chunk_label("c1")}, f"every child's container must be downed: {down}"
     teardowns = [p["slug"] for ev, p in emitted if ev == "chunk.teardown"]
     assert set(teardowns) == {"c0", "c1"}, f"chunk.teardown per child: {teardowns}"
     assert live == {}, "registry must be cleared so a re-entrant signal won't re-tear-down"
@@ -512,7 +513,7 @@ def test_supervisor_installs_signal_handlers(monkeypatch, tmp_path):
     monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 5.0)
     monkeypatch.setattr(orch, "_stall_timeout", lambda: 0)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(rc=0)]))
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(rc=0)], tmp_path))
 
     orch._fan_out_plans([plan], harness=None, model=None)
 
@@ -605,7 +606,7 @@ def test_supervisor_warns_when_load_high_but_still_spawns(monkeypatch, tmp_path,
 
     async def spy_spawn(plan, *, harness=None, model=None, seed_summary=None):
         launches.append(plan.slug)
-        return (f"sess-{plan.slug}", FakeAsyncProc(rc=0))
+        return (f"sess-{plan.slug}", FakeAsyncProc(rc=0), tmp_path)
 
     monkeypatch.setattr(orch._fan_out, "spawn_async", spy_spawn)
 
@@ -630,7 +631,7 @@ def test_supervisor_signal_handler_tears_down_and_cancels(monkeypatch, tmp_path)
     # Fire the handler synchronously at install time — before any task has run — so
     # every task is cancelled and harvested through the BaseException branch.
     monkeypatch.setattr(orch, "_install_signal_handlers", lambda loop, cb: cb("SIGTERM"))
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(rc=0)]))
+    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(rc=0)], tmp_path))
 
     results = orch._fan_out_plans([plan], harness=None, model=None)
 

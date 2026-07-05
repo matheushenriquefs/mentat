@@ -39,7 +39,8 @@ def build_parser() -> argparse.ArgumentParser:
     wt_p = sub.add_parser("worktree", help="Worktree management")
     wt_sub = wt_p.add_subparsers(dest="wt_cmd", required=True)
     wt_create = wt_sub.add_parser("create", help="Create a worktree under <repo>/.mentat/worktrees/ on a new branch")
-    wt_create.add_argument("slug", help="Worktree dir name + new branch name")
+    wt_create.add_argument("slug", help="Plan slug (human-readable suffix)")
+    wt_create.add_argument("--chunk-id", default=None, help="Chunk uuid7 hex (minted when omitted)")
     wt_create.add_argument("--base", default=None, help="Base branch (auto-detected when omitted)")
     wt_create.add_argument("--parent", default=None, help="Parent dir (default: <repo>/.mentat/worktrees/)")
 
@@ -63,7 +64,7 @@ def main() -> None:
         sys.exit(cmd_rebase(args.holding))
     elif args.cmd == "worktree" and args.wt_cmd == "create":
         parent = Path(args.parent) if args.parent else None
-        sys.exit(cmd_worktree_create(args.slug, base=args.base, parent=parent))
+        sys.exit(cmd_worktree_create(args.slug, chunk_id=args.chunk_id, base=args.base, parent=parent))
     elif args.cmd == "worktree" and args.wt_cmd == "sweep":
         sys.exit(cmd_worktree_sweep(dry_run=not args.force))
 

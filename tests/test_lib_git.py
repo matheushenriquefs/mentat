@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 
 import lib.git as git_lib
+import pytest
 
 from tests.conftest import init_git_repo
 
@@ -77,12 +78,7 @@ def test_worktree_list_captures_prunable(monkeypatch) -> None:
     # (branch 49->37), not just falls off the end.
     # A 'detached' attribute matches no branch and is followed by more lines, so
     # the final elif (prunable) is evaluated False and the loop continues (49->37).
-    stdout = (
-        "worktree /a\n"
-        "HEAD abc123\n"
-        "detached\n"
-        "prunable gitdir file points to non-existent location\n"
-    )
+    stdout = "worktree /a\nHEAD abc123\ndetached\nprunable gitdir file points to non-existent location\n"
     monkeypatch.setattr(git_lib, "_run", lambda *a, **k: _cp(0, stdout))
 
     entries = git_lib.worktree_list()
@@ -96,18 +92,20 @@ def test_worktree_list_captures_prunable(monkeypatch) -> None:
     ]
 
 
-# ── worktree_for_slug ─────────────────────────────────────────────────────────
+# ── worktree_for_chunk ────────────────────────────────────────────────────────
 
 
-def test_worktree_for_slug_returns_matching_branch(monkeypatch) -> None:
-    """A branch matching the slug returns that worktree's path (line 60)."""
-    stdout = "worktree /a\nbranch refs/heads/other\n\nworktree /b\nbranch refs/heads/target\n"
+def test_worktree_for_chunk_returns_matching_branch(monkeypatch) -> None:
+    stdout = "worktree /a\nbranch refs/heads/other\n\nworktree /b\nbranch refs/heads/mentat/cid1/plan-a\n"
     monkeypatch.setattr(git_lib, "_run", lambda *a, **k: _cp(0, stdout))
+    monkeypatch.setattr(git_lib, "repo_root", lambda cwd=None: Path("/repo"))
 
-    assert git_lib.worktree_for_slug("target") == Path("/b")
+    assert git_lib.worktree_for_chunk("cid1", "plan-a") == Path("/b")
 
 
-def test_worktree_for_slug_falls_back_to_cwd(monkeypatch) -> None:
-    """No branch matches the slug → falls back to cwd."""
+def test_worktree_for_chunk_raises_on_miss(monkeypatch) -> None:
     monkeypatch.setattr(git_lib, "_run", lambda *a, **k: _cp(0, "worktree /a\nbranch refs/heads/x\n"))
-    assert git_lib.worktree_for_slug("nope") == Path.cwd()
+    monkeypatch.setattr(git_lib, "repo_root", lambda cwd=None: Path("/repo"))
+
+    with pytest.raises(git_lib.GitError):
+        git_lib.worktree_for_chunk("missing", "slug")

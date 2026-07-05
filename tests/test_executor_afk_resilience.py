@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.conftest import init_git_repo, load_script
+from tests.conftest import TEST_CHUNK_ID, init_git_repo, load_script
 
 _WT_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-git/scripts"
 _IMPL_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts"
@@ -51,16 +51,16 @@ def main_repo(tmp_path, monkeypatch):
 def test_worktree_create_prunes_phantom_record_and_reattaches(repo, capsys):
     """Stale admin record (dir deleted) must not cause create to return rc=0 with a missing dir."""
     wt = _load_worktree()
-    target = repo / ".mentat" / "worktrees" / "feat-phantom"
+    target = repo / ".mentat" / "worktrees" / TEST_CHUNK_ID / "feat-phantom"
 
-    assert wt.cmd_worktree_create("feat-phantom") == 0
+    assert wt.cmd_worktree_create("feat-phantom", chunk_id=TEST_CHUNK_ID) == 0
     assert target.is_dir()
     capsys.readouterr()
 
     shutil.rmtree(target)
     assert not target.exists()
 
-    rc2 = wt.cmd_worktree_create("feat-phantom")
+    rc2 = wt.cmd_worktree_create("feat-phantom", chunk_id=TEST_CHUNK_ID)
     out2 = capsys.readouterr().out.strip()
 
     assert rc2 == 0, f"re-create after stale record must succeed, got rc={rc2}"

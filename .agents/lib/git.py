@@ -5,6 +5,13 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from lib.chunk import chunk_slug, holding_branch
+from lib.chunk import worktree_path as chunk_worktree_path
+
+
+class GitError(RuntimeError):
+    """A git target could not be resolved or a git operation failed."""
+
 
 def _run(args: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -53,12 +60,62 @@ def worktree_list(cwd: Path | None = None) -> list[dict[str, str]]:
     return entries
 
 
-def worktree_for_slug(slug: str, cwd: Path | None = None) -> Path:
-    """Path of the worktree whose branch matches ``slug``. Falls back to cwd."""
-    for entry in worktree_list(cwd=cwd):
-        if entry.get("branch") == slug:
+def worktree_for_chunk(chunk_id: str, slug: str, cwd: Path | None = None) -> Path:
+    """Return the registered worktree for ``chunk_slug(chunk_id, slug)``.
+
+    Raises ``GitError`` on miss — never falls back to ``Path.cwd()``.
+    """
+    root = repo_root(cwd)
+    if root is None:
+        raise GitError("not inside a git repository")
+    cs = chunk_slug(chunk_id, slug)
+    branch = holding_branch(cs)
+    for entry in worktree_list(cwd=root):
+        if entry.get("branch") == branch:
             return Path(entry["worktree"])
-    return Path.cwd()
+    expected = chunk_worktree_path(root, cs)
+    if expected.is_dir():
+        return expected
+    raise GitError(f"no worktree for chunk {cs!r}")
+
+
+def worktree_for_plan(plan_slug: str, cwd: Path | None = None) -> Path:
+    """Resolve a plan slug via the bound chunk id registry."""
+    from lib.chunk import bind_plan_chunk, chunk_id_for_plan
+
+    try:
+        chunk_id = chunk_id_for_plan(plan_slug)
+    except LookupError:
+        root = repo_root(cwd)
+        if root is not None:
+            wt_root = root / ".mentat" / "worktrees"
+            matches = [p for p in wt_root.glob(f"*/{plan_slug}") if p.is_dir()]
+            if len(matches) == 1:
+                chunk_id = matches[0].parent.name
+                bind_plan_chunk(plan_slug, chunk_id)
+            else:
+                raise GitError(f"no chunk_id bound for plan {plan_slug!r}") from None
+        else:
+            raise GitError(f"no chunk_id bound for plan {plan_slug!r}") from None
+    return worktree_for_chunk(chunk_id, plan_slug, cwd=cwd)
+
+
+def sweep_bare_holding_refs(cwd: Path | None = None) -> int:
+    """Delete legacy ``refs/heads/mentat/<slug>`` branches (no chunk_id segment)."""
+    root = repo_root(cwd)
+    if root is None:
+        return 0
+    r = _run(["for-each-ref", "--format=%(refname:short)", "refs/heads/mentat/"], cwd=root)
+    if r.returncode != 0:
+        return 0
+    removed = 0
+    for line in r.stdout.splitlines():
+        name = line.strip()
+        if not name or name.count("/") != 1:
+            continue
+        if _run(["branch", "-D", name], cwd=root).returncode == 0:
+            removed += 1
+    return removed
 
 
 def is_dirty(path: Path) -> bool:

@@ -12,6 +12,15 @@ from tests.conftest import init_git_repo, load_script
 
 _SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts"
 _GIT_SKILLS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-git/scripts"
+_CID = "b" * 32
+
+
+@pytest.fixture(autouse=True)
+def _fixed_chunk_id(monkeypatch):
+    import lib.chunk as chunk_mod
+
+    monkeypatch.setattr(chunk_mod, "make_chunk_id", lambda: _CID)
+    monkeypatch.setenv("MENTAT_CHUNK_ID", _CID)
 
 
 def _load():
@@ -107,7 +116,7 @@ def test_preflight_skips_inside_sibling_worktree(main_repo, monkeypatch):
 
 def test_preflight_returns_65_on_path_conflict(main_repo):
     impl = _load()
-    conflict = main_repo / ".mentat" / "worktrees" / "feat-conflict"
+    conflict = main_repo / ".mentat" / "worktrees" / _CID / "feat-conflict"
     conflict.mkdir(parents=True)
     rc, target = impl.preflight_worktree("feat-conflict")
     assert rc == 65
@@ -148,7 +157,7 @@ def test_main_invokes_preflight_then_chdir(main_repo, tmp_path, monkeypatch):
 
     assert exc.value.code == 0
     assert mock_run.call_count == 1
-    expected = (main_repo / ".mentat" / "worktrees" / "feat-cli").resolve()
+    expected = (main_repo / ".mentat" / "worktrees" / _CID / "feat-cli").resolve()
     assert expected.is_dir()
     # Verify os.chdir actually fired with the worktree path before run_plan was invoked.
     assert any(p.resolve() == expected for p in chdir_targets), (
@@ -225,7 +234,7 @@ def test_main_emits_eject_on_preflight_conflict(main_repo, tmp_path, monkeypatch
     plan_dir.mkdir()
     plan = plan_dir / "feat-conflict.md"
     plan.write_text("---\nid: feat-conflict\nclass: AFK\n---\n# x\n")
-    conflict = main_repo / ".mentat" / "worktrees" / "feat-conflict"
+    conflict = main_repo / ".mentat" / "worktrees" / _CID / "feat-conflict"
     conflict.mkdir(parents=True)
 
     emits = []
@@ -235,9 +244,10 @@ def test_main_emits_eject_on_preflight_conflict(main_repo, tmp_path, monkeypatch
 
     with patch.object(impl, "preflight_veto_reviewers", return_value=(0, [])):
         with patch.object(impl, "_emit_event", side_effect=fake_emit):
-            with patch.object(impl.sys, "argv", ["implement.py", str(plan)]):
-                with pytest.raises(SystemExit) as exc:
-                    impl.main()
+            with patch.object(impl, "_run_and_doctor", return_value=0):
+                with patch.object(impl.sys, "argv", ["implement.py", str(plan)]):
+                    with pytest.raises(SystemExit) as exc:
+                        impl.main()
 
     assert exc.value.code == 65
     assert any(

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import init_git_repo, load_script
+from tests.conftest import TEST_CHUNK_ID, chunk_worktree_target, init_git_repo, load_script
 
 _SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-git/scripts"
 
@@ -47,15 +47,14 @@ def messy_repo(repo, tmp_path):
     """Repo with a parent-folder stray, a prunable nested worktree, and a live nested one."""
     wt = _load_worktree()
     # Parent-folder stray: lives in tmp_path (sibling of repo), outside .mentat/worktrees/.
-    wt.cmd_worktree_create("stray-one", parent=tmp_path / "strays")
-    stray = (tmp_path / "strays" / "stray-one").resolve()
+    wt.cmd_worktree_create("stray-one", parent=tmp_path / "strays", chunk_id=TEST_CHUNK_ID)
+    stray = chunk_worktree_target(tmp_path / "strays", "stray-one")
     # Prunable nested worktree: created under .mentat/worktrees/, then its dir deleted.
-    wt.cmd_worktree_create("ghost")
-    ghost = (repo / ".mentat" / "worktrees" / "ghost").resolve()
+    wt.cmd_worktree_create("ghost", chunk_id=TEST_CHUNK_ID)
+    ghost = (repo / ".mentat" / "worktrees" / TEST_CHUNK_ID / "ghost").resolve()
     shutil.rmtree(ghost)
-    # Live nested worktree: stays — never swept.
-    wt.cmd_worktree_create("live")
-    live = (repo / ".mentat" / "worktrees" / "live").resolve()
+    wt.cmd_worktree_create("live", chunk_id=TEST_CHUNK_ID)
+    live = (repo / ".mentat" / "worktrees" / TEST_CHUNK_ID / "live").resolve()
     return {"wt": wt, "stray": stray, "ghost": ghost, "live": live}
 
 
@@ -122,11 +121,11 @@ def test_sweep_force_preserves_dirty_stray(repo, tmp_path):
     stray beside it is still swept. Mirrors the codebase's locked dirty-preserve
     contract (lib.worktrees.is_dirty / teardown)."""
     wt = _load_worktree()
-    wt.cmd_worktree_create("dirty-stray", parent=tmp_path / "strays")
-    dirty = (tmp_path / "strays" / "dirty-stray").resolve()
+    wt.cmd_worktree_create("dirty-stray", parent=tmp_path / "strays", chunk_id=TEST_CHUNK_ID)
+    dirty = chunk_worktree_target(tmp_path / "strays", "dirty-stray")
     (dirty / "uncommitted.txt").write_text("un-landed work\n")
-    wt.cmd_worktree_create("clean-stray", parent=tmp_path / "strays")
-    clean = (tmp_path / "strays" / "clean-stray").resolve()
+    wt.cmd_worktree_create("clean-stray", parent=tmp_path / "strays", chunk_id=TEST_CHUNK_ID)
+    clean = chunk_worktree_target(tmp_path / "strays", "clean-stray")
 
     rc = wt.cmd_worktree_sweep(dry_run=False)
     assert rc == 0
@@ -137,8 +136,8 @@ def test_sweep_force_preserves_dirty_stray(repo, tmp_path):
 
 def test_sweep_dry_run_marks_dirty_stray(repo, tmp_path, capsys):
     wt = _load_worktree()
-    wt.cmd_worktree_create("dirty-stray", parent=tmp_path / "strays")
-    dirty = (tmp_path / "strays" / "dirty-stray").resolve()
+    wt.cmd_worktree_create("dirty-stray", parent=tmp_path / "strays", chunk_id=TEST_CHUNK_ID)
+    dirty = chunk_worktree_target(tmp_path / "strays", "dirty-stray")
     (dirty / "uncommitted.txt").write_text("un-landed work\n")
     wt.cmd_worktree_sweep(dry_run=True)
     out = capsys.readouterr().out
