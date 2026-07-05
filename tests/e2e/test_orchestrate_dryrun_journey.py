@@ -66,8 +66,8 @@ def test_dry_run_previews_partition(tmp_path, audit_env, capsys):
     plans_dir = tmp_path / "plans"
     plans_dir.mkdir()
     api = _plan(plans_dir, "api", cls="HITL")
-    ui = _plan(plans_dir, "ui", cls="AFK", blocked_by="api")   # upstream HITL → anchored
-    infra = _plan(plans_dir, "infra", cls="AFK")               # standalone → auto
+    ui = _plan(plans_dir, "ui", cls="AFK", blocked_by="api")  # upstream HITL → anchored
+    infra = _plan(plans_dir, "infra", cls="AFK")  # standalone → auto
 
     rc = orch.run_orchestrate("holding", [api, ui, infra], harness=None, model=None, dry_run=True)
     assert rc == 0

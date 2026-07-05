@@ -108,6 +108,45 @@ def down(slug: str, *, label: str = DEFAULT_LABEL) -> bool:
     return ok
 
 
+def down_run(chunk_slugs: set[str], *, label: str = DEFAULT_LABEL) -> int:
+    """Tear down containers for exactly these chunk slugs. Returns success count."""
+    return sum(1 for cs in chunk_slugs if down(cs, label=label))
+
+
+def container_oom_killed(slug: str, *, label: str = DEFAULT_LABEL) -> bool:
+    """True iff the labeled container's last exit was OOM-killed."""
+    r = _run_docker(
+        [
+            "docker",
+            "ps",
+            "-aq",
+            "--filter",
+            f"label={label}={slug}",
+            "--filter",
+            "status=exited",
+        ]
+    )
+    if r is None or r.returncode != 0 or not r.stdout.strip():
+        cid_r = _run_docker(
+            [
+                "docker",
+                "ps",
+                "-q",
+                "--filter",
+                f"label={label}={slug}",
+            ]
+        )
+        if cid_r is None or cid_r.returncode != 0 or not cid_r.stdout.strip():
+            return False
+        cid = cid_r.stdout.strip().splitlines()[0]
+    else:
+        cid = r.stdout.strip().splitlines()[0]
+    inspect = _run_docker(["docker", "inspect", "--format", "{{.State.OOMKilled}}", cid])
+    if inspect is None or inspect.returncode != 0:
+        return False
+    return inspect.stdout.strip().lower() == "true"
+
+
 def up(slug: str, wt: Path) -> bool:
     """Bring container up from stopped or cold state. Returns True if container running."""
     # Restart a stopped container

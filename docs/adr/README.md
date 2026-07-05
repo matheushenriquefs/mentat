@@ -19,3 +19,4 @@ Architecture Decision Records for Mentat.
 | [0013](./0013-session-continuity-over-compaction.md) | Session continuity over compaction — checkpoint + respawn, harness-agnostic | Accepted |
 | [0014](./0014-coverage-gate.md) | Coverage gate — 100% unit / 99% e2e, blocking | Accepted |
 | [0015](./0015-auto-recovery.md) | Model-driven auto-recovery — JIT retry/reslice/abandon + storm/budget/attempt caps | Accepted |
+| [0017](./0017-per-run-isolation.md) | Per-run isolation — chunk-keyed identity, override-config, run-scoped prune, OOM recover | Accepted |

@@ -164,14 +164,19 @@ def _checkpoint_if_needed(result: Any, *, slug: str, threshold: int | None) -> N
 def _prune_worktrees_preflight() -> None:
     """Sweep clean, inactive, stale worktrees before this run starts.
 
-    Implement owns its worktree lifecycle (ADR ownership split) — it no longer
-    waits for an orchestrate run to clean up. Silent (no session.prune emit): a
-    preflight housekeeping sweep, not a batch audit event.
+    Scoped to this implement run's chunk_id only — never touches another run's trees.
     """
     from lib import devcontainer, worktrees
 
+    chunk_id = os.environ.get("MENTAT_CHUNK_ID", "").strip()
+    if not chunk_id:
+        return
     wt_root = Path.cwd() / ".mentat" / "worktrees"
-    worktrees.prune_stale(wt_root, active_slugs=set(devcontainer.list_active_slugs()))
+    worktrees.prune_stale(
+        wt_root,
+        active_slugs=set(devcontainer.list_active_slugs()),
+        scope_chunk_ids={chunk_id},
+    )
 
 
 def _repo_root_from_worktree(worktree: Path) -> Path:

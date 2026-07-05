@@ -109,7 +109,11 @@ def test_render_colorizes_when_requested(tmp_path):
     plan, render = _mods()
     p = plan.InstallPlan(
         add=[plan.Action("mkdir", None, Path("/x"))],
-        update=[], stale=[], conflicts=[], missing_companions=[], skipped=[],
+        update=[],
+        stale=[],
+        conflicts=[],
+        missing_companions=[],
+        skipped=[],
     )
     out = render.render(p, color=True)
     assert "\033[32m" in out, "color=True emits ANSI"

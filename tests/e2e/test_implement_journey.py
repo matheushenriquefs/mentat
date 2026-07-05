@@ -630,12 +630,20 @@ def test_teardown_worktree_dirty_preserves(impl, monkeypatch, tmp_path, capsys):
 def test_prune_worktrees_preflight_runs(impl, monkeypatch, tmp_path):
     from lib import devcontainer, worktrees
 
+    from tests.conftest import TEST_CHUNK_ID
+
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(devcontainer, "list_active_slugs", lambda: ["a"])
+    monkeypatch.setenv("MENTAT_CHUNK_ID", TEST_CHUNK_ID)
+    monkeypatch.setattr(devcontainer, "list_active_slugs", lambda: {"a"})
     seen: dict = {}
-    monkeypatch.setattr(worktrees, "prune_stale", lambda root, active_slugs: seen.update(active=active_slugs))
+
+    def _prune(root, active_slugs, scope_chunk_ids=None):
+        seen.update(active=active_slugs, scope=scope_chunk_ids)
+
+    monkeypatch.setattr(worktrees, "prune_stale", _prune)
     impl._prune_worktrees_preflight()
     assert seen["active"] == {"a"}
+    assert seen["scope"] == {TEST_CHUNK_ID}
 
 
 # ── _repo_root_from_worktree ───────────────────────────────────────────────────

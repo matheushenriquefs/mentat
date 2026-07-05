@@ -137,7 +137,7 @@ def _reduce_session(session_dir: Path) -> tuple[str, str, float, float] | None:
             row = cast("dict[str, object]", parsed)
             try:
                 ts = datetime.datetime.fromisoformat(str(row["ts"])).timestamp()
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 continue
             session = row.get("session")
             if session is not None:

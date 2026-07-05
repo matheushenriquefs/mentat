@@ -65,29 +65,62 @@ def teardown(path: Path) -> bool:
     return _remove(path)
 
 
-def _stale_children(wt_root: Path, cutoff_seconds: int) -> list[Path]:
+def _iter_managed(wt_root: Path) -> list[Path]:
+    """All managed worktree paths: flat ``worktrees/<slug>`` or ``worktrees/<cid>/<slug>``."""
     if not wt_root.is_dir():
         return []
+    out: list[Path] = []
+    for child in wt_root.iterdir():
+        if not child.is_dir():
+            continue
+        if (child / ".git").exists():
+            out.append(child)
+            continue
+        for sub in child.iterdir():
+            if sub.is_dir() and (sub / ".git").exists():
+                out.append(sub)
+    return out
+
+
+def chunk_slug_for_path(wt: Path, wt_root: Path) -> str:
+    try:
+        rel = wt.resolve().relative_to(wt_root.resolve())
+        if len(rel.parts) == 2:
+            return f"{rel.parts[0]}/{rel.parts[1]}"
+        if len(rel.parts) == 1:
+            return rel.parts[0]
+    except ValueError:
+        pass
+    return wt.name
+
+
+def _stale_managed(wt_root: Path, cutoff_seconds: int) -> list[Path]:
     cutoff = time.time() - cutoff_seconds
-    return [c for c in wt_root.iterdir() if c.is_dir() and c.stat().st_mtime <= cutoff]
+    return [c for c in _iter_managed(wt_root) if c.stat().st_mtime <= cutoff]
 
 
 def prune_stale(
     wt_root: Path,
     *,
     active_slugs: set[str] | None = None,
+    scope_chunk_ids: set[str] | None = None,
     cutoff_seconds: int = DEFAULT_CUTOFF_SECONDS,
 ) -> int:
     """Remove clean, inactive, stale worktrees under ``wt_root``. Returns count.
 
-    Every child dir of ``wt_root`` is a managed worktree (identity-by-path).
-    A worktree is removed iff it is older than the cutoff AND not active AND
-    not dirty. Dirty worktrees are always preserved.
+    When ``scope_chunk_ids`` is set, only worktrees whose chunk_id is in the set
+    are candidates — another run's trees are never touched.
     """
     active = active_slugs or set()
     removed = 0
-    for child in _stale_children(wt_root, cutoff_seconds):
-        if child.name in active or is_dirty(child):
+    for child in _stale_managed(wt_root, cutoff_seconds):
+        cs = chunk_slug_for_path(child, wt_root)
+        chunk_id = cs.split("/", 1)[0] if "/" in cs else cs
+        if scope_chunk_ids is not None and chunk_id not in scope_chunk_ids:
+            continue
+        if cs in active or child.name in active:
+            continue
+        if is_dirty(child):
             continue
         if _remove(child):
             removed += 1
@@ -98,22 +131,18 @@ def gc_preserved(
     wt_root: Path,
     *,
     active_slugs: set[str] | None = None,
+    scope_chunk_ids: set[str] | None = None,
     gc_seconds: int = DEFAULT_GC_SECONDS,
 ) -> int:
-    """Reclaim *preserved* (typically dirty / ejected) worktrees older than
-    ``gc_seconds``. Returns count.
-
-    ``prune_stale`` deliberately keeps every dirty worktree forever — it holds
-    un-landed work. That is right in the short term but unbounded in the long
-    term: ejected worktrees accumulate and leave secrets in stale trees. This
-    force-removes any worktree older than the (much longer) GC age regardless of
-    dirty state, except still-active slugs. A clean stale worktree is already
-    ``prune_stale``'s job; in practice this reaps the long-abandoned dirty ones.
-    """
+    """Reclaim preserved worktrees older than ``gc_seconds``. Returns count."""
     active = active_slugs or set()
     removed = 0
-    for child in _stale_children(wt_root, gc_seconds):
-        if child.name in active:
+    for child in _stale_managed(wt_root, gc_seconds):
+        cs = chunk_slug_for_path(child, wt_root)
+        chunk_id = cs.split("/", 1)[0] if "/" in cs else cs
+        if scope_chunk_ids is not None and chunk_id not in scope_chunk_ids:
+            continue
+        if cs in active or child.name in active:
             continue
         if _remove(child):
             removed += 1
@@ -121,9 +150,5 @@ def gc_preserved(
 
 
 def dirty_stale(wt_root: Path, *, cutoff_seconds: int = DEFAULT_CUTOFF_SECONDS) -> list[str]:
-    """Names of stale worktrees that are dirty (hold un-landed work).
-
-    Used to gate container pruning: if any stale worktree is dirty, container
-    prune is skipped so the operator's leftovers keep a runnable container.
-    """
-    return [c.name for c in _stale_children(wt_root, cutoff_seconds) if is_dirty(c)]
+    """Names of stale worktrees that are dirty (hold un-landed work)."""
+    return [chunk_slug_for_path(c, wt_root) for c in _stale_managed(wt_root, cutoff_seconds) if is_dirty(c)]

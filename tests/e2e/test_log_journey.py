@@ -42,11 +42,30 @@ def test_log_emit_validate_query_prune_lifecycle(tmp_path, monkeypatch, capsys):
     _log_env(monkeypatch, log_root, repo, session)
 
     # emit: a spawn then a landing — two real audit rows under one session.
-    assert _dispatch(log, ["emit", "mentat-orchestrate", "chunk.spawned",
-                           json.dumps({"slug": "s1", "plan": "s1.md", "harness": "claude-code",
-                                       "worktree": "/tmp/wt"})]) == 0
-    assert _dispatch(log, ["emit", "mentat-orchestrate", "chunk.landed",
-                           json.dumps({"slug": "s1", "sha": "cafe", "holding": "main"})]) == 0
+    assert (
+        _dispatch(
+            log,
+            [
+                "emit",
+                "mentat-orchestrate",
+                "chunk.spawned",
+                json.dumps({"slug": "s1", "plan": "s1.md", "harness": "claude-code", "worktree": "/tmp/wt"}),
+            ],
+        )
+        == 0
+    )
+    assert (
+        _dispatch(
+            log,
+            [
+                "emit",
+                "mentat-orchestrate",
+                "chunk.landed",
+                json.dumps({"slug": "s1", "sha": "cafe", "holding": "main"}),
+            ],
+        )
+        == 0
+    )
 
     session_dir = log_root / repo / session
     jsonls = list(session_dir.glob("*.jsonl"))
@@ -104,8 +123,15 @@ def test_log_emit_rejects_missing_payload_field(tmp_path, monkeypatch, capsys):
 def test_log_emit_rejects_invalid_eject_reason(tmp_path, monkeypatch):
     log = load_script(LOG_PY, "e2e_log_reason")
     _log_env(monkeypatch, tmp_path / "logs", "logrepo", "orchestrate-main-3")
-    rc = _dispatch(log, ["emit", "mentat-orchestrate", "chunk.ejected",
-                         json.dumps({"slug": "s", "reason": "made-up", "where": "land"})])
+    rc = _dispatch(
+        log,
+        [
+            "emit",
+            "mentat-orchestrate",
+            "chunk.ejected",
+            json.dumps({"slug": "s", "reason": "made-up", "where": "land"}),
+        ],
+    )
     assert rc == 1
 
 

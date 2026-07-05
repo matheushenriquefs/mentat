@@ -10,7 +10,6 @@ Slice 6: _SIGNAL_EXIT_BASE = 128 module constant.
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -597,16 +596,17 @@ def test_run_orchestrate_all_green_no_eject_summary(tmp_path, capsys):
 
 
 def test_prune_stale_containers_runs_even_with_dirty_worktree(tmp_path, monkeypatch):
-    """_prune_stale_containers must call devcontainer.prune() even if dirty worktrees exist."""
+    """_prune_stale_containers calls down_run even if dirty worktrees exist."""
     import os
     import time as _time
 
     orch = load_module("orchestrate")
     from lib import devcontainer as _dc_mod
-    from lib.devcontainer import PruneResult
+
+    from tests.test_orchestrate_prune import _seed_run_chunks
 
     monkeypatch.chdir(tmp_path)
-    # Create a dirty stale worktree
+    _seed_run_chunks(orch, "a")
     wt_root = tmp_path / ".mentat" / "worktrees"
     wt = wt_root / "mentat-1700000000-12-34"
     wt.mkdir(parents=True)
@@ -615,22 +615,13 @@ def test_prune_stale_containers_runs_even_with_dirty_worktree(tmp_path, monkeypa
     mtime = _time.time() - 7200
     os.utime(wt, (mtime, mtime))
 
-    prune_calls = [0]
-    monkeypatch.setattr(
-        _dc_mod, "prune", lambda: prune_calls.__setitem__(0, prune_calls[0] + 1) or PruneResult(None, 0)
-    )
+    down_calls: list[set[str]] = []
+    monkeypatch.setattr(_dc_mod, "down_run", lambda slugs: down_calls.append(set(slugs)) or 1)
     monkeypatch.setattr(orch._utils, "emit_event", lambda *a, **k: None)
-
-    def fake_run(cmd, **kw):
-        if cmd[0] == "git" and "status" in cmd:
-            return subprocess.CompletedProcess(cmd, 0, "?? dirty.txt\n", "")
-        return subprocess.CompletedProcess(cmd, 0, "", "")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
 
     orch._prune_stale_containers()
 
-    assert prune_calls[0] == 1, "devcontainer.prune must be called even when dirty worktrees exist"
+    assert down_calls, "devcontainer.down_run must be called even when dirty worktrees exist"
 
 
 # ── _chunk_timeout: non-integer env + config fall through to default ─────────

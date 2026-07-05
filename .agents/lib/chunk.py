@@ -64,3 +64,8 @@ def chunk_id_for_plan(plan_slug: str) -> str:
     if env:
         return env
     raise LookupError(f"no chunk_id bound for plan {plan_slug!r}")
+
+
+def override_config_dir(repo_root: Path, chunk_slug_value: str) -> Path:
+    chunk_id, slug = parse_chunk_slug(chunk_slug_value)
+    return repo_root / ".mentat" / "config" / chunk_id / slug

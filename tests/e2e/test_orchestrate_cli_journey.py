@@ -285,31 +285,37 @@ def test_partition_fanout_routes_each_returncode(orch, monkeypatch, tmp_path):
 
 
 def test_prune_stale_containers_warns_dirty_and_emits_reclaimed(orch, monkeypatch, capsys):
+    from tests.test_orchestrate_prune import _seed_run_chunks
+
     events = []
-    monkeypatch.setattr(orch._worktrees, "dirty_stale", lambda root: ["wt1"])
-    monkeypatch.setattr(orch._devcontainer, "prune", lambda: SimpleNamespace(reclaimed_bytes=123))
+    _seed_run_chunks(orch, "a")
+    monkeypatch.setattr(orch._devcontainer, "down_run", lambda slugs: 1)
     monkeypatch.setattr(orch._utils, "emit_event", lambda ev, payload: events.append((ev, payload)))
     orch._prune_stale_containers()
-    assert "wt1" in capsys.readouterr().err
-    assert events == [("session.prune", {"reclaimed_bytes": 123})]
+    assert events == [("session.prune", {"reclaimed_bytes": None, "containers_removed": 1})]
 
 
 # ── _prune_stale_worktrees ────────────────────────────────────────────────────
 
 
 def test_prune_stale_worktrees_folds_preserve_into_active(orch, monkeypatch):
+    from tests.conftest import TEST_CHUNK_ID, bind_plan, chunk_label
+    from tests.test_orchestrate_prune import _seed_run_chunks
+
     events = []
     seen = {}
-    monkeypatch.setattr(orch._devcontainer, "list_active_slugs", lambda: ["a"])
+    bind_plan("wedged", TEST_CHUNK_ID)
+    _seed_run_chunks(orch, "wedged")
 
-    def _prune_stale(root, active_slugs):
+    def _prune_stale(root, active_slugs, scope_chunk_ids=None):
         seen["active"] = active_slugs
+        seen["scope"] = scope_chunk_ids
         return 2
 
     monkeypatch.setattr(orch._worktrees, "prune_stale", _prune_stale)
     monkeypatch.setattr(orch._utils, "emit_event", lambda ev, payload: events.append((ev, payload)))
     orch._prune_stale_worktrees(preserve={"wedged"})
-    assert seen["active"] == {"a", "wedged"}
+    assert seen["active"] == {chunk_label("wedged")}
     assert events == [("session.prune", {"reclaimed_bytes": None, "worktrees_removed": 2})]
 
 

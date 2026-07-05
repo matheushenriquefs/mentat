@@ -138,9 +138,7 @@ def test_drain_cascades_ejection_to_dependents(tmp_path, monkeypatch):
         return ["child"] if slug == "root" else []
 
     with _patch_attr(lq, "_run_gates", gate), _patch_attr(lq, "_teardown_container", lambda slug: None):
-        results = lq.drain(
-            chunks, holding="holding", on_ejected=on_ejected, next_ready=next_ready
-        )
+        results = lq.drain(chunks, holding="holding", on_ejected=on_ejected, next_ready=next_ready)
 
     by_slug = {r["slug"]: r for r in results}
     assert by_slug["root"]["reason"] == lq.EjectReason.GATE_FAILED

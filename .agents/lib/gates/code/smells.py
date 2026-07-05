@@ -128,7 +128,7 @@ def run(chunk_path: Path | None) -> tuple[str, str]:
     for path in _iter_py(root):
         try:
             tree = ast.parse(path.read_text(), filename=str(path))
-        except (SyntaxError, OSError):
+        except SyntaxError, OSError:
             continue
         findings += _long_method(tree, path, long_method_limit)
         findings += _long_params(tree, path, long_params_limit)

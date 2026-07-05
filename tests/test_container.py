@@ -40,6 +40,20 @@ def _doctor_capture(container_mod, wt: Path) -> str:
     return buf.getvalue()
 
 
+_CID = "0" * 32
+
+
+def _cs(slug: str) -> str:
+    return f"{_CID}/{slug}"
+
+
+def _override_dcj(wt: Path, slug: str) -> Path:
+    from lib.chunk import override_config_dir
+
+    repo = container._repo_root_for_wt(wt)
+    return override_config_dir(repo, _cs(slug)) / "devcontainer.json"
+
+
 # ── utils ───────────────────────────────────────────────────────────────────
 
 
@@ -59,16 +73,16 @@ def test_slug_for_cwd_from_worktree(tmp_path, monkeypatch):
     assert slug == tmp_path.name
 
 
-def test_resolve_workspace_folder_reads_devcontainer(tmp_path):
+def test_workspace_folder_for_ignores_devcontainer_json(tmp_path):
     utils = load_module("container_ops")
     dcj_dir = tmp_path / ".devcontainer"
     dcj_dir.mkdir()
     (dcj_dir / "devcontainer.json").write_text(json.dumps({"name": "test", "workspaceFolder": "/workspaces/custom"}))
-    result = utils.resolve_workspace_folder(tmp_path)
-    assert result == "/workspaces/custom"
+    result = utils.workspace_folder_for(tmp_path)
+    assert result == f"/workspaces/{tmp_path.name}"
 
 
-def test_resolve_workspace_folder_falls_back_when_missing(tmp_path):
+def test_resolve_workspace_folder_delegates_to_workspace_folder_for(tmp_path):
     utils = load_module("container_ops")
     result = utils.resolve_workspace_folder(tmp_path)
     assert result == f"/workspaces/{tmp_path.name}"
@@ -77,24 +91,6 @@ def test_resolve_workspace_folder_falls_back_when_missing(tmp_path):
 def test_resolve_workspace_folder_git_file_worktree_uses_name(tmp_path):
     ops = load_module("container_ops")
     (tmp_path / ".git").write_text("gitdir: ../main/.git/worktrees/wt")
-    result = ops.resolve_workspace_folder(tmp_path)
-    assert result == f"/workspaces/{tmp_path.name}"
-
-
-def test_resolve_workspace_folder_invalid_json_falls_back(tmp_path):
-    ops = load_module("container_ops")
-    dcj_dir = tmp_path / ".devcontainer"
-    dcj_dir.mkdir()
-    (dcj_dir / "devcontainer.json").write_text("not-json{{{")
-    result = ops.resolve_workspace_folder(tmp_path)
-    assert result == f"/workspaces/{tmp_path.name}"
-
-
-def test_resolve_workspace_folder_missing_key_falls_back(tmp_path):
-    ops = load_module("container_ops")
-    dcj_dir = tmp_path / ".devcontainer"
-    dcj_dir.mkdir()
-    (dcj_dir / "devcontainer.json").write_text(json.dumps({"name": "test"}))
     result = ops.resolve_workspace_folder(tmp_path)
     assert result == f"/workspaces/{tmp_path.name}"
 
@@ -386,20 +382,21 @@ _MENTAT_DCJ = {
 }
 
 
-class TestEnsureDevcontainerJson:
+class TestWriteOverrideConfig:
     def test_new_file_written_via_synth(self, tmp_path):
         wt = tmp_path / "some-repo"
         wt.mkdir()
         slug = wt.name
         expected = json.dumps({"name": slug, "workspaceFolder": f"/workspaces/{slug}"}, indent=2)
-        dcj = wt / ".devcontainer" / "devcontainer.json"
 
         with patch.object(compose_render, "synth_spec", return_value=compose_render.SynthResult(expected, {})):
-            container._ensure_devcontainer_json(wt, slug)
+            container._write_override_config(wt, _cs(slug))
 
-        assert dcj.read_text() == expected
+        override = _override_dcj(wt, slug)
+        assert override.read_text() == expected
+        assert not (wt / ".devcontainer" / "devcontainer.json").exists()
 
-    def test_idempotent_correct_file(self, tmp_path):
+    def test_idempotent_tracked_file_untouched(self, tmp_path):
         wt = tmp_path / "mentat"
         wt.mkdir()
         slug = wt.name
@@ -409,11 +406,11 @@ class TestEnsureDevcontainerJson:
         dcj.write_text(json.dumps(data, indent=2))
         mtime = dcj.stat().st_mtime_ns
 
-        container._ensure_devcontainer_json(wt, slug)
+        container._write_override_config(wt, _cs(slug))
 
         assert dcj.stat().st_mtime_ns == mtime
 
-    def test_stale_worktree_workspace_folder_patched(self, tmp_path):
+    def test_stale_worktree_workspace_folder_in_override(self, tmp_path):
         wt = tmp_path / "my-feature"
         wt.mkdir()
         slug = wt.name
@@ -421,13 +418,13 @@ class TestEnsureDevcontainerJson:
         dcj.parent.mkdir()
         dcj.write_text(json.dumps(_MENTAT_DCJ, indent=2))
 
-        container._ensure_devcontainer_json(wt, slug)
+        container._write_override_config(wt, _cs(slug))
 
-        result = json.loads(dcj.read_text())
+        result = json.loads(_override_dcj(wt, slug).read_text())
         assert result["workspaceFolder"] == f"/workspaces/{slug}"
         assert result["name"] == slug
 
-    def test_stale_worktree_patches_mount_and_commands(self, tmp_path):
+    def test_stale_worktree_patches_mount_and_commands_in_override(self, tmp_path):
         wt = tmp_path / "my-feature"
         wt.mkdir()
         slug = wt.name
@@ -435,13 +432,13 @@ class TestEnsureDevcontainerJson:
         dcj.parent.mkdir()
         dcj.write_text(json.dumps(_MENTAT_DCJ, indent=2))
 
-        container._ensure_devcontainer_json(wt, slug)
+        container._write_override_config(wt, _cs(slug))
 
-        result = json.loads(dcj.read_text())
+        result = json.loads(_override_dcj(wt, slug).read_text())
         assert f"target=/workspaces/{slug}" in result["workspaceMount"]
         assert f"/workspaces/{slug}" in result["postCreateCommand"]
 
-    def test_correct_worktree_not_rewritten(self, tmp_path):
+    def test_correct_worktree_tracked_file_not_rewritten(self, tmp_path):
         wt = tmp_path / "my-feature"
         wt.mkdir()
         slug = wt.name
@@ -451,7 +448,7 @@ class TestEnsureDevcontainerJson:
         dcj.write_text(json.dumps(data, indent=2))
         mtime = dcj.stat().st_mtime_ns
 
-        container._ensure_devcontainer_json(wt, slug)
+        container._write_override_config(wt, _cs(slug))
 
         assert dcj.stat().st_mtime_ns == mtime
 
@@ -462,7 +459,7 @@ class TestEnsureDevcontainerJson:
 
         side = ValueError("no Dockerfile")
         with patch.object(compose_render, "synth_spec", side_effect=side), pytest.raises(SystemExit) as exc_info:
-            container._ensure_devcontainer_json(wt, slug)
+            container._write_override_config(wt, _cs(slug))
 
         assert exc_info.value.code == 1
 
@@ -491,7 +488,7 @@ class TestGitMountForWorktree:
         assert container._git_mount_for_worktree(wt) is None
 
 
-class TestEnsureDevcontainerJsonGitMount:
+class TestWriteOverrideConfigGitMount:
     def test_adds_git_mount_when_patching_stale_worktree(self, tmp_path):
         wt = tmp_path / "my-feature"
         wt.mkdir()
@@ -501,9 +498,9 @@ class TestEnsureDevcontainerJsonGitMount:
         dcj.parent.mkdir()
         dcj.write_text(json.dumps(_MENTAT_DCJ, indent=2))
 
-        container._ensure_devcontainer_json(wt, "my-feature")
+        container._write_override_config(wt, _cs("my-feature"))
 
-        result = json.loads(dcj.read_text())
+        result = json.loads(_override_dcj(wt, "my-feature").read_text())
         expected_mount = f"source={main_git},target={main_git},type=bind"
         assert expected_mount in result.get("mounts", [])
 
@@ -515,9 +512,9 @@ class TestEnsureDevcontainerJsonGitMount:
         dcj.parent.mkdir()
         dcj.write_text(json.dumps(_MENTAT_DCJ, indent=2))
 
-        container._ensure_devcontainer_json(wt, "my-feature")
+        container._write_override_config(wt, _cs("my-feature"))
 
-        result = json.loads(dcj.read_text())
+        result = json.loads(_override_dcj(wt, "my-feature").read_text())
         assert "mounts" not in result
 
     def test_idempotent_when_mount_already_present(self, tmp_path):
@@ -526,13 +523,17 @@ class TestEnsureDevcontainerJsonGitMount:
         main_git = str(tmp_path / "main" / ".git")
         (wt / ".git").write_text(f"gitdir: {main_git}/worktrees/my-feature\n")
         expected_mount = f"source={main_git},target={main_git},type=bind"
-        data = {"name": "my-feature", "workspaceFolder": "/workspaces/my-feature", "mounts": [expected_mount]}
+        data = {
+            "name": "my-feature",
+            "workspaceFolder": f"/workspaces/{_CID}/my-feature",
+            "mounts": [expected_mount],
+        }
         dcj = wt / ".devcontainer" / "devcontainer.json"
         dcj.parent.mkdir()
         dcj.write_text(json.dumps(data, indent=2))
         mtime = dcj.stat().st_mtime_ns
 
-        container._ensure_devcontainer_json(wt, "my-feature")
+        container._write_override_config(wt, _cs("my-feature"))
 
         assert dcj.stat().st_mtime_ns == mtime
 
@@ -545,10 +546,9 @@ class TestEnsureDevcontainerJsonGitMount:
         synth_out = json.dumps({"name": slug, "workspaceFolder": f"/workspaces/{slug}"})
 
         with patch.object(compose_render, "synth_spec", return_value=compose_render.SynthResult(synth_out, {})):
-            container._ensure_devcontainer_json(wt, slug)
+            container._write_override_config(wt, _cs(slug))
 
-        dcj = wt / ".devcontainer" / "devcontainer.json"
-        result = json.loads(dcj.read_text())
+        result = json.loads(_override_dcj(wt, slug).read_text())
         expected_mount = f"source={main_git},target={main_git},type=bind"
         assert expected_mount in result.get("mounts", [])
 
@@ -631,7 +631,7 @@ class TestCmdDown:
 
 
 class TestResolveWorkspaceFolder:
-    def test_main_repo_reads_devcontainer_json(self, tmp_path):
+    def test_main_repo_uses_directory_name(self, tmp_path):
         repo = tmp_path / "mentat"
         repo.mkdir()
         (repo / ".git").mkdir()
@@ -639,9 +639,9 @@ class TestResolveWorkspaceFolder:
         dcj.parent.mkdir()
         dcj.write_text(json.dumps({"workspaceFolder": "/workspaces/mentat"}))
 
-        assert utils.resolve_workspace_folder(repo) == "/workspaces/mentat"
+        assert utils.workspace_folder_for(repo) == "/workspaces/mentat"
 
-    def test_worktree_uses_slug_regardless_of_devcontainer(self, tmp_path):
+    def test_worktree_uses_slug_not_devcontainer_json(self, tmp_path):
         wt = tmp_path / "my-feature"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /some/repo/.git/worktrees/my-feature\n")
@@ -649,14 +649,14 @@ class TestResolveWorkspaceFolder:
         dcj.parent.mkdir()
         dcj.write_text(json.dumps({"workspaceFolder": "/workspaces/mentat"}))
 
-        assert utils.resolve_workspace_folder(wt) == "/workspaces/my-feature"
+        assert utils.workspace_folder_for(wt) == "/workspaces/my-feature"
 
-    def test_worktree_no_devcontainer_uses_slug(self, tmp_path):
-        wt = tmp_path / "some-branch"
-        wt.mkdir()
+    def test_chunk_keyed_worktree_uses_chunk_path(self, tmp_path):
+        wt = tmp_path / ".mentat" / "worktrees" / "abc" / "some-branch"
+        wt.mkdir(parents=True)
         (wt / ".git").write_text("gitdir: /some/repo/.git/worktrees/some-branch\n")
 
-        assert utils.resolve_workspace_folder(wt) == "/workspaces/some-branch"
+        assert utils.workspace_folder_for(wt) == "/workspaces/abc/some-branch"
 
 
 class TestPostCreateCommandLefthookInstall:
@@ -668,9 +668,9 @@ class TestPostCreateCommandLefthookInstall:
         dcj.parent.mkdir()
         dcj.write_text(json.dumps(_MENTAT_DCJ, indent=2))
 
-        container._ensure_devcontainer_json(wt, slug)
+        container._write_override_config(wt, _cs(slug))
 
-        result = json.loads(dcj.read_text())
+        result = json.loads(_override_dcj(wt, slug).read_text())
         assert "lefthook install" in result["postCreateCommand"]
 
     def test_lefthook_install_path_rewrite(self, tmp_path):
@@ -681,9 +681,9 @@ class TestPostCreateCommandLefthookInstall:
         dcj.parent.mkdir()
         dcj.write_text(json.dumps(_MENTAT_DCJ, indent=2))
 
-        container._ensure_devcontainer_json(wt, slug)
+        container._write_override_config(wt, _cs(slug))
 
-        result = json.loads(dcj.read_text())
+        result = json.loads(_override_dcj(wt, slug).read_text())
         cmd = result["postCreateCommand"]
         assert "lefthook install" in cmd
         cd_pos = cmd.index(f"cd /workspaces/{slug}")
@@ -694,7 +694,7 @@ class TestPostCreateCommandLefthookInstall:
 # ── S2: list/object postCreateCommand form ────────────────────────────────────
 
 
-def test_ensure_devcontainer_json_list_command_not_replaced(tmp_path):
+def test_write_override_config_list_command_not_replaced(tmp_path):
     """List-form postCreateCommand must not raise and must remain unchanged."""
     wt = tmp_path / "my-feature"
     wt.mkdir()
@@ -708,10 +708,11 @@ def test_ensure_devcontainer_json_list_command_not_replaced(tmp_path):
     }
     dcj.write_text(json.dumps(data, indent=2))
 
-    container._ensure_devcontainer_json(wt, slug)
+    container._write_override_config(wt, _cs(slug))
 
-    result = json.loads(dcj.read_text())
+    result = json.loads(_override_dcj(wt, slug).read_text())
     assert result["postCreateCommand"] == ["echo", "hi"], "list-form command must not be mutated"
+    assert json.loads(dcj.read_text())["postCreateCommand"] == ["echo", "hi"]
     assert result["workspaceFolder"] == f"/workspaces/{slug}"
 
 
@@ -811,7 +812,7 @@ def test_cmd_up_fails_when_bringup_fails_despite_stale_container(tmp_path, monke
     monkeypatch.setattr(container_mod, "_host_runtime", lambda: False)
     monkeypatch.setattr(container_mod.utils, "container_id_for", fake_cid)
     monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
-    monkeypatch.setattr(container_mod, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(container_mod, "_write_override_config", lambda wt, slug: None)
 
     rc = container_mod.cmd_up(tmp_path)
     assert rc != 0, "cmd_up must return non-zero when bring-up command fails"
@@ -835,7 +836,7 @@ def test_cmd_up_devcontainer_cli_missing_returns_failure(tmp_path, monkeypatch, 
     monkeypatch.setattr(container_mod, "_host_runtime", lambda: False)
     monkeypatch.setattr(container_mod.utils, "container_id_for", lambda slug: None)
     monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
-    monkeypatch.setattr(container_mod, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(container_mod, "_write_override_config", lambda wt, slug: None)
 
     rc = container_mod.cmd_up(tmp_path)
 
@@ -868,7 +869,7 @@ def test_cmd_up_created_container_detected_fails_loud_when_unusable(tmp_path, mo
     # container_id_for always None — docker start leaves no usable container
     monkeypatch.setattr(container_mod.utils, "container_id_for", lambda slug: None)
     monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
-    monkeypatch.setattr(container_mod, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(container_mod, "_write_override_config", lambda wt, slug: None)
 
     rc = container_mod.cmd_up(tmp_path)
 
@@ -940,7 +941,7 @@ def test_cmd_up_broken_symlink_at_dst_does_not_raise(tmp_path, monkeypatch):
     monkeypatch.setattr(container_mod, "_host_runtime", lambda: False)
     monkeypatch.setattr(container_mod.utils, "container_id_for", lambda slug: None)
     monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
-    monkeypatch.setattr(container_mod, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(container_mod, "_write_override_config", lambda wt, slug: None)
     monkeypatch.setattr(container_mod, "_main_repo_root_for_wt", lambda wt: main_repo)
 
     # Must not raise FileExistsError — must return an int
@@ -1007,7 +1008,7 @@ def test_cmd_up_devcontainer_up_timeout_returns_failure(tmp_path, monkeypatch, c
     monkeypatch.setattr(container_mod, "_host_runtime", lambda: False)
     monkeypatch.setattr(container_mod.utils, "container_id_for", lambda slug: None)
     monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
-    monkeypatch.setattr(container_mod, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(container_mod, "_write_override_config", lambda wt, slug: None)
 
     rc = container_mod.cmd_up(tmp_path)
     captured = capsys.readouterr()
@@ -1110,10 +1111,10 @@ def test_main_repo_root_for_wt_non_gitdir_returns_none(tmp_path):
     assert container._main_repo_root_for_wt(wt) is None
 
 
-# ── _ensure_devcontainer_json mount-only patch (139->148) ─────────────────────
+# ── _write_override_config mount-only patch (139->148) ─────────────────────
 
 
-def test_ensure_devcontainer_json_adds_mount_only_when_ws_ok(tmp_path):
+def test_write_override_config_adds_mount_only_when_ws_ok(tmp_path):
     """workspaceFolder already correct but git mount missing → only mount appended.
 
     Covers the ws_ok-True / mount_ok-False branch (139->148): the workspaceFolder
@@ -1129,9 +1130,9 @@ def test_ensure_devcontainer_json_adds_mount_only_when_ws_ok(tmp_path):
     # workspaceFolder already correct, but no mounts key yet.
     dcj.write_text(json.dumps({"name": "my-feature", "workspaceFolder": "/workspaces/my-feature"}, indent=2))
 
-    container._ensure_devcontainer_json(wt, "my-feature")
+    container._write_override_config(wt, _cs("my-feature"))
 
-    result = json.loads(dcj.read_text())
+    result = json.loads(_override_dcj(wt, "my-feature").read_text())
     expected_mount = f"source={main_git},target={main_git},type=bind"
     assert expected_mount in result.get("mounts", [])
     assert result["workspaceFolder"] == "/workspaces/my-feature"
@@ -1147,7 +1148,7 @@ def test_cmd_up_running_container_ensures_safe_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(container, "_host_runtime", lambda: False)
     monkeypatch.setattr(container.utils, "container_id_for", lambda slug: "running-cid")
-    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container.utils, "workspace_folder_for", lambda wt: "/workspaces/wt")
     monkeypatch.setattr(container, "_ensure_safe_directory", lambda ws, cid: safe_calls.append(cid))
 
     rc = container.cmd_up(tmp_path)
@@ -1172,7 +1173,7 @@ def test_cmd_up_docker_start_timeout_returns_unavailable(tmp_path, monkeypatch, 
 
     monkeypatch.setattr(container, "_host_runtime", lambda: False)
     monkeypatch.setattr(container.utils, "container_id_for", lambda slug: None)
-    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container.utils, "workspace_folder_for", lambda wt: "/workspaces/wt")
     monkeypatch.setattr(container.subprocess, "run", fake_run)
 
     rc = container.cmd_up(tmp_path)
@@ -1198,8 +1199,8 @@ def test_cmd_up_cold_start_symlinks_and_copies_env(tmp_path, monkeypatch):
 
     monkeypatch.setattr(container, "_host_runtime", lambda: False)
     monkeypatch.setattr(container.utils, "container_id_for", lambda slug: None)
-    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
-    monkeypatch.setattr(container, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(container.utils, "workspace_folder_for", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container, "_write_override_config", lambda wt, slug: None)
     monkeypatch.setattr(container, "_main_repo_root_for_wt", lambda wt: main_repo)
     monkeypatch.setattr(container.subprocess, "run", lambda cmd, **kw: _ok())
 
@@ -1227,8 +1228,8 @@ def test_cmd_up_git_dir_timeout_degrades_to_empty(tmp_path, monkeypatch):
 
     monkeypatch.setattr(container, "_host_runtime", lambda: False)
     monkeypatch.setattr(container.utils, "container_id_for", lambda slug: None)
-    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
-    monkeypatch.setattr(container, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(container.utils, "workspace_folder_for", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container, "_write_override_config", lambda wt, slug: tmp_path / "override.json")
     monkeypatch.setattr(container, "_main_repo_root_for_wt", lambda wt: None)
     monkeypatch.setattr(container.subprocess, "run", fake_run)
 
@@ -1258,8 +1259,8 @@ def test_cmd_up_cold_start_adds_remote_env_and_final_safe_dir(tmp_path, monkeypa
 
     monkeypatch.setattr(container, "_host_runtime", lambda: False)
     monkeypatch.setattr(container.utils, "container_id_for", lambda slug: next(cid_seq))
-    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
-    monkeypatch.setattr(container, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(container.utils, "workspace_folder_for", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container, "_write_override_config", lambda wt, slug: None)
     monkeypatch.setattr(container, "_main_repo_root_for_wt", lambda wt: None)
     monkeypatch.setattr(container, "_ensure_safe_directory", lambda ws, cid: safe_calls.append(cid))
     monkeypatch.setattr(container.subprocess, "run", fake_run)
@@ -1301,7 +1302,7 @@ def test_cmd_run_execs_command_in_container(tmp_path, monkeypatch):
 
     monkeypatch.setattr(container, "_host_runtime", lambda: False)
     monkeypatch.setattr(container.utils, "container_id_for", lambda slug: "run-cid")
-    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container.utils, "workspace_folder_for", lambda wt: "/workspaces/wt")
     monkeypatch.setattr(container.subprocess, "run", lambda cmd, **kw: calls.append(list(cmd)) or _ok(returncode=7))
 
     rc = container.cmd_run(tmp_path, "echo hi")
@@ -1330,7 +1331,7 @@ def test_doctor_container_running_no_emulation(tmp_path, monkeypatch):
         return _ok(returncode=1)
 
     monkeypatch.setattr(container.utils, "container_id_for", lambda slug: "cid-1")
-    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container.utils, "workspace_folder_for", lambda wt: "/workspaces/wt")
     monkeypatch.setattr(container.subprocess, "run", fake_run)
 
     output = _doctor_capture(container, tmp_path)
@@ -1354,7 +1355,7 @@ def test_doctor_container_running_arch_emulation_warns(tmp_path, monkeypatch):
         return _ok(returncode=1)
 
     monkeypatch.setattr(container.utils, "container_id_for", lambda slug: "cid-1")
-    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container.utils, "workspace_folder_for", lambda wt: "/workspaces/wt")
     monkeypatch.setattr(container.subprocess, "run", fake_run)
 
     rc = container.cmd_doctor(tmp_path)
@@ -1378,7 +1379,7 @@ def test_doctor_container_inspect_timeout_unknown_platform(tmp_path, monkeypatch
         return _ok(returncode=1)
 
     monkeypatch.setattr(container.utils, "container_id_for", lambda slug: "cid-1")
-    monkeypatch.setattr(container.utils, "resolve_workspace_folder", lambda wt: "/workspaces/wt")
+    monkeypatch.setattr(container.utils, "workspace_folder_for", lambda wt: "/workspaces/wt")
     monkeypatch.setattr(container.subprocess, "run", fake_run)
 
     output = _doctor_capture(container, tmp_path)
@@ -1593,6 +1594,7 @@ def test_main_dispatches_down_default_slug(monkeypatch):
     container = load_module("container")
     monkeypatch.setattr("sys.argv", ["container.py", "down"])
     monkeypatch.setattr(container, "_git_root", lambda: Path("/tmp/some-repo"))
+    monkeypatch.setattr(container, "_chunk_slug_for_wt", lambda wt: wt.name)
     with patch.object(container, "cmd_down", return_value=0) as mock, pytest.raises(SystemExit) as exc:
         container.main()
     assert exc.value.code == 0

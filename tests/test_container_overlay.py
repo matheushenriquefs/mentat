@@ -143,17 +143,21 @@ def test_dockerfile_path_has_no_extra_files(cr, tmp_path):
 # ── container.py writes the overlay alongside devcontainer.json ─────────────────
 
 
-def test_ensure_devcontainer_writes_overlay(tmp_path):
-    """_ensure_devcontainer_json writes both devcontainer.json and the dev overlay."""
+def test_write_override_config_writes_overlay_outside_worktree(tmp_path):
+    """_write_override_config writes override devcontainer.json + compose overlay outside the tree."""
     container = load_script(_SCRIPTS / "container.py", "container")
     _sidecar_worktree(tmp_path)
+    slug = tmp_path.name
+    cs = f"{'0' * 32}/{slug}"
 
-    container._ensure_devcontainer_json(tmp_path, tmp_path.name)
+    container._write_override_config(tmp_path, cs)
 
-    dcj = tmp_path / ".devcontainer" / "devcontainer.json"
-    overlay = tmp_path / ".devcontainer" / "mentat-dev.compose.yml"
-    assert dcj.exists(), "devcontainer.json not written"
+    from lib.chunk import override_config_dir
+
+    override_dir = override_config_dir(tmp_path, cs)
+    dcj = override_dir / "devcontainer.json"
+    overlay = override_dir / "mentat-dev.compose.yml"
+    assert dcj.exists(), "override devcontainer.json not written"
     assert overlay.exists(), "mentat-dev.compose.yml overlay not written"
-    data = json.loads(dcj.read_text())
-    assert data["dockerComposeFile"] == ["../docker-compose.yml", "mentat-dev.compose.yml"]
+    assert not (tmp_path / ".devcontainer" / "devcontainer.json").exists()
     assert "mentat-dev:" in overlay.read_text()

@@ -26,8 +26,9 @@ def _sessions():
     return load_script(SESSIONS_PY, "e2e_sessions")
 
 
-def _seed(session_dir: Path, *, stream: list[dict] | None = None, events: list[dict] | None = None,
-          age: float = 0.0) -> None:
+def _seed(
+    session_dir: Path, *, stream: list[dict] | None = None, events: list[dict] | None = None, age: float = 0.0
+) -> None:
     session_dir.mkdir(parents=True, exist_ok=True)
     if stream is not None:
         (session_dir / "session.jsonl").write_text("".join(json.dumps(r) + "\n" for r in stream))
@@ -43,10 +44,13 @@ def _seed(session_dir: Path, *, stream: list[dict] | None = None, events: list[d
 def test_session_stream_tools_extracts_tail(tmp_path):
     ss = _sessions()
     sd = tmp_path / "sess"
-    _seed(sd, stream=[
-        {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {}}]}},
-        {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {}}]}},
-    ])
+    _seed(
+        sd,
+        stream=[
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {}}]}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {}}]}},
+        ],
+    )
     tools = ss.session_stream_tools(sd, limit=5)
     assert tools == ["Read", "Bash"]
 
@@ -54,12 +58,21 @@ def test_session_stream_tools_extracts_tail(tmp_path):
 def test_session_worktree_from_spawn_audit(tmp_path):
     ss = _sessions()
     sd = tmp_path / "sess"
-    _seed(sd, events=[
-        {"ts": "2026-06-30T00:00:00Z", "event": "chunk.spawned",
-         "payload": {"slug": "s", "plan": "s.md", "harness": "claude-code", "worktree": "/wt/one"}},
-        {"ts": "2026-06-30T00:00:01Z", "event": "chunk.spawned",
-         "payload": {"slug": "s", "plan": "s.md", "harness": "claude-code", "worktree": "/wt/two"}},
-    ])
+    _seed(
+        sd,
+        events=[
+            {
+                "ts": "2026-06-30T00:00:00Z",
+                "event": "chunk.spawned",
+                "payload": {"slug": "s", "plan": "s.md", "harness": "claude-code", "worktree": "/wt/one"},
+            },
+            {
+                "ts": "2026-06-30T00:00:01Z",
+                "event": "chunk.spawned",
+                "payload": {"slug": "s", "plan": "s.md", "harness": "claude-code", "worktree": "/wt/two"},
+            },
+        ],
+    )
     assert ss.session_worktree(sd) == "/wt/two", "latest spawn's worktree wins"
 
 
@@ -112,13 +125,25 @@ def test_list_sessions_ranks_attention_to_top(tmp_path):
     ss = _sessions()
     repo_dir = tmp_path / "repo"
     # waiting (AskUserQuestion, fresh) must outrank an idle landed session.
-    _seed(repo_dir / "waiter", stream=[
-        {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "AskUserQuestion", "input": {}}]}},
-    ])
-    _seed(repo_dir / "done", events=[
-        {"ts": "2026-06-30T00:00:00Z", "event": "chunk.landed",
-         "payload": {"slug": "s", "sha": "x", "holding": "main"}},
-    ])
+    _seed(
+        repo_dir / "waiter",
+        stream=[
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "tool_use", "name": "AskUserQuestion", "input": {}}]},
+            },
+        ],
+    )
+    _seed(
+        repo_dir / "done",
+        events=[
+            {
+                "ts": "2026-06-30T00:00:00Z",
+                "event": "chunk.landed",
+                "payload": {"slug": "s", "sha": "x", "holding": "main"},
+            },
+        ],
+    )
     records = ss.list_sessions(repo_dir, active_only=False)
     order = [r["session"] for r in records]
     assert order.index("waiter") < order.index("done"), "waiting floats above idle"

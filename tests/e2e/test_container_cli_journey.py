@@ -213,27 +213,42 @@ def test_atomic_write_writes_text_and_leaves_no_tmp(cc, tmp_path):
     assert not (tmp_path / "out.json.tmp").exists()
 
 
-# ── _ensure_devcontainer_json ───────────────────────────────────────────────────
+# ── _write_override_config ───────────────────────────────────────────────────
+
+_CID = "0" * 32
+
+
+def _cs(slug: str) -> str:
+    return f"{_CID}/{slug}"
+
+
+def _override_dcj(cc, wt: Path, slug: str) -> Path:
+    from lib.chunk import override_config_dir
+
+    repo = cc._repo_root_for_wt(wt)
+    return override_config_dir(repo, _cs(slug)) / "devcontainer.json"
 
 
 def _dcj_path(wt: Path) -> Path:
     return wt / ".devcontainer" / "devcontainer.json"
 
 
-def test_ensure_dcj_correct_existing_is_left_untouched(cc, tmp_path):
+def test_ensure_dcj_tracked_file_left_untouched_override_written(cc, tmp_path):
     wt = tmp_path / "myslug"
-    dcj = _dcj_path(wt)
+    wt.mkdir()
+    dcj = wt / ".devcontainer" / "devcontainer.json"
     dcj.parent.mkdir(parents=True)
     dcj.write_text('{\n  "workspaceFolder": "/workspaces/myslug"\n}\n')
     before = dcj.read_text()
-    cc._ensure_devcontainer_json(wt, "myslug")
-    # ws matches and no git mount → early return, file unchanged.
+    cc._write_override_config(wt, _cs("myslug"))
     assert dcj.read_text() == before
+    assert _override_dcj(cc, wt, "myslug").exists()
 
 
 def test_ensure_dcj_wrong_workspace_folder_is_rewritten(cc, tmp_path):
     wt = tmp_path / "newslug"
-    dcj = _dcj_path(wt)
+    wt.mkdir()
+    dcj = wt / ".devcontainer" / "devcontainer.json"
     dcj.parent.mkdir(parents=True)
     dcj.write_text(
         "{\n"
@@ -244,10 +259,10 @@ def test_ensure_dcj_wrong_workspace_folder_is_rewritten(cc, tmp_path):
         '  "onCreateCommand": "init /workspaces/mentat"\n'
         "}\n"
     )
-    cc._ensure_devcontainer_json(wt, "newslug")
+    cc._write_override_config(wt, _cs("newslug"))
     import json
 
-    data = json.loads(dcj.read_text())
+    data = json.loads(_override_dcj(cc, wt, "newslug").read_text())
     assert data["name"] == "newslug"
     assert data["workspaceFolder"] == "/workspaces/newslug"
     assert data["workspaceMount"] == "source=/a,target=/workspaces/newslug,type=bind"
@@ -257,16 +272,17 @@ def test_ensure_dcj_wrong_workspace_folder_is_rewritten(cc, tmp_path):
 
 def test_ensure_dcj_appends_missing_git_mount(cc, tmp_path):
     wt = tmp_path / "myslug"
-    dcj = _dcj_path(wt)
+    wt.mkdir()
+    dcj = wt / ".devcontainer" / "devcontainer.json"
     dcj.parent.mkdir(parents=True)
-    # ws is already correct; only the git mount is missing.
     dcj.write_text('{\n  "workspaceFolder": "/workspaces/myslug",\n  "mounts": []\n}\n')
-    (wt / ".git").write_text("gitdir: /main/.git/worktrees/x\n")
-    cc._ensure_devcontainer_json(wt, "myslug")
+    main_git = str(tmp_path / "main" / ".git")
+    (wt / ".git").write_text(f"gitdir: {main_git}/worktrees/x\n")
+    cc._write_override_config(wt, _cs("myslug"))
     import json
 
-    data = json.loads(dcj.read_text())
-    assert "source=/main/.git,target=/main/.git,type=bind" in data["mounts"]
+    data = json.loads(_override_dcj(cc, wt, "myslug").read_text())
+    assert f"source={main_git},target={main_git},type=bind" in data["mounts"]
 
 
 def test_ensure_dcj_synthesizes_when_absent(cc, monkeypatch, tmp_path):
@@ -277,23 +293,27 @@ def test_ensure_dcj_synthesizes_when_absent(cc, monkeypatch, tmp_path):
         extra_files={"docker-compose.yml": "services: {}\n"},
     )
     monkeypatch.setattr(cc.compose_render, "synth_spec", lambda w: synth)
-    cc._ensure_devcontainer_json(wt, "myslug")
-    dcj = _dcj_path(wt)
-    assert dcj.read_text() == '{"name":"x"}'
-    assert (dcj.parent / "docker-compose.yml").read_text() == "services: {}\n"
+    cc._write_override_config(wt, _cs("myslug"))
+    import json
+
+    data = json.loads(_override_dcj(cc, wt, "myslug").read_text())
+    assert data["name"] == "myslug"
+    assert data["workspaceFolder"] == "/workspaces/myslug"
+    assert (_override_dcj(cc, wt, "myslug").parent / "docker-compose.yml").read_text() == "services: {}\n"
 
 
 def test_ensure_dcj_synthesizes_and_merges_git_mount(cc, monkeypatch, tmp_path):
     wt = tmp_path / "myslug"
     wt.mkdir()
-    (wt / ".git").write_text("gitdir: /main/.git/worktrees/x\n")
+    main_git = str(tmp_path / "main" / ".git")
+    (wt / ".git").write_text(f"gitdir: {main_git}/worktrees/x\n")
     synth = SimpleNamespace(devcontainer_json='{"name":"x"}', extra_files={})
     monkeypatch.setattr(cc.compose_render, "synth_spec", lambda w: synth)
-    cc._ensure_devcontainer_json(wt, "myslug")
+    cc._write_override_config(wt, _cs("myslug"))
     import json
 
-    data = json.loads(_dcj_path(wt).read_text())
-    assert data["mounts"] == ["source=/main/.git,target=/main/.git,type=bind"]
+    data = json.loads(_override_dcj(cc, wt, "myslug").read_text())
+    assert data["mounts"] == [f"source={main_git},target={main_git},type=bind"]
 
 
 def test_ensure_dcj_synth_valueerror_exits(cc, monkeypatch, tmp_path, capsys):
@@ -305,7 +325,7 @@ def test_ensure_dcj_synth_valueerror_exits(cc, monkeypatch, tmp_path, capsys):
 
     monkeypatch.setattr(cc.compose_render, "synth_spec", _boom)
     with pytest.raises(SystemExit) as exc:
-        cc._ensure_devcontainer_json(wt, "myslug")
+        cc._write_override_config(wt, _cs("myslug"))
     assert exc.value.code == 1
     assert "no template found" in capsys.readouterr().err
 
@@ -349,7 +369,7 @@ def test_cmd_up_host_runtime_warns_and_returns_zero(cc, monkeypatch, tmp_path):
 def test_cmd_up_already_running_ensures_safe_dir(cc, monkeypatch, tmp_path):
     monkeypatch.setattr(cc, "_host_runtime", lambda: False)
     monkeypatch.setattr(cc.utils, "container_id_for", lambda slug: "cid")
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     ensured = []
     monkeypatch.setattr(cc, "_ensure_safe_directory", lambda ws, cid: ensured.append((ws, cid)))
     assert cc.cmd_up(tmp_path / "slug") == 0
@@ -359,7 +379,7 @@ def test_cmd_up_already_running_ensures_safe_dir(cc, monkeypatch, tmp_path):
 def test_cmd_up_restart_stopped_container(cc, monkeypatch, tmp_path):
     monkeypatch.setattr(cc, "_host_runtime", lambda: False)
     monkeypatch.setattr(cc.utils, "container_id_for", _Popper([None, "cid2"]))
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
     monkeypatch.setattr(cc, "_ensure_safe_directory", lambda ws, cid: None)
 
@@ -380,7 +400,7 @@ def test_cmd_up_restart_stopped_container(cc, monkeypatch, tmp_path):
 def test_cmd_up_docker_ps_timeout_is_unavailable(cc, monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cc, "_host_runtime", lambda: False)
     monkeypatch.setattr(cc.utils, "container_id_for", lambda slug: None)
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
 
     def _boom(cmd):
@@ -394,7 +414,7 @@ def test_cmd_up_docker_ps_timeout_is_unavailable(cc, monkeypatch, tmp_path, caps
 def test_cmd_up_docker_start_timeout_is_unavailable(cc, monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cc, "_host_runtime", lambda: False)
     monkeypatch.setattr(cc.utils, "container_id_for", lambda slug: None)
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
 
     def responder(cmd):
@@ -412,7 +432,7 @@ def test_cmd_up_docker_start_timeout_is_unavailable(cc, monkeypatch, tmp_path, c
 def test_cmd_up_docker_start_nonzero_is_failure(cc, monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cc, "_host_runtime", lambda: False)
     monkeypatch.setattr(cc.utils, "container_id_for", lambda slug: None)
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
 
     def responder(cmd):
@@ -431,7 +451,7 @@ def test_cmd_up_start_ok_but_no_container_is_failure(cc, monkeypatch, tmp_path, 
     monkeypatch.setattr(cc, "_host_runtime", lambda: False)
     # both container_id_for lookups return None → post-start check fails.
     monkeypatch.setattr(cc.utils, "container_id_for", lambda slug: None)
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
 
     def responder(cmd):
@@ -449,9 +469,9 @@ def test_cmd_up_start_ok_but_no_container_is_failure(cc, monkeypatch, tmp_path, 
 def test_cmd_up_cold_start_success(cc, monkeypatch, tmp_path):
     monkeypatch.setattr(cc, "_host_runtime", lambda: False)
     monkeypatch.setattr(cc.utils, "container_id_for", _Popper([None, "cid"]))
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
-    monkeypatch.setattr(cc, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(cc, "_write_override_config", lambda wt, slug: None)
     monkeypatch.setattr(cc, "_main_repo_root_for_wt", lambda wt: None)
     monkeypatch.setattr(cc, "_ensure_safe_directory", lambda ws, cid: None)
 
@@ -472,9 +492,9 @@ def test_cmd_up_cold_start_success(cc, monkeypatch, tmp_path):
 def test_cmd_up_cold_start_devcontainer_missing_is_failure(cc, monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cc, "_host_runtime", lambda: False)
     monkeypatch.setattr(cc.utils, "container_id_for", lambda slug: None)
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
-    monkeypatch.setattr(cc, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(cc, "_write_override_config", lambda wt, slug: None)
     monkeypatch.setattr(cc, "_main_repo_root_for_wt", lambda wt: None)
 
     def responder(cmd):
@@ -494,9 +514,9 @@ def test_cmd_up_cold_start_devcontainer_missing_is_failure(cc, monkeypatch, tmp_
 def test_cmd_up_cold_start_devcontainer_timeout_is_unavailable(cc, monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cc, "_host_runtime", lambda: False)
     monkeypatch.setattr(cc.utils, "container_id_for", lambda slug: None)
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
-    monkeypatch.setattr(cc, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(cc, "_write_override_config", lambda wt, slug: None)
     monkeypatch.setattr(cc, "_main_repo_root_for_wt", lambda wt: None)
 
     def responder(cmd):
@@ -516,9 +536,9 @@ def test_cmd_up_cold_start_devcontainer_timeout_is_unavailable(cc, monkeypatch, 
 def test_cmd_up_cold_start_devcontainer_nonzero_is_failure(cc, monkeypatch, tmp_path):
     monkeypatch.setattr(cc, "_host_runtime", lambda: False)
     monkeypatch.setattr(cc.utils, "container_id_for", lambda slug: None)
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
-    monkeypatch.setattr(cc, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(cc, "_write_override_config", lambda wt, slug: None)
     monkeypatch.setattr(cc, "_main_repo_root_for_wt", lambda wt: None)
 
     def responder(cmd):
@@ -537,9 +557,9 @@ def test_cmd_up_cold_start_devcontainer_nonzero_is_failure(cc, monkeypatch, tmp_
 def test_cmd_up_cold_start_git_timeout_omits_remote_env(cc, monkeypatch, tmp_path):
     monkeypatch.setattr(cc, "_host_runtime", lambda: False)
     monkeypatch.setattr(cc.utils, "container_id_for", _Popper([None, "cid"]))
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
-    monkeypatch.setattr(cc, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(cc, "_write_override_config", lambda wt, slug: None)
     monkeypatch.setattr(cc, "_main_repo_root_for_wt", lambda wt: None)
     monkeypatch.setattr(cc, "_ensure_safe_directory", lambda ws, cid: None)
 
@@ -561,9 +581,9 @@ def test_cmd_up_cold_start_symlinks_and_env_from_repo_root(cc, monkeypatch, tmp_
     """Exercise the repo-root symlink + .env copy block with a real tmp repo."""
     monkeypatch.setattr(cc, "_host_runtime", lambda: False)
     monkeypatch.setattr(cc.utils, "container_id_for", _Popper([None, "cid"]))
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
-    monkeypatch.setattr(cc, "_ensure_devcontainer_json", lambda wt, slug: None)
+    monkeypatch.setattr(cc, "_write_override_config", lambda wt, slug: None)
     monkeypatch.setattr(cc, "_ensure_safe_directory", lambda ws, cid: None)
 
     repo_root = tmp_path / "main"
@@ -619,7 +639,7 @@ def test_cmd_run_container_not_running_is_unavailable(cc, monkeypatch, tmp_path,
 def test_cmd_run_execs_in_container(cc, monkeypatch, tmp_path):
     monkeypatch.setattr(cc, "_host_runtime", lambda: False)
     monkeypatch.setattr(cc.utils, "container_id_for", lambda slug: "cid")
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
     rec = Recorder(lambda cmd: _cp(0))
     monkeypatch.setattr(cc.subprocess, "run", rec)
@@ -678,7 +698,7 @@ def test_doctor_section_container_daemon_down_warns(cc, monkeypatch, tmp_path, c
 def test_doctor_section_container_emulation_warns(cc, monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
     monkeypatch.setattr(cc.utils, "container_id_for", lambda slug: "cid")
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
 
     def responder(cmd):
         if cmd[1] == "info":
@@ -696,7 +716,7 @@ def test_doctor_section_container_emulation_warns(cc, monkeypatch, tmp_path, cap
 def test_doctor_section_container_no_emulation(cc, monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
     monkeypatch.setattr(cc.utils, "container_id_for", lambda slug: "cid")
-    monkeypatch.setattr(cc.utils, "resolve_workspace_folder", lambda wt: "/ws")
+    monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
 
     def responder(cmd):
         if cmd[1] == "info":
@@ -722,8 +742,8 @@ def test_doctor_section_container_no_container_warns(cc, monkeypatch, tmp_path, 
 
     monkeypatch.setattr(cc.subprocess, "run", Recorder(responder))
     w, a = cc._doctor_section_container(tmp_path / "myslug", "arm64")
-    assert w == ["container not running (slug=myslug)"]
-    assert "no container for slug=myslug" in capsys.readouterr().out
+    assert w == ["container not running (chunk=myslug)"]
+    assert "no container for chunk=myslug" in capsys.readouterr().out
 
 
 # ── _doctor_section_harness ──────────────────────────────────────────────────────
@@ -948,6 +968,7 @@ def test_main_run_joins_command_with_spaces(cc, monkeypatch, tmp_path):
 def test_main_down_defaults_slug_to_git_root_name(cc, monkeypatch, tmp_path):
     captured = {}
     monkeypatch.setattr(cc, "_git_root", lambda: tmp_path / "my-repo")
+    monkeypatch.setattr(cc, "_chunk_slug_for_wt", lambda wt: wt.name)
     monkeypatch.setattr(cc, "cmd_down", lambda *, slug: captured.update(slug=slug) or 0)
     monkeypatch.setattr(cc.sys, "argv", ["c", "down"])
     with pytest.raises(SystemExit) as exc:

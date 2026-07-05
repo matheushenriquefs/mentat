@@ -38,7 +38,37 @@ _fan_out = load_sibling(__file__, "fan_out")
 _land_queue = load_sibling(__file__, "land_queue")
 _recover = load_sibling(__file__, "recover")
 
+_run_chunk_slugs: set[str] = set()
+
 _SIGNAL_EXIT_BASE = 128  # Shell-reported signal exit: 128 + signum
+
+
+def _track_chunk_slug(plan_slug: str) -> None:
+    from lib.chunk import chunk_id_for_plan, chunk_slug
+
+    with contextlib.suppress(LookupError):
+        _run_chunk_slugs.add(chunk_slug(chunk_id_for_plan(plan_slug), plan_slug))
+
+
+def _run_chunk_ids() -> set[str]:
+    ids: set[str] = set()
+    for cs in _run_chunk_slugs:
+        ids.add(cs.split("/", 1)[0] if "/" in cs else cs)
+    return ids
+
+
+def _preserve_chunk_slugs(preserve_plan_slugs: set[str] | None) -> set[str]:
+    if not preserve_plan_slugs:
+        return set()
+    from lib.chunk import chunk_id_for_plan, chunk_slug
+
+    out: set[str] = set()
+    for slug in preserve_plan_slugs:
+        try:
+            out.add(chunk_slug(chunk_id_for_plan(slug), slug))
+        except LookupError:
+            out.add(slug)
+    return out
 
 
 def _down_plan_container(plan_slug: str) -> bool:
@@ -56,6 +86,7 @@ def _bind_chunk_from_worktree(plan_slug: str, worktree: Path) -> None:
 
     try:
         chunk_id_for_plan(plan_slug)
+        _track_chunk_slug(plan_slug)
         return
     except LookupError:
         pass
@@ -68,6 +99,7 @@ def _bind_chunk_from_worktree(plan_slug: str, worktree: Path) -> None:
         return
     chunk_id, _slug = cs.split("/", 1)
     bind_plan_chunk(plan_slug, chunk_id)
+    _track_chunk_slug(plan_slug)
 
 
 def _parse_list_field(raw: str) -> list[str]:
@@ -654,7 +686,17 @@ def _partition_fanout(
             # Container/infra failure — the worker never ran, no code produced.
             # killed_by names the killer so the death is self-describing: a breaker
             # short-circuit ('breaker-open', never launched) vs. a genuine downed
-            # container. Transient → returned, not marked (see docstring).
+            # container vs. OOM. Transient → returned, not marked (see docstring).
+            killed_by = killed_reason if killed_reason == "breaker-open" else "container-down"
+            if killed_by == "container-down":
+                from lib.chunk import chunk_id_for_plan, chunk_slug
+
+                try:
+                    cs = chunk_slug(chunk_id_for_plan(plan.slug), plan.slug)
+                    if _devcontainer.container_oom_killed(cs):
+                        killed_by = "oom"
+                except LookupError:
+                    pass
             _emit_event(
                 "chunk.ejected",
                 ejected_payload(
@@ -662,7 +704,7 @@ def _partition_fanout(
                     EjectReason.WORKER_DIED,
                     str(worktree),
                     logs_path=logs_path,
-                    killed_by=killed_reason if killed_reason == "breaker-open" else "container-down",
+                    killed_by=killed_by,
                 ),
             )
             transient.add(plan.slug)
@@ -681,47 +723,41 @@ def _partition_fanout(
 
 
 def _prune_stale_containers() -> None:
-    """Prune stale labeled containers. Dirty worktrees are logged but do not block pruning.
+    """Tear down exited containers for this run's chunk slugs only.
 
-    A dirty worktree's container is typically still running (and therefore not
-    pruneable) or recent enough to survive docker's ``until=1h`` filter. Skipping
-    the entire prune whenever *any* worktree is dirty accumulates orphan containers
-    from all other crashed runs — so we always prune and let docker's filters protect
-    genuinely live resources.
+    Machine-wide docker prune is forbidden — it would reap a concurrent run's
+    idle container (H3). Another run's resources are never candidates.
     """
-    wt_root = Path.cwd() / ".mentat" / "worktrees"
-    dirty = _worktrees.dirty_stale(wt_root)
-    for name in dirty:
-        print(f"devcontainer: dirty worktree '{name}' — its container may still be live", file=sys.stderr)
-
-    result = _devcontainer.prune()
-    _utils.emit_event("session.prune", {"reclaimed_bytes": result.reclaimed_bytes})
+    if not _run_chunk_slugs:
+        return
+    removed = _devcontainer.down_run(_run_chunk_slugs)
+    _utils.emit_event("session.prune", {"reclaimed_bytes": None, "containers_removed": removed})
 
 
 def _prune_stale_worktrees(preserve: set[str] | None = None) -> None:
-    """End-of-batch sweep of clean, inactive, stale worktrees (shared lib).
+    """End-of-batch sweep of clean, inactive, stale worktrees for this run only.
 
-    ``preserve`` slugs are held back from the sweep — a wedged (hitl-required)
+    ``preserve`` plan slugs are held back from the sweep — a wedged (hitl-required)
     chunk's worktree must survive for the operator even when it is clean and
-    inactive. They are folded into the active set the prune treats as live.
+    inactive.
     """
+    scope = _run_chunk_ids()
+    if not scope:
+        return
     wt_root = Path.cwd() / ".mentat" / "worktrees"
-    active = set(_devcontainer.list_active_slugs()) | (preserve or set())
-    removed = _worktrees.prune_stale(wt_root, active_slugs=active)
+    active = _preserve_chunk_slugs(preserve)
+    removed = _worktrees.prune_stale(wt_root, active_slugs=active, scope_chunk_ids=scope)
     _utils.emit_event("session.prune", {"reclaimed_bytes": None, "worktrees_removed": removed})
 
 
 def _gc_preserved_worktrees(preserve: set[str] | None = None) -> None:
-    """Reclaim long-abandoned preserved (ejected/dirty) worktrees.
-
-    ``_prune_stale_worktrees`` never touches a dirty worktree, so ejected trees
-    accumulate unbounded and keep their secrets around. This GCs any worktree far
-    older than the clean-prune cutoff (``worktrees.DEFAULT_GC_SECONDS``) regardless
-    of dirty state, sparing still-active + freshly-preserved (hitl) slugs.
-    """
+    """Reclaim long-abandoned preserved worktrees for this run's chunk ids only."""
+    scope = _run_chunk_ids()
+    if not scope:
+        return
     wt_root = Path.cwd() / ".mentat" / "worktrees"
-    active = set(_devcontainer.list_active_slugs()) | (preserve or set())
-    reclaimed = _worktrees.gc_preserved(wt_root, active_slugs=active)
+    active = _preserve_chunk_slugs(preserve)
+    reclaimed = _worktrees.gc_preserved(wt_root, active_slugs=active, scope_chunk_ids=scope)
     _utils.emit_event("session.prune", {"reclaimed_bytes": None, "worktrees_gc": reclaimed})
 
 
@@ -1062,6 +1098,7 @@ def run_orchestrate(
     print(f"mentat-orchestrate: track this run with `mentat-session track {session_id}`", file=sys.stderr)
     plans = _load_plans(plan_paths)
     anchored, auto = _scheduler.partition(plans)
+    _run_chunk_slugs.clear()
 
     if dry_run:
         print(f"[dry-run] would anchor: {[p.slug for p in anchored]}")

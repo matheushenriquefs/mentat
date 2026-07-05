@@ -28,7 +28,7 @@ def _load_config_order(config_path: Path) -> list[str]:
         if not isinstance(order, list):
             return []
         return [str(x) for x in order]  # type: ignore[unknown]
-    except (KeyError, TypeError):
+    except KeyError, TypeError:
         return []
 
 

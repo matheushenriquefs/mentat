@@ -86,7 +86,7 @@ def _git_mount_for_worktree(wt: Path) -> str | None:
         return None
     try:
         content = git_path.read_text().strip()
-    except (OSError, UnicodeDecodeError):
+    except OSError, UnicodeDecodeError:
         return None
     if not content.startswith("gitdir:"):
         return None
@@ -102,7 +102,7 @@ def _main_repo_root_for_wt(wt: Path) -> Path | None:
         return None
     try:
         content = git_path.read_text().strip()
-    except (OSError, UnicodeDecodeError):
+    except OSError, UnicodeDecodeError:
         return None
     if not content.startswith("gitdir:"):
         return None
@@ -117,57 +117,113 @@ def _atomic_write(path: Path, text: str) -> None:
     tmp.replace(path)
 
 
-def _ensure_devcontainer_json(wt: Path, slug: str) -> None:
+def _repo_root_for_wt(wt: Path) -> Path:
+    main = _main_repo_root_for_wt(wt)
+    if main is not None:
+        return main
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        cwd=str(wt),
+    )
+    if result.returncode == 0:
+        return Path(result.stdout.strip())
+    return wt
+
+
+def _chunk_slug_for_wt(wt: Path) -> str:
+    cs = utils.chunk_slug_for_worktree(wt)
+    return cs if cs else wt.name
+
+
+def _absolutize_build(data: dict, wt: Path) -> None:
+    build = data.get("build")
+    if not isinstance(build, dict):
+        return
+    dcj_parent = wt / ".devcontainer"
+    ctx = build.get("context")
+    if ctx and not str(ctx).startswith("/"):
+        build["context"] = str((dcj_parent / ctx).resolve())
+    df = build.get("dockerfile")
+    if df and not str(df).startswith("/"):
+        base = Path(str(build.get("context") or dcj_parent))
+        build["dockerfile"] = str((base / df).resolve())
+
+
+def _patch_compose_paths(data: dict, wt: Path) -> None:
+    dcf = data.get("dockerComposeFile")
+    if not dcf:
+        return
+    original_base = wt / ".devcontainer"
+    files = [dcf] if isinstance(dcf, str) else list(dcf)
+    abs_files: list[str] = []
+    for f in files:
+        if str(f).startswith("/"):
+            abs_files.append(str(f))
+            continue
+        candidate = (original_base / f).resolve()
+        if candidate.exists():
+            abs_files.append(str(candidate))
+        else:
+            abs_files.append(str((wt / f).resolve()))
+    data["dockerComposeFile"] = abs_files[0] if isinstance(dcf, str) else abs_files
+
+
+def _write_override_config(wt: Path, chunk_slug: str) -> Path:
+    """Write per-chunk devcontainer override outside the worktree; never touch tracked json."""
     import json as _json
     import re as _re
 
-    dcj = wt / ".devcontainer" / "devcontainer.json"
-    expected_ws = f"/workspaces/{slug}"
-    git_mount = _git_mount_for_worktree(wt)
+    from lib.chunk import override_config_dir
 
-    if dcj.exists():
-        # Strip JSONC comments via the canonical string-preserving parser so
-        # inline `//` inside quoted values (e.g. https:// URLs in postCreateCommand)
-        # is not mistaken for a line comment. Returns {} on any read/parse error.
+    repo_root = _repo_root_for_wt(wt)
+    expected_ws = utils.workspace_folder_for(wt)
+    git_mount = _git_mount_for_worktree(wt)
+    override_dir = override_config_dir(repo_root, chunk_slug)
+    override_dir.mkdir(parents=True, exist_ok=True)
+
+    dcj_src = wt / ".devcontainer" / "devcontainer.json"
+    extra_files: dict[str, str] = {}
+    if dcj_src.exists():
         from lib.config import load_jsonc
 
-        data = load_jsonc(dcj)
-        ws_ok = data.get("workspaceFolder") == expected_ws
-        mount_ok = git_mount is None or git_mount in data.get("mounts", [])
-        if ws_ok and mount_ok:
-            return
-        if not ws_ok:
-            old_ws = data.get("workspaceFolder") or "/workspaces/mentat"
-            data["name"] = slug
-            data["workspaceFolder"] = expected_ws
-            if "workspaceMount" in data:
-                data["workspaceMount"] = _re.sub(r"target=[^,]+", f"target={expected_ws}", data["workspaceMount"])
-            for key in ("postCreateCommand", "onCreateCommand"):
-                if key in data and isinstance(data[key], str):
-                    data[key] = data[key].replace(old_ws, expected_ws)
-        if git_mount and git_mount not in data.get("mounts", []):
-            data.setdefault("mounts", []).append(git_mount)
-        content = _json.dumps(data, indent=2)
-        extra_files: dict[str, str] = {}
+        data = load_jsonc(dcj_src)
     else:
         try:
             spec = compose_render.synth_spec(wt)
         except ValueError as exc:
             print(str(exc), file=sys.stderr)
             raise SystemExit(1) from exc
-        content = spec.devcontainer_json
+        data = _json.loads(spec.devcontainer_json)
         extra_files = spec.extra_files
-        if git_mount:
-            data = _json.loads(content)
-            data.setdefault("mounts", []).append(git_mount)
-            content = _json.dumps(data, indent=2)
 
-    dcj.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(dcj, content)
-    # Generated compose files (rendered template, sidecar overlay) live beside
-    # devcontainer.json; synth stays pure, so the writes happen here.
+    old_ws = data.get("workspaceFolder") or "/workspaces/mentat"
+    plan_slug = chunk_slug.split("/", 1)[-1]
+    data["name"] = plan_slug
+    data["workspaceFolder"] = expected_ws
+    if "workspaceMount" in data:
+        data["workspaceMount"] = _re.sub(r"target=[^,]+", f"target={expected_ws}", data["workspaceMount"])
+    for key in ("postCreateCommand", "onCreateCommand"):
+        if key in data and isinstance(data[key], str):
+            data[key] = data[key].replace(old_ws, expected_ws)
+    if git_mount and git_mount not in data.get("mounts", []):
+        data.setdefault("mounts", []).append(git_mount)
+
+    _absolutize_build(data, wt)
+    _patch_compose_paths(data, wt)
+
+    mem = os.environ.get("MENTAT_CHUNK_MEMORY", "").strip()
+    if mem:
+        run_args = list(data.get("runArgs") or [])
+        run_args.extend(["--memory", mem, "--memory-swap", mem])
+        data["runArgs"] = run_args
+
+    override_path = override_dir / "devcontainer.json"
+    _atomic_write(override_path, _json.dumps(data, indent=2))
     for fname, text in extra_files.items():
-        _atomic_write(dcj.parent / fname, text)
+        _atomic_write(override_dir / fname, text)
+    return override_path
 
 
 def _ensure_safe_directory(ws: str, cid: str) -> None:
@@ -190,12 +246,12 @@ def _ensure_safe_directory(ws: str, cid: str) -> None:
 
 
 def cmd_up(wt: Path) -> int:
-    slug = wt.name
+    chunk_slug = _chunk_slug_for_wt(wt)
     if _host_runtime():
-        _warn_host_runtime_once(slug)
+        _warn_host_runtime_once(chunk_slug)
         return 0  # nothing to bring up — tools run on the host
-    cid = utils.container_id_for(slug)
-    ws = utils.resolve_workspace_folder(wt)
+    cid = utils.container_id_for(chunk_slug)
+    ws = utils.workspace_folder_for(wt)
 
     if cid:
         _ensure_safe_directory(ws, cid)
@@ -209,7 +265,7 @@ def cmd_up(wt: Path) -> int:
                 "ps",
                 "-aq",
                 "--filter",
-                f"label=mentat_slug={slug}",
+                f"label={utils.CHUNK_LABEL}={chunk_slug}",
                 "--filter",
                 "status=exited",
                 "--filter",
@@ -241,18 +297,18 @@ def cmd_up(wt: Path) -> int:
                 file=sys.stderr,
             )
             return EX_FAILURE
-        cid2 = utils.container_id_for(slug)
+        cid2 = utils.container_id_for(chunk_slug)
         if not cid2:
             print(
-                f"mentat-container: docker start succeeded but no usable container found for slug={slug}",
+                f"mentat-container: docker start succeeded but no usable container found for chunk={chunk_slug}",
                 file=sys.stderr,
             )
             return EX_FAILURE
         _ensure_safe_directory(ws, cid2)
         return 0
 
-    # Cold start
-    _ensure_devcontainer_json(wt, slug)
+    # Cold start — external override config; tracked devcontainer.json stays pristine.
+    override_path = _write_override_config(wt, chunk_slug)
 
     # Symlink shared dirs from main repo
     repo_root = _main_repo_root_for_wt(wt)
@@ -284,8 +340,10 @@ def cmd_up(wt: Path) -> int:
         "up",
         "--workspace-folder",
         str(wt),
+        "--override-config",
+        str(override_path),
         "--id-label",
-        f"mentat_slug={slug}",
+        f"{utils.CHUNK_LABEL}={chunk_slug}",
     ]
     if git_dir:
         cmd += ["--remote-env", f"GIT_DIR={git_dir}"]
@@ -309,31 +367,31 @@ def cmd_up(wt: Path) -> int:
     if result.returncode != 0:
         return EX_FAILURE
 
-    final_cid = utils.container_id_for(slug)
+    final_cid = utils.container_id_for(chunk_slug)
     if final_cid:
         _ensure_safe_directory(ws, final_cid)
     return 0
 
 
 def cmd_run(wt: Path, command: str) -> int:
-    slug = wt.name
+    chunk_slug = _chunk_slug_for_wt(wt)
     if _host_runtime():
-        _warn_host_runtime_once(slug)
+        _warn_host_runtime_once(chunk_slug)
         return _run_on_host(command, wt)
-    cid = utils.container_id_for(slug)
+    cid = utils.container_id_for(chunk_slug)
     if cid is utils.DAEMON_DOWN:
         print(
-            f"mentat-container: docker daemon not reachable for slug {slug} (is Docker running?)",
+            f"mentat-container: docker daemon not reachable for chunk {chunk_slug} (is Docker running?)",
             file=sys.stderr,
         )
         return EX_UNAVAILABLE
     if not cid:
         print(
-            f"mentat-container: container not running for slug {slug} (run 'mentat-container up' first)",
+            f"mentat-container: container not running for chunk {chunk_slug} (run 'mentat-container up' first)",
             file=sys.stderr,
         )
         return EX_UNAVAILABLE
-    ws = utils.resolve_workspace_folder(wt)
+    ws = utils.workspace_folder_for(wt)
     result = subprocess.run(
         [
             _docker(),
@@ -373,18 +431,18 @@ def _doctor_section_host(host_arch: str, host_os: str) -> tuple[list[str], list[
 
 def _doctor_section_container(wt: Path, host_arch: str) -> tuple[list[str], list[str]]:
     warnings: list[str] = []
-    slug = wt.name
+    chunk_slug = _chunk_slug_for_wt(wt)
     print("[container]")
     try:
         daemon_ok = subprocess.run([_docker(), "info"], capture_output=True, timeout=30).returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         daemon_ok = False
     if not daemon_ok:
         print(_col("daemon", "not running"))
         warnings.append("docker daemon not running")
     else:
         print(_col("daemon", "running"))
-        cid = utils.container_id_for(slug)
+        cid = utils.container_id_for(chunk_slug)
         if cid:
             try:
                 inspect = subprocess.run(
@@ -404,12 +462,12 @@ def _doctor_section_container(wt: Path, host_arch: str) -> tuple[list[str], list
                 warnings.append("arch emulation")
             else:
                 print(_col("emulation", "none"))
-            ws = utils.resolve_workspace_folder(wt)
+            ws = utils.workspace_folder_for(wt)
             print(_col("state", "running"))
             print(_col("workspace", ws))
         else:
-            print(_col("state", f"no container for slug={slug}"))
-            warnings.append(f"container not running (slug={slug})")
+            print(_col("state", f"no container for chunk={chunk_slug}"))
+            warnings.append(f"container not running (chunk={chunk_slug})")
     print()
     return warnings, []
 
@@ -505,7 +563,7 @@ def cmd_doctor(wt: Path) -> int:
 
     try:
         host_arch = subprocess.run(["uname", "-m"], capture_output=True, text=True, timeout=30).stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         host_arch = "unknown"
     host_os = f"{_platform.system().lower()} {_platform.release()}"
 
@@ -552,7 +610,7 @@ def main() -> None:
     elif args.cmd == "run":
         sys.exit(cmd_run(_git_root(), " ".join(args.command)))
     elif args.cmd == "down":
-        slug = args.slug if args.slug else _git_root().name
+        slug = args.slug if args.slug else _chunk_slug_for_wt(_git_root())
         sys.exit(cmd_down(slug=slug))
     elif args.cmd == "doctor":
         sys.exit(cmd_doctor(Path.cwd()))

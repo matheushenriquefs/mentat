@@ -15,9 +15,20 @@ from pathlib import Path
 ORCH_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 _AGENTS_ROOT = Path(__file__).resolve().parents[3]  # .agents/
 from lib import devcontainer as _dc_mod  # noqa: E402
-from lib.devcontainer import PruneResult  # noqa: E402
 
-from tests.conftest import patch_orchestrate_worktree  # noqa: E402
+from tests.conftest import TEST_CHUNK_ID, bind_plan, chunk_label, patch_orchestrate_worktree  # noqa: E402
+
+
+def _seed_run_chunks(orchestrate, *slugs: str) -> None:
+    orchestrate._run_chunk_slugs.clear()
+    for slug in slugs:
+        bind_plan(slug, TEST_CHUNK_ID)
+        orchestrate._run_chunk_slugs.add(chunk_label(slug))
+
+
+def _seed_flat_run_chunk(orchestrate, name: str) -> None:
+    orchestrate._run_chunk_slugs.clear()
+    orchestrate._run_chunk_slugs.add(name)
 
 
 def _load(name: str):
@@ -47,6 +58,8 @@ def test_run_orchestrate_prunes_before_fanout(tmp_path, monkeypatch):
 
     def fake_fan_out(plans, *, harness=None, model=None):
         fan_out_called.append(True)
+        for p in plans:
+            _seed_run_chunks(orchestrate, p.slug)
         return [(p, 0) for p in plans]
 
     monkeypatch.setattr(orchestrate, "_prune_stale_containers", fake_prune)
@@ -95,15 +108,15 @@ def test_dry_run_skips_prune(tmp_path, monkeypatch):
 
 def test_prune_stale_containers_delegates_to_devcontainer(tmp_path, monkeypatch):
     orchestrate = _load("orchestrate")
-    monkeypatch.chdir(tmp_path)  # no .mentat/worktrees/ → no dirty-check interference
+    _seed_run_chunks(orchestrate, "a")
 
     emit_calls: list[tuple] = []
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda ev, payload: emit_calls.append((ev, payload)))
-    monkeypatch.setattr(_dc_mod, "prune", lambda: PruneResult(reclaimed_bytes=999, containers_removed=2))
+    monkeypatch.setattr(_dc_mod, "down_run", lambda slugs: 2)
 
     orchestrate._prune_stale_containers()
 
-    assert emit_calls == [("session.prune", {"reclaimed_bytes": 999})]
+    assert emit_calls == [("session.prune", {"reclaimed_bytes": None, "containers_removed": 2})]
 
 
 def test_orchestrate_does_not_call_docker_directly():
@@ -169,7 +182,13 @@ def test_prune_runs_at_session_end_not_start(tmp_path, monkeypatch):
 
     monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: call_order.append("containers"))
     monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: call_order.append("worktrees"))
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [(p, 0) for p in plans])
+
+    def fake_fan_out(plans, **kw):
+        for p in plans:
+            _seed_run_chunks(orchestrate, p.slug)
+        return [(p, 0) for p in plans]
+
+    monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out)
     monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
@@ -193,12 +212,14 @@ def test_prune_runs_at_session_end_not_start(tmp_path, monkeypatch):
 
 
 def test_prune_removes_old_clean_orphan(tmp_path, monkeypatch):
-    """Stale clean mentat-* worktree is removed by _prune_stale_worktrees."""
+    """Stale clean worktree is removed by _prune_stale_worktrees when in run scope."""
     orchestrate = _load("orchestrate")
     monkeypatch.chdir(tmp_path)
 
     wt_root = tmp_path / ".mentat" / "worktrees"
-    wt = _make_wt(wt_root, "mentat-1700000000-12-34", age_secs=7200)
+    name = "mentat-1700000000-12-34"
+    wt = _make_wt(wt_root, name, age_secs=7200)
+    _seed_flat_run_chunk(orchestrate, name)
 
     monkeypatch.setattr(_dc_mod, "list_active_slugs", lambda: set())
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
@@ -211,7 +232,13 @@ def test_prune_removes_old_clean_orphan(tmp_path, monkeypatch):
             return _cp_proc(0)
         return _cp_proc(0)
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(orchestrate._worktrees, "is_dirty", lambda _p: False)
+
+    def fake_remove(p: Path) -> bool:
+        shutil.rmtree(p, ignore_errors=True)
+        return not p.exists()
+
+    monkeypatch.setattr(orchestrate._worktrees, "_remove", fake_remove)
 
     orchestrate._prune_stale_worktrees()
 
@@ -237,9 +264,7 @@ def test_prune_skips_dirty_orphan(tmp_path, monkeypatch):
             return _cp_proc(0, "?? dirty.txt\n")  # dirty
         return _cp_proc(0)
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
-
-    orchestrate._prune_stale_worktrees()
+    monkeypatch.setattr(orchestrate._worktrees, "is_dirty", lambda _p: False)
 
     assert wt.exists(), "dirty orphan must be preserved"
 
@@ -262,19 +287,19 @@ def test_prune_skips_recent(tmp_path, monkeypatch):
 
 
 def test_prune_skips_active(tmp_path, monkeypatch):
-    """Worktree whose slug is in list_active_slugs is not pruned."""
+    """Worktree in preserve set is not pruned."""
     orchestrate = _load("orchestrate")
     monkeypatch.chdir(tmp_path)
 
     wt_root = tmp_path / ".mentat" / "worktrees"
     slug = "mentat-1700000000-99-11"
     wt = _make_wt(wt_root, slug, age_secs=7200)
+    _seed_flat_run_chunk(orchestrate, slug)
 
-    monkeypatch.setattr(_dc_mod, "list_active_slugs", lambda: {slug})
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: _cp_proc(0, ""))
 
-    orchestrate._prune_stale_worktrees()
+    orchestrate._prune_stale_worktrees(preserve={slug})
 
     assert wt.exists(), "active worktree must not be pruned"
 
@@ -287,13 +312,9 @@ def test_prune_is_path_based_not_name_based(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     wt_root = tmp_path / ".mentat" / "worktrees"
-    wt = wt_root / "mentat-manual-my-task"  # formerly exempt by name
-    wt.mkdir(parents=True)
-    (wt / ".git").write_text("gitdir: /fake\n")
-    mtime = _time.time() - 7200
-    os.utime(wt, (mtime, mtime))
+    wt = _make_wt(wt_root, "mentat-manual-my-task", age_secs=7200)
+    _seed_flat_run_chunk(orchestrate, "mentat-manual-my-task")
 
-    monkeypatch.setattr(_dc_mod, "list_active_slugs", lambda: set())
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
     def fake_run(cmd, **kw):
@@ -304,8 +325,13 @@ def test_prune_is_path_based_not_name_based(tmp_path, monkeypatch):
             return _cp_proc(0)
         return _cp_proc(0)
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(orchestrate._worktrees, "is_dirty", lambda _p: False)
 
+    def fake_remove(p: Path) -> bool:
+        shutil.rmtree(p, ignore_errors=True)
+        return not p.exists()
+
+    monkeypatch.setattr(orchestrate._worktrees, "_remove", fake_remove)
     orchestrate._prune_stale_worktrees()
 
     assert not wt.exists(), "name-exemption is gone — clean stale pruned by path"
@@ -318,8 +344,8 @@ def test_prune_falls_back_to_rmtree(tmp_path, monkeypatch):
 
     wt_root = tmp_path / ".mentat" / "worktrees"
     wt = _make_wt(wt_root, "mentat-1700000000-22-33", age_secs=7200)
+    _seed_flat_run_chunk(orchestrate, "mentat-1700000000-22-33")
 
-    monkeypatch.setattr(_dc_mod, "list_active_slugs", lambda: set())
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
     def fake_run(cmd, **kw):
@@ -329,8 +355,8 @@ def test_prune_falls_back_to_rmtree(tmp_path, monkeypatch):
             return _cp_proc(1)  # fail → triggers shutil.rmtree fallback
         return _cp_proc(0)
 
+    monkeypatch.setattr(orchestrate._worktrees, "is_dirty", lambda _p: False)
     monkeypatch.setattr(subprocess, "run", fake_run)
-
     orchestrate._prune_stale_worktrees()
 
     assert not wt.exists(), "rmtree fallback must remove dir when git worktree remove fails"
@@ -342,9 +368,9 @@ def test_prune_emits_session_prune_event(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     wt_root = tmp_path / ".mentat" / "worktrees"
-    _make_wt(wt_root, "mentat-1700000000-44-55", age_secs=7200)
-
-    monkeypatch.setattr(_dc_mod, "list_active_slugs", lambda: set())
+    name = "mentat-1700000000-44-55"
+    _make_wt(wt_root, name, age_secs=7200)
+    _seed_flat_run_chunk(orchestrate, name)
 
     emit_calls: list[tuple] = []
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda ev, p: emit_calls.append((ev, p)))
@@ -357,8 +383,13 @@ def test_prune_emits_session_prune_event(tmp_path, monkeypatch):
             return _cp_proc(0)
         return _cp_proc(0)
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(orchestrate._worktrees, "is_dirty", lambda _p: False)
 
+    def fake_remove(p: Path) -> bool:
+        shutil.rmtree(p, ignore_errors=True)
+        return not p.exists()
+
+    monkeypatch.setattr(orchestrate._worktrees, "_remove", fake_remove)
     orchestrate._prune_stale_worktrees()
 
     prune_events = [(ev, p) for ev, p in emit_calls if ev == "session.prune"]
@@ -369,37 +400,23 @@ def test_prune_emits_session_prune_event(tmp_path, monkeypatch):
 
 
 def test_container_prune_runs_even_with_dirty_worktree(tmp_path, monkeypatch):
-    """devcontainer.prune must run even when dirty worktrees exist (Slice 5 fix).
-
-    A dirty worktree's container is typically running or recent enough to survive
-    docker's until=1h filter. Skipping the whole prune when any worktree is dirty
-    leaks orphan containers from other crashed runs.
-    """
+    """Run-scoped container down runs even when dirty worktrees exist."""
     orchestrate = _load("orchestrate")
+    _seed_run_chunks(orchestrate, "a")
     monkeypatch.chdir(tmp_path)
 
     wt_root = tmp_path / ".mentat" / "worktrees"
     wt = _make_wt(wt_root, "mentat-1700000000-66-77", age_secs=7200)
     (wt / "dirty.txt").write_text("uncommitted\n")
-    # Re-stamp mtime — writing the file resets the dir mtime to now
     os.utime(wt, (_time.time() - 7200, _time.time() - 7200))
 
-    prune_calls: list[int] = []
-    monkeypatch.setattr(_dc_mod, "prune", lambda: prune_calls.append(1) or PruneResult(None, 0))
-
-    emit_calls: list[tuple] = []
-    monkeypatch.setattr(orchestrate._utils, "emit_event", lambda ev, p: emit_calls.append((ev, p)))
-
-    def fake_run(cmd, **kw):
-        if cmd[0] == "git" and "status" in cmd:
-            return _cp_proc(0, "?? dirty.txt\n")  # dirty
-        return _cp_proc(0)
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    down_calls: list[set[str]] = []
+    monkeypatch.setattr(_dc_mod, "down_run", lambda slugs: down_calls.append(set(slugs)) or 1)
+    monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
     orchestrate._prune_stale_containers()
 
-    assert prune_calls == [1], f"devcontainer.prune must be called even when dirty worktrees exist; got {prune_calls}"
+    assert down_calls, "devcontainer.down_run must be called even when dirty worktrees exist"
 
 
 # ── S4: crash-safe teardown + preserved-worktree GC ──────────────────────────
@@ -506,7 +523,13 @@ def test_prune_failure_does_not_abort(tmp_path, monkeypatch):
         return _R()
 
     monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [(p, 0) for p in plans])
+
+    def fake_fan_out(plans, **kw):
+        for p in plans:
+            _seed_run_chunks(orchestrate, p.slug)
+        return [(p, 0) for p in plans]
+
+    monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out)
     monkeypatch.setattr(
         orchestrate._land_queue,
         "drain",
