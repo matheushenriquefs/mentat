@@ -223,7 +223,7 @@ def project(env: dict[str, str], event: str, *, now: float | None = None) -> Non
     swallowed — a projection error must never break an emit. No-op when the env
     carries no session id.
     """
-    uuid = env.get("MENTAT_SESSION")
+    uuid = env.get("MENTAT_AGENT") or env.get("MENTAT_SESSION")
     if not uuid:
         return
     ts = time.time() if now is None else now

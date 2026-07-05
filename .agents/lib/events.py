@@ -8,34 +8,32 @@ import subprocess
 import sys
 from collections.abc import Callable
 
-from lib import paths, state
-from lib.session import make_agent_id
+from lib import paths, state, store
+from lib.session import agent_id_from_env, make_agent_id
 
 # Events where a failed emit must not be silently swallowed — the orchestration
 # state machine cannot proceed correctly without a confirmed log write.
 _TERMINAL_EVENTS: frozenset[str] = frozenset({"chunk.landed", "chunk.ejected"})
+_EMIT_TIMEOUT_S = 30.0
 
 
 def _spawn(skill: str, event: str, payload: dict[str, object]) -> bool:
-    # Guarantee a session id reaches log.py: mint an opaque uuid into the child
-    # env when none is set (never mutating our own os.environ), so log.py's
-    # last-resort fallback is unreachable and no unkeyed `orphan-` dir is born.
     env = dict(os.environ)
-    if not env.get("MENTAT_SESSION"):
-        env["MENTAT_SESSION"] = make_agent_id(skill, "adhoc")
+    if not agent_id_from_env(env):
+        env["MENTAT_AGENT"] = make_agent_id(skill, "adhoc")
     r = subprocess.run(
         ["python3", str(paths.LOG_SCRIPT), "emit", skill, event, json.dumps(payload)],
         capture_output=True,
         text=True,
         env=env,
+        timeout=_EMIT_TIMEOUT_S,
     )
     if r.returncode != 0:
         tail = (r.stderr or "").strip().splitlines()[-1:] or ["(no stderr)"]
         print(f"{skill}: emit {event!r} failed rc={r.returncode}: {tail[0]}", file=sys.stderr)
         return False
-    # Log write confirmed → project the derived read model from the same env the
-    # child logged under. Best-effort inside project(): never fails an emit.
     state.project(env, event)
+    store.record_emit(env, event, payload)
     return True
 
 
