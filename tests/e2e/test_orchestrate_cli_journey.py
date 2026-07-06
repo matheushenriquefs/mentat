@@ -120,12 +120,12 @@ def test_load_plans_blocked_on_parent_index_is_dataerr(orch, tmp_path):
     assert exc.value.code == orch.EX_DATAERR
 
 
-def test_load_plans_unknown_dep_warns_but_does_not_raise(orch, tmp_path, capsys):
+def test_load_plans_unknown_dep_raises(orch, tmp_path, capsys):
     p = _write_plan(tmp_path, "solo", class_="AFK", blocked_by=["external-thing"])
-    plans = orch._load_plans([p])
-    assert len(plans) == 1
+    with pytest.raises(SystemExit) as exc:
+        orch._load_plans([p])
+    assert exc.value.code == orch.EX_DATAERR
     err = capsys.readouterr().err
-    assert "warning:" in err
     assert "external-thing" in err
 
 
@@ -248,6 +248,11 @@ def test_read_chunk_seed_returns_none_when_absent(orch, monkeypatch, tmp_path):
 
 
 def test_partition_fanout_routes_each_returncode(orch, monkeypatch, tmp_path):
+    from tests.conftest import TEST_CHUNK_ID, bind_plan
+
+    for slug in ("ok", "sig", "shell-sig", "hitl", "infra", "impl"):
+        bind_plan(slug, TEST_CHUNK_ID)
+
     events = []
     ejected = []
     monkeypatch.setattr(orch, "_emit_event", lambda ev, payload: events.append((ev, payload)))
@@ -322,6 +327,10 @@ def test_prune_stale_worktrees_folds_preserve_into_active(orch, monkeypatch):
 
 
 def test_land_all_without_plans_drains_bare(orch, monkeypatch, tmp_path):
+    from tests.conftest import TEST_CHUNK_ID, bind_plan
+
+    bind_plan("a", TEST_CHUNK_ID)
+    bind_plan("b", TEST_CHUNK_ID)
     captured = {}
     monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path / s)
 
@@ -338,6 +347,9 @@ def test_land_all_without_plans_drains_bare(orch, monkeypatch, tmp_path):
 
 
 def test_land_all_with_plans_passes_scheduler_hooks(orch, monkeypatch, tmp_path):
+    from tests.conftest import TEST_CHUNK_ID, bind_plan
+
+    bind_plan("a", TEST_CHUNK_ID)
     captured = {}
     monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path / s)
 
@@ -348,7 +360,7 @@ def test_land_all_with_plans_passes_scheduler_hooks(orch, monkeypatch, tmp_path)
     monkeypatch.setattr(orch._land_queue, "drain", _drain)
     plans = [_plan(orch, "a")]
     orch._land_all(["a"], holding="hold", plans=plans)
-    assert set(captured["kwargs"]) == {"on_landed", "on_ejected", "next_ready"}
+    assert set(captured["kwargs"]) == {"on_landed", "on_ejected", "list_ready_slices"}
 
 
 # ── run_orchestrate (dry-run) ─────────────────────────────────────────────────

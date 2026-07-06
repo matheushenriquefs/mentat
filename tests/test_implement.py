@@ -185,43 +185,10 @@ def test_implement_emits_chunk_ejected_with_hitl_reason(tmp_path):
     assert "hitl-required" in str(ejected_payload)
 
 
-# ── gate failure ──────────────────────────────────────────────────────────────
+# ── AFK success (in-session gates deferred to land per ADR-0004) ───────────────
 
 
-def test_implement_gate_fail_exits_1(tmp_path):
-    impl = load_module("implement")
-    plan = _write_plan(tmp_path, "gate-fail-plan", class_="AFK")
-
-    fake_result = MagicMock(returncode=0)
-
-    with patch.object(impl, "_invoke_harness", return_value=fake_result):
-        with patch.object(impl, "_detect_self_answer", return_value=False):
-            with patch.object(impl, "_run_gates", return_value=("block", "gate failed")):
-                with patch.object(impl, "_emit_event"):
-                    rc = impl.run_plan(plan, harness="fake")
-
-    assert rc == 1
-
-
-def test_implement_emits_chunk_ejected_with_gate_failed_reason(tmp_path):
-    impl = load_module("implement")
-    plan = _write_plan(tmp_path, "gate-fail-emit", class_="AFK")
-
-    fake_result = MagicMock(returncode=0)
-
-    with patch.object(impl, "_invoke_harness", return_value=fake_result):
-        with patch.object(impl, "_detect_self_answer", return_value=False):
-            with patch.object(impl, "_run_gates", return_value=("block", "smells bad")):
-                with patch.object(impl, "_emit_event") as mock_emit:
-                    impl.run_plan(plan, harness="fake")
-
-    payloads = [c.args[1] for c in mock_emit.call_args_list if "ejected" in c.args[0]]
-    assert payloads
-    assert "gate-failed" in str(payloads[0])
-
-
-def test_implement_tdd_red_then_green(tmp_path):
-    """After harness runs, gate passes → exit 0."""
+def test_implement_afk_harness_success_exits_0(tmp_path):
     impl = load_module("implement")
     plan = _write_plan(tmp_path, "tdd-plan", class_="AFK")
 
@@ -229,9 +196,8 @@ def test_implement_tdd_red_then_green(tmp_path):
 
     with patch.object(impl, "_invoke_harness", return_value=fake_result):
         with patch.object(impl, "_detect_self_answer", return_value=False):
-            with patch.object(impl, "_run_gates", return_value=("pass", "")):
-                with patch.object(impl, "_emit_event"):
-                    rc = impl.run_plan(plan, harness="fake")
+            with patch.object(impl, "_emit_event"):
+                rc = impl.run_plan(plan, harness="fake")
 
     assert rc == 0
 
@@ -573,7 +539,6 @@ def _patch_impl_common(monkeypatch, impl):
     monkeypatch.setattr(impl, "read_tests_manifest", lambda slug: ([], []))
     monkeypatch.setattr(impl, "compute_ro_mounts", lambda c, o: [])
     monkeypatch.setattr(impl, "_emit_event", lambda *a, **kw: None)
-    monkeypatch.setattr(impl, "_run_gates", lambda p: ("pass", ""))
 
 
 def test_afk_prompt_contains_commit_contract(tmp_path, monkeypatch):
@@ -638,9 +603,9 @@ def test_implement_diff_suggestion_is_raw_git_diff(tmp_path, monkeypatch, capsys
     monkeypatch.setattr(impl, "ensure_session", lambda *a, **k: "sess-b5")
     monkeypatch.setattr(impl, "_prune_worktrees_preflight", lambda: None)
     monkeypatch.setattr(impl._utils, "default_harness", lambda: "default")
-    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda _h: (0, []))
-    monkeypatch.setattr(impl, "preflight_worktree", lambda _: (0, None))
-    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda: False)
+    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda _h, reuse_worktree=False: (0, []))
+    monkeypatch.setattr(impl, "preflight_worktree", lambda _, reuse_worktree=False: (0, None))
+    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda reuse_worktree=False: False)
     monkeypatch.setattr(impl, "_run_and_doctor", lambda *a, **k: 0)
     monkeypatch.setattr(impl, "_teardown_worktree", lambda _: None)
     monkeypatch.setattr(sys, "exit", lambda c: None)
@@ -908,7 +873,7 @@ def test_main_preflight_veto_failure_names_missing_and_exits(tmp_path, monkeypat
     monkeypatch.setattr(impl, "ensure_session", lambda *a, **k: "sess")
     monkeypatch.setattr(impl, "_prune_worktrees_preflight", lambda: None)
     monkeypatch.setattr(impl._utils, "default_harness", lambda: "claude-code")
-    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda _h: (1, ["mentat-bug-reviewer"]))
+    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda _h, reuse_worktree=False: (1, ["mentat-bug-reviewer"]))
     with pytest.raises(SystemExit) as exc:
         impl.main()
     assert exc.value.code == 1

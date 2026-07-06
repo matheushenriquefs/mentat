@@ -131,14 +131,13 @@ def test_preflight_returns_65_on_path_conflict(main_repo):
     assert target is None
 
 
-def test_preflight_returns_66_on_missing_base(main_repo, monkeypatch):
-    """preflight calls mentat-git with default base=main; force a non-main repo to trip 66."""
+def test_preflight_succeeds_after_default_branch_rename(main_repo):
+    """worktree create auto-detects the default branch (FL3); renamed main→trunk still works."""
     impl = _load()
-    # Rename current branch off `main` so worktree create can't find base "main"
     subprocess.run(["git", "branch", "-m", "main", "trunk"], cwd=main_repo, check=True, capture_output=True)
     rc, target = impl.preflight_worktree("feat-y")
-    assert rc == 66
-    assert target is None
+    assert rc == 0
+    assert target is not None
 
 
 def test_main_invokes_preflight_then_chdir(main_repo, tmp_path, monkeypatch):

@@ -115,7 +115,10 @@ def test_worktree_for_chunk_raises_on_miss(monkeypatch) -> None:
 
 
 def test_rebase_ff_only_rejects_empty_sha_after_success(monkeypatch, tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
     def fake_run(cmd, *, cwd=None):
+        calls.append(cmd)
         if cmd[:2] == ["rebase", "main"]:
             return _cp(0, "")
         if cmd == ["rev-parse", "HEAD"]:
@@ -161,4 +164,3 @@ def test_require_commit_identity_raises_when_unset(tmp_path: Path, monkeypatch) 
     monkeypatch.setattr(git_lib, "host_commit_identity", lambda **kw: {})
     with pytest.raises(git_lib.GitError, match="user.name and user.email"):
         git_lib.require_commit_identity(cwd=repo)
-

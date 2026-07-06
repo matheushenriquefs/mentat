@@ -70,6 +70,8 @@ def test_run_orchestrate_prunes_before_fanout(tmp_path, monkeypatch):
         lambda chunks, **kw: [{"slug": c.slug, "status": "success"} for c in chunks],
     )
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
+    monkeypatch.setattr(orchestrate, "ensure_session", lambda *a, **k: "orch-test")
+    monkeypatch.setattr(orchestrate._git, "require_commit_identity", lambda **kw: ("T", "t@t"))
 
     with patch_orchestrate_worktree(orchestrate, tmp_path):
         orchestrate.run_orchestrate(
@@ -519,15 +521,19 @@ def test_prune_failure_does_not_abort(tmp_path, monkeypatch):
         class _R:
             returncode = 1
             stdout = ""
+            stderr = ""
+            stdout = ""
 
         return _R()
 
     monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr(orchestrate._utils, "read_config", lambda: {})
+    monkeypatch.setattr(orchestrate, "_run_recovery", lambda *a, **k: (set(), set(), set()))
 
     def fake_fan_out(plans, **kw):
         for p in plans:
             _seed_run_chunks(orchestrate, p.slug)
-        return [(p, 0) for p in plans]
+        return [(p, 0, None, None) for p in plans]
 
     monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out)
     monkeypatch.setattr(
@@ -536,6 +542,8 @@ def test_prune_failure_does_not_abort(tmp_path, monkeypatch):
         lambda chunks, **kw: [{"slug": c.slug, "status": "success"} for c in chunks],
     )
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
+    monkeypatch.setattr(orchestrate, "ensure_session", lambda *a, **k: "orch-test")
+    monkeypatch.setattr(orchestrate._git, "require_commit_identity", lambda **kw: ("T", "t@t"))
 
     with patch_orchestrate_worktree(orchestrate, tmp_path):
         rc = orchestrate.run_orchestrate(

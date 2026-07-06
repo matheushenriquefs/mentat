@@ -132,10 +132,7 @@ CLEAN_FULL = textwrap.dedent("""\
 CLEAN_CREW = textwrap.dedent("""\
     ---
     name: mentat-test-reviewer
-    description: >
-      Read-only test-faithfulness reviewer. Scores whether tests assert plan intent and
-      whether impl earns green or games it. Deterministic veto on gamed green.
-      Refuses to edit, run, or rebase.
+    description: Read-only test-faithfulness reviewer. Scores whether tests assert plan intent and whether impl earns green or games it. Deterministic veto on gamed green. Refuses to edit, run, or rebase.
     tools: [Read, Grep, Glob]
     ---
 
@@ -190,6 +187,15 @@ CLEAN_CREW = textwrap.dedent("""\
 
     Report ≤3 findings per lens. Flag highest-severity first.
     Return empty findings array on plan-less input, not error.
+    Coverage gap below threshold = weak-assertion finding, not veto.
+
+    ## Notes
+
+    Keep this reviewer read-only. Never edit tests or implementation files.
+    Never run pytest or rebase branches from this role.
+    Report findings only; implementer owns fixes.
+    Veto triggers only on blacklist patterns above.
+    Empty findings array on plan-less input, not error.
     Coverage gap below threshold = weak-assertion finding, not veto.
 """)
 

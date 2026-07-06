@@ -270,6 +270,7 @@ def test_run_recovery_retry_marks_recovered(monkeypatch, tmp_path):
     monkeypatch.setattr(orch._recover, "_emit_event", lambda *a, **k: None)
     monkeypatch.setattr(orch, "_recovery_respawn", lambda p, a, ctx=None, **k: [{"slug": p.slug, "status": "success"}])
     monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
+    monkeypatch.setattr(orch._recover, "_emit_event", lambda *a, **k: None)
     plan = _plan(orch, "core")
     ok, dead, stalled = orch._run_recovery(
         {"core"}, plans_by_slug={"core": plan}, holding="hold", session_id="s1", harness=None, model=None
@@ -285,10 +286,10 @@ def test_run_recovery_skipped_hitl_counts_neither(monkeypatch, tmp_path):
     ok, dead, stalled = orch._run_recovery(
         {"ui"}, plans_by_slug={"ui": ui}, holding="hold", session_id="s1", harness=None, model=None
     )
-    assert ok == set() and dead == set() and stalled == set()  # HITL is skipped, neither recovered nor dead-lettered
+    assert ok == set() and dead == set() and stalled == set()
 
 
-def test_run_recovery_stalled_is_reported(monkeypatch, tmp_path):
+def test_run_recovery_stalled_is_reported(monkeypatch, tmp_path, capsys):
     orch = _load("orchestrate")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "repo")
@@ -300,18 +301,20 @@ def test_run_recovery_stalled_is_reported(monkeypatch, tmp_path):
         lambda p, a, c, *, holding, session_id: {"slug": p.slug, "worktree": "w"},
     )
     monkeypatch.setattr(orch._recover, "decide", lambda ctx: {"action": "retry", "rationale": "env"})
-    monkeypatch.setattr(orch._recover, "_emit_event", lambda *a, **k: None)
     monkeypatch.setattr(
         orch,
         "_recovery_respawn",
         lambda p, a, ctx=None, **k: [{"slug": p.slug, "status": "stalled", "pending": [p.slug]}],
     )
     monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
+    monkeypatch.setattr(orch._recover, "_emit_event", lambda *a, **k: None)
     plan = _plan(orch, "core")
+
     ok, dead, stalled = orch._run_recovery(
         {"core"}, plans_by_slug={"core": plan}, holding="hold", session_id="s1", harness=None, model=None
     )
-    assert ok == set() and dead == set() and stalled == {"core"}
+
+    assert ok == set() and dead == set() and stalled == {"core"}  # HITL is skipped, neither recovered nor dead-lettered
 
 
 def test_run_orchestrate_invokes_recovery_for_worker_died(tmp_path, monkeypatch):
@@ -332,6 +335,7 @@ def test_run_orchestrate_invokes_recovery_for_worker_died(tmp_path, monkeypatch)
     monkeypatch.setattr(orch, "_gc_preserved_worktrees", lambda **kw: None)
     monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
     monkeypatch.setattr(orch._utils, "emit_event", lambda *a, **k: None)
+    monkeypatch.setattr(orch, "ensure_session", lambda *a, **k: "sess-1")
 
     captured = {}
 
@@ -352,9 +356,7 @@ def test_run_recovery_abandon_dead_letters(monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_REPO", "repo")
     monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path)
     monkeypatch.setattr(orch, "_teardown_ejected", lambda s: None)
-    monkeypatch.setattr(
-        orch, "make_recovery_seed_for_plan", lambda p, a, c, *, holding, session_id: {"slug": p.slug}
-    )
+    monkeypatch.setattr(orch, "make_recovery_seed_for_plan", lambda p, a, c, *, holding, session_id: {"slug": p.slug})
     monkeypatch.setattr(orch._recover, "decide", lambda ctx: {"action": "abandon", "rationale": "no"})
     emitted = []
     monkeypatch.setattr(orch, "_emit_event", lambda ev, p: emitted.append((ev, p)))
@@ -382,7 +384,9 @@ def test_run_recovery_retry_without_success_not_marked_recovered(monkeypatch, tm
     monkeypatch.setattr(orch._recover, "decide", lambda ctx: {"action": "retry", "rationale": "env"})
     monkeypatch.setattr(orch._recover, "_emit_event", lambda *a, **k: None)
     monkeypatch.setattr(
-        orch, "_recovery_respawn", lambda p, a, ctx=None, **k: [{"slug": p.slug, "status": "eject", "reason": "gate-failed"}]
+        orch,
+        "_recovery_respawn",
+        lambda p, a, ctx=None, **k: [{"slug": p.slug, "status": "eject", "reason": "gate-failed"}],
     )
     monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
     plan = _plan(orch, "core")

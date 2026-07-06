@@ -213,12 +213,12 @@ def test_score_smell_at_or_above_threshold_advises_empty_reason():
     assert r.reason == ""
 
 
-def test_score_smell_absent_score_defaults_to_one_and_advises_clean():
+def test_score_smell_absent_score_defaults_to_zero_and_advises_below_threshold():
     score = _score_mod()
     r = score.score_smell({})
     assert r.verdict == "advise"
-    assert r.score == 1.0
-    assert r.reason == ""
+    assert r.score == 0.0
+    assert "0.00" in r.reason
 
 
 # ── score_rules: violations veto vs pass ─────────────────────────────────────
@@ -412,12 +412,12 @@ def test_score_from_file_routes_context(tmp_path: Path):
     assert "1 residue finding(s)" in r.reason
 
 
-def test_score_from_file_unknown_reviewer_passes_with_reason(tmp_path: Path):
+def test_score_from_file_unknown_reviewer_blocks(tmp_path: Path):
     score = _score_mod()
     f = _write_json(tmp_path / "out.json", {"reviewer": "mentat-weird-reviewer"})
     r = score.score_from_file(f)
-    assert r.verdict == "pass"
-    assert r.score == 1.0
+    assert r.verdict == "block"
+    assert r.score == 0.0
     assert "unknown reviewer" in r.reason
     assert "mentat-weird-reviewer" in r.reason
 

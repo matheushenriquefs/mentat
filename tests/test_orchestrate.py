@@ -339,7 +339,7 @@ def test_land_all_with_plans_wires_scheduler_callbacks(tmp_path):
     _, kwargs = mock_drain.call_args
     assert callable(kwargs["on_landed"])
     assert callable(kwargs["on_ejected"])
-    assert callable(kwargs["next_ready"])
+    assert callable(kwargs["list_ready_slices"])
 
 
 # ── eject summary: drain-carried eject reasons are named on stderr ───────────

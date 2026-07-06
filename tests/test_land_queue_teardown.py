@@ -118,7 +118,7 @@ def test_drain_tears_down_cascaded_eject(tmp_path, monkeypatch) -> None:
         holding="holding",
         on_landed=sched.mark_landed,
         on_ejected=sched.mark_ejected,
-        next_ready=sched.next_ready,
+        list_ready_slices=sched.list_ready_slices,
     )
 
     assert "a" in torn_down, f"ejected chunk a not torn down; torn_down={torn_down}"
@@ -134,6 +134,8 @@ def test_teardown_failure_swallowed(tmp_path, monkeypatch) -> None:
     def fake_run(cmd, **kw):
         class _R:
             returncode = 1
+            stdout = ""
+            stderr = ""
 
         return _R()
 
@@ -141,6 +143,7 @@ def test_teardown_failure_swallowed(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(land_queue, "_run_gates", lambda c: ("pass", ""))
     monkeypatch.setattr(land_queue, "_ff_merge", lambda c, h: None)
     monkeypatch.setattr(land_queue, "_emit_event", lambda e, p: emitted.append((e, p)))
+    monkeypatch.setattr(land_queue._utils, "read_config", lambda: {})
     monkeypatch.setattr(_sp, "run", fake_run)
 
     chunk = _chunk("fail-slug", tmp_path)
@@ -178,7 +181,7 @@ def test_drain_tears_down_all_pending_on_stall(tmp_path, monkeypatch) -> None:
         holding="holding",
         on_landed=sched.mark_landed,
         on_ejected=sched.mark_ejected,
-        next_ready=sched.next_ready,
+        list_ready_slices=sched.list_ready_slices,
     )
 
     stalled = [r for r in results if r.get("status") == "stalled"]

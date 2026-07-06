@@ -35,9 +35,11 @@ def test_parse_frontmatter_returns_dict_from_real_file(tmp_path: Path):
     assert plans.parse_frontmatter(plan_path) == {"slug": "alpha", "status": "open"}
 
 
-def test_run_gates_none_chunk_is_immediate_pass():
+def test_run_gates_none_chunk_blocks():
     plans = load_script(PLANS_PY, "orch_plans_none")
-    assert plans.run_gates(None) == ("pass", "")
+    verdict, msg = plans.run_gates(None)
+    assert verdict == "block"
+    assert "no chunk path" in msg
 
 
 def test_run_gates_forwards_to_engine_and_passes_on_clean_tree(tmp_path: Path):

@@ -81,10 +81,10 @@ def test_main_tears_down_worktree_on_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(impl, "ensure_session", lambda *a, **k: "sess")
     monkeypatch.setattr(impl, "_prune_worktrees_preflight", lambda: None)
     monkeypatch.setattr(impl._utils, "default_harness", lambda: "claude-code")
-    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda _h: (0, []))
-    monkeypatch.setattr(impl, "preflight_worktree", lambda _slug: (0, target))
+    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda _h, reuse_worktree=False: (0, []))
+    monkeypatch.setattr(impl, "preflight_worktree", lambda _slug, reuse_worktree=False: (0, target))
     monkeypatch.setattr(impl.os, "chdir", lambda _p: None)
-    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda: False)
+    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda reuse_worktree=False: False)
     monkeypatch.setattr(impl, "_run_and_doctor", lambda *a, **k: 1)  # non-preserve failure
     monkeypatch.setattr(impl, "_repo_root_from_worktree", lambda _t: tmp_path)
 

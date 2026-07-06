@@ -85,6 +85,7 @@ def test_mutate_quoted_values(tmp_path: Path):
     assert fm["created_at"] == "2026-06-12T00:00:00Z"
     assert fm["status"] == "done"
 
+
 def test_write_atomic_cleans_up_tmp_on_failure(tmp_path: Path, monkeypatch):
     from unittest.mock import patch
 

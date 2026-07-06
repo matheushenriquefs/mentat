@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import types
 from collections.abc import Generator
@@ -12,7 +13,25 @@ from unittest.mock import patch
 
 import pytest
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
 TEST_CHUNK_ID = "b" * 32
+
+
+def git_isolation_env(ceiling: Path) -> dict[str, str]:
+    """Git env that blocks upward discovery past ``ceiling``."""
+    env = os.environ.copy()
+    for key in list(env):
+        if key.startswith("GIT_") and key != "GIT_CEILING_DIRECTORIES":
+            env.pop(key, None)
+    env["GIT_CEILING_DIRECTORIES"] = str(ceiling)
+    return env
+
+
+def strip_git_hook_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Drop inherited git hook vars (GIT_INDEX_FILE, GIT_DIR, …) before subprocess git."""
+    for key in list(os.environ):
+        if key.startswith("GIT_") and key != "GIT_CEILING_DIRECTORIES":
+            monkeypatch.delenv(key, raising=False)
 
 
 def load_script(path: Path, key: str | None = None) -> ModuleType:
@@ -32,25 +51,34 @@ def load_script(path: Path, key: str | None = None) -> ModuleType:
     return mod
 
 
-def init_git_repo(path: Path, *, initial_branch: str = "main") -> None:
+def init_git_repo(path: Path, *, initial_branch: str = "main", ceiling: Path | None = None) -> None:
     """Initialize a git repo with an initial commit. Disables gpg signing.
 
     Used by worktree + preflight tests that need a real on-disk repo.
     """
+    ceiling = ceiling or path.parent
+    env = git_isolation_env(ceiling)
     subprocess.run(
         ["git", "init", "-b", initial_branch, str(path)],
         check=True,
         capture_output=True,
+        env=env,
     )
     for k, v in (
         ("user.email", "t@t"),
         ("user.name", "T"),
         ("commit.gpgsign", "false"),
     ):
-        subprocess.run(["git", "config", k, v], cwd=path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", k, v],
+            cwd=path,
+            check=True,
+            capture_output=True,
+            env=env,
+        )
     (path / "README").write_text("hi\n")
-    subprocess.run(["git", "add", "."], cwd=path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=path, check=True, capture_output=True)
+    subprocess.run(["git", "add", "."], cwd=path, check=True, capture_output=True, env=env)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=path, check=True, capture_output=True, env=env)
 
 
 @pytest.fixture(autouse=True)
@@ -60,6 +88,38 @@ def _clear_chunk_registry() -> None:
     chunk_mod.clear_plan_chunks()
     yield
     chunk_mod.clear_plan_chunks()
+
+
+@pytest.fixture(autouse=True)
+def _default_git_commit_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+) -> None:
+    """Orchestrate paths call require_commit_identity; tmp sandboxes have no git config."""
+    nodeid = request.node.nodeid
+    if "test_lib_git.py" in nodeid and ("require_commit_identity" in nodeid or "host_commit_identity" in nodeid):
+        return
+    from lib import git as git_mod
+
+    monkeypatch.setattr(
+        git_mod,
+        "require_commit_identity",
+        lambda *, cwd=None: ("Test", "test@example.com"),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_git_namespace(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    request: pytest.FixtureRequest,
+) -> None:
+    """Keep subprocess git off the live checkout (e2e suite uses tests/e2e/conftest.py)."""
+    if request.node.get_closest_marker("e2e") is not None:
+        return
+    monkeypatch.chdir(tmp_path)
+    strip_git_hook_env(monkeypatch)
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
 
 
 @pytest.fixture(autouse=True)
@@ -149,29 +209,7 @@ def mentat_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 def fixture_repo(tmp_path: Path) -> Generator[Path]:
     """Create a minimal git repo with optional plan files. Yield the repo root."""
     repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@example.com"],
-        check=True,
-        capture_output=True,
-        cwd=repo,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        check=True,
-        capture_output=True,
-        cwd=repo,
-    )
-    readme = repo / "README.md"
-    readme.write_text("fixture repo\n")
-    subprocess.run(["git", "add", "."], check=True, capture_output=True, cwd=repo)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        check=True,
-        capture_output=True,
-        cwd=repo,
-    )
+    init_git_repo(repo, ceiling=tmp_path)
     yield repo
 
 

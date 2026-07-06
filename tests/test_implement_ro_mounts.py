@@ -52,9 +52,8 @@ def test_run_plan_sets_ro_mounts_from_manifest(tmp_path, monkeypatch):
     harness_result = MagicMock(returncode=0, session_log=None)
     with patch.object(impl, "_invoke_harness", return_value=harness_result):
         with patch.object(impl, "_detect_self_answer", return_value=False):
-            with patch.object(impl, "_run_gates", return_value=("pass", "")):
-                with patch.object(impl, "_emit_event"):
-                    rc = impl.run_plan(plan)
+            with patch.object(impl, "_emit_event"):
+                rc = impl.run_plan(plan)
 
     assert rc == 0
     assert "MENTAT_RO_MOUNTS" in os.environ
@@ -75,9 +74,8 @@ def test_run_plan_omits_ro_mounts_when_manifest_absent(tmp_path, monkeypatch):
     harness_result = MagicMock(returncode=0, session_log=None)
     with patch.object(impl, "_invoke_harness", return_value=harness_result):
         with patch.object(impl, "_detect_self_answer", return_value=False):
-            with patch.object(impl, "_run_gates", return_value=("pass", "")):
-                with patch.object(impl, "_emit_event"):
-                    rc = impl.run_plan(plan)
+            with patch.object(impl, "_emit_event"):
+                rc = impl.run_plan(plan)
 
     assert rc == 0
     assert "MENTAT_RO_MOUNTS" not in os.environ
@@ -96,9 +94,8 @@ def test_run_plan_omits_ro_mounts_when_all_closed_are_open(tmp_path, monkeypatch
     harness_result = MagicMock(returncode=0, session_log=None)
     with patch.object(impl, "_invoke_harness", return_value=harness_result):
         with patch.object(impl, "_detect_self_answer", return_value=False):
-            with patch.object(impl, "_run_gates", return_value=("pass", "")):
-                with patch.object(impl, "_emit_event"):
-                    rc = impl.run_plan(plan)
+            with patch.object(impl, "_emit_event"):
+                rc = impl.run_plan(plan)
 
     assert rc == 0
     assert "MENTAT_RO_MOUNTS" not in os.environ

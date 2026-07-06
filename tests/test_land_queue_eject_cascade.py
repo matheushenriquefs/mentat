@@ -80,7 +80,7 @@ def _drain(chunks, sched, holding="holding"):
         holding=holding,
         on_landed=sched.mark_landed,
         on_ejected=sched.mark_ejected,
-        next_ready=sched.next_ready,
+        list_ready_slices=sched.list_ready_slices,
     )
 
 
@@ -224,6 +224,6 @@ def test_ejected_dep_unblocks_auto_downstream() -> None:
     a, b = _plan("a"), _plan("b", blocked_by=["a"])
     sched = scheduler.Scheduler([a, b])
 
-    assert sched.next_ready(["b"]) is None, "b gated while a is neither landed nor ejected"
+    assert sched.list_ready_slices(["b"]) == [], "b gated while a is neither landed nor ejected"
     sched.mark_ejected("a")
-    assert sched.next_ready(["b"]) == "b", "ejected a must unblock b for re-test"
+    assert sched.list_ready_slices(["b"]) == ["b"], "ejected a must unblock b for re-test"

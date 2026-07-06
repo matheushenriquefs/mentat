@@ -172,17 +172,15 @@ def test_drain_cascade_skips_downstream_not_in_pending(tmp_path, monkeypatch):
 
     order = ["root", "child"]
 
-    def next_ready(pending):
-        return next((s for s in order if s in pending), None)
+    def list_ready_slices(pending):
+        slug = next((s for s in order if s in pending), None)
+        return [slug] if slug else []
 
-    # on_ejected names "child" (a real dependent, correctly cascade-ejected) plus
-    # "ghost" — a slug never in the chunk set, so it is not in pending and the
-    # cascade loop must skip it via the 174 guard rather than KeyError.
     def on_ejected(slug):
         return ["child", "ghost"] if slug == "root" else []
 
     with _patch_attr(lq, "_run_gates", gate), _patch_attr(lq, "_teardown_container", lambda slug: None):
-        results = lq.drain(chunks, holding="holding", on_ejected=on_ejected, next_ready=next_ready)
+        results = lq.drain(chunks, holding="holding", on_ejected=on_ejected, list_ready_slices=list_ready_slices)
 
     by_slug = {r.get("slug"): r for r in results}
     assert by_slug["child"]["reason"] == lq.EjectReason.UPSTREAM_EJECTED

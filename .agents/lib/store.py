@@ -607,7 +607,7 @@ def _track_status(agent: Agent, events: list[Event]) -> str:
     if events:
         last_kind = display_kind(events[-1].kind)
         payload = events[-1].payload
-        if last_kind == "chunk.ejected" and isinstance(payload, dict) and payload.get("reason") == "hitl-required":
+        if last_kind == "chunk.ejected" and payload.get("reason") == "hitl-required":
             return "waiting"
         if last_kind in _TERMINAL_DISPLAY or last_kind == "chunk.ejected":
             return "idle"
@@ -714,7 +714,8 @@ def attempt_count(agent_id: str, slug: str) -> int:
         payload = row.get("payload")
         if not isinstance(payload, dict):
             continue
-        if payload.get("slug") == slug and payload.get("trigger") == "recovery":
+        pl = cast(dict[str, object], payload)
+        if pl.get("slug") == slug and pl.get("trigger") == "recovery":
             count += 1
     return count
 

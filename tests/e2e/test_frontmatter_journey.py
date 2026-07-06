@@ -31,13 +31,16 @@ def test_parse_missing_leading_fence_returns_empty_and_zero():
     assert frontmatter.parse("not a fence\nkey: value\n") == ({}, 0)
 
 
-def test_parse_keeps_only_matching_key_and_reports_body_start():
-    text = "---\nstatus: open\n    continuation line\nnot a fm line\n---\nbody here\n"
-    fm, body_start = frontmatter.parse(text)
-    assert fm == {"status": "open"}
-    # Lines: 0=---, 1=status, 2=cont, 3=not-a-line, 4=--- → body starts at 5.
-    assert body_start == 5
-    assert text.splitlines()[body_start] == "body here"
+def test_parse_rejects_indented_continuation_line():
+    text = "---\nstatus: open\n    continuation line\n---\nbody\n"
+    with pytest.raises(frontmatter.FrontmatterError, match="nested/indented"):
+        frontmatter.parse(text)
+
+
+def test_parse_rejects_non_key_line():
+    text = "---\nstatus: open\nnot a fm line\n---\nbody here\n"
+    with pytest.raises(frontmatter.FrontmatterError, match="unsupported frontmatter"):
+        frontmatter.parse(text)
 
 
 # ── encode ───────────────────────────────────────────────────────────────────

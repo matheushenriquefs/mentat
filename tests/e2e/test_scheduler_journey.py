@@ -75,20 +75,19 @@ def test_partition_detects_cycles():
         m.partition(plans)
 
 
-def test_scheduler_next_ready_gates_on_landed_deps():
+def test_scheduler_list_ready_slices_gates_on_landed_deps():
     m = _sched()
     sched = m.Scheduler([_plan(m, "a"), _plan(m, "b", blocked_by=["a"])])
 
-    # b is blocked until a lands; a is ready first.
-    assert sched.next_ready(["a", "b"]) == "a"
+    assert sched.list_ready_slices(["a", "b"]) == ["a"]
     sched.mark_landed("a")
-    assert sched.next_ready(["b"]) == "b"
+    assert sched.list_ready_slices(["b"]) == ["b"]
 
 
 def test_scheduler_unknown_slug_is_immediately_ready():
     m = _sched()
     sched = m.Scheduler([_plan(m, "known")])
-    assert sched.next_ready(["ad-hoc"]) == "ad-hoc", "chunks with no loaded plan never block"
+    assert sched.list_ready_slices(["ad-hoc"]) == ["ad-hoc"]
 
 
 def test_scheduler_cascade_ejects_only_anchored_dependents():
@@ -114,4 +113,4 @@ def test_scheduler_cascade_ejects_only_anchored_dependents():
     assert sched.ejected_slugs() == frozenset({"root", "mid", "leaf"})
     # auto_dep is NOT ejected — its ejected dep counts as resolved, so it is
     # handed out for a re-test against the new holding tip. island has no deps.
-    assert sched.next_ready(["mid", "leaf", "auto_dep", "island"]) == "auto_dep"
+    assert sched.list_ready_slices(["mid", "leaf", "auto_dep", "island"]) == ["auto_dep", "island"]

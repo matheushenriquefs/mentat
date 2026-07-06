@@ -382,6 +382,7 @@ def test_cmd_up_restart_stopped_container(cc, monkeypatch, tmp_path):
     monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc, "_docker", lambda: "docker")
     monkeypatch.setattr(cc, "_ensure_safe_directory", lambda ws, cid: None)
+    monkeypatch.setattr(cc, "_propagate_git_identity", lambda ws, cid, repo_root: None)
 
     def responder(cmd):
         if cmd[1] == "ps":
@@ -595,6 +596,8 @@ def test_cmd_up_cold_start_symlinks_and_env_from_repo_root(cc, monkeypatch, tmp_
 
     def responder(cmd):
         if cmd[0] == "docker" and cmd[1] == "ps":
+            return _cp(0, "")
+        if cmd[0] == "docker" and cmd[1] == "exec":
             return _cp(0, "")
         if cmd[0] == "git":
             return _cp(0, ".git\n")

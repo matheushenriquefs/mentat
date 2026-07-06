@@ -123,14 +123,15 @@ def test_drain_cascades_ejection_to_dependents(tmp_path, monkeypatch):
 
     order = ["root", "child"]
 
-    def next_ready(pending):
-        return next((s for s in order if s in pending), None)
+    def list_ready_slices(pending):
+        slug = next((s for s in order if s in pending), None)
+        return [slug] if slug else []
 
     def on_ejected(slug):
         return ["child"] if slug == "root" else []
 
     with _patch_attr(lq, "_run_gates", gate), _patch_attr(lq, "_teardown_container", lambda slug: None):
-        results = lq.drain(chunks, holding="holding", on_ejected=on_ejected, next_ready=next_ready)
+        results = lq.drain(chunks, holding="holding", on_ejected=on_ejected, list_ready_slices=list_ready_slices)
 
     by_slug = {r["slug"]: r for r in results}
     assert by_slug["root"]["reason"] == lq.EjectReason.GATE_FAILED
@@ -156,7 +157,7 @@ def test_drain_stalls_when_no_chunk_ready(tmp_path, monkeypatch):
 
     # An unmet dependency: next_ready never returns the pending chunk → stalled verdict.
     with _patch_attr(lq, "_teardown_container", lambda slug: None):
-        results = lq.drain(chunks, holding="holding", next_ready=lambda pending: None)
+        results = lq.drain(chunks, holding="holding", list_ready_slices=lambda pending: [])
 
     assert results[-1]["status"] == "stalled"
     assert results[-1]["pending"] == ["blocked"]

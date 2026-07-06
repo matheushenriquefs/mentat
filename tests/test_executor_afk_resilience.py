@@ -104,7 +104,6 @@ def _run_plan_capture_prompt(impl, plan_file):
         patch.object(impl, "read_tests_manifest", return_value=([], [])),
         patch.object(impl, "_read_blocked_summary", return_value=None),
         patch.object(impl, "_detect_self_answer", return_value=False),
-        patch.object(impl, "_run_gates", return_value=("pass", "")),
         patch.object(impl, "_checkpoint_if_needed", return_value=None),
     ):
         impl.run_plan(plan_file)

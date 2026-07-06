@@ -90,16 +90,9 @@ def test_commit_exits_69_when_bringup_fails():
 
 
 def test_host_identity_skips_unset_key(monkeypatch):
-    """When one git config key is unset, the loop continues without adding it (32->29)."""
+    """When one git config key is unset, only the set key is forwarded."""
     commit = load_module("commit")
-
-    def fake_run(cmd, **kw):
-        # user.name set, user.email returns empty value (val falsy → skipped).
-        if isinstance(cmd, list) and cmd[-1] == "user.name":
-            return _ok(stdout="Alice\n")
-        return _ok(stdout="\n")  # user.email empty
-
-    monkeypatch.setattr(commit.subprocess, "run", fake_run)
+    monkeypatch.setattr(commit, "host_commit_identity", lambda **kw: {"user.name": "Alice"})
     args = commit._host_identity()
 
     assert args == ["-c", "user.name=Alice"]

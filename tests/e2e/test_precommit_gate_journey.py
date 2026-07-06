@@ -384,12 +384,16 @@ def test_check_jq_passes_when_clean(tmp_path: Path, monkeypatch):
 
 def test_run_pass_on_none():
     precommit = _precommit_mod()
-    assert precommit.run(None) == ("pass", "")
+    verdict, msg = precommit.run(None)
+    assert verdict == "block"
+    assert "no chunk path" in msg
 
 
-def test_run_pass_on_nonexistent_path(tmp_path: Path):
+def test_run_blocks_on_nonexistent_path(tmp_path: Path):
     precommit = _precommit_mod()
-    assert precommit.run(tmp_path / "nope") == ("pass", "")
+    verdict, msg = precommit.run(tmp_path / "nope")
+    assert verdict == "block"
+    assert "missing" in msg
 
 
 def test_run_blocks_on_bad_classified_file(tmp_path: Path):
@@ -419,7 +423,7 @@ def test_run_skips_unclassified_files(tmp_path: Path):
     assert precommit.run(tmp_path) == ("pass", "")
 
 
-def test_run_appends_advisory_on_oserror(tmp_path: Path, monkeypatch):
+def test_run_blocks_on_oserror(tmp_path: Path, monkeypatch):
     precommit = _precommit_mod()
     skill_dir = tmp_path / "skills" / "widget"
     skill_dir.mkdir(parents=True)
@@ -430,7 +434,7 @@ def test_run_appends_advisory_on_oserror(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(precommit, "_check", _boom)
     verdict, msg = precommit.run(tmp_path)
-    assert verdict == "advise"
+    assert verdict == "block"
     assert "read error" in msg
     assert "disk gone" in msg
 
@@ -467,10 +471,12 @@ def test_gate_run_delegates_to_run(tmp_path: Path):
     assert "frontmatter" in msg
 
 
-def test_gate_run_pass_on_ctx_without_chunk_path():
+def test_gate_run_blocks_on_ctx_without_chunk_path():
     precommit = _precommit_mod()
 
     class _Bare:
         pass
 
-    assert precommit.gate.run(_Bare()) == ("pass", "")
+    verdict, msg = precommit.gate.run(_Bare())
+    assert verdict == "block"
+    assert "no chunk path" in msg

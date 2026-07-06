@@ -2,7 +2,7 @@
 
 `_fan_out_plans` returns `(plan, returncode)` pairs keyed by `plan.slug` from
 frontmatter. If slugs are swapped for session_ids, `Scheduler._plans.get(session_id)`
-returns None, the unknown-slug fallback in `next_ready` fires for every chunk, and
+returns None, the unknown-slug fallback in `list_ready_slices` fires for every chunk, and
 dep gating + eject cascade silently no-op on the prod `run` path.
 
 This test stubs the spawn + drain at module boundary and asserts the chunk slugs
@@ -16,7 +16,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from tests.conftest import patch_orchestrate_worktree
+from tests.conftest import TEST_CHUNK_ID, bind_chunk_worktrees, patch_orchestrate_worktree
 
 ORCH_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
@@ -40,20 +40,20 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
     b_path.write_text("---\nid: b\nstatus: ready\nclass: AFK\nblocked_by: [a]\n---\n# b\n")
 
     # Stub fan_out to return (plan, 0) tuples — proves plan slugs reach land queue.
+    worktrees: dict[str, Path] = {}
+
     def fake_fan_out_plans(plans, *, harness=None, model=None):
-        return [(p, 0) for p in plans]
+        worktrees.update(bind_chunk_worktrees(plans, tmp_path, chunk_id=TEST_CHUNK_ID))
+        return [(p, 0, str(worktrees[p.slug]), None) for p in plans]
 
     captured: dict[str, object] = {}
     captured["chunks"] = []
 
-    def fake_drain(chunks, *, holding, on_landed=None, on_ejected=None, next_ready=None, **kw):
-        # Staged fan-out lands each dep wave before the next spawns, so drain is
-        # called once per wave (b's wave only forms after a lands). Accumulate the
-        # chunks across waves and land each so the scheduler advances.
+    def fake_drain(chunks, *, holding, on_landed=None, on_ejected=None, list_ready_slices=None, **kw):
         captured["chunks"].extend(chunks)  # type: ignore[attr-defined]
         captured["on_landed"] = on_landed
         captured["on_ejected"] = on_ejected
-        captured["next_ready"] = next_ready
+        captured["list_ready_slices"] = list_ready_slices
         results = []
         for c in chunks:
             if on_landed is not None:
@@ -62,8 +62,10 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
         return results
 
     monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out_plans)
+    monkeypatch.setattr(orchestrate, "_worktree_for_slug", lambda slug: worktrees[slug])
     monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
+    monkeypatch.setattr(orchestrate, "ensure_session", lambda *a, **k: "sess-1")
 
     with patch_orchestrate_worktree(orchestrate, tmp_path):
         rc = orchestrate.run_orchestrate(
@@ -83,7 +85,7 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
     assert not any(s.startswith("auto-") for s in chunk_slugs), f"session_ids leaked into land queue: {chunk_slugs}"
 
     # Callbacks must be callables wrapping a Scheduler with the right plans.
-    assert callable(captured.get("next_ready")), "next_ready callback must be passed for dep-aware drain"
+    assert callable(captured.get("list_ready_slices")), "list_ready_slices callback must be passed"
     assert callable(captured.get("on_landed")), "on_landed callback must be passed"
     assert callable(captured.get("on_ejected")), "on_ejected callback must be passed"
 
@@ -99,15 +101,18 @@ def test_run_orchestrate_independent_afks_keep_plan_slug_identity(tmp_path, monk
     a_path.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
     b_path.write_text("---\nid: b\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# b\n")
 
-    monkeypatch.setattr(
-        orchestrate,
-        "_fan_out_plans",
-        lambda plans, **kw: [(p, 0) for p in plans],
-    )
+    worktrees: dict[str, Path] = {}
+
+    def fake_fan_out(plans, **kw):
+        worktrees.update(bind_chunk_worktrees(plans, tmp_path))
+        return [(p, 0, str(worktrees[p.slug]), None) for p in plans]
+
+    monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out)
+    monkeypatch.setattr(orchestrate, "_worktree_for_slug", lambda slug: worktrees[slug])
 
     captured_slugs: list[str] = []
 
-    def fake_drain(chunks, *, holding, on_landed=None, on_ejected=None, next_ready=None, **kw):
+    def fake_drain(chunks, *, holding, on_landed=None, on_ejected=None, list_ready_slices=None, **kw):
         captured_slugs.extend(c.slug for c in chunks)
         return [{"slug": c.slug, "status": "success"} for c in chunks]
 

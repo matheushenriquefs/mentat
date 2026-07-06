@@ -83,7 +83,7 @@ def test_healthy_sibling_not_killed_by_slow_sibling(monkeypatch, tmp_path):
 
     results = orch._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
 
-    by_slug = {plan.slug: rc for plan, rc, *_ in results}
+    by_slug = {item[0].slug: item[1] for item in results}
     assert by_slug == {"a": 5, "b": 0}, f"both must return true exit codes, neither killed: {by_slug}"
 
 

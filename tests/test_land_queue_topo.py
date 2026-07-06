@@ -68,7 +68,7 @@ def test_chain_lands_in_topo_order(tmp_path, monkeypatch) -> None:
         holding="holding",
         on_landed=sched.mark_landed,
         on_ejected=sched.mark_ejected,
-        next_ready=sched.next_ready,
+        list_ready_slices=sched.list_ready_slices,
     )
 
     assert ff_calls == ["a", "b"], f"expected topo order [a,b], got {ff_calls}"
@@ -88,7 +88,7 @@ def test_independent_afks_keep_input_order(tmp_path, monkeypatch) -> None:
         holding="holding",
         on_landed=sched.mark_landed,
         on_ejected=sched.mark_ejected,
-        next_ready=sched.next_ready,
+        list_ready_slices=sched.list_ready_slices,
     )
 
     assert ff_calls == ["a1", "a2"], f"expected input order, got {ff_calls}"
@@ -124,7 +124,7 @@ def test_stalled_dep_lists_pending(tmp_path, monkeypatch) -> None:
         holding="holding",
         on_landed=sched.mark_landed,
         on_ejected=sched.mark_ejected,
-        next_ready=sched.next_ready,
+        list_ready_slices=sched.list_ready_slices,
     )
 
     assert ff_calls == [], f"b should not have landed, ff_calls={ff_calls}"
@@ -162,25 +162,25 @@ def test_blocked_chunk_waits_until_upstream_lands(tmp_path, monkeypatch) -> None
         holding="holding",
         on_landed=sched.mark_landed,
         on_ejected=sched.mark_ejected,
-        next_ready=sched.next_ready,
+        list_ready_slices=sched.list_ready_slices,
     )
 
     assert landed_seq[0] == "a", f"a must land before b; landed_seq={landed_seq}"
     assert landed_seq[1] == "b"
 
 
-def test_scheduler_next_ready_unit() -> None:
-    """Direct unit on Scheduler.next_ready — slug from candidates with deps ⊂ landed."""
+def test_scheduler_list_ready_slices_unit() -> None:
+    """Direct unit on Scheduler.list_ready_slices — ready slugs with deps ⊂ landed."""
     a, b, c = _plan("a"), _plan("b", blocked_by=["a"]), _plan("c", blocked_by=["b"])
     sched = scheduler.Scheduler([a, b, c])
 
-    assert sched.next_ready(["b", "c", "a"]) == "a"  # only a has no deps
+    assert sched.list_ready_slices(["b", "c", "a"]) == ["a"]
     sched.mark_landed("a")
-    assert sched.next_ready(["c", "b"]) == "b"
+    assert sched.list_ready_slices(["c", "b"]) == ["b"]
     sched.mark_landed("b")
-    assert sched.next_ready(["c"]) == "c"
+    assert sched.list_ready_slices(["c"]) == ["c"]
     sched.mark_landed("c")
-    assert sched.next_ready([]) is None
+    assert sched.list_ready_slices([]) == []
 
 
 def test_scheduler_unknown_slug_treated_as_ready() -> None:
@@ -188,5 +188,4 @@ def test_scheduler_unknown_slug_treated_as_ready() -> None:
     a = _plan("a")
     sched = scheduler.Scheduler([a])
 
-    # 'stranger' has no Plan loaded; treat as no deps so legacy ad-hoc chunks still flow
-    assert sched.next_ready(["stranger"]) == "stranger"
+    assert sched.list_ready_slices(["stranger"]) == ["stranger"]

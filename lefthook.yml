@@ -1,5 +1,5 @@
 pre-commit:
-  parallel: true
+  parallel: false
   commands:
     stale-ref:
       glob: "**/*"
@@ -44,4 +44,5 @@ pre-commit:
       run: python3 ~/.agents/skills/mentat-container/scripts/container.py run 'uv run pyright'
     pytest-fast:
       glob: "**/*.py"
+      # Full suite is safe: tests/conftest.py + tests/e2e/conftest.py isolate git.
       run: python3 ~/.agents/skills/mentat-container/scripts/container.py run 'pytest tests/ -q'

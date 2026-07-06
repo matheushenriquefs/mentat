@@ -92,7 +92,7 @@ def test_throttle_wait_drains_healthy_chunk_before_spawning_next(monkeypatch, tm
 
     results = orch._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
 
-    by_slug = {plan.slug: rc for plan, rc, *_ in results}
+    by_slug = {item[0].slug: item[1] for item in results}
     assert by_slug == {"a": 0, "b": 0}
 
 

@@ -114,12 +114,13 @@ def test_load_plans_rejects_parent_with_blocked_by(tmp_path, audit_env):
         orch._load_plans([parent])
 
 
-def test_load_plans_warns_on_external_dep(tmp_path, audit_env, capsys):
+def test_load_plans_raises_on_external_dep(tmp_path, audit_env, capsys):
     orch = _orch()
     plans_dir = tmp_path / "plans"
     plans_dir.mkdir()
     p = _plan(plans_dir, "solo", cls="AFK", blocked_by="not-in-batch")
 
-    plans = orch._load_plans([p])
-    assert [pl.slug for pl in plans] == ["solo"]
-    assert "not in batch" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as exc:
+        orch._load_plans([p])
+    assert exc.value.code == orch.EX_DATAERR
+    assert "not-in-batch" in capsys.readouterr().err

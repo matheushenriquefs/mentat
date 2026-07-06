@@ -42,7 +42,7 @@ def _wire(orchestrate, monkeypatch, tmp_path):
         worktrees.update(bind_chunk_worktrees(plans, tmp_path))
         return [(p, 0) for p in plans]
 
-    def fake_drain(chunks, *, holding, on_landed=None, on_ejected=None, next_ready=None, **kw):
+    def fake_drain(chunks, *, holding, on_landed=None, on_ejected=None, list_ready_slices=None, **kw):
         results = []
         for c in chunks:
             if on_landed is not None:

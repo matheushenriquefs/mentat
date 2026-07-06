@@ -39,7 +39,6 @@ def test_hitl_does_not_invoke_harness(tmp_path, monkeypatch):
 
     emitted: list[tuple[str, dict]] = []
     monkeypatch.setattr(impl, "_emit_event", lambda e, p: emitted.append((e, p)))
-    monkeypatch.setattr(impl, "_run_gates", lambda chunk: ("pass", ""))
 
     rc = impl.run_plan(plan, harness=None, model=None)
 
@@ -68,7 +67,6 @@ def test_afk_still_invokes_harness(tmp_path, monkeypatch):
     monkeypatch.setattr(impl, "_invoke_harness", fake_invoke_harness)
     monkeypatch.setattr(impl, "_detect_self_answer", lambda r: False)
     monkeypatch.setattr(impl, "_emit_event", lambda *a, **kw: None)
-    monkeypatch.setattr(impl, "_run_gates", lambda chunk: ("pass", ""))
 
     rc = impl.run_plan(plan, harness=None, model=None)
     assert rc == 0

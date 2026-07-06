@@ -270,15 +270,15 @@ def test_speculative_only_applies_to_independent_path():
         land_calls.append(chunk.slug)
         return {"slug": chunk.slug, "status": "success", "tip": "x"}
 
-    def fake_next_ready(pending):
-        return pending[0] if pending else None
+    def fake_list_ready_slices(pending):
+        return [pending[0]] if pending else []
 
     with (
         patch.object(lq, "land", side_effect=fake_land),
         patch.object(lq, "_teardown_container", lambda _s: None),
         patch.object(lq, "_emit_event", lambda *a, **k: None),
     ):
-        results = lq.drain(chunks, holding="main", speculative=True, next_ready=fake_next_ready)
+        results = lq.drain(chunks, holding="main", speculative=True, list_ready_slices=fake_list_ready_slices)
 
     # land() invoked per chunk = serial dep-aware path, not the speculative wave.
     assert land_calls == ["a", "b"]

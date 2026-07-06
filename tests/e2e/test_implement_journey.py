@@ -277,13 +277,6 @@ def test_preflight_veto_missing_reports_names(impl, monkeypatch, tmp_path):
     assert missing  # every reviewer absent
 
 
-# ── _run_gates ─────────────────────────────────────────────────────────────────
-
-
-def test_run_gates_default_passes(impl):
-    assert impl._run_gates(None) == ("pass", "")
-
-
 # ── _blocked_summary_path ──────────────────────────────────────────────────────
 
 
@@ -420,7 +413,6 @@ def test_run_plan_afk_clean_result_returns_zero(impl, monkeypatch, tmp_path):
     monkeypatch.setattr(impl, "_invoke_harness", lambda *a, **k: _fake_result(returncode=0))
     monkeypatch.setattr(impl, "_read_blocked_summary", lambda wt: None)
     monkeypatch.setattr(impl, "_detect_self_answer", lambda r: False)
-    monkeypatch.setattr(impl, "_run_gates", lambda c: ("pass", ""))
     monkeypatch.setattr(impl, "_compaction_threshold", lambda: None)
     plan = _write_plan(tmp_path / "afk.md", class_="AFK")
     monkeypatch.chdir(tmp_path)
@@ -465,26 +457,12 @@ def test_run_plan_afk_nonzero_return_is_implement_failed(impl, monkeypatch, tmp_
     assert reasons == [impl.EjectReason.IMPLEMENT_FAILED]
 
 
-def test_run_plan_afk_gate_block(impl, monkeypatch, tmp_path):
-    events = _wire_run_plan(impl, monkeypatch)
-    monkeypatch.setattr(impl, "_invoke_harness", lambda *a, **k: _fake_result(returncode=0))
-    monkeypatch.setattr(impl, "_read_blocked_summary", lambda wt: None)
-    monkeypatch.setattr(impl, "_detect_self_answer", lambda r: False)
-    monkeypatch.setattr(impl, "_run_gates", lambda c: ("block", "gate says no"))
-    plan = _write_plan(tmp_path / "afk.md", class_="AFK")
-    monkeypatch.chdir(tmp_path)
-    assert impl.run_plan(plan) == 1
-    reasons = [p["reason"] for ev, p in events if ev == "chunk.ejected"]
-    assert reasons == [impl.EjectReason.GATE_FAILED]
-
-
 def test_run_plan_afk_sets_ro_mounts_from_manifest(impl, monkeypatch, tmp_path):
     _wire_run_plan(impl, monkeypatch)
     monkeypatch.setattr(impl, "read_tests_manifest", lambda slug: (["tests/a_test.py"], []))
     monkeypatch.setattr(impl, "_invoke_harness", lambda *a, **k: _fake_result(returncode=0))
     monkeypatch.setattr(impl, "_read_blocked_summary", lambda wt: None)
     monkeypatch.setattr(impl, "_detect_self_answer", lambda r: False)
-    monkeypatch.setattr(impl, "_run_gates", lambda c: ("pass", ""))
     monkeypatch.setattr(impl, "_compaction_threshold", lambda: None)
     monkeypatch.delenv("MENTAT_RO_MOUNTS", raising=False)
     plan = _write_plan(tmp_path / "afk.md", class_="AFK")
@@ -734,7 +712,7 @@ def test_preflight_worktree_not_shared_main(impl, monkeypatch, tmp_path):
     script = tmp_path / "git.py"
     script.write_text("# stub\n")
     monkeypatch.setattr(impl, "_GIT_SCRIPT", script)
-    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda: False)
+    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda reuse_worktree=False: False)
     assert impl.preflight_worktree("slug") == (0, None)
 
 
@@ -743,7 +721,7 @@ def test_preflight_worktree_create_nonzero(impl, monkeypatch, tmp_path):
     script = tmp_path / "git.py"
     script.write_text("# stub\n")
     monkeypatch.setattr(impl, "_GIT_SCRIPT", script)
-    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda: True)
+    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda reuse_worktree=False: True)
     monkeypatch.setattr(impl.subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=65, stdout=""))
     assert impl.preflight_worktree("slug") == (65, None)
 
@@ -753,7 +731,7 @@ def test_preflight_worktree_success_returns_target(impl, monkeypatch, tmp_path):
     script = tmp_path / "git.py"
     script.write_text("# stub\n")
     monkeypatch.setattr(impl, "_GIT_SCRIPT", script)
-    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda: True)
+    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda reuse_worktree=False: True)
     target = tmp_path / "wt"
     target.mkdir()
     monkeypatch.setattr(
@@ -769,7 +747,7 @@ def test_preflight_worktree_empty_stdout_is_software(impl, monkeypatch, tmp_path
     script = tmp_path / "git.py"
     script.write_text("# stub\n")
     monkeypatch.setattr(impl, "_GIT_SCRIPT", script)
-    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda: True)
+    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda reuse_worktree=False: True)
     monkeypatch.setattr(impl.subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=0, stdout="   "))
     assert impl.preflight_worktree("slug") == (impl.EX_SOFTWARE, None)
 
@@ -779,7 +757,7 @@ def test_preflight_worktree_non_dir_path_is_software(impl, monkeypatch, tmp_path
     script = tmp_path / "git.py"
     script.write_text("# stub\n")
     monkeypatch.setattr(impl, "_GIT_SCRIPT", script)
-    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda: True)
+    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda reuse_worktree=False: True)
     monkeypatch.setattr(
         impl.subprocess,
         "run",
@@ -842,9 +820,9 @@ def _wire_main(impl, monkeypatch):
     monkeypatch.setattr(impl, "ensure_session", lambda role, slug: "sess")
     monkeypatch.setattr(impl, "_prune_worktrees_preflight", lambda: None)
     monkeypatch.setattr(impl._utils, "default_harness", lambda: "claude-code")
-    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda h: (0, []))
-    monkeypatch.setattr(impl, "preflight_worktree", lambda slug: (0, None))
-    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda: False)
+    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda h, reuse_worktree=False: (0, []))
+    monkeypatch.setattr(impl, "preflight_worktree", lambda slug, reuse_worktree=False: (0, None))
+    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda reuse_worktree=False: False)
     monkeypatch.setattr(impl, "_run_and_doctor", lambda *a, **k: 0)
     monkeypatch.setattr(impl, "_land_and_review", lambda *a, **k: {})
     monkeypatch.setattr(impl, "_teardown_worktree", lambda t: None)
@@ -898,7 +876,7 @@ def test_main_veto_preflight_fail(impl, monkeypatch, tmp_path, capsys):
     _wire_main(impl, monkeypatch)
     plan = _write_plan(tmp_path / "p.md", class_="AFK")
     monkeypatch.setattr(impl, "resolve_plan_path", lambda ref: plan)
-    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda h: (1, ["mentat-plan-reviewer"]))
+    monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda h, reuse_worktree=False: (1, ["mentat-plan-reviewer"]))
     monkeypatch.setattr(impl.sys, "argv", ["i", "run", "p"])
     with pytest.raises(SystemExit) as exc:
         impl.main()
@@ -910,7 +888,7 @@ def test_main_preflight_worktree_fail_emits_and_exits(impl, monkeypatch, tmp_pat
     events = _wire_main(impl, monkeypatch)
     plan = _write_plan(tmp_path / "p.md", class_="AFK")
     monkeypatch.setattr(impl, "resolve_plan_path", lambda ref: plan)
-    monkeypatch.setattr(impl, "preflight_worktree", lambda slug: (65, None))
+    monkeypatch.setattr(impl, "preflight_worktree", lambda slug, reuse_worktree=False: (65, None))
     monkeypatch.setattr(impl.sys, "argv", ["i", "run", "p"])
     with pytest.raises(SystemExit) as exc:
         impl.main()
@@ -923,8 +901,8 @@ def test_main_main_tree_refused(impl, monkeypatch, tmp_path):
     events = _wire_main(impl, monkeypatch)
     plan = _write_plan(tmp_path / "p.md", class_="AFK")
     monkeypatch.setattr(impl, "resolve_plan_path", lambda ref: plan)
-    monkeypatch.setattr(impl, "preflight_worktree", lambda slug: (0, None))
-    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda: True)
+    monkeypatch.setattr(impl, "preflight_worktree", lambda slug, reuse_worktree=False: (0, None))
+    monkeypatch.setattr(impl, "_in_shared_main_tree", lambda reuse_worktree=False: True)
     monkeypatch.setattr(impl.sys, "argv", ["i", "run", "p"])
     with pytest.raises(SystemExit) as exc:
         impl.main()
@@ -937,7 +915,7 @@ def test_main_success_no_land_reviews_diff(impl, monkeypatch, tmp_path, capsys):
     _wire_main(impl, monkeypatch)
     plan = _write_plan(tmp_path / "p.md", class_="AFK")
     monkeypatch.setattr(impl, "resolve_plan_path", lambda ref: plan)
-    monkeypatch.setattr(impl, "preflight_worktree", lambda slug: (0, tmp_path / "wt"))
+    monkeypatch.setattr(impl, "preflight_worktree", lambda slug, reuse_worktree=False: (0, tmp_path / "wt"))
     landed: list = []
     monkeypatch.setattr(impl, "_land_and_review", lambda *a, **k: landed.append(a))
     monkeypatch.setattr(impl.sys, "argv", ["i", "run", "p"])
@@ -953,7 +931,7 @@ def test_main_success_with_land_calls_land_and_review(impl, monkeypatch, tmp_pat
     plan = _write_plan(tmp_path / "p.md", class_="AFK")
     monkeypatch.setattr(impl, "resolve_plan_path", lambda ref: plan)
     target = tmp_path / "wt"
-    monkeypatch.setattr(impl, "preflight_worktree", lambda slug: (0, target))
+    monkeypatch.setattr(impl, "preflight_worktree", lambda slug, reuse_worktree=False: (0, target))
     landed: list = []
     monkeypatch.setattr(impl, "_land_and_review", lambda slug, wt, holding: landed.append((slug, wt, holding)))
     monkeypatch.setattr(impl.sys, "argv", ["i", "run", "p", "--land", "--holding", "hb"])
@@ -968,7 +946,7 @@ def test_main_failure_tears_down_worktree(impl, monkeypatch, tmp_path):
     plan = _write_plan(tmp_path / "p.md", class_="AFK")
     monkeypatch.setattr(impl, "resolve_plan_path", lambda ref: plan)
     target = tmp_path / "wt"
-    monkeypatch.setattr(impl, "preflight_worktree", lambda slug: (0, target))
+    monkeypatch.setattr(impl, "preflight_worktree", lambda slug, reuse_worktree=False: (0, target))
     monkeypatch.setattr(impl, "_run_and_doctor", lambda *a, **k: 1)
     torn: list = []
     monkeypatch.setattr(impl, "_teardown_worktree", lambda t: torn.append(t))
@@ -1016,7 +994,7 @@ def _fake_agent(repo):
     return invoke
 
 
-def test_implement_one_slice_commits_and_runs_gates(impl, tmp_path, monkeypatch):
+def test_implement_one_slice_commits_via_pre_commit_hook(impl, tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     _init_repo(repo)
     plan = _write_plan(tmp_path / "tiny-slice.md", class_="AFK", body="# Tiny slice\nAdd a feature module.")
@@ -1030,10 +1008,7 @@ def test_implement_one_slice_commits_and_runs_gates(impl, tmp_path, monkeypatch)
 
     before = _git(["rev-list", "--count", "HEAD"], cwd=repo)
 
-    gate_calls: list = []
-    real_gates = impl._run_gates
     monkeypatch.setattr(impl, "_invoke_harness", _fake_agent(repo))
-    monkeypatch.setattr(impl, "_run_gates", lambda c: gate_calls.append(c) or real_gates(c))
 
     rc = impl._run_and_doctor(plan)
     assert rc == 0
@@ -1042,5 +1017,4 @@ def test_implement_one_slice_commits_and_runs_gates(impl, tmp_path, monkeypatch)
     assert int(after) == int(before) + 1
     assert _git(["log", "-1", "--format=%s"], cwd=repo) == "feat(core): add feature module"
     assert "feature.py" in _git(["ls-tree", "--name-only", "HEAD"], cwd=repo)
-    assert gate_calls == [None]
     assert (repo / ".git/gate-ran").exists()

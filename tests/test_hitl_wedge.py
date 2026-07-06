@@ -138,16 +138,15 @@ def test_run_plan_self_answer_still_wedges_when_no_marker(tmp_path):
     assert "hitl-required" in reasons
 
 
-def test_run_plan_no_wedge_proceeds_to_gates(tmp_path):
+def test_run_plan_no_wedge_returns_zero(tmp_path):
     impl = _impl()
     plan = _write_plan(tmp_path, "afk-clean")
 
     with patch.object(impl, "_invoke_harness", return_value=MagicMock(returncode=0)):
         with patch.object(impl, "_read_blocked_summary", return_value=None):
             with patch.object(impl, "_detect_self_answer", return_value=False):
-                with patch.object(impl, "_run_gates", return_value=("pass", "")):
-                    with patch.object(impl, "_emit_event"):
-                        rc = impl.run_plan(plan, harness="fake")
+                with patch.object(impl, "_emit_event"):
+                    rc = impl.run_plan(plan, harness="fake")
 
     assert rc == 0
 
@@ -162,9 +161,8 @@ def test_afk_prompt_instructs_blocked_summary_channel(tmp_path):
     with patch.object(impl, "_invoke_harness", return_value=MagicMock(returncode=0)) as invoke:
         with patch.object(impl, "_read_blocked_summary", return_value=None):
             with patch.object(impl, "_detect_self_answer", return_value=False):
-                with patch.object(impl, "_run_gates", return_value=("pass", "")):
-                    with patch.object(impl, "_emit_event"):
-                        impl.run_plan(plan, harness="fake")
+                with patch.object(impl, "_emit_event"):
+                    impl.run_plan(plan, harness="fake")
 
     prompt = invoke.call_args.args[1]
     assert "summary.md" in prompt

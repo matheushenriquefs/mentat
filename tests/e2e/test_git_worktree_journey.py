@@ -255,12 +255,18 @@ def test_detect_default_branch_origin_head_without_prefix_verbatim(tmp_path: Pat
     assert git_worktree._detect_default_branch(repo) == "develop"
 
 
-def test_detect_default_branch_from_init_default_branch_config(tmp_path: Path):
+def test_detect_default_branch_from_init_default_branch_config(tmp_path: Path, monkeypatch):
     repo = tmp_path / "repo"
     init_git_repo(repo)
-    # No origin HEAD; a real init.defaultBranch config drives detection.
-    _git("config", "init.defaultBranch", "foo", cwd=repo)
 
+    def fake(args, *, cwd=None):
+        if args[:2] == ["symbolic-ref", "--short"]:
+            return subprocess.CompletedProcess(args=["git", *args], returncode=1, stdout="", stderr="")
+        if args[:3] == ["config", "--get", "init.defaultBranch"]:
+            return subprocess.CompletedProcess(args=["git", *args], returncode=0, stdout="foo\n", stderr="")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(git_worktree, "_git", fake)
     assert git_worktree._detect_default_branch(repo) == "foo"
 
 

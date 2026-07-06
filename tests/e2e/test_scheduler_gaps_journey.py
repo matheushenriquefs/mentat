@@ -135,7 +135,7 @@ def test_partition_upstream_walk_survives_diamond_reconvergence():
 # scheduler.py 130 (deps unlanded → continue) and 132 (nothing ready → None).
 
 
-def test_next_ready_skips_candidate_with_unmet_deps():
+def test_list_ready_slices_skips_candidate_with_unmet_deps():
     m = _sched()
     sched = m.Scheduler(
         [
@@ -143,11 +143,10 @@ def test_next_ready_skips_candidate_with_unmet_deps():
             _plan(m, "b", blocked_by=["a"]),
         ]
     )
-    # b's dep "a" has not landed → b is skipped (130) and a is returned.
-    assert sched.next_ready(["b", "a"]) == "a"
+    assert sched.list_ready_slices(["b", "a"]) == ["a"]
 
 
-def test_next_ready_returns_none_when_all_candidates_blocked():
+def test_list_ready_slices_returns_empty_when_all_candidates_blocked():
     m = _sched()
     sched = m.Scheduler(
         [
@@ -155,14 +154,12 @@ def test_next_ready_returns_none_when_all_candidates_blocked():
             _plan(m, "b", blocked_by=["a"]),
         ]
     )
-    # Only b is a candidate and its dep never landed → the loop exhausts → None.
-    assert sched.next_ready(["b"]) is None
+    assert sched.list_ready_slices(["b"]) == []
 
 
-def test_next_ready_returns_none_when_every_candidate_already_settled():
+def test_list_ready_slices_returns_empty_when_every_candidate_already_settled():
     m = _sched()
     sched = m.Scheduler([_plan(m, "a"), _plan(m, "b")])
     sched.mark_landed("a")
     sched.mark_ejected("b")
-    # Both candidates are landed/ejected → skipped → None (also exercises 132).
-    assert sched.next_ready(["a", "b"]) is None
+    assert sched.list_ready_slices(["a", "b"]) == []

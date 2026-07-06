@@ -157,7 +157,7 @@ def test_serialized_plans_drive_scheduler_serialization() -> None:
     sched = scheduler.Scheduler(scheduler.serialize_conflicts([a, b]))
 
     # b is chained behind a → only a is ready first.
-    assert sched.next_ready(["a", "b"]) == "a"
-    assert sched.next_ready(["b"]) is None, "b must wait until a lands"
+    assert sched.list_ready_slices(["a", "b"]) == ["a"]
+    assert sched.list_ready_slices(["b"]) == [], "b must wait until a lands"
     sched.mark_landed("a")
-    assert sched.next_ready(["b"]) == "b"
+    assert sched.list_ready_slices(["b"]) == ["b"]
