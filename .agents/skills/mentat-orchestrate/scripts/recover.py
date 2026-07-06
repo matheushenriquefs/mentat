@@ -24,30 +24,50 @@ landing imports and is unit-testable in isolation.
 
 from __future__ import annotations
 
-import json
+import importlib.util
 import subprocess
 import sys
-import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
-_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+_AGENTS_ROOT = _SCRIPTS_DIR.parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from lib import config as _config  # noqa: E402
+from lib import config as _config  # noqa: E402, F401
 from lib.events import bind  # noqa: E402
 
 _emit_event = bind("mentat-orchestrate")
 
-# The three recovery actions the agent may choose (and the wire strings).
-RETRY = "retry"
-RESLICE = "reslice"
-ABANDON = "abandon"
-_ACTIONS = frozenset({RETRY, RESLICE, ABANDON})
 
-DEFAULT_ATTEMPTS = 2
+def _load_sub(name: str) -> Any:
+    path = _SCRIPTS_DIR / "recovery" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"mentat_orchestrate_recovery_{name}", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load recovery.{name} from {path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_guards = _load_sub("guards")
+_context = _load_sub("context")
+_decision = _load_sub("decision")
+
+RETRY = _decision.RETRY
+RESLICE = _decision.RESLICE
+ABANDON = _decision.ABANDON
+
+DEFAULT_ATTEMPTS = _guards.DEFAULT_ATTEMPTS
+DEFAULT_MAX_RESTARTS = _guards.DEFAULT_MAX_RESTARTS
+DEFAULT_RESTART_WINDOW = _guards.DEFAULT_RESTART_WINDOW
+
+StormGuard = _guards.StormGuard
+Budget = _guards.Budget
 
 
 class _PlanLike(Protocol):
@@ -56,193 +76,36 @@ class _PlanLike(Protocol):
     path: Path
 
 
-DEFAULT_MAX_RESTARTS = 3
-DEFAULT_RESTART_WINDOW = 60.0
-
-
-def _int_config(key: str, default: int, *, minimum: int = 1) -> int:
-    raw = _config.read_config().get(key, default)
-    try:
-        return max(minimum, int(raw))
-    except TypeError, ValueError:
-        return default
-
-
 def recovery_attempts() -> int:
-    """Per-slug recovery attempt cap. Config ``recovery_attempts`` (default 2, min 1)."""
-    return _int_config("recovery_attempts", DEFAULT_ATTEMPTS)
+    return _guards.recovery_attempts()
 
 
 def recovery_max_restarts() -> int:
-    """Batch-wide restart-storm intensity: max respawns per window. Config
-    ``recovery_max_restarts`` (default 3, min 1) — the OTP supervisor ``MaxR``."""
-    return _int_config("recovery_max_restarts", DEFAULT_MAX_RESTARTS)
+    return _guards.recovery_max_restarts()
 
 
 def recovery_restart_window() -> float:
-    """The storm window in seconds — the OTP ``MaxT``. Config
-    ``recovery_restart_window`` (default 60)."""
-    raw = _config.read_config().get("recovery_restart_window", DEFAULT_RESTART_WINDOW)
-    try:
-        return max(0.0, float(raw))
-    except TypeError, ValueError:
-        return DEFAULT_RESTART_WINDOW
+    return _guards.recovery_restart_window()
 
 
 def recovery_budget() -> float | None:
-    """Accumulated recovery-cost ceiling for the batch, or None (unlimited). Config
-    ``recovery_budget`` — a soft OpenHands-style cost cap (unit-agnostic: respawns
-    by default; a caller may charge tokens/wall instead)."""
-    raw = _config.read_config().get("recovery_budget")
-    if raw is None:
-        return None
-    try:
-        return max(0.0, float(raw))
-    except TypeError, ValueError:
-        return None
-
-
-class StormGuard:
-    """OTP-style restart-intensity limiter (Erlang ``MaxR``/``MaxT``).
-
-    Allows at most ``max_restarts`` respawns within any ``window_s`` sliding window
-    across the whole batch. When the window is saturated the batch stops recovering
-    and escalates the remainder rather than restart-storming a sick box — the same
-    "give up, don't loop" contract an OTP supervisor enforces on its children.
-    ``clock`` is injectable for deterministic tests."""
-
-    def __init__(self, max_restarts: int, window_s: float, *, clock: Callable[[], float] = time.monotonic) -> None:
-        self.max_restarts = max(1, max_restarts)
-        self.window_s = window_s
-        self._clock = clock
-        self._stamps: list[float] = []
-
-    def allow(self) -> bool:
-        now = self._clock()
-        self._stamps = [t for t in self._stamps if now - t <= self.window_s]
-        return len(self._stamps) < self.max_restarts
-
-    def record(self) -> None:
-        self._stamps.append(self._clock())
-
-
-class Budget:
-    """Accumulated-cost ceiling for a batch's recovery (OpenHands-style).
-
-    ``allow(cost)`` gates the next respawn; ``spend(cost)`` accrues. ``total`` None
-    means unlimited. Cost is unit-agnostic — the caller decides whether one unit is
-    one respawn, N tokens, or N seconds."""
-
-    def __init__(self, total: float | None = None) -> None:
-        self.total = total
-        self.spent = 0.0
-
-    def allow(self, cost: float = 1.0) -> bool:
-        return self.total is None or self.spent + cost <= self.total
-
-    def spend(self, cost: float = 1.0) -> None:
-        self.spent += cost
-
-
-def _notify(message: str) -> None:
-    """Surface an escalation to the operator. Stderr today (audit is the durable
-    record); a single seam so a future push/notify backend has one call site."""
-    print(f"mentat-recover: ESCALATE — {message}", file=sys.stderr)
+    return _guards.recovery_budget()
 
 
 def attempt_count(agent_id: str, slug: str) -> int:
-    """Prior recovery respawns for ``slug``, replayed from the canonical store."""
-    from lib import store
-
-    return store.attempt_count(agent_id, slug)
+    return _guards.attempt_count(agent_id, slug)
 
 
-_PROMPT_TEMPLATE = """You are a mentat recovery agent. A parallel AFK chunk was ejected for a \
-TRANSIENT reason (its environment failed it, not necessarily its code). Decide how to \
-recover it. This is attempt {attempt} of {cap}.
-
-Chunk: {slug}
-Eject reason: {reason}
-Worktree (preserved): {worktree}
-Holding tip: {holding}
-
-Progress note (distilled from the dead agent's transcript):
-{progress_note}
-
-Choose exactly one action and reply with ONLY a JSON object, no prose:
-  {{"action": "retry",   "rationale": "..."}}  re-run the SAME work rebased onto holding \
-(pick this when the failure looks purely environmental — a timeout, a downed container, a \
-merge that raced out of fast-forward).
-  {{"action": "reslice", "rationale": "..."}}  the chunk is too big to finish in one deadline; \
-re-plan it into smaller slices (pick this when the work itself is the problem — it timed out \
-because it was doing too much).
-  {{"action": "abandon", "rationale": "..."}}  do not retry; hand back to a human (pick this \
-when retrying or reslicing cannot help).
-"""
-
-_DISTILL_TEMPLATE = """Distill this AFK agent transcript + worktree diff into a compact handoff note \
-for a respawned agent. Output ONLY the note — no preamble.
-
-Format:
-## Done
-- <completed step> (file pointers: path — what changed)
-
-## In progress
-- <partial step> (path — what's left there)
-
-## Pending
-- <not started>
-
-## Key decisions
-- <decision>
-
-## Git tip
-<holding branch tip sha from context>
-
-Transcript (tail):
-{transcript}
-
-Worktree diff vs holding (truncated):
-{diff}
-"""
+def _notify(message: str) -> None:
+    _guards.notify(message)
 
 
 def make_recovery_prompt(context: dict[str, object]) -> str:
-    """Render the recovery-agent prompt from a failure context dict."""
-    return _PROMPT_TEMPLATE.format(
-        slug=context.get("slug", "?"),
-        reason=context.get("reason", "?"),
-        worktree=context.get("worktree", "?"),
-        holding=context.get("holding", "?"),
-        attempt=context.get("attempt", "?"),
-        cap=context.get("cap", "?"),
-        progress_note=context.get("progress_note") or "(none)",
-    )
+    return _context.make_recovery_prompt(context)
 
 
 def build_prompt(context: dict[str, object]) -> str:
-    """Deprecated alias for ``make_recovery_prompt``."""
-    return make_recovery_prompt(context)
-
-
-def _transcript_path(agent_log_dir: Path | None) -> Path | None:
-    if agent_log_dir is None:
-        return None
-    for name in ("transcript.jsonl", "ses" + "sion.jsonl"):
-        path = agent_log_dir / name
-        if path.is_file() and path.stat().st_size > 0:
-            return path
-    return None
-
-
-def _read_tail(path: Path, *, max_bytes: int = 12000) -> str:
-    try:
-        data = path.read_bytes()
-    except OSError:
-        return ""
-    if len(data) <= max_bytes:
-        return data.decode("utf-8", errors="replace")
-    return data[-max_bytes:].decode("utf-8", errors="replace")
+    return _context.build_prompt(context)
 
 
 def distill_progress_note(
@@ -252,66 +115,17 @@ def distill_progress_note(
     holding_tip: str,
     invoke: Callable[[str], str] | None = None,
 ) -> str:
-    """Distill transcript + diff into a compact done/pending handoff note.
-
-    Absent transcript → returns ``diff`` unchanged (today's baseline seed).
-    """
-    transcript_file = _transcript_path(agent_log_dir)
-    if transcript_file is None:
-        return diff or "(none)"
-    invoke = invoke or _invoke_claude
-    prompt = _DISTILL_TEMPLATE.format(
-        transcript=_read_tail(transcript_file),
-        diff=(diff or "(empty)")[:4000],
+    return _context.distill_progress_note(
+        agent_log_dir=agent_log_dir,
+        diff=diff,
+        holding_tip=holding_tip,
+        invoke=invoke,
+        invoke_claude_fn=_invoke_claude if invoke is None else None,
     )
-    if holding_tip:
-        prompt = prompt.replace("<holding branch tip sha from context>", holding_tip)
-    raw = invoke(prompt).strip()
-    return raw if raw else (diff or "(none)")
-
-
-def _holding_tip_sha(worktree: Path, holding: str) -> str:
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(worktree), "rev-parse", holding],
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return ""
-    return result.stdout.strip() if result.returncode == 0 else ""
-
-
-def _agent_log_dir_for_slug(agent_id: str, slug: str) -> Path | None:
-    """Resolve the ejected implement agent's log dir from canonical store events."""
-    from lib import store
-
-    for row in reversed(store.list_events(agent_id)):
-        if row.get("event") != "chunk_ejected":
-            continue
-        payload = row.get("payload")
-        if not isinstance(payload, dict) or payload.get("slug") != slug:
-            continue
-        logs_path = payload.get("logs_path")
-        if isinstance(logs_path, str) and logs_path:
-            return Path(logs_path)
-    return None
 
 
 def eject_reason_for_slug(agent_id: str, slug: str) -> str:
-    """Latest ``chunk_ejected.reason`` for ``slug`` from the canonical store."""
-    from lib import store
-
-    for row in reversed(store.list_events(agent_id)):
-        if row.get("event") != "chunk_ejected":
-            continue
-        payload = row.get("payload")
-        if not isinstance(payload, dict) or payload.get("slug") != slug:
-            continue
-        reason = payload.get("reason")
-        if isinstance(reason, str):
-            return reason
-    return "unknown"
+    return _context.eject_reason_for_slug(agent_id, slug)
 
 
 def make_recovery_seed(
@@ -326,71 +140,40 @@ def make_recovery_seed(
     diff: str,
     invoke: Callable[[str], str] | None = None,
 ) -> dict[str, object]:
-    """Mint the composite recovery context: distilled progress note + metadata."""
-    agent_log_dir = _agent_log_dir_for_slug(agent_id, slug)
-    tip = _holding_tip_sha(worktree, holding)
-    progress_note = distill_progress_note(
-        agent_log_dir=agent_log_dir,
+    return _context.make_recovery_seed(
+        slug=slug,
+        reason=reason,
+        worktree=worktree,
+        holding=holding,
+        attempt=attempt,
+        cap=cap,
+        agent_id=agent_id,
         diff=diff,
-        holding_tip=tip,
         invoke=invoke,
+        invoke_claude_fn=_invoke_claude if invoke is None else None,
+        distill_fn=distill_progress_note,
     )
-    return {
-        "slug": slug,
-        "reason": reason,
-        "worktree": str(worktree),
-        "holding": holding,
-        "attempt": attempt,
-        "cap": cap,
-        "progress_note": progress_note,
-        "seed_summary": progress_note,
-    }
 
 
 def _extract_json(raw: str) -> str:
-    """Slice the first balanced ``{...}`` object out of a possibly-chatty reply."""
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start == -1 or end == -1 or end < start:
-        raise ValueError("no JSON object in reply")
-    return raw[start : end + 1]
+    return _decision._extract_json(raw)
 
 
 def _parse_decision(raw: str) -> dict[str, str]:
-    """Parse the agent reply into ``{action, rationale}``.
-
-    Any unparseable reply or unrecognized action degrades to ``abandon`` — the
-    safe escalate rung (never a blind retry against an unclassifiable failure)."""
-    try:
-        obj = json.loads(_extract_json(raw))
-    except json.JSONDecodeError, ValueError:
-        return {"action": ABANDON, "rationale": "unparseable recovery decision"}
-    # _extract_json only ever returns a ``{...}``-bounded slice, so a successful
-    # json.loads always yields a dict — a JSON array / scalar reply fails to parse
-    # above and degrades to abandon there.
-    action = obj.get("action")
-    if action not in _ACTIONS:
-        return {"action": ABANDON, "rationale": f"unrecognized recovery action {action!r}"}
-    return {"action": action, "rationale": str(obj.get("rationale", ""))}
+    return _decision.parse_decision(raw)
 
 
 def _invoke_claude(prompt: str) -> str:
-    """Run the recovery agent headless (claude --print, AFK-safe) and return stdout.
-
-    A non-zero exit or launch failure yields an empty string, which
-    ``_parse_decision`` turns into a safe ``abandon``."""
-    cmd = ["claude", "--print", prompt, "--dangerously-skip-permissions", "--disallowedTools", "AskUserQuestion"]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-    except OSError:
-        return ""
-    return result.stdout if result.returncode == 0 else ""
+    return _decision.invoke_claude(prompt, subprocess_mod=subprocess)
 
 
 def decide(context: dict[str, object], *, invoke: Callable[[str], str] | None = None) -> dict[str, str]:
-    """Ask the recovery agent how to recover a chunk. Returns ``{action, rationale}``."""
-    invoke = invoke or _invoke_claude
-    return _parse_decision(invoke(make_recovery_prompt(context)))
+    return _decision.decide(
+        context,
+        invoke=invoke,
+        prompt_fn=_context.make_recovery_prompt,
+        subprocess_mod=subprocess,
+    )
 
 
 def recover(
@@ -413,22 +196,8 @@ def recover(
     budget: Budget | None = None,
     notify: Callable[[str], None] | None = None,
 ) -> list[dict[str, object]]:
-    """Run the recovery pass over the transient-ejected set. Returns per-slug outcomes.
-
-    Serial by construction (one slug at a time, spaced by ``backoff``) so a recovering
-    fleet never re-storms the box under live contention. Each recoverable AFK slug
-    within cap gets a fresh worktree/container teardown, a model decision, and the
-    matching action.
-
-    Three guardrails escalate to HITL (dead-letter + notify) instead of blind-retrying:
-    a per-slug attempt cap, a batch-wide restart-storm intensity cap (``StormGuard``),
-    and an accumulated-cost ceiling (``Budget``). A storm or budget breach stops the
-    whole pass and escalates every not-yet-recovered slug — the OTP "give up, don't
-    loop" contract — so a sick box is never hammered.
-    """
+    """Run the recovery pass over the transient-ejected set. Returns per-slug outcomes."""
     cap = cap if cap is not None else recovery_attempts()
-    # Resolve the decider at call time (via the module namespace) so a test — or a
-    # caller — can monkeypatch ``decide`` without the def-time default freezing it.
     decider = decide if decide is not None else globals()["decide"]
     storm = storm_guard if storm_guard is not None else StormGuard(recovery_max_restarts(), recovery_restart_window())
     bud = budget if budget is not None else Budget(recovery_budget())
@@ -439,11 +208,9 @@ def recover(
     for i, slug in enumerate(ordered):
         plan = plans_by_slug.get(slug)
         if plan is None:
-            # Ad-hoc / external slug with no loaded plan — nothing to recover from.
             outcomes.append({"slug": slug, "recovery": "unrecoverable", "reason": "no-plan"})
             continue
         if not is_afk(slug):
-            # HITL is never auto-respawned — the operator owns it.
             outcomes.append({"slug": slug, "recovery": "skipped-hitl"})
             continue
 
@@ -454,8 +221,6 @@ def recover(
             outcomes.append({"slug": slug, "recovery": "dead-lettered", "reason": "attempt-cap"})
             continue
 
-        # Batch-wide give-up rungs: a storm-intensity or budget breach escalates this
-        # slug AND every remaining one, then stops — never keep restarting a sick box.
         if not storm.allow() or not bud.allow():
             breach = "restart-storm cap" if not storm.allow() else "recovery budget"
             for rest in ordered[i:]:
@@ -479,15 +244,9 @@ def recover(
             outcomes.append({"slug": slug, "recovery": ABANDON, "rationale": decision.get("rationale", "")})
             continue
 
-        # Charge the storm-intensity + budget rungs only for an ACTUAL respawn
-        # (retry/reslice). An abandon short-circuits above without charging, so a
-        # decision that never respawns can't prematurely trip the batch-wide give-up
-        # rungs and dead-letter still-recoverable siblings.
         storm.record()
         bud.spend()
 
-        # Payload-only respawn audit (ADR-0007): the outcome rides the existing
-        # chunk_landed / chunk_ejected from the re-drained chunk.
         _emit_event(
             "chunk_started",
             {
