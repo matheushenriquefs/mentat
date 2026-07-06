@@ -10,11 +10,13 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 from lib import config as _config  # noqa: E402
-from lib import frontmatter as _frontmatter  # noqa: E402
-from lib import paths  # noqa: E402,F401  # type: ignore[reportUnusedImport]  # pyright: ignore[reportUnusedImport]
 from lib import plans as _plans  # noqa: E402
 from lib.events import bind  # noqa: E402
 from lib.gates import engine as _gate_engine  # noqa: E402
+from lib.support import frontmatter as _frontmatter  # noqa: E402
+from lib.support import (
+    paths,  # noqa: E402,F401  # type: ignore[reportUnusedImport]  # pyright: ignore[reportUnusedImport]
+)
 
 emit_event = bind("mentat-orchestrate")
 read_config = _config.read_config

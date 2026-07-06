@@ -33,7 +33,7 @@ def test_emit_invokes_log_script_with_skill_name():
     import subprocess
 
     events = _import_events()
-    from lib import paths
+    from lib.support import paths
 
     with patch.object(subprocess, "run") as mock_run:
         mock_run.return_value.returncode = 0

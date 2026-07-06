@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
-from lib import paths
+from lib.support import paths
 
 
 def _load_cached(key: str, path: Path) -> ModuleType:

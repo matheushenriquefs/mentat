@@ -43,7 +43,7 @@ def claimed_file(td: Path) -> Path:
 
 
 def test_refresh_bumps_expiry(claimed_file: Path) -> None:
-    from lib import frontmatter
+    from lib.support import frontmatter
 
     fm_before, _ = frontmatter.parse(claimed_file.read_text())
     old_expiry = fm_before["claim_expires_at"]

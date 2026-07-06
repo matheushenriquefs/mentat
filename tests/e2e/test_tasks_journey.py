@@ -21,7 +21,7 @@ pytestmark = pytest.mark.e2e
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TASKS_PY = REPO_ROOT / ".agents/skills/mentat-tasks/scripts/tasks.py"
-_frontmatter = load_script(REPO_ROOT / ".agents/lib/frontmatter.py", "e2e_frontmatter")
+_frontmatter = load_script(REPO_ROOT / ".agents/lib/support/frontmatter.py", "e2e_frontmatter")
 
 
 @pytest.fixture

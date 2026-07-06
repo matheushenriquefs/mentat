@@ -13,12 +13,12 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
-from lib import paths  # noqa: E402
 from lib.chunk import bind_plan_chunk, make_chunk_id  # noqa: E402
 from lib.events import bind, spawned_payload  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 from lib.session import make_agent_id  # noqa: E402
 from lib.session import session_dir as _session_dir_fn
+from lib.support import paths  # noqa: E402
 
 _GIT_SCRIPT = paths.SKILLS_DIR / "mentat-git/scripts/git.py"
 _IMPLEMENT_SCRIPT = paths.SKILLS_DIR / "mentat-implement/scripts/implement.py"

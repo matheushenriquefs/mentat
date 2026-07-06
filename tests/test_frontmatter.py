@@ -1,4 +1,4 @@
-"""Tests for lib/frontmatter.py — stdlib YAML-flat frontmatter codec."""
+"""Tests for lib/support/frontmatter.py — stdlib YAML-flat frontmatter codec."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 
 _LIB = Path(__file__).resolve().parents[1] / ".agents/lib"
 
-import frontmatter  # noqa: E402
+from lib.support import frontmatter  # noqa: E402
 
 
 def test_parse_returns_dict_and_body_offset():
@@ -105,7 +105,7 @@ def test_write_atomic_cleans_up_tmp_on_failure(tmp_path: Path, monkeypatch):
 
 
 def test_frontmatter_stdlib_only():
-    src = (_LIB / "frontmatter.py").read_text(encoding="utf-8")
+    src = (_LIB / "support" / "frontmatter.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     stdlib = sys.stdlib_module_names  # type: ignore[attr-defined]
     for node in ast.walk(tree):

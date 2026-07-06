@@ -18,13 +18,12 @@ if str(_AGENTS_ROOT) not in sys.path:
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
-from lib import paths  # noqa: E402
+from lib.support import paths  # noqa: E402
 
 _SESSION_SCRIPT = paths.SKILLS_DIR / "mentat-track/scripts/session.py"
 _GIT_SCRIPT = paths.SKILLS_DIR / "mentat-git/scripts/git.py"
 _GIT_WORKTREE_PY = paths.SKILLS_DIR / "mentat-git/scripts/worktree.py"
 
-from lib import frontmatter as _frontmatter  # noqa: E402
 from lib.exits import (  # noqa: E402
     EX_CONFIG,
     EX_DATAERR,
@@ -38,6 +37,7 @@ from lib.exits import (  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 from lib.session import ensure_session  # noqa: E402
 from lib.session import session_dir as _session_dir_fn
+from lib.support import frontmatter as _frontmatter  # noqa: E402
 
 
 def _logs_path() -> str:

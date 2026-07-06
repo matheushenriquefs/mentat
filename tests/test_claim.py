@@ -50,7 +50,7 @@ def test_claim_creates_lock_sentinel(task_file: Path) -> None:
         t.main(["claim", str(task_file), "agent-a", "600"])
     lock = task_file.with_suffix(".md.lock")
     assert lock.exists()
-    from lib import frontmatter
+    from lib.support import frontmatter
 
     fm, _ = frontmatter.parse(task_file.read_text())
     assert fm["claimed_by"] == "agent-a"
@@ -109,7 +109,7 @@ def test_release_removes_lock_and_resets_fields(task_file: Path) -> None:
         t.main(["release", str(task_file)])
     lock = task_file.with_suffix(".md.lock")
     assert not lock.exists()
-    from lib import frontmatter
+    from lib.support import frontmatter
 
     fm, _ = frontmatter.parse(task_file.read_text())
     assert fm["claimed_by"] == ""
@@ -121,7 +121,7 @@ def test_claim_emits_task_claimed(task_file: Path) -> None:
     t = _reload("tasks")
     with patch("lib.events._spawn") as mock_spawn:
         t.main(["claim", str(task_file), "agent-a", "600"])
-    from lib import frontmatter
+    from lib.support import frontmatter
 
     fm, _ = frontmatter.parse(task_file.read_text())
     expires = fm["claim_expires_at"]
@@ -193,7 +193,7 @@ def test_legal_path_todo_to_inprogress_to_done(task_file: Path) -> None:
     with patch("lib.events._spawn"):
         t.main(["claim", str(task_file), "agent-a", "600"])
         t.main(["done", str(task_file)])
-    from lib import frontmatter
+    from lib.support import frontmatter
 
     fm, _ = frontmatter.parse(task_file.read_text())
     assert fm["status"] == "done"

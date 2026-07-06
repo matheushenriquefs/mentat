@@ -1,4 +1,4 @@
-"""Slice deepen-paths: lib/paths.py frozen path constants."""
+"""Slice deepen-paths: lib/support/paths.py frozen path constants."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ import pytest
 def _import_paths():
     import importlib.util as _ilu
 
-    key = "lib.paths"
+    key = "lib.support.paths"
     spec = _ilu.spec_from_file_location(
         key,
-        Path(__file__).resolve().parents[1] / ".agents/lib/paths.py",
+        Path(__file__).resolve().parents[1] / ".agents/lib/support/paths.py",
     )
     mod = _ilu.module_from_spec(spec)
     sys.modules[key] = mod  # register first so __name__ lookup inside paths.py works
@@ -80,7 +80,7 @@ def test_paths_derived_fields_structure():
 
 
 def test_paths_module_is_stdlib_only():
-    src = (Path(__file__).resolve().parents[1] / ".agents/lib/paths.py").read_text()
+    src = (Path(__file__).resolve().parents[1] / ".agents/lib/support/paths.py").read_text()
     tree = ast.parse(src)
     stdlib = sys.stdlib_module_names
     for node in ast.walk(tree):

@@ -50,7 +50,7 @@ All operations route through `scripts/tasks.py`. Set `MENTAT_TASKS_DIR` to overr
 
 ## Atomic-write invariant
 
-All frontmatter mutations use `lib.frontmatter.mutate` — tmp+`os.replace` same-fs rename (POSIX `rename(2)`). Claims use `os.open(O_CREAT|O_EXCL)` for exclusive create — correct POSIX primitive for test-and-set. The lock sentinel (`.lock`) is separate from the content file so rename never rebinds the guard inode.
+All frontmatter mutations use `lib.support.frontmatter.mutate` — tmp+`os.replace` same-fs rename (POSIX `rename(2)`). Claims use `os.open(O_CREAT|O_EXCL)` for exclusive create — correct POSIX primitive for test-and-set. The lock sentinel (`.lock`) is separate from the content file so rename never rebinds the guard inode.
 
 ## Pick gate
 

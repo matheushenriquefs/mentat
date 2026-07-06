@@ -1,6 +1,6 @@
 """E2E: the stdlib frontmatter codec — parse + encode + atomic mutate.
 
-Drives ``lib.frontmatter`` through the full round trip on real tmp files: the
+Drives ``lib.support.frontmatter`` through the full round trip on real tmp files: the
 parse guard clauses (empty / no leading ``---``), the continuation-line skip and
 non-matching-line drop, ``encode`` order + trailing newline, an on-disk
 ``mutate`` that preserves the body, and the ``_write_atomic`` failure path — a
@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from lib import frontmatter
+from lib.support import frontmatter
 
 pytestmark = pytest.mark.e2e
 

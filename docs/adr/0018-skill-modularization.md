@@ -110,5 +110,5 @@ Held-state resources become `<Thing>Service`: `ContainerService`, `GitService`,
 - `test_orchestrate.py` and `test_implement.py` monoliths split to mirror modules.
 - `mentat-track` skill name retires; docs, install symlinks, and evals reference
   `mentat-track` only.
-- `lib/support/` is optional grouping — core subsystems (`git`, `events`, `store`)
+- `lib/support/` groups pure helpers (`backoff`, `paths`, `frontmatter`); core subsystems (`git`, `events`, `store`)
   stay top-level `lib/` modules.

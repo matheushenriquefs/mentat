@@ -14,15 +14,17 @@ def _no_double(p: Path) -> None:
 
 
 def test_plans_uses_paths_lib():
-    """plans.py must import from lib.paths, not define its own _LOG_SCRIPT/_GATES_CODE."""
+    """plans.py must import from lib.support.paths, not define its own _LOG_SCRIPT/_GATES_CODE."""
     src = _src("plans")
     tree = ast.parse(src)
-    # `from lib import paths` → ImportFrom(module='lib', names=[alias(name='paths')])
+    # `from lib.support import paths` → ImportFrom(module='lib', names=[alias(name='paths')])
     imports_paths = any(
-        isinstance(node, ast.ImportFrom) and node.module == "lib" and any(alias.name == "paths" for alias in node.names)
+        isinstance(node, ast.ImportFrom)
+        and node.module in ("lib", "lib.support")
+        and any(alias.name == "paths" for alias in node.names)
         for node in ast.walk(tree)
     )
-    assert imports_paths, "plans.py must do 'from lib import paths'"
+    assert imports_paths, "plans.py must do 'from lib.support import paths'"
     assert "_LOG_SCRIPT" not in src, "plans.py must not define _LOG_SCRIPT (use paths.LOG_SCRIPT)"
     assert "_GATES_CODE" not in src, "plans.py must not define _GATES_CODE (use paths.GATES_CODE_DIR)"
 

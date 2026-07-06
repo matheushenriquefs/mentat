@@ -7,7 +7,7 @@ Refactor `.agents/lib/` helpers and `.agents/agents/` reviewer set. The work fal
 ## Groups
 
 ### Group A — lib helpers
-Write-set: `.agents/lib/paths.py`, `.agents/lib/logging.py`, `.agents/lib/here.py`
+Write-set: `.agents/lib/support/paths.py`, `.agents/lib/logging.py`, `.agents/lib/here.py`
 Work: create stdlib helper modules (canonical path resolution, structured logging, self-locator). No dependency on B, C, or D.
 
 ### Group B — add agents/
@@ -24,7 +24,7 @@ Work: update cross-references to new names. No dependency on A, B, or C.
 
 ## Slices
 
-- create `lib/paths.py`, `lib/logging.py`, `lib/here.py` [Group A]
+- create `lib/support/paths.py`, `lib/logging.py`, `lib/here.py` [Group A]
 - write reviewer files under `agents/` [Group B]
 - write release + prune scripts under `skills/` [Group C]
 - sweep docs for new names [Group D]

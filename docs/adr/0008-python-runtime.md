@@ -106,10 +106,10 @@ _plans = load_sibling(__file__, "plans")
 
 ### Cross-skill calls (updated)
 
-Use `lib.paths` constants; do not compute `SKILL_ROOT` inline:
+Use `lib.support.paths` constants; do not compute `SKILL_ROOT` inline:
 
 ```python
-from lib import paths
+from lib.support import paths
 # paths.SKILLS_DIR / "mentat-<bin>" / "scripts" / "<bin>.py"
 ```
 

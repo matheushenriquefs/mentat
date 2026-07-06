@@ -1,4 +1,4 @@
-"""E2E journey: capped exponential backoff with full jitter (lib/backoff.py).
+"""E2E journey: capped exponential backoff with full jitter (lib/support/backoff.py).
 
 Pure math with an injectable RNG — the recovery engine's respawn spacer.
 """
@@ -13,7 +13,7 @@ from tests.conftest import load_script
 
 pytestmark = pytest.mark.e2e
 
-BACKOFF_PY = Path(__file__).resolve().parents[2] / ".agents/lib/backoff.py"
+BACKOFF_PY = Path(__file__).resolve().parents[2] / ".agents/lib/support/backoff.py"
 
 
 def _backoff():

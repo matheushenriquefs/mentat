@@ -16,11 +16,11 @@ _AGENTS_DIR = _SCRIPTS.parents[2]  # .agents/
 if str(_AGENTS_DIR) not in sys.path:
     sys.path.insert(0, str(_AGENTS_DIR))
 
-from lib import frontmatter  # noqa: E402
 from lib.events import bind  # noqa: E402
 from lib.exits import EX_USAGE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 from lib.session import ensure_session as _ensure_session  # noqa: E402
+from lib.support import frontmatter  # noqa: E402
 
 _utils: _types.ModuleType = load_sibling(__file__, "lifecycle")  # type: ignore[assignment]
 

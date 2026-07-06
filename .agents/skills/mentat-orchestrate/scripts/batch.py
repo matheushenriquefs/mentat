@@ -14,7 +14,6 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
-from lib import backoff as _backoff  # noqa: E402
 from lib import devcontainer as _devcontainer  # noqa: E402
 from lib import git as _git  # noqa: E402
 from lib import worktrees as _worktrees  # noqa: E402
@@ -30,6 +29,7 @@ from lib.events import (  # noqa: E402
 from lib.events import bind as _bind  # noqa: E402
 from lib.exits import EX_HITL_REQUIRED, EX_UNAVAILABLE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
+from lib.support import backoff as _backoff  # noqa: E402
 
 _utils = load_sibling(__file__, "plans")
 _scheduler = load_sibling(__file__, "scheduler")

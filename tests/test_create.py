@@ -67,7 +67,7 @@ def test_create_writes_file_with_frontmatter(td: Path, monkeypatch: pytest.Monke
         t.main(["create", "my-slug"])
     created = td / "T001-my-slug.md"
     assert created.exists()
-    from lib import frontmatter
+    from lib.support import frontmatter
 
     fm, _ = frontmatter.parse(created.read_text())
     assert fm["id"] == "T001"

@@ -9,8 +9,8 @@ import sys
 from collections.abc import Callable
 from typing import Literal
 
-from lib import paths
 from lib.session import agent_id_from_env, make_agent_id
+from lib.support import paths
 
 # Events where a failed emit must not be silently swallowed — the orchestration
 # state machine cannot proceed correctly without a confirmed log write.

@@ -47,7 +47,7 @@ def test_done_sets_status_and_clears_claim(claimed_file: Path) -> None:
         t.main(["done", str(claimed_file)])
     lock = claimed_file.with_suffix(".md.lock")
     assert not lock.exists()
-    from lib import frontmatter
+    from lib.support import frontmatter
 
     fm, _ = frontmatter.parse(claimed_file.read_text())
     assert fm["status"] == "done"
@@ -61,7 +61,7 @@ def test_wontfix_sets_status_wontfix(claimed_file: Path) -> None:
         t.main(["wontfix", str(claimed_file)])
     lock = claimed_file.with_suffix(".md.lock")
     assert not lock.exists()
-    from lib import frontmatter
+    from lib.support import frontmatter
 
     fm, _ = frontmatter.parse(claimed_file.read_text())
     assert fm["status"] == "wontfix"

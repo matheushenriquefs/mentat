@@ -645,7 +645,7 @@ def test_supervisor_signal_handler_tears_down_and_cancels(monkeypatch, tmp_path)
 
 
 def load_backoff():
-    return load_script(LIB / "backoff.py", "backoff")
+    return load_script(LIB / "support" / "backoff.py", "backoff")
 
 
 def test_full_jitter_never_exceeds_cap():

@@ -8,11 +8,13 @@ import sys
 from pathlib import Path
 
 _LIB = Path(__file__).resolve().parents[1]
-if str(_LIB) not in sys.path:
-    sys.path.insert(0, str(_LIB))
+_AGENTS = _LIB.parent
+for _p in (_AGENTS, _LIB):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 from exits import EX_FAILURE, EX_OK, EX_USAGE  # noqa: E402
-from frontmatter import parse as _parse_frontmatter  # noqa: E402
+from lib.support.frontmatter import parse as _parse_frontmatter  # noqa: E402
 
 BANNED_RE = re.compile(
     r"\b(just|simply|really|basically|actually|obviously|certainly|moreover)\b"
