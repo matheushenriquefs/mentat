@@ -8,7 +8,7 @@ from pathlib import Path
 _SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestrate/scripts"
 
 from lib.exits import EX_HITL_REQUIRED  # noqa: E402
-from tests.conftest import patch_orchestrate_worktree  # noqa: E402
+from tests.conftest import bind_plan, patch_orchestrate_worktree  # noqa: E402
 
 
 def _load(name: str):
@@ -38,6 +38,7 @@ def test_orchestrate_exit_codes_unchanged(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrate, "_emit_event", lambda *a, **k: None)
 
     plan_obj = sched_mod.Plan(slug="a", kind="AFK", blocked_by=[], path=a_path)
+    bind_plan("a")
 
     # Ejected path: child exits EX_HITL_REQUIRED → hitl_slugs non-empty → exit 1
     monkeypatch.setattr(
