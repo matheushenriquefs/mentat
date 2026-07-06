@@ -73,11 +73,12 @@ def test_load_config_file_returns_empty_on_missing_file(tmp_path):
 
 
 def test_load_config_file_returns_empty_on_malformed_toml(tmp_path):
-    """load_config_file returns {} when tomllib raises on garbage. Covers lines 37-38."""
+    """load_config_file raises ConfigError when tomllib rejects garbage."""
     path = tmp_path / "config.toml"
     path.write_text("this is = = not toml\n")
 
-    assert config.load_config_file(path) == {}, "malformed TOML must yield {}"
+    with pytest.raises(config.ConfigError, match="parse error"):
+        config.load_config_file(path)
 
 
 def test_config_status_valid(tmp_path):

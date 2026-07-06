@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
 import datetime
 import json
 import os
@@ -65,8 +64,7 @@ def _sidecar_file(base: Path, repo: str, session: str, agent: str, slug: str) ->
 
 def _ensure_log_dir(log_root: Path) -> None:
     log_root.mkdir(parents=True, exist_ok=True)
-    with contextlib.suppress(OSError):
-        log_root.chmod(0o700)
+    log_root.chmod(0o700)
 
 
 def _reject(base: Path, repo: str, session: str, agent: str, slug: str, event: str, reason: str) -> None:

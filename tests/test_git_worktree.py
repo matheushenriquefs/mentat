@@ -322,13 +322,37 @@ def test_detect_default_branch_symbolic_ref_empty_falls_through(tmp_path, monkey
 
     def fake_git(args, *, cwd=None):
         if args[:2] == ["symbolic-ref", "--short"]:
-            return _ok(stdout="\n")  # rc 0 but empty ref
+            if len(args) > 2 and args[2] == "refs/remotes/origin/HEAD":
+                return _ok(stdout="\n")
+            return _ok(returncode=1)
         if args[:2] == ["config", "--get"]:
             return _ok(stdout="cfgbranch\n")
         return _ok(returncode=1)
 
     monkeypatch.setattr(wt, "_git", fake_git)
     assert wt._detect_default_branch(tmp_path) == "cfgbranch"
+
+
+def test_detect_default_branch_from_local_head(tmp_path, monkeypatch):
+    """Local HEAD symbolic-ref is used when origin/HEAD is absent."""
+    wt = _load_worktree()
+
+    def fake_git(args, *, cwd=None):
+        if args[:2] == ["symbolic-ref", "--short"]:
+            if len(args) > 2 and args[2] == "refs/remotes/origin/HEAD":
+                return _ok(returncode=1)
+            return _ok(stdout="trunk\n")
+        return _ok(returncode=1)
+
+    monkeypatch.setattr(wt, "_git", fake_git)
+    assert wt._detect_default_branch(tmp_path) == "trunk"
+
+
+def test_detect_default_branch_raises_when_unresolvable(tmp_path, monkeypatch):
+    wt = _load_worktree()
+    monkeypatch.setattr(wt, "_git", lambda args, *, cwd=None: _ok(returncode=1))
+    with pytest.raises(wt._git_lib.GitError, match="cannot detect default branch"):
+        wt._detect_default_branch(tmp_path)
 
 
 def test_detect_default_branch_from_init_default(tmp_path, monkeypatch):

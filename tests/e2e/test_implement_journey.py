@@ -170,11 +170,12 @@ def test_compaction_threshold_key_absent_is_none(impl, monkeypatch, tmp_path):
     assert impl._compaction_threshold() is None
 
 
-def test_compaction_threshold_non_int_is_none(impl, monkeypatch, tmp_path):
+def test_compaction_threshold_non_int_raises(impl, monkeypatch, tmp_path):
     cfg = tmp_path / "config.toml"
     cfg.write_text('compaction_threshold_tokens = "abc"\n')
     monkeypatch.setenv("MENTAT_CONFIG", str(cfg))
-    assert impl._compaction_threshold() is None
+    with pytest.raises(ValueError, match="invalid compaction_threshold_tokens"):
+        impl._compaction_threshold()
 
 
 # ── _checkpoint_if_needed ──────────────────────────────────────────────────────
@@ -361,8 +362,7 @@ def test_promote_blocked_summary_writes_file(impl, monkeypatch, tmp_path):
     assert "the body" in body
 
 
-def test_promote_blocked_summary_oserror_swallowed(impl, monkeypatch):
-    # A seam path whose parent.mkdir raises OSError; the failure is swallowed.
+def test_promote_blocked_summary_oserror_surfaces(impl, monkeypatch):
     class _FakePath:
         @property
         def parent(self):
@@ -375,7 +375,8 @@ def test_promote_blocked_summary_oserror_swallowed(impl, monkeypatch):
             raise OSError("nope")
 
     monkeypatch.setattr(impl, "_blocked_summary_path", lambda: _FakePath())
-    impl._promote_blocked_summary("body")  # must not raise
+    with pytest.raises(OSError, match="nope"):
+        impl._promote_blocked_summary("body")
 
 
 # ── _detect_self_answer ────────────────────────────────────────────────────────

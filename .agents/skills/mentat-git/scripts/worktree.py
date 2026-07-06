@@ -73,8 +73,9 @@ def _branch_exists(main_root: Path, branch: str) -> bool:
 def _detect_default_branch(repo_root: Path) -> str:
     """Detect the repo's default branch. Detection order:
     1. git symbolic-ref --short refs/remotes/origin/HEAD (strip origin/ prefix)
-    2. git config --get init.defaultBranch
-    3. literal "main"
+    2. git symbolic-ref --short HEAD
+    3. git config --get init.defaultBranch
+    Raises GitError when none resolve.
     """
     r = _git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], cwd=repo_root)
     if r.returncode == 0:
@@ -84,11 +85,17 @@ def _detect_default_branch(repo_root: Path) -> str:
         if ref:
             return ref
 
+    r = _git(["symbolic-ref", "--short", "HEAD"], cwd=repo_root)
+    if r.returncode == 0 and r.stdout.strip():
+        return r.stdout.strip()
+
     r = _git(["config", "--get", "init.defaultBranch"], cwd=repo_root)
     if r.returncode == 0 and r.stdout.strip():
         return r.stdout.strip()
 
-    return "main"
+    raise _git_lib.GitError(
+        "cannot detect default branch: no origin/HEAD, HEAD, or init.defaultBranch"
+    )
 
 
 def _list_worktrees(main_root: Path) -> list[dict[str, str]]:

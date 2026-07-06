@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / ".agents"))
 from lib import config  # noqa: E402
@@ -64,7 +66,7 @@ def test_read_config_missing_returns_empty(tmp_path):
         assert config.read_config() == {}
 
 
-def test_read_config_malformed_repo_falls_back_to_global(tmp_path):
+def test_read_config_malformed_repo_raises(tmp_path):
     global_dir = tmp_path / "home"
     (global_dir / ".mentat").mkdir(parents=True)
     (global_dir / ".mentat" / "config.toml").write_text('harness = "claude-code"\n')
@@ -75,8 +77,8 @@ def test_read_config_malformed_repo_falls_back_to_global(tmp_path):
         patch.object(config, "_repo_mentat_dir", return_value=repo_mentat),
         patch("pathlib.Path.home", return_value=global_dir),
     ):
-        result = config.read_config()
-    assert result == {"harness": "claude-code"}
+        with pytest.raises(config.ConfigError, match="parse error"):
+            config.read_config()
 
 
 # ── load_config_file ──────────────────────────────────────────────────────────
@@ -112,10 +114,28 @@ def test_load_jsonc_returns_empty_on_non_utf8(tmp_path):
     assert config.load_jsonc(f) == {}
 
 
-def test_load_config_file_toml_non_utf8_returns_empty(tmp_path):
+def test_load_config_file_malformed_toml_raises(tmp_path):
+    f = tmp_path / "config.toml"
+    f.write_text("not = = valid")
+    with pytest.raises(config.ConfigError, match="parse error"):
+        config.load_config_file(f)
+
+
+def test_load_config_file_toml_non_utf8_raises(tmp_path):
     f = tmp_path / "config.toml"
     f.write_bytes(b'harness = "\xff\xfe"\n')
-    assert config.load_config_file(f) == {}
+    with pytest.raises(config.ConfigError, match="cannot read"):
+        config.load_config_file(f)
+
+
+def test_repo_mentat_dir_surfaces_git_failure(tmp_path, monkeypatch):
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 128, "", "fatal: unexpected git error")
+
+    monkeypatch.chdir(tmp_path)
+    with patch.object(subprocess, "run", fake_run):
+        with pytest.raises(config.ConfigError, match="git rev-parse failed"):
+            config._repo_mentat_dir()
 
 
 def test_config_status_non_utf8_toml_is_invalid_not_crash(tmp_path):

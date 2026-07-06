@@ -16,7 +16,7 @@ from lib.config import load_config_file  # noqa: E402
 
 
 def _load_config_order(config_path: Path) -> list[str]:
-    """Read plugin order from ~/.mentat/config.toml. Returns [] if absent or malformed."""
+    """Read plugin order from ~/.mentat/config.toml. Returns [] if absent; raises ConfigError if malformed."""
     if not config_path.exists():
         return []
     try:

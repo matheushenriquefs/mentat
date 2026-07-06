@@ -264,10 +264,9 @@ def test_detect_default_branch_from_init_default_branch_config(tmp_path: Path):
     assert git_worktree._detect_default_branch(repo) == "foo"
 
 
-def test_detect_default_branch_falls_back_to_main(tmp_path: Path):
+def test_detect_default_branch_from_head_on_init_repo(tmp_path: Path):
     repo = tmp_path / "repo"
     init_git_repo(repo)
-    # No origin HEAD, no init.defaultBranch → literal "main".
     assert git_worktree._detect_default_branch(repo) == "main"
 
 

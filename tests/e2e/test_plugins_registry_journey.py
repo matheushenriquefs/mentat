@@ -94,14 +94,14 @@ def test_config_order_valid_list_is_returned(tmp_path: Path) -> None:
     assert registry._load_config_order(cfg) == ["a", "b"]
 
 
-def test_config_order_malformed_toml_returns_empty(tmp_path: Path) -> None:
-    """Malformed TOML → load_config_file returns {} → data.get('plugins') is None → [].
+def test_config_order_malformed_toml_raises(tmp_path: Path) -> None:
+    """Malformed TOML surfaces at load instead of silently yielding []."""
+    from lib.config import ConfigError
 
-    Exercises the 23-26 path where the parse fails silently upstream.
-    """
     cfg = tmp_path / "config.toml"
     cfg.write_text("this is = = not valid toml [[[\n")
-    assert registry._load_config_order(cfg) == []
+    with pytest.raises(ConfigError, match="parse error"):
+        registry._load_config_order(cfg)
 
 
 def test_config_order_swallows_config_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

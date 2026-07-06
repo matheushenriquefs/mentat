@@ -6,6 +6,8 @@ import ast
 import sys
 from pathlib import Path
 
+import pytest
+
 _LIB = Path(__file__).resolve().parents[1] / ".agents/lib"
 
 import frontmatter  # noqa: E402
@@ -25,11 +27,16 @@ def test_parse_no_frontmatter_returns_empty():
     assert offset == 0
 
 
-def test_parse_skips_indented_lines():
+def test_parse_rejects_indented_lines():
     text = "---\nname: top\n  nested: x\n---\n# body\n"
-    fm, offset = frontmatter.parse(text)
-    assert "nested" not in fm
-    assert fm == {"name": "top"}
+    with pytest.raises(frontmatter.FrontmatterError, match="nested"):
+        frontmatter.parse(text)
+
+
+def test_parse_rejects_non_matching_line_inside_block():
+    text = "---\nname: x\nthis line has no colon\n---\n# body\n"
+    with pytest.raises(frontmatter.FrontmatterError, match="unsupported"):
+        frontmatter.parse(text)
 
 
 def test_encode_roundtrip():
@@ -77,15 +84,6 @@ def test_mutate_quoted_values(tmp_path: Path):
     fm, _ = frontmatter.parse(p.read_text(encoding="utf-8"))
     assert fm["created_at"] == "2026-06-12T00:00:00Z"
     assert fm["status"] == "done"
-
-
-def test_parse_skips_non_matching_line_inside_block():
-    # A non-indented line with no `key:` shape must be skipped (m is None → loop continues).
-    text = "---\nname: x\nthis line has no colon\n---\n# body\n"
-    fm, offset = frontmatter.parse(text)
-    assert fm == {"name": "x"}
-    assert offset == 4
-
 
 def test_write_atomic_cleans_up_tmp_on_failure(tmp_path: Path, monkeypatch):
     from unittest.mock import patch

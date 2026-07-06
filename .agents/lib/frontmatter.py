@@ -10,6 +10,10 @@ from pathlib import Path
 _LINE = re.compile(r"^(\w[\w-]*):\s*(.*)$")
 
 
+class FrontmatterError(ValueError):
+    """Unsupported or malformed YAML-flat frontmatter."""
+
+
 def parse(text: str) -> tuple[dict[str, str], int]:
     """Return (frontmatter dict, body-start line index). Empty fm → ({}, 0)."""
     lines = text.splitlines()
@@ -20,11 +24,14 @@ def parse(text: str) -> tuple[dict[str, str], int]:
         end += 1
     fm: dict[str, str] = {}
     for line in lines[1:end]:
-        if line.startswith((" ", "\t")):
+        if not line.strip():
             continue
+        if line.startswith((" ", "\t")):
+            raise FrontmatterError("nested/indented frontmatter is not supported")
         m = _LINE.match(line)
-        if m:
-            fm[m.group(1)] = m.group(2).strip()
+        if not m:
+            raise FrontmatterError(f"unsupported frontmatter line: {line!r}")
+        fm[m.group(1)] = m.group(2).strip()
     return fm, end + 1
 
 

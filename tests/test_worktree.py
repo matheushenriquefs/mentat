@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 _GIT_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-git/scripts"
 sys.path.insert(0, str(_GIT_SCRIPTS))
 
@@ -91,22 +93,22 @@ class TestCmdWorktreeCreate:
         fake = _make_fake_git(
             tmp_path,
             branch_exists_for="develop",
-            detect_responses=[_cp(1), _cp(0, "develop\n")],
+            detect_responses=[_cp(1), _cp(1), _cp(0, "develop\n")],
         )
         with patch.object(wt, "_git", side_effect=fake):
             rc = wt.cmd_worktree_create("my-slug", base=None, parent=tmp_path)
         assert rc == 0
 
-    def test_omitted_base_falls_back_to_main_exits_66_when_missing(self, tmp_path):
-        """omitted --base falls back to 'main'; exits 66 when main doesn't exist."""
+    def test_omitted_base_raises_when_default_branch_unresolvable(self, tmp_path):
+        """omitted --base raises when origin/HEAD, HEAD, and init.defaultBranch all fail."""
         fake = _make_fake_git(
             tmp_path,
-            branch_exists_for="develop",  # develop exists, main does not
-            detect_responses=[_cp(1), _cp(1)],  # both detection steps fail
+            branch_exists_for="develop",
+            detect_responses=[_cp(1), _cp(1), _cp(1)],
         )
         with patch.object(wt, "_git", side_effect=fake):
-            rc = wt.cmd_worktree_create("my-slug", base=None, parent=tmp_path)
-        assert rc == 66
+            with pytest.raises(wt._git_lib.GitError, match="cannot detect default branch"):
+                wt.cmd_worktree_create("my-slug", base=None, parent=tmp_path)
 
     def test_explicit_base_main_exits_66_on_develop_only_repo(self, tmp_path):
         """explicit --base main on develop-only repo exits 66 — no silent fix-up."""
@@ -132,7 +134,7 @@ class TestCmdWorktreeCreate:
             if args[:2] == ["symbolic-ref", "--short"]:
                 return _cp(1)
             if args[:2] == ["config", "--get"]:
-                return _cp(1)
+                return _cp(0, "main\n")
             if args[:3] == ["rev-parse", "--verify", "--quiet"]:
                 branch = args[3].replace("refs/heads/", "")
                 return _cp(0) if branch == "main" else _cp(1)

@@ -10,6 +10,10 @@ from pathlib import Path
 
 _CONFIG_NAME = "config.toml"
 
+
+class ConfigError(ValueError):
+    """Malformed or unreadable Mentat config."""
+
 # Match // line-comments OR quoted strings (preserve strings, strip comments)
 _COMMENT_RE = re.compile(r'//[^\n]*|"(?:[^"\\]|\\.)*"')
 
@@ -34,12 +38,14 @@ def _load_toml(path: Path) -> dict[str, object]:
     try:
         with path.open("rb") as fh:
             return tomllib.load(fh)
-    except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError):
-        return {}
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{path.name} parse error") from exc
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ConfigError(f"cannot read {path}") from exc
 
 
 def load_config_file(path: Path) -> dict[str, object]:
-    """Load a config.toml file. {} if missing or malformed."""
+    """Load a config.toml file. {} if missing; raises ConfigError if malformed."""
     if not path.exists():
         return {}
     return _load_toml(path)
@@ -74,7 +80,10 @@ def config_status(mentat_dir: Path) -> tuple[str, str | None]:
 def _repo_mentat_dir() -> Path | None:
     r = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
     if r.returncode != 0:
-        return None
+        stderr = r.stderr.strip()
+        if "not a git repository" in stderr:
+            return None
+        raise ConfigError(f"git rev-parse failed: {stderr or 'unknown error'}")
     return Path(r.stdout.strip()) / ".mentat"
 
 

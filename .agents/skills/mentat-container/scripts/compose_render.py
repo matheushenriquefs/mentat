@@ -6,6 +6,7 @@ import json
 import os
 import platform
 import re
+import sys
 from pathlib import Path
 from string import Template
 from typing import NamedTuple
@@ -234,7 +235,11 @@ def render_template(tmpl_path: Path, workspace_folder: str, arch: str, image_tag
 def _ro_mounts_from_env(workspace_folder: str, worktree_host: str) -> list[str]:
     """Return devcontainer.json mount strings from MENTAT_RO_MOUNTS env var."""
     raw = os.environ.get("MENTAT_RO_MOUNTS")
-    if not raw:
+    if raw is None:
+        print(
+            "mentat-container: MENTAT_RO_MOUNTS unset — ADR-0010 read-only test mounts disabled",
+            file=sys.stderr,
+        )
         return []
     paths: list[str] = json.loads(raw)
     return [f"source={worktree_host}/{p},target={workspace_folder}/{p},type=bind,readonly" for p in paths]

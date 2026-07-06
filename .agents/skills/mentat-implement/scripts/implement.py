@@ -135,12 +135,14 @@ def _compaction_threshold() -> int | None:
     cfg_path = Path(cfg_path_env) if cfg_path_env else Path.home() / ".mentat" / "config.toml"
     if not cfg_path.exists():
         return None
-    try:
-        data = _load_cfg(cfg_path)
-        val = data.get("compaction_threshold_tokens")
-        return int(val) if val is not None else None
-    except KeyError, TypeError, ValueError:
+    data = _load_cfg(cfg_path)
+    val = data.get("compaction_threshold_tokens")
+    if val is None:
         return None
+    try:
+        return int(val)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid compaction_threshold_tokens in {cfg_path}: {val!r}") from exc
 
 
 def _checkpoint_if_needed(result: Any, *, slug: str, threshold: int | None) -> None:
@@ -431,15 +433,11 @@ def _read_blocked_summary(worktree: Path) -> str | None:
 def _promote_blocked_summary(body: str) -> None:
     """Ensure the blocker body is in the session log dir's summary.md so
     ``mentat-session report`` surfaces it. Agent already writes there on a wedge;
-    this covers the self-answer case where it never wrote the file.
-    Best-effort — a write failure must not mask the hitl-required ejection."""
+    this covers the self-answer case where it never wrote the file."""
     seam = _blocked_summary_path()
     target = seam if seam is not None else _session_dir_fn(os.environ.get("MENTAT_SESSION", "manual")) / SUMMARY_FILE
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(f"---\nstatus: {_BLOCKED_STATUS}\n---\n{body}\n")
-    except OSError:
-        pass
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(f"---\nstatus: {_BLOCKED_STATUS}\n---\n{body}\n")
 
 
 _HARNESS_AGENT_DIRS: dict[str, str] = {

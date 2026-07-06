@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from harness import Result
@@ -12,22 +13,19 @@ from harness import Result
 
 def _parse_usage(log_path: Path) -> int | None:
     """Parse total tokens (input + output) from a stream-json session log."""
-    try:
-        for line in log_path.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if event.get("type") == "result":
-                usage = event.get("usage", {})
-                input_t = usage.get("input_tokens", 0)
-                output_t = usage.get("output_tokens", 0)
-                return input_t + output_t
-    except OSError:
-        pass
+    for line in log_path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == "result":
+            usage = event.get("usage", {})
+            input_t = usage.get("input_tokens", 0)
+            output_t = usage.get("output_tokens", 0)
+            return input_t + output_t
     return None
 
 
@@ -67,6 +65,11 @@ def invoke(
         with session_log.open("wb") as fh:
             result = subprocess.run(cmd, stdout=fh, stderr=subprocess.PIPE)
         usage = _parse_usage(session_log)
+        if usage is None:
+            print(
+                "mentat-implement: session log has no usage result — compaction checkpoint skipped",
+                file=sys.stderr,
+            )
         return Result(returncode=result.returncode, session_log=session_log, usage_tokens=usage)
 
     result = subprocess.run(cmd, capture_output=True, text=True)

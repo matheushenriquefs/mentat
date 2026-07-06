@@ -348,12 +348,13 @@ def test_synth_uses_compose_tmpl_when_present(tmp_path, monkeypatch):
 # ── S26: read-only test manifest ──────────────────────────────────────────────
 
 
-def test_ro_mounts_from_env_returns_empty_when_unset(tmp_path, monkeypatch):
-    """_ro_mounts_from_env returns [] when MENTAT_RO_MOUNTS is unset."""
+def test_ro_mounts_from_env_warns_when_unset(tmp_path, monkeypatch, capsys):
+    """_ro_mounts_from_env logs when MENTAT_RO_MOUNTS is unset."""
     cr = load_module("compose_render")
     monkeypatch.delenv("MENTAT_RO_MOUNTS", raising=False)
     result = cr._ro_mounts_from_env("/workspaces/slug", str(tmp_path))
     assert result == []
+    assert "MENTAT_RO_MOUNTS unset" in capsys.readouterr().err
 
 
 def test_ro_mounts_from_env_returns_mount_strings(tmp_path, monkeypatch):

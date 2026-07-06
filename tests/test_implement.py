@@ -681,12 +681,13 @@ def test_mark_test_writable_no_manifest_warns(tmp_path, monkeypatch, capsys):
 # ── _compaction_threshold ────────────────────────────────────────────────────
 
 
-def test_compaction_threshold_bad_value_returns_none(tmp_path, monkeypatch):
+def test_compaction_threshold_bad_value_raises(tmp_path, monkeypatch):
     impl = load_module("implement")
     cfg = tmp_path / "config.toml"
     cfg.write_text('compaction_threshold_tokens = "not-an-int"\n')
     monkeypatch.setenv("MENTAT_CONFIG", str(cfg))
-    assert impl._compaction_threshold() is None
+    with pytest.raises(ValueError, match="invalid compaction_threshold_tokens"):
+        impl._compaction_threshold()
 
 
 # ── _repo_root_from_worktree fallback ────────────────────────────────────────
@@ -826,7 +827,7 @@ def test_read_blocked_summary_falls_back_to_worktree(tmp_path, monkeypatch):
     assert impl._read_blocked_summary(tmp_path) == "the blocker text"
 
 
-def test_promote_blocked_summary_swallows_oserror(monkeypatch):
+def test_promote_blocked_summary_surfaces_oserror(monkeypatch):
     impl = load_module("implement")
     monkeypatch.setenv("MENTAT_SESSION", "sess-x")
 
@@ -834,7 +835,8 @@ def test_promote_blocked_summary_swallows_oserror(monkeypatch):
         raise OSError("mkdir failed")
 
     monkeypatch.setattr(Path, "mkdir", boom)
-    impl._promote_blocked_summary("body")  # must not raise
+    with pytest.raises(OSError, match="mkdir failed"):
+        impl._promote_blocked_summary("body")
 
 
 # ── _veto_agents_dir mapping ─────────────────────────────────────────────────

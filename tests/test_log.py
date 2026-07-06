@@ -7,6 +7,8 @@ import os
 import stat
 from pathlib import Path
 
+import pytest
+
 LOG_SCRIPT = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-log/scripts/log.py"
 
 
@@ -67,6 +69,21 @@ def test_emit_creates_log_dir_0700(tmp_path):
     assert result.returncode == 0, result.stderr
     mode = oct(stat.S_IMODE(log_root.stat().st_mode))
     assert mode == oct(0o700), f"expected 0o700, got {mode}"
+
+
+def test_ensure_log_dir_surfaces_chmod_failure(tmp_path, monkeypatch):
+    from tests.conftest import load_script
+
+    log = load_script(LOG_SCRIPT, "log_mod")
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+
+    def chmod_fail(self, mode):
+        raise OSError("chmod denied")
+
+    monkeypatch.setattr(Path, "chmod", chmod_fail)
+    with pytest.raises(OSError, match="chmod denied"):
+        log._ensure_log_dir(log_root)
 
 
 def test_validate_catches_missing_field(tmp_path):

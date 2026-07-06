@@ -243,10 +243,11 @@ def test_render_template_substitutes_and_keeps_literal_dollar(tmp_path):
 # ── _ro_mounts_from_env ─────────────────────────────────────────────────────
 
 
-def test_ro_mounts_empty_when_env_unset(monkeypatch):
+def test_ro_mounts_empty_when_env_unset(monkeypatch, capsys):
     cr = _fresh()
     monkeypatch.delenv("MENTAT_RO_MOUNTS", raising=False)
     assert cr._ro_mounts_from_env("/workspaces/x", "/host/wt") == []
+    assert "MENTAT_RO_MOUNTS unset" in capsys.readouterr().err
 
 
 def test_ro_mounts_from_json_list(monkeypatch):
