@@ -11,18 +11,26 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import store  # noqa: E402
-from lib.events import SUMMARY_FILE, EjectReason  # noqa: E402
+from lib.events import (
+    GATE_FAILED,
+    HITL_REQUIRED,
+    IMPLEMENT_FAILED,
+    NOT_FF,
+    REBASE_CONFLICTED,
+    SUMMARY_FILE,
+    WORKER_DIED,
+)  # noqa: E402
 
 _SUSPECT_MAP = {
-    EjectReason.IMPLEMENT_FAILED: "TDD/gate fail mid-implementation. Check `<chunk>.stdout` for harness output.",
-    EjectReason.GATE_FAILED: "Code/LLM gate returned `block`. See payload `message:` field.",
-    EjectReason.REBASE_CONFLICTED: "Conflict against holding tip. Worktree preserved at `<where>`.",
-    EjectReason.NOT_FF: "Non-fast-forward state. Holding moved while this chunk worked.",
-    EjectReason.HITL_REQUIRED: (
+    IMPLEMENT_FAILED: "TDD/gate fail mid-implementation. Check `<chunk>.stdout` for harness output.",
+    GATE_FAILED: "Code/LLM gate returned `block`. See payload `message:` field.",
+    REBASE_CONFLICTED: "Conflict against holding tip. Worktree preserved at `<where>`.",
+    NOT_FF: "Non-fast-forward state. Holding moved while this chunk worked.",
+    HITL_REQUIRED: (
         "AFK hit a decision the plan did not resolve and wrote a blocker to "
         "summary.md instead of guessing. See the blocker below / payload `summary`."
     ),
-    EjectReason.WORKER_DIED: (
+    WORKER_DIED: (
         "Worker process died before emitting a verdict — no code confirmed. "
         "Container/harness crash or timeout. Worktree preserved at `<where>`."
     ),
@@ -81,7 +89,7 @@ def build_verdict(session_dir: Path) -> str:
         where = payload.get("where", "")
         suspect = f"Chunk `{slug}` — {suspect_template.replace('<where>', str(where))}"
         blocker = payload.get("summary")
-        if reason == EjectReason.HITL_REQUIRED and blocker:
+        if reason == HITL_REQUIRED and blocker:
             suspect = f"{suspect} Blocker: {blocker}"
     else:
         reason = "unknown"
@@ -146,7 +154,7 @@ def build_summary(session_dir: Path) -> str:
         reason = p.get("reason", "unknown")
         outcome = f"Ejected `{p.get('slug', 'unknown')}` — {reason}."
         blocker = p.get("summary")
-        if reason == EjectReason.HITL_REQUIRED and blocker:
+        if reason == HITL_REQUIRED and blocker:
             outcome += f" Blocker: {blocker}"
         else:
             outcome += " See diagnose output."

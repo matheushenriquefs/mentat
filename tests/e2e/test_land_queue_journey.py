@@ -96,7 +96,7 @@ def test_drain_lands_clean_and_ejects_blocked(tmp_path, monkeypatch):
     by_slug = {r["slug"]: r for r in results}
     assert by_slug["good"]["status"] == "success"
     assert by_slug["bad"]["status"] == "eject"
-    assert by_slug["bad"]["reason"] == lq.EjectReason.GATE_FAILED
+    assert by_slug["bad"]["reason"] == lq.GATE_FAILED
 
     # Only the clean chunk advanced holding.
     after = int(_git(["rev-list", "--count", "refs/heads/holding"], cwd=main_repo))
@@ -134,17 +134,17 @@ def test_drain_cascades_ejection_to_dependents(tmp_path, monkeypatch):
         results = lq.drain(chunks, holding="holding", on_ejected=on_ejected, list_ready_slices=list_ready_slices)
 
     by_slug = {r["slug"]: r for r in results}
-    assert by_slug["root"]["reason"] == lq.EjectReason.GATE_FAILED
+    assert by_slug["root"]["reason"] == lq.GATE_FAILED
     assert by_slug["child"]["status"] == "eject"
-    assert by_slug["child"]["reason"] == lq.EjectReason.UPSTREAM_EJECTED
+    assert by_slug["child"]["reason"] == lq.UPSTREAM_EJECTED
     assert by_slug["child"]["upstream"] == "root"
 
     # holding never advanced — nothing landed.
     assert int(_git(["rev-list", "--count", "refs/heads/holding"], cwd=main_repo)) == 1
 
     ejects = {e["payload"]["slug"]: e["payload"] for e in _events(session, "chunk.ejected")}
-    assert ejects["root"]["reason"] == lq.EjectReason.GATE_FAILED
-    assert ejects["child"]["reason"] == lq.EjectReason.UPSTREAM_EJECTED
+    assert ejects["root"]["reason"] == lq.GATE_FAILED
+    assert ejects["child"]["reason"] == lq.UPSTREAM_EJECTED
     assert ejects["child"]["upstream"] == "root"
 
 

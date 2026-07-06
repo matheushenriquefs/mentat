@@ -112,9 +112,9 @@ def test_timeout_group_kill_reaps_grandchild(monkeypatch, tmp_path):
     emitted: list[tuple[str, dict]] = []
     with patch.object(orch, "_worktree_for_slug", return_value=worktree):
         with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-            chunks, hitl, _transient = orch._partition_fanout(results, mark_ejected=lambda _slug: [])
+            chunks, hitl, _transient = orch.partition_by_outcome(results, mark_ejected=lambda _slug: [])
 
     assert chunks == [] and not hitl
     ejects = [p for ev, p in emitted if ev == "chunk.ejected"]
-    assert ejects and ejects[0]["reason"] == "worker-died"
+    assert ejects and ejects[0]["reason"] == "worker_died"
     assert worktree.exists(), "worktree must be preserved for the operator"

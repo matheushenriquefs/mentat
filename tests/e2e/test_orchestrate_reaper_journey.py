@@ -147,12 +147,12 @@ def test_run_orchestrate_failing_batch_reports_stall_cascade_and_ejects(monkeypa
     monkeypatch.setattr(orch, "_prune_stale_containers", lambda: None)
     monkeypatch.setattr(orch, "_prune_stale_worktrees", lambda *, preserve=None: None)
     monkeypatch.setattr(orch, "_worktree_for_slug", lambda slug: tmp_path / slug)
-    # Auto chunk fails (rc=1) → real _partition_fanout ejects it + cascades to ui.
+    # Auto chunk fails (rc=1) → real partition_by_outcome ejects it + cascades to ui.
     monkeypatch.setattr(orch, "_fan_out_plans", lambda auto, *, harness, model: [(core, 1)])
     # Land queue returns a stalled row + an eject row for the failed core chunk.
     drain_rows = [
         {"status": "stalled", "pending": ["core"]},
-        {"status": "eject", "slug": "core", "reason": "gate-failed"},
+        {"status": "eject", "slug": "core", "reason": "gate_failed"},
     ]
     monkeypatch.setattr(orch._land_queue, "drain", lambda *a, **k: drain_rows)
 

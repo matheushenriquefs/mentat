@@ -128,15 +128,15 @@ def test_land_ejects_not_ff_when_ff_merge_reports_not_ff(tmp_path, monkeypatch):
 
     with (
         _patch_attr(lq, "_run_gates", lambda chunk: ("pass", "")),
-        _patch_attr(lq, "_ff_merge", lambda chunk, holding: "not-ff"),
+        _patch_attr(lq, "_ff_merge", lambda chunk, holding: "not_ff"),
         _patch_attr(lq, "_teardown_container", lambda chunk: None),
     ):
         verdict = lq.land(lq.Chunk("moved", wts["moved"]), holding="holding")
 
     assert verdict["status"] == "eject"
-    assert verdict["reason"] == lq.EjectReason.NOT_FF
+    assert verdict["reason"] == lq.NOT_FF
     ejects = _events(session, "chunk.ejected")
-    assert {e["payload"]["reason"] for e in ejects} == {lq.EjectReason.NOT_FF}
+    assert {e["payload"]["reason"] for e in ejects} == {lq.NOT_FF}
 
 
 def test_land_ejects_git_error_when_ff_merge_reports_other_error(tmp_path, monkeypatch):
@@ -146,13 +146,13 @@ def test_land_ejects_git_error_when_ff_merge_reports_other_error(tmp_path, monke
 
     with (
         _patch_attr(lq, "_run_gates", lambda chunk: ("pass", "")),
-        _patch_attr(lq, "_ff_merge", lambda chunk, holding: "git-error"),
+        _patch_attr(lq, "_ff_merge", lambda chunk, holding: "git_error"),
         _patch_attr(lq, "_teardown_container", lambda chunk: None),
     ):
         verdict = lq.land(lq.Chunk("broken", wts["broken"]), holding="holding")
 
     assert verdict["status"] == "eject"
-    assert verdict["reason"] == lq.EjectReason.GIT_ERROR
+    assert verdict["reason"] == lq.GIT_ERROR
     # holding never advanced — the merge failed.
     assert int(_git(["rev-list", "--count", "refs/heads/holding"], cwd=main_repo)) == 1
 
@@ -183,7 +183,7 @@ def test_drain_cascade_skips_downstream_not_in_pending(tmp_path, monkeypatch):
         results = lq.drain(chunks, holding="holding", on_ejected=on_ejected, list_ready_slices=list_ready_slices)
 
     by_slug = {r.get("slug"): r for r in results}
-    assert by_slug["child"]["reason"] == lq.EjectReason.UPSTREAM_EJECTED
+    assert by_slug["child"]["reason"] == lq.UPSTREAM_EJECTED
     assert "ghost" not in by_slug, "a cascaded slug not in pending yields no result row"
     # And no chunk.ejected audit row was written for the phantom either.
     ejected_slugs = {e["payload"]["slug"] for e in _events(session, "chunk.ejected")}

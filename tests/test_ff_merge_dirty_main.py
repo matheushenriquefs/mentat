@@ -134,6 +134,6 @@ def test_ff_merge_returns_false_for_non_ff(tmp_path: Path) -> None:
 
     result = git_lib.ff_merge(chunk_wt, "holding")
 
-    assert result == "not-ff", "ff_merge must return 'not-ff' when not fast-forward"
+    assert result == "not_ff", "ff_merge must return 'not_ff' when not fast-forward"
     after_sha = _branch_sha(main_repo, "holding")
     assert after_sha == holding_tip, f"holding must not change: {holding_tip!r} vs {after_sha!r}"

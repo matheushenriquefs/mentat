@@ -157,7 +157,7 @@ def test_list_sessions_ranks_attention_to_top(tmp_path, monkeypatch):
         [
             {
                 "event": "chunk.ejected",
-                "payload": {"slug": "s", "reason": "hitl-required", "where": "/wt"},
+                "payload": {"slug": "s", "reason": "hitl_required", "where": "/wt"},
             },
         ],
         status="running",

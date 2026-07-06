@@ -80,11 +80,11 @@ def test_partition_marks_oom_as_transient_killed_by(monkeypatch, tmp_path: Path)
     monkeypatch.setattr(orch, "_teardown_ejected", lambda _s: None)
 
     results = [(plan, EX_UNAVAILABLE, "/logs", None)]
-    chunks, hitl, transient = orch._partition_fanout(results, mark_ejected=lambda s: [])
+    chunks, hitl, transient = orch.partition_by_outcome(results, mark_ejected=lambda s: [])
     assert "p" in transient
     eject = next(p for e, p in emitted if e == "chunk.ejected")
     assert eject["killed_by"] == "oom"
-    assert eject["reason"] == orch.EjectReason.WORKER_DIED
+    assert eject["reason"] == orch.WORKER_DIED
 
 
 def test_mentat_chunk_memory_unset_by_default(tmp_path: Path) -> None:

@@ -121,7 +121,16 @@ def parse_frontmatter(plan_path: Path) -> dict[str, str]:
     return _frontmatter.parse(plan_path.read_text())[0]
 
 
-from lib.events import HITL_IN_SESSION, SUMMARY_FILE, EjectReason, ejected_payload, spawned_payload  # noqa: E402
+from lib.events import (
+    HITL_IN_SESSION,
+    HITL_REQUIRED,
+    IMPLEMENT_FAILED,
+    MAIN_TREE_REFUSED,
+    PREFLIGHT_WORKTREE_FAILED,
+    SUMMARY_FILE,
+    ejected_payload,
+    spawned_payload,
+)  # noqa: E402
 from lib.events import bind as _bind  # noqa: E402
 
 _emit_event = _bind("mentat-implement")
@@ -544,9 +553,9 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
 
     # AFK wedge: the agent hit an unresolvable design call and signaled via
     # summary.md{status: blocked} (preferred, hang-proof) or — defensively — a
-    # self-answered AskUserQuestion in the captured stream. Eject hitl-required
+    # self-answered AskUserQuestion in the captured stream. Eject hitl_required
     # and preserve the worktree for the operator. Checked before the generic
-    # nonzero-exit branch so a wedge is never misreported as implement-failed
+    # nonzero-exit branch so a wedge is never misreported as implement_failed
     # (the root cause of silent AFK kills reading as plain failures).
     blocker = _read_blocked_summary(Path.cwd())
     if blocker is not None or _detect_self_answer(result):
@@ -556,7 +565,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
             "chunk.ejected",
             ejected_payload(
                 slug,
-                EjectReason.HITL_REQUIRED,
+                HITL_REQUIRED,
                 str(plan_path.parent),
                 logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
                 summary=summary,
@@ -569,7 +578,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
             "chunk.ejected",
             ejected_payload(
                 slug,
-                EjectReason.IMPLEMENT_FAILED,
+                IMPLEMENT_FAILED,
                 str(plan_path.parent),
                 logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
             ),
@@ -698,7 +707,7 @@ def main() -> None:
             "chunk.ejected",
             ejected_payload(
                 slug,
-                EjectReason.PREFLIGHT_WORKTREE_FAILED,
+                PREFLIGHT_WORKTREE_FAILED,
                 str(plan_path.parent),
                 logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
                 preflight_exit=pf_rc,
@@ -720,7 +729,7 @@ def main() -> None:
             "chunk.ejected",
             ejected_payload(
                 slug,
-                EjectReason.MAIN_TREE_REFUSED,
+                MAIN_TREE_REFUSED,
                 str(Path.cwd()),
                 logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
             ),
@@ -738,7 +747,7 @@ def main() -> None:
     # Own-worktree teardown lives in a finally so it is crash-safe: it runs on a
     # normal failure exit AND if the land/review body below raises. Implement owns
     # the worktree it created — on its own failure it drops a clean one, preserves
-    # a dirty one (holds un-landed work). Signal exits and a hitl-required wedge
+    # a dirty one (holds un-landed work). Signal exits and a hitl_required wedge
     # are preserved unconditionally — the wedge worktree holds work the operator
     # must resume once the design call is made. Doctor already ran inside
     # _run_and_doctor and writes to ~/.mentat/logs, so teardown loses nothing.

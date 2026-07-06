@@ -162,9 +162,9 @@ def test_parse_decision_non_object_degrades_to_abandon(recover):
 
 def test_make_recovery_prompt_includes_context(recover):
     prompt = recover.make_recovery_prompt(
-        {"slug": "core", "reason": "worker-died", "attempt": 1, "cap": 2, "progress_note": "## Done\n- x"}
+        {"slug": "core", "reason": "worker_died", "attempt": 1, "cap": 2, "progress_note": "## Done\n- x"}
     )
-    assert "core" in prompt and "worker-died" in prompt and "## Done" in prompt
+    assert "core" in prompt and "worker_died" in prompt and "## Done" in prompt
 
 
 def test_build_prompt_alias(recover):
@@ -201,7 +201,7 @@ def test_make_recovery_seed_includes_progress_note(recover, monkeypatch, tmp_pat
         [
             {
                 "event": "chunk.ejected",
-                "payload": {"slug": "core", "reason": "worker-died", "logs_path": str(tmp_path / "agent")},
+                "payload": {"slug": "core", "reason": "worker_died", "logs_path": str(tmp_path / "agent")},
             }
         ],
     )
@@ -213,7 +213,7 @@ def test_make_recovery_seed_includes_progress_note(recover, monkeypatch, tmp_pat
     monkeypatch.setattr(recover, "distill_progress_note", lambda **kw: "## Pending\n- finish tests")
     seed = recover.make_recovery_seed(
         slug="core",
-        reason="worker-died",
+        reason="worker_died",
         worktree=wt,
         holding="main",
         attempt=1,

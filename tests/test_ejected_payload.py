@@ -22,15 +22,15 @@ _DECLARED_OPTIONAL = {"logs_path", "preflight_exit", "upstream", "summary", "kil
 
 
 def test_builder_base_shape() -> None:
-    p = events.ejected_payload("my-slug", "gate-failed", "/w")
-    assert p == {"slug": "my-slug", "reason": "gate-failed", "where": "/w"}
+    p = events.ejected_payload("my-slug", "gate_failed", "/w")
+    assert p == {"slug": "my-slug", "reason": "gate_failed", "where": "/w"}
 
 
 def test_builder_includes_optionals_only_when_set() -> None:
-    p = events.ejected_payload("s", "implement-failed", "/w", logs_path="/logs", preflight_exit=66)
+    p = events.ejected_payload("s", "implement_failed", "/w", logs_path="/logs", preflight_exit=66)
     assert p == {
         "slug": "s",
-        "reason": "implement-failed",
+        "reason": "implement_failed",
         "where": "/w",
         "logs_path": "/logs",
         "preflight_exit": 66,
@@ -44,28 +44,28 @@ def test_builder_emits_no_undeclared_keys() -> None:
 
 
 def test_builder_includes_summary_only_when_set() -> None:
-    assert "summary" not in events.ejected_payload("s", "gate-failed", "/w")
-    p = events.ejected_payload("s", "hitl-required", "/w", summary="OAuth or SAML?")
+    assert "summary" not in events.ejected_payload("s", "gate_failed", "/w")
+    p = events.ejected_payload("s", "hitl_required", "/w", summary="OAuth or SAML?")
     assert p["summary"] == "OAuth or SAML?"
 
 
 def test_builder_includes_timed_out_and_killed_by_only_when_set() -> None:
-    assert "timed_out" not in events.ejected_payload("s", "worker-died", "/w")
-    assert "killed_by" not in events.ejected_payload("s", "worker-died", "/w")
-    p = events.ejected_payload("s", "worker-died", "/w", timed_out=True, killed_by="container-down")
+    assert "timed_out" not in events.ejected_payload("s", "worker_died", "/w")
+    assert "killed_by" not in events.ejected_payload("s", "worker_died", "/w")
+    p = events.ejected_payload("s", "worker_died", "/w", timed_out=True, killed_by="container-down")
     assert p["timed_out"] is True
     assert p["killed_by"] == "container-down"
 
 
 def test_transient_reasons_are_environment_failures() -> None:
     """worker-died + not-ff are transient (retryable); gate/hitl/implement are terminal."""
-    assert events.is_transient_eject(events.EjectReason.WORKER_DIED)
-    assert events.is_transient_eject(events.EjectReason.NOT_FF)
+    assert events.is_transient_eject(events.WORKER_DIED)
+    assert events.is_transient_eject(events.NOT_FF)
     for terminal in (
-        events.EjectReason.GATE_FAILED,
-        events.EjectReason.HITL_REQUIRED,
-        events.EjectReason.IMPLEMENT_FAILED,
-        events.EjectReason.MAIN_TREE_REFUSED,
+        events.GATE_FAILED,
+        events.HITL_REQUIRED,
+        events.IMPLEMENT_FAILED,
+        events.MAIN_TREE_REFUSED,
     ):
         assert not events.is_transient_eject(terminal), f"{terminal} must be terminal"
 

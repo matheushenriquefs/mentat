@@ -339,7 +339,7 @@ def test_ff_merge_not_ff_when_holding_diverged_checked_out(tmp_path: Path):
     # Advance holding independently → its tip is no longer an ancestor of feat.
     _commit(hold_wt, "h.txt", "holding\n", "holding diverges")
 
-    assert git.ff_merge(feat, "holding") == "not-ff"
+    assert git.ff_merge(feat, "holding") == "not_ff"
 
 
 def test_ff_merge_not_ff_when_holding_diverged_not_checked_out(tmp_path: Path):
@@ -359,7 +359,7 @@ def test_ff_merge_not_ff_when_holding_diverged_not_checked_out(tmp_path: Path):
     diverge = _commit(repo, "d.txt", "diverge\n", "main+holding diverge base")
     _git("update-ref", "refs/heads/holding", diverge, cwd=repo)
 
-    assert git.ff_merge(feat, "holding") == "not-ff"
+    assert git.ff_merge(feat, "holding") == "not_ff"
 
 
 def test_ff_merge_git_error_when_head_unresolvable(tmp_path: Path, monkeypatch):
@@ -368,7 +368,7 @@ def test_ff_merge_git_error_when_head_unresolvable(tmp_path: Path, monkeypatch):
     norepo = tmp_path / "norepo"
     norepo.mkdir()
 
-    assert git.ff_merge(norepo, "holding") == "git-error"
+    assert git.ff_merge(norepo, "holding") == "git_error"
 
 
 def test_ff_merge_git_error_on_repo_without_commits(tmp_path: Path):
@@ -378,4 +378,4 @@ def test_ff_merge_git_error_on_repo_without_commits(tmp_path: Path):
     repo.mkdir()
     _git("init", "-b", "main", ".", cwd=repo)
 
-    assert git.ff_merge(repo, "holding") == "git-error"
+    assert git.ff_merge(repo, "holding") == "git_error"

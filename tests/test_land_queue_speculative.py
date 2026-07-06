@@ -225,7 +225,7 @@ def test_speculative_gate_failure_falls_back_to_serial_drain():
     assert by_slug["a"]["status"] == "success"
     assert by_slug["c"]["status"] == "success"
     assert by_slug["b"]["status"] == "eject"
-    assert by_slug["b"]["reason"] == "gate-failed"
+    assert by_slug["b"]["reason"] == "gate_failed"
 
 
 def test_speculative_merge_conflict_falls_back_to_serial():
@@ -238,7 +238,7 @@ def test_speculative_merge_conflict_falls_back_to_serial():
     chunks = [make_chunk("a"), make_chunk("b"), make_chunk("c")]
 
     def fake_ff(chunk, holding):
-        return "not-ff" if chunk.slug == "b" else None
+        return "not_ff" if chunk.slug == "b" else None
 
     with (
         patch.object(lq, "_rebase_chunk", return_value=("sha", None)),
@@ -252,7 +252,7 @@ def test_speculative_merge_conflict_falls_back_to_serial():
     by_slug = {r["slug"]: r for r in results}
     assert by_slug["a"]["status"] == "success"
     assert by_slug["b"]["status"] == "eject"
-    assert by_slug["b"]["reason"] == "not-ff"
+    assert by_slug["b"]["reason"] == "not_ff"
     assert by_slug["c"]["status"] == "success"
 
 

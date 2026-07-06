@@ -20,6 +20,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, cast
 
+from lib.events import HITL_REQUIRED, StatusReason
+
 _WRITE_RETRIES = 8
 _WRITE_BACKOFF_BASE_S = 0.01
 _BUSY_TIMEOUT_MS = 5000
@@ -27,7 +29,6 @@ _USER_VERSION = 1
 
 AgentStatus = Literal["pending", "running", "stopped", "reaped"]
 ChunkStatus = Literal["running", "landed", "ejected"]
-StatusReason = Literal["ok", "nonzero", "signal", "dead_pid"]
 SliceKind = Literal["AFK", "HITL"]
 
 _CREATE_SLICE = """
@@ -607,7 +608,7 @@ def _track_status(agent: Agent, events: list[Event]) -> str:
     if events:
         last_kind = display_kind(events[-1].kind)
         payload = events[-1].payload
-        if last_kind == "chunk.ejected" and payload.get("reason") == "hitl-required":
+        if last_kind == "chunk.ejected" and payload.get("reason") == HITL_REQUIRED:
             return "waiting"
         if last_kind in _TERMINAL_DISPLAY or last_kind == "chunk.ejected":
             return "idle"

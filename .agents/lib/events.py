@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 from collections.abc import Callable
+from typing import Literal
 
 from lib import paths
 from lib.session import agent_id_from_env, make_agent_id
@@ -15,6 +16,70 @@ from lib.session import agent_id_from_env, make_agent_id
 # state machine cannot proceed correctly without a confirmed log write.
 _TERMINAL_EVENTS: frozenset[str] = frozenset({"chunk.landed", "chunk.ejected"})
 _EMIT_TIMEOUT_S = 30.0
+
+IMPLEMENT_FAILED = "implement_failed"
+GATE_FAILED = "gate_failed"
+REBASE_CONFLICTED = "rebase_conflicted"
+NOT_FF = "not_ff"
+GIT_ERROR = "git_error"
+HITL_REQUIRED = "hitl_required"
+PREFLIGHT_WORKTREE_FAILED = "preflight_worktree_failed"
+MAIN_TREE_REFUSED = "main_tree_refused"
+UPSTREAM_EJECTED = "upstream_ejected"
+WORKER_DIED = "worker_died"
+CONTAINER_OOM = "container_oom"
+
+OK = "ok"
+NONZERO = "nonzero"
+SIGNAL = "signal"
+DEAD_PID = "dead_pid"
+
+StatusReason = Literal[
+    "implement_failed",
+    "gate_failed",
+    "rebase_conflicted",
+    "not_ff",
+    "git_error",
+    "hitl_required",
+    "preflight_worktree_failed",
+    "main_tree_refused",
+    "upstream_ejected",
+    "worker_died",
+    "container_oom",
+    "ok",
+    "nonzero",
+    "signal",
+    "dead_pid",
+]
+
+CHUNK_EJECT_REASONS: frozenset[str] = frozenset(
+    {
+        IMPLEMENT_FAILED,
+        GATE_FAILED,
+        REBASE_CONFLICTED,
+        NOT_FF,
+        GIT_ERROR,
+        HITL_REQUIRED,
+        PREFLIGHT_WORKTREE_FAILED,
+        MAIN_TREE_REFUSED,
+        UPSTREAM_EJECTED,
+        WORKER_DIED,
+        CONTAINER_OOM,
+    }
+)
+
+AGENT_STATUS_REASONS: frozenset[str] = frozenset({OK, NONZERO, SIGNAL, DEAD_PID})
+
+STATUS_REASONS: frozenset[str] = CHUNK_EJECT_REASONS | AGENT_STATUS_REASONS
+
+EJECT_REASONS = CHUNK_EJECT_REASONS
+
+TRANSIENT_EJECT_REASONS: frozenset[str] = frozenset({WORKER_DIED, NOT_FF})
+
+
+def is_transient_eject(reason: str) -> bool:
+    """True iff `reason` is worth re-attempting (environment failed, not the code)."""
+    return reason in TRANSIENT_EJECT_REASONS
 
 
 def _spawn(skill: str, event: str, payload: dict[str, object]) -> bool:
@@ -45,64 +110,8 @@ def bind(skill: str) -> Callable[[str, dict[str, object]], None]:
     return emit
 
 
-class EjectReason:
-    """Canonical ``chunk.ejected`` reasons — one definition imported by every
-    emitter (implement, orchestrate, land_queue) and reader (sessions,
-    log) so a rename can't desync them. Values are the wire strings."""
-
-    IMPLEMENT_FAILED = "implement-failed"
-    GATE_FAILED = "gate-failed"
-    REBASE_CONFLICTED = "rebase-conflicted"
-    NOT_FF = "not-ff"
-    GIT_ERROR = "git-error"
-    HITL_REQUIRED = "hitl-required"
-    PREFLIGHT_WORKTREE_FAILED = "preflight-worktree-failed"
-    MAIN_TREE_REFUSED = "main-tree-refused"
-    UPSTREAM_EJECTED = "upstream_ejected"
-    WORKER_DIED = "worker-died"
-
-
-EJECT_REASONS: frozenset[str] = frozenset(
-    {
-        EjectReason.IMPLEMENT_FAILED,
-        EjectReason.GATE_FAILED,
-        EjectReason.REBASE_CONFLICTED,
-        EjectReason.NOT_FF,
-        EjectReason.GIT_ERROR,
-        EjectReason.HITL_REQUIRED,
-        EjectReason.PREFLIGHT_WORKTREE_FAILED,
-        EjectReason.MAIN_TREE_REFUSED,
-        EjectReason.UPSTREAM_EJECTED,
-        EjectReason.WORKER_DIED,
-    }
-)
-
-# Transient ejections are worth re-attempting — the chunk's *code* was never
-# proven bad, only its environment failed it: a deadline/container kill
-# (worker-died) or a merge that raced out of fast-forward (not-ff). The recovery
-# engine consumes this set to decide what to respawn. Every other reason is
-# terminal: the code itself failed a gate, wedged on a design call, or refused to
-# run — respawning it unchanged would just fail again.
-TRANSIENT_EJECT_REASONS: frozenset[str] = frozenset(
-    {
-        EjectReason.WORKER_DIED,
-        EjectReason.NOT_FF,
-    }
-)
-
-
-def is_transient_eject(reason: str) -> bool:
-    """True iff `reason` is worth re-attempting (environment failed, not the code)."""
-    return reason in TRANSIENT_EJECT_REASONS
-
-
-# The one report-back filename: implement reads it as the AFK wedge marker, the
-# AFK prompt tells the agent to write it, diagnose writes the success summary to
-# it. Shared so the cross-skill contract has a single source.
 SUMMARY_FILE = "summary.md"
 
-# Harness sentinel for a HITL chunk that runs in the calling session rather than
-# a spawned headless sub-claude.
 HITL_IN_SESSION = "hitl-in-session"
 
 
@@ -115,14 +124,6 @@ def spawned_payload(
     trigger: str | None = None,
     attempt: int | None = None,
 ) -> dict[str, object]:
-    """The one canonical ``chunk.spawned`` payload — shared by fan_out (headless
-    AFK spawn) and the in-session HITL emitters in implement/orchestrate.
-
-    ``trigger``/``attempt`` are set only by the recovery engine's respawn: a
-    ``trigger:"recovery"`` spawn carries the 1-based ``attempt`` number so the
-    outcome (chunk.landed / chunk.ejected) attributes to a recovery pass and the
-    per-slug attempt count is replayable from the durable log. Payload-only —
-    declared in mentat-log's ``EVENT_OPTIONAL_FIELDS``, not a new event type."""
     payload: dict[str, object] = {"slug": slug, "plan": plan, "harness": harness, "worktree": worktree}
     if trigger is not None:
         payload["trigger"] = trigger
@@ -143,18 +144,6 @@ def ejected_payload(
     killed_by: str | None = None,
     timed_out: bool | None = None,
 ) -> dict[str, object]:
-    """Build the one canonical ``chunk.ejected`` payload.
-
-    Base shape ``{slug, reason, where}`` for every ejection regardless of caller;
-    the optional fields (``logs_path``, ``preflight_exit``, ``upstream``,
-    ``summary``, ``killed_by``, ``timed_out``) are included only when set.
-    ``summary`` carries the operator-facing blocker text on a ``hitl-required``
-    ejection; ``timed_out``/``killed_by`` make a ``worker-died`` ejection
-    self-describing (a chunk killed at its deadline vs. one lost to a downed
-    container). These optionals are declared in mentat-log's
-    ``EVENT_OPTIONAL_FIELDS`` — a payload extension, not a new event type (the
-    event catalog is unchanged).
-    """
     payload: dict[str, object] = {"slug": slug, "reason": reason, "where": where}
     if logs_path is not None:
         payload["logs_path"] = logs_path

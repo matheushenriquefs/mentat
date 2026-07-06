@@ -98,7 +98,7 @@ def test_run_plan_wedge_via_marker_exits_42_with_summary(tmp_path):
     assert rc == impl.EX_HITL_REQUIRED
     ejected = [c.args[1] for c in emit.call_args_list if c.args[0] == "chunk.ejected"]
     assert ejected, "no chunk.ejected emitted"
-    assert ejected[0]["reason"] == "hitl-required"
+    assert ejected[0]["reason"] == "hitl_required"
     assert ejected[0]["summary"] == "blocked: pick a DB"
     assert promoted == ["blocked: pick a DB"], "blocker not promoted to the log dir"
 
@@ -117,8 +117,8 @@ def test_run_plan_wedge_precedes_nonzero_exit(tmp_path):
 
     assert rc == impl.EX_HITL_REQUIRED
     reasons = [c.args[1].get("reason") for c in emit.call_args_list if c.args[0] == "chunk.ejected"]
-    assert "hitl-required" in reasons
-    assert "implement-failed" not in reasons
+    assert "hitl_required" in reasons
+    assert "implement_failed" not in reasons
 
 
 def test_run_plan_self_answer_still_wedges_when_no_marker(tmp_path):
@@ -135,7 +135,7 @@ def test_run_plan_self_answer_still_wedges_when_no_marker(tmp_path):
 
     assert rc == impl.EX_HITL_REQUIRED
     reasons = [c.args[1].get("reason") for c in emit.call_args_list if c.args[0] == "chunk.ejected"]
-    assert "hitl-required" in reasons
+    assert "hitl_required" in reasons
 
 
 def test_run_plan_no_wedge_returns_zero(tmp_path):
@@ -185,7 +185,7 @@ def test_hitl_exit_excluded_from_worktree_teardown():
 # ── orchestrate: child exit 42 → not landed, preserved, cascaded ──────────────
 
 
-def test_partition_fanout_excludes_hitl_children_from_landing():
+def testpartition_by_outcome_excludes_hitl_children_from_landing():
     orch = _orch()
     sched = _scheduler()
     bind_plan("a")
@@ -198,7 +198,7 @@ def test_partition_fanout_excludes_hitl_children_from_landing():
 
     with patch.object(orch, "_emit_event", side_effect=lambda e, p: emitted.append((e, p))):
         with patch.object(orch, "_worktree_for_slug", side_effect=lambda s: Path(f"/wt/{s}")):
-            chunks, hitl, _transient = orch._partition_fanout(
+            chunks, hitl, _transient = orch.partition_by_outcome(
                 [(plan_a, 0), (plan_b, orch.EX_HITL_REQUIRED)],
                 mark_ejected=ejected_slugs.append,
             )
@@ -207,11 +207,11 @@ def test_partition_fanout_excludes_hitl_children_from_landing():
     assert landed_slugs == ["a"], "hitl child must not be enqueued for landing"
     assert hitl == {"b"}
     assert ejected_slugs == ["b"], "hitl child must cascade via scheduler.mark_ejected"
-    hitl_ejects = [p for e, p in emitted if e == "chunk.ejected" and p.get("reason") == "hitl-required"]
+    hitl_ejects = [p for e, p in emitted if e == "chunk.ejected" and p.get("reason") == "hitl_required"]
     assert hitl_ejects and hitl_ejects[0]["slug"] == "b"
 
 
-def test_partition_fanout_all_clean_lands_all():
+def testpartition_by_outcome_all_clean_lands_all():
     orch = _orch()
     sched = _scheduler()
     bind_plan("x")
@@ -219,7 +219,7 @@ def test_partition_fanout_all_clean_lands_all():
     plans = [sched.Plan(slug=s, class_="AFK", blocked_by=[], path=Path(f"/p/{s}.md")) for s in ("x", "y")]
     with patch.object(orch, "_emit_event", lambda e, p: None):
         with patch.object(orch, "_worktree_for_slug", side_effect=lambda s: Path(f"/wt/{s}")):
-            chunks, hitl, _transient = orch._partition_fanout(
+            chunks, hitl, _transient = orch.partition_by_outcome(
                 [(plans[0], 0), (plans[1], 0)],
                 mark_ejected=lambda s: None,
             )
@@ -273,12 +273,12 @@ def test_doctor_verdict_names_hitl_blocker(tmp_path):
             {
                 "event": "chunk.ejected",
                 "ts": "t1",
-                "payload": {"slug": "p", "reason": "hitl-required", "where": "/wt/p", "summary": "OAuth or SAML?"},
+                "payload": {"slug": "p", "reason": "hitl_required", "where": "/wt/p", "summary": "OAuth or SAML?"},
             },
         ],
     )
     verdict = diagnose.build_verdict(sd)
-    assert "hitl-required" in verdict
+    assert "hitl_required" in verdict
     assert "OAuth or SAML?" in verdict, "doctor must surface the blocker summary"
 
 
@@ -292,12 +292,12 @@ def test_report_summary_names_hitl_blocker(tmp_path):
             {
                 "event": "chunk.ejected",
                 "ts": "t1",
-                "payload": {"slug": "p", "reason": "hitl-required", "where": "/wt/p", "summary": "pick a queue"},
+                "payload": {"slug": "p", "reason": "hitl_required", "where": "/wt/p", "summary": "pick a queue"},
             },
         ],
     )
     summary = diagnose.build_summary(sd)
-    assert "hitl-required" in summary
+    assert "hitl_required" in summary
     assert "pick a queue" in summary
 
 

@@ -34,7 +34,7 @@ class _Plan:
 
 
 def _ctx_builder(plan, attempt, cap):
-    return {"slug": plan.slug, "reason": "worker-died", "worktree": "/wt", "attempt": attempt, "cap": cap}
+    return {"slug": plan.slug, "reason": "worker_died", "worktree": "/wt", "attempt": attempt, "cap": cap}
 
 
 def _wire(mod, *, calls: dict):

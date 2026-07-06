@@ -84,9 +84,9 @@ def test_spawned_payload_is_exact_shape():
 
 
 def test_ejected_payload_base_shape_omits_all_optionals():
-    assert events.ejected_payload("slug-a", "gate-failed", "land") == {
+    assert events.ejected_payload("slug-a", "gate_failed", "land") == {
         "slug": "slug-a",
-        "reason": "gate-failed",
+        "reason": "gate_failed",
         "where": "land",
     }
 
@@ -94,7 +94,7 @@ def test_ejected_payload_base_shape_omits_all_optionals():
 def test_ejected_payload_includes_every_optional_when_set():
     payload = events.ejected_payload(
         "slug-a",
-        "gate-failed",
+        "gate_failed",
         "land",
         logs_path="/logs",
         preflight_exit=69,
@@ -103,7 +103,7 @@ def test_ejected_payload_includes_every_optional_when_set():
     )
     assert payload == {
         "slug": "slug-a",
-        "reason": "gate-failed",
+        "reason": "gate_failed",
         "where": "land",
         "logs_path": "/logs",
         "preflight_exit": 69,

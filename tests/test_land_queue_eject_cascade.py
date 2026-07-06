@@ -110,7 +110,7 @@ def test_soft_downstream_retested_and_lands(tmp_path, monkeypatch) -> None:
 
     ejections = [p for e, p in emitted if e == "chunk.ejected"]
     assert [p["slug"] for p in ejections] == ["a"], f"only a ejects; got {ejections}"
-    assert ejections[0]["reason"] == "gate-failed"
+    assert ejections[0]["reason"] == "gate_failed"
 
 
 def test_hard_downstream_cannot_build_ejects_on_merit(tmp_path, monkeypatch) -> None:
@@ -136,7 +136,7 @@ def test_hard_downstream_cannot_build_ejects_on_merit(tmp_path, monkeypatch) -> 
 
     # Honest reasons from the re-test surface the real failure, not a synthetic tag.
     reasons = {p["slug"]: p["reason"] for e, p in emitted if e == "chunk.ejected"}
-    assert reasons == {"a": "gate-failed", "b": "gate-failed", "c": "gate-failed"}
+    assert reasons == {"a": "gate_failed", "b": "gate_failed", "c": "gate_failed"}
 
 
 def test_hard_downstream_rebase_conflict_ejects(tmp_path, monkeypatch) -> None:
@@ -164,7 +164,7 @@ def test_hard_downstream_rebase_conflict_ejects(tmp_path, monkeypatch) -> None:
     assert "b" in rebase_calls, "b must be re-tested (rebased), not blind-ejected"
     assert ff_calls == [], "b's conflicted rebase blocks the land"
     reasons = {p["slug"]: p["reason"] for e, p in emitted if e == "chunk.ejected"}
-    assert reasons == {"a": "gate-failed", "b": "rebase-conflicted"}
+    assert reasons == {"a": "gate_failed", "b": "rebase_conflicted"}
 
 
 def test_sibling_eject_does_not_cascade(tmp_path, monkeypatch) -> None:

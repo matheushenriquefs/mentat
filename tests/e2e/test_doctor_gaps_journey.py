@@ -73,7 +73,7 @@ def test_build_summary_no_terminal_reports_in_session_completion(tmp_path):
 def test_build_summary_hitl_eject_appends_operator_blocker(tmp_path):
     d = _diagnose()
     agent_id = "session"
-    reason = d.EjectReason.HITL_REQUIRED
+    reason = d.HITL_REQUIRED
     seed_agent_events(
         tmp_path,
         "repo",

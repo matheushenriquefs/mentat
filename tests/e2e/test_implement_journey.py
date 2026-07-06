@@ -428,7 +428,7 @@ def test_run_plan_afk_wedge_via_blocked_summary(impl, monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     assert impl.run_plan(plan) == impl.EX_HITL_REQUIRED
     ejected = [p for ev, p in events if ev == "chunk.ejected"]
-    assert ejected and ejected[0]["reason"] == impl.EjectReason.HITL_REQUIRED
+    assert ejected and ejected[0]["reason"] == impl.HITL_REQUIRED
     assert ejected[0]["summary"] == "blocker text"
 
 
@@ -442,7 +442,7 @@ def test_run_plan_afk_self_answer(impl, monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     assert impl.run_plan(plan) == impl.EX_HITL_REQUIRED
     reasons = [p["reason"] for ev, p in events if ev == "chunk.ejected"]
-    assert impl.EjectReason.HITL_REQUIRED in reasons
+    assert impl.HITL_REQUIRED in reasons
 
 
 def test_run_plan_afk_nonzero_return_is_implement_failed(impl, monkeypatch, tmp_path):
@@ -454,7 +454,7 @@ def test_run_plan_afk_nonzero_return_is_implement_failed(impl, monkeypatch, tmp_
     monkeypatch.chdir(tmp_path)
     assert impl.run_plan(plan) == 1
     reasons = [p["reason"] for ev, p in events if ev == "chunk.ejected"]
-    assert reasons == [impl.EjectReason.IMPLEMENT_FAILED]
+    assert reasons == [impl.IMPLEMENT_FAILED]
 
 
 def test_run_plan_afk_sets_ro_mounts_from_manifest(impl, monkeypatch, tmp_path):
@@ -894,7 +894,7 @@ def test_main_preflight_worktree_fail_emits_and_exits(impl, monkeypatch, tmp_pat
         impl.main()
     assert exc.value.code == 65
     reasons = [p["reason"] for ev, p in events if ev == "chunk.ejected"]
-    assert reasons == [impl.EjectReason.PREFLIGHT_WORKTREE_FAILED]
+    assert reasons == [impl.PREFLIGHT_WORKTREE_FAILED]
 
 
 def test_main_main_tree_refused(impl, monkeypatch, tmp_path):
@@ -908,7 +908,7 @@ def test_main_main_tree_refused(impl, monkeypatch, tmp_path):
         impl.main()
     assert exc.value.code == impl.EX_USAGE
     reasons = [p["reason"] for ev, p in events if ev == "chunk.ejected"]
-    assert reasons == [impl.EjectReason.MAIN_TREE_REFUSED]
+    assert reasons == [impl.MAIN_TREE_REFUSED]
 
 
 def test_main_success_no_land_reviews_diff(impl, monkeypatch, tmp_path, capsys):

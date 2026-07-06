@@ -24,7 +24,17 @@ from lib import devcontainer as _devcontainer  # noqa: E402
 from lib import git as _git  # noqa: E402
 from lib import plans as _plans_lib  # noqa: E402
 from lib import worktrees as _worktrees  # noqa: E402
-from lib.events import HITL_IN_SESSION, EjectReason, ejected_payload, spawned_payload  # noqa: E402
+from lib.events import (  # noqa: E402
+    HITL_IN_SESSION,
+    HITL_REQUIRED,
+    IMPLEMENT_FAILED,
+    REBASE_CONFLICTED,
+    UPSTREAM_EJECTED,
+    WORKER_DIED,
+    ejected_payload,
+    is_transient_eject,
+    spawned_payload,
+)
 from lib.events import bind as _bind  # noqa: E402
 from lib.exits import EX_CONFIG, EX_DATAERR, EX_HITL_REQUIRED, EX_NOINPUT, EX_UNAVAILABLE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
@@ -203,7 +213,7 @@ def _concurrency_cap() -> int:
     raw = _utils.read_config().get("concurrency", 3)
     try:
         want = max(1, int(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         want = 3
     cores = os.cpu_count() or 1
     ceiling = max(1, cores // 2)
@@ -228,7 +238,7 @@ def _load_headroom_ok() -> bool:
     """
     try:
         load1 = os.getloadavg()[0]
-    except (OSError, AttributeError):
+    except OSError, AttributeError:
         return True
     cores = os.cpu_count() or 1
     return load1 < cores
@@ -250,7 +260,7 @@ def _chunk_timeout() -> int:
     raw = _utils.read_config().get("chunk_timeout", 1800)
     try:
         return max(1, int(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 1800
 
 
@@ -274,7 +284,7 @@ def _stall_timeout() -> int:
     raw = _utils.read_config().get("stall_timeout", 300)
     try:
         return int(raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 300
 
 
@@ -347,7 +357,7 @@ def _breaker_threshold() -> int:
     raw = _utils.read_config().get("breaker_threshold", 3)
     try:
         return max(1, int(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 3
 
 
@@ -356,7 +366,7 @@ def _breaker_cooldown() -> float:
     raw = _utils.read_config().get("breaker_cooldown", 30)
     try:
         return max(0.0, float(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 30.0
 
 
@@ -401,7 +411,7 @@ def _kill_proc_group(proc: object) -> None:
         return
     try:
         pgid = os.getpgid(pid)
-    except (ProcessLookupError, OSError):
+    except ProcessLookupError, OSError:
         with contextlib.suppress(Exception):
             proc.kill()  # type: ignore[attr-defined]
         return
@@ -617,7 +627,7 @@ def _fan_out_plans(
 
     Returns each plan paired with (child exit code, logs_path). The caller routes
     an ``EX_HITL_REQUIRED`` (42) child away from landing and uses logs_path to make
-    a worker-died ejection self-describing (ADR-0007 payload extension).
+    a worker_died ejection self-describing (ADR-0007 payload extension).
     """
     return asyncio.run(_supervise_fanout(plans, harness=harness, model=model))
 
@@ -635,7 +645,7 @@ def _teardown_ejected(slug: str) -> None:
     _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
 
 
-def _partition_fanout(
+def partition_by_outcome(
     results: list[tuple[_scheduler.Plan, int | None, str | None]],
     *,
     mark_ejected: Callable[[str], list[str]],
@@ -643,14 +653,14 @@ def _partition_fanout(
     """Split fan-out results into (landable_chunks, hitl_slugs, transient_slugs).
 
     A child that exited EX_HITL_REQUIRED is a wedge: self-ejected, worktree
-    preserved. Mirrored as chunk.ejected{reason:hitl-required} so the operator
+    preserved. Mirrored as chunk.ejected{reason:hitl_required} so the operator
     sees it without reading the child's log, kept out of the land queue.
 
-    A **transient** death (worker-died: timeout kill or container-down) is not
+    A **transient** death (worker_died: timeout kill or container-down) is not
     mark_ejected here — its slug is RETURNED in the third set instead. That set is
     the seam the recovery engine consumes to decide what to respawn; the caller
     (run_orchestrate) marks them ejected once no respawn is pending. Terminal
-    ejects (hitl-required, implement-failed) are mark_ejected inline as before —
+    ejects (hitl_required, implement_failed) are mark_ejected inline as before —
     respawning them unchanged would just fail again.
     """
     chunks = []
@@ -661,6 +671,9 @@ def _partition_fanout(
         logs_path = item[2] if len(item) > 2 else None
         killed_reason = item[3] if len(item) > 3 else None
         worktree = _worktree_for_slug(plan.slug)
+        reason: str
+        payload: dict[str, object]
+
         if rc is None or rc < 0 or rc >= _SIGNAL_EXIT_BASE:
             # Timeout/stall group-kill (rc<0), a crashed supervise task (rc None), or
             # a shell-reported signal exit (128+signum). A dead worker produced no
@@ -668,28 +681,21 @@ def _partition_fanout(
             # (and the recovery engine) can tell a wall-deadline kill from a
             # no-progress stall kill without reading the child's stream: a ``stalled``
             # reason names the killer, otherwise it defaults to a wall timeout.
-            # Transient → returned, not marked (see docstring).
             if killed_reason == "stalled":
                 payload = ejected_payload(
-                    plan.slug, EjectReason.WORKER_DIED, str(worktree), logs_path=logs_path, killed_by="stalled"
+                    plan.slug, WORKER_DIED, str(worktree), logs_path=logs_path, killed_by="stalled"
                 )
             else:
-                payload = ejected_payload(
-                    plan.slug, EjectReason.WORKER_DIED, str(worktree), logs_path=logs_path, timed_out=True
-                )
-            _emit_event("chunk.ejected", payload)
-            transient.add(plan.slug)
-            _teardown_ejected(plan.slug)
+                payload = ejected_payload(plan.slug, WORKER_DIED, str(worktree), logs_path=logs_path, timed_out=True)
+            reason = WORKER_DIED
         elif rc == EX_HITL_REQUIRED:
-            hitl.add(plan.slug)
-            _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.HITL_REQUIRED, str(worktree)))
-            mark_ejected(plan.slug)
-            _teardown_ejected(plan.slug)
+            reason = HITL_REQUIRED
+            payload = ejected_payload(plan.slug, HITL_REQUIRED, str(worktree))
         elif rc == EX_UNAVAILABLE:
             # Container/infra failure — the worker never ran, no code produced.
             # killed_by names the killer so the death is self-describing: a breaker
             # short-circuit ('breaker-open', never launched) vs. a genuine downed
-            # container vs. OOM. Transient → returned, not marked (see docstring).
+            # container vs. OOM.
             killed_by = killed_reason if killed_reason == "breaker-open" else "container-down"
             if killed_by == "container-down":
                 from lib.chunk import chunk_id_for_plan, chunk_slug
@@ -700,28 +706,33 @@ def _partition_fanout(
                         killed_by = "oom"
                 except LookupError:
                     pass
-            _emit_event(
-                "chunk.ejected",
-                ejected_payload(
-                    plan.slug,
-                    EjectReason.WORKER_DIED,
-                    str(worktree),
-                    logs_path=logs_path,
-                    killed_by=killed_by,
-                ),
+            reason = WORKER_DIED
+            payload = ejected_payload(
+                plan.slug,
+                WORKER_DIED,
+                str(worktree),
+                logs_path=logs_path,
+                killed_by=killed_by,
             )
-            transient.add(plan.slug)
-            _teardown_ejected(plan.slug)
         elif rc != 0:
-            # Any other non-zero exit: implement or gate failure. Terminal.
-            _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.IMPLEMENT_FAILED, str(worktree)))
-            mark_ejected(plan.slug)
-            _teardown_ejected(plan.slug)
+            reason = IMPLEMENT_FAILED
+            payload = ejected_payload(plan.slug, IMPLEMENT_FAILED, str(worktree))
         else:
             from lib.chunk import chunk_id_for_plan
 
             chunk_id = chunk_id_for_plan(plan.slug)
             chunks.append(_land_queue.Chunk(slug=plan.slug, worktree=worktree, chunk_id=chunk_id))
+            continue
+
+        _emit_event("chunk.ejected", payload)
+        _teardown_ejected(plan.slug)
+        if is_transient_eject(reason):
+            transient.add(plan.slug)
+        elif reason == HITL_REQUIRED:
+            hitl.add(plan.slug)
+            mark_ejected(plan.slug)
+        else:
+            mark_ejected(plan.slug)
     return chunks, hitl, transient
 
 
@@ -740,7 +751,7 @@ def _prune_stale_containers() -> None:
 def _prune_stale_worktrees(preserve: set[str] | None = None) -> None:
     """End-of-batch sweep of clean, inactive, stale worktrees for this run only.
 
-    ``preserve`` plan slugs are held back from the sweep — a wedged (hitl-required)
+    ``preserve`` plan slugs are held back from the sweep — a wedged (hitl_required)
     chunk's worktree must survive for the operator even when it is clean and
     inactive.
     """
@@ -862,9 +873,9 @@ def _run_batch(
             break
 
         results = _fan_out_plans(wave, harness=harness, model=model)
-        chunks, hitl, transient = _partition_fanout(results, mark_ejected=_on_ejected)
+        chunks, hitl, transient = partition_by_outcome(results, mark_ejected=_on_ejected)
         hitl_slugs.update(hitl)
-        # Transient (worker-died) ejects: the recovery engine's seam. Absent a
+        # Transient (worker_died) ejects: the recovery engine's seam. Absent a
         # respawn engine in this slice, mark them ejected so the cascade + non-zero
         # batch exit are unchanged (S2 replaces this with the recovery pass).
         for slug in transient:
@@ -908,7 +919,7 @@ def make_recovery_seed_for_plan(
     worktree = _worktree_for_slug(plan.slug)
     return _recover.make_recovery_seed(
         slug=plan.slug,
-        reason=EjectReason.WORKER_DIED,
+        reason=WORKER_DIED,
         worktree=worktree,
         holding=holding,
         attempt=attempt,
@@ -964,9 +975,9 @@ def _recovery_respawn(
     if err is not None:
         _emit_event(
             "chunk.ejected",
-            ejected_payload(plan.slug, EjectReason.REBASE_CONFLICTED, str(worktree)),
+            ejected_payload(plan.slug, REBASE_CONFLICTED, str(worktree)),
         )
-        return [{"slug": plan.slug, "status": "eject", "reason": EjectReason.REBASE_CONFLICTED}]
+        return [{"slug": plan.slug, "status": "eject", "reason": REBASE_CONFLICTED}]
     seed_summary = str((seed or {}).get("seed_summary", "")) or None
     rc = _spawn_implement_in_worktree(
         plan.path,
@@ -977,8 +988,8 @@ def _recovery_respawn(
         seed_summary=seed_summary,
     )
     if rc != 0:
-        _emit_event("chunk.ejected", ejected_payload(plan.slug, EjectReason.IMPLEMENT_FAILED, str(worktree)))
-        return [{"slug": plan.slug, "status": "eject", "reason": EjectReason.IMPLEMENT_FAILED}]
+        _emit_event("chunk.ejected", ejected_payload(plan.slug, IMPLEMENT_FAILED, str(worktree)))
+        return [{"slug": plan.slug, "status": "eject", "reason": IMPLEMENT_FAILED}]
     from lib.chunk import chunk_id_for_plan
 
     chunk_id = chunk_id_for_plan(plan.slug)
@@ -1008,7 +1019,7 @@ def _recovery_reslice(
     """reslice action: re-plan into sub-slices JIT and re-fan them through the staged coordinator."""
     sub_paths = _reslice_agent(plan)
     if not sub_paths:
-        return [{"slug": plan.slug, "status": "eject", "reason": EjectReason.IMPLEMENT_FAILED, "note": "reslice-empty"}]
+        return [{"slug": plan.slug, "status": "eject", "reason": IMPLEMENT_FAILED, "note": "reslice-empty"}]
     sub_plans = _scheduler.serialize_conflicts(_load_plans(sub_paths))
     sched = _scheduler.Scheduler(sub_plans)
     known = {p.slug for p in sub_plans}
@@ -1063,9 +1074,7 @@ def _run_recovery(
     def _dead_letter(plan: _scheduler.Plan, rationale: str) -> None:
         _emit_event(
             "chunk.ejected",
-            ejected_payload(
-                plan.slug, EjectReason.HITL_REQUIRED, str(_worktree_for_slug(plan.slug)), summary=rationale
-            ),
+            ejected_payload(plan.slug, HITL_REQUIRED, str(_worktree_for_slug(plan.slug)), summary=rationale),
         )
 
     outcomes = _recover.recover(
@@ -1108,8 +1117,7 @@ def _run_recovery(
                 recovery_stalled.add(slug)
             elif verdict in ("failed", "inconclusive", "empty"):
                 print(
-                    f"mentat-orchestrate: recovery {kind} for {slug} did not land "
-                    f"(verdict={verdict})",
+                    f"mentat-orchestrate: recovery {kind} for {slug} did not land (verdict={verdict})",
                     file=sys.stderr,
                 )
         elif kind in (_recover.ABANDON, "dead-lettered"):
@@ -1213,7 +1221,7 @@ def run_orchestrate(
                 where = str(plan_obj.path.parent) if plan_obj else str(Path.cwd())
                 _emit_event(
                     "chunk.ejected",
-                    ejected_payload(slug, EjectReason.UPSTREAM_EJECTED, where),
+                    ejected_payload(slug, UPSTREAM_EJECTED, where),
                 )
 
         _utils.emit_event(
@@ -1239,7 +1247,7 @@ def run_orchestrate(
                 if slug not in drain_eject_slugs and slug not in hitl_slugs:
                     print(f"mentat-orchestrate: ejected {slug}", file=sys.stderr)
             for slug in sorted(hitl_slugs):
-                print(f"mentat-orchestrate: ejected {slug} — hitl-required", file=sys.stderr)
+                print(f"mentat-orchestrate: ejected {slug} — hitl_required", file=sys.stderr)
         else:
             print(f"mentat-orchestrate: review the diff with `git diff {holding}..HEAD`", file=sys.stderr)
         return rc

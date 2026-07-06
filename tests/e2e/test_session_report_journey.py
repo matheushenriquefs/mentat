@@ -93,7 +93,7 @@ _EJECTED = [
     {
         "ts": "2026-06-30T00:00:03Z",
         "event": "chunk.ejected",
-        "payload": {"slug": "s2", "reason": "gate-failed", "where": "land"},
+        "payload": {"slug": "s2", "reason": "gate_failed", "where": "land"},
     },
 ]
 
@@ -117,7 +117,7 @@ def test_report_summarizes_an_ejected_session(repo_log, tmp_path, capsys):
 
     assert s.cmd_report("orchestrate-main-2") == 0
     out = capsys.readouterr().out
-    assert "Ejected" in out and "gate-failed" in out and "diagnose output" in out
+    assert "Ejected" in out and "gate_failed" in out and "diagnose output" in out
 
 
 def test_report_defaults_to_latest_session(repo_log, tmp_path, capsys):
@@ -154,7 +154,7 @@ def test_doctor_verdict_hitl_eject_cites_blocker(repo_log, tmp_path, capsys):
                 "event": "chunk.ejected",
                 "payload": {
                     "slug": "tiny",
-                    "reason": "hitl-required",
+                    "reason": "hitl_required",
                     "where": "/wt",
                     "summary": "needs a design call on the API shape",
                 },
@@ -164,7 +164,7 @@ def test_doctor_verdict_hitl_eject_cites_blocker(repo_log, tmp_path, capsys):
 
     assert s.cmd_doctor("orchestrate-main-hitl") == 0
     out = capsys.readouterr().out
-    assert "hitl-required" in out
+    assert "hitl_required" in out
     assert "needs a design call" in out, "the HITL blocker text must surface in the verdict"
     # plan.started (no spawn) supplies the Expected line.
     assert "tiny.md" in out
@@ -259,7 +259,7 @@ def test_track_navigator_oneshot_lists_registry(repo_log, capsys, monkeypatch, t
         store.record_emit(
             {"MENTAT_AGENT": agent_id, "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"},
             event,
-            {"slug": "x", "reason": "implement-failed", "where": "/tmp"},
+            {"slug": "x", "reason": "implement_failed", "where": "/tmp"},
         )
         (log_root / repo / agent_id).mkdir(parents=True)
 

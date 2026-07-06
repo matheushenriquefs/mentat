@@ -244,10 +244,10 @@ def test_read_chunk_seed_returns_none_when_absent(orch, monkeypatch, tmp_path):
     assert orch._read_chunk_seed("sess-x") is None
 
 
-# ── _partition_fanout ─────────────────────────────────────────────────────────
+# ── partition_by_outcome ─────────────────────────────────────────────────────────
 
 
-def test_partition_fanout_routes_each_returncode(orch, monkeypatch, tmp_path):
+def testpartition_by_outcome_routes_each_returncode(orch, monkeypatch, tmp_path):
     from tests.conftest import TEST_CHUNK_ID, bind_plan
 
     for slug in ("ok", "sig", "shell-sig", "hitl", "infra", "impl"):
@@ -266,18 +266,18 @@ def test_partition_fanout_routes_each_returncode(orch, monkeypatch, tmp_path):
         (_plan(orch, "infra"), orch.EX_UNAVAILABLE),
         (_plan(orch, "impl"), 1),
     ]
-    chunks, hitl, transient = orch._partition_fanout(results, mark_ejected=lambda s: ejected.append(s))
+    chunks, hitl, transient = orch.partition_by_outcome(results, mark_ejected=lambda s: ejected.append(s))
 
     # rc == 0 is the only landable chunk.
     assert [c.slug for c in chunks] == ["ok"]
     assert hitl == {"hitl"}
 
     reasons = {payload["slug"]: payload["reason"] for ev, payload in events if ev == "chunk.ejected"}
-    assert reasons["sig"] == orch.EjectReason.WORKER_DIED
-    assert reasons["shell-sig"] == orch.EjectReason.WORKER_DIED
-    assert reasons["hitl"] == orch.EjectReason.HITL_REQUIRED
-    assert reasons["infra"] == orch.EjectReason.WORKER_DIED
-    assert reasons["impl"] == orch.EjectReason.IMPLEMENT_FAILED
+    assert reasons["sig"] == orch.WORKER_DIED
+    assert reasons["shell-sig"] == orch.WORKER_DIED
+    assert reasons["hitl"] == orch.HITL_REQUIRED
+    assert reasons["infra"] == orch.WORKER_DIED
+    assert reasons["impl"] == orch.IMPLEMENT_FAILED
 
     # Transient (worker-died) ejects are RETURNED for the recovery engine, not
     # mark_ejected'd inside partition; only terminal ejects are marked.

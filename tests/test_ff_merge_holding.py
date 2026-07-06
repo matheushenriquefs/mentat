@@ -107,7 +107,7 @@ def test_ff_merge_returns_false_when_not_ff(tmp_path: Path) -> None:
 
     result = git_lib.ff_merge(chunk_wt, "holding")
 
-    assert result == "not-ff", "ff_merge must return 'not-ff' when not fast-forward"
+    assert result == "not_ff", "ff_merge must return 'not_ff' when not fast-forward"
 
     # holding ref must NOT advance
     after_sha = _branch_sha(main_repo, "holding")
@@ -115,10 +115,10 @@ def test_ff_merge_returns_false_when_not_ff(tmp_path: Path) -> None:
 
 
 def test_ff_merge_not_checked_out_not_ff_returns_not_ff(tmp_path: Path) -> None:
-    """holding not checked out anywhere; holding diverged → ff_merge returns 'not-ff'.
+    """holding not checked out anywhere; holding diverged → ff_merge returns 'not_ff'.
 
     Regression for the fetch-path mislabel: before the fix, all non-zero git fetch
-    exit codes collapsed to 'git-error', masking the real not-ff cause.
+    exit codes collapsed to 'git_error', masking the real not-ff cause.
     """
     main_repo = tmp_path / "main"
     main_repo.mkdir()
@@ -152,7 +152,7 @@ def test_ff_merge_not_checked_out_not_ff_returns_not_ff(tmp_path: Path) -> None:
 
     result = git_lib.ff_merge(chunk_wt, "holding")
 
-    assert result == "not-ff", f"expected 'not-ff', got {result!r}"
+    assert result == "not_ff", f"expected 'not_ff', got {result!r}"
     assert _branch_sha(main_repo, "holding") == holding_tip, "holding must not advance"
 
 
@@ -163,7 +163,7 @@ def _cp(returncode: int = 0, stdout: str = "") -> subprocess.CompletedProcess:  
 
 
 def test_ff_merge_empty_worktree_list_returns_git_error(tmp_path: Path, monkeypatch) -> None:
-    """An empty worktree list (e.g. a corrupt repo) → 'git-error' (line 125)."""
+    """An empty worktree list (e.g. a corrupt repo) → 'git_error' (line 125)."""
     calls = {"n": 0}
 
     def fake_run(args, **kw):
@@ -176,11 +176,11 @@ def test_ff_merge_empty_worktree_list_returns_git_error(tmp_path: Path, monkeypa
         return _cp(0, "")
 
     monkeypatch.setattr(git_lib, "_run", fake_run)
-    assert git_lib.ff_merge(tmp_path, "holding") == "git-error"
+    assert git_lib.ff_merge(tmp_path, "holding") == "git_error"
 
 
 def test_ff_merge_holding_checked_out_missing_tip_returns_git_error(tmp_path: Path, monkeypatch) -> None:
-    """holding checked out but its ref rev-parse fails → 'git-error' (line 140)."""
+    """holding checked out but its ref rev-parse fails → 'git_error' (line 140)."""
 
     def fake_run(args, **kw):
         if args[:2] == ["rev-parse", "HEAD"]:
@@ -192,11 +192,11 @@ def test_ff_merge_holding_checked_out_missing_tip_returns_git_error(tmp_path: Pa
         return _cp(0, "")
 
     monkeypatch.setattr(git_lib, "_run", fake_run)
-    assert git_lib.ff_merge(tmp_path, "holding") == "git-error"
+    assert git_lib.ff_merge(tmp_path, "holding") == "git_error"
 
 
 def test_ff_merge_not_checked_out_missing_ref_returns_git_error(tmp_path: Path) -> None:
-    """holding not checked out and holding ref missing → ff_merge returns 'git-error'."""
+    """holding not checked out and holding ref missing → ff_merge returns 'git_error'."""
     main_repo = tmp_path / "main"
     main_repo.mkdir()
     _cmd(["init", "-b", "main", str(main_repo)], tmp_path)
@@ -218,4 +218,4 @@ def test_ff_merge_not_checked_out_missing_ref_returns_git_error(tmp_path: Path) 
 
     # "holding" branch does not exist → rev-parse refs/heads/holding fails → git-error
     result = git_lib.ff_merge(chunk_wt, "holding")
-    assert result == "git-error", f"expected 'git-error', got {result!r}"
+    assert result == "git_error", f"expected 'git_error', got {result!r}"

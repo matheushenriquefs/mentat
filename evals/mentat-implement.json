@@ -19,12 +19,12 @@
     },
     {
       "id": "exits-42-on-self-answer",
-      "description": "exits 42 + emits chunk.ejected{reason:hitl-required} on AFK ambiguity",
+      "description": "exits 42 + emits chunk.ejected{reason:hitl_required} on AFK ambiguity",
       "type": "functional"
     },
     {
       "id": "gate-fail-exits-1",
-      "description": "exits 1 + emits chunk.ejected{reason:gate-failed} on gate block",
+      "description": "exits 1 + emits chunk.ejected{reason:gate_failed} on gate block",
       "type": "functional"
     }
   ],

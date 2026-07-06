@@ -266,18 +266,18 @@ def rebase_ff_only(cwd: Path, onto: str) -> tuple[str | None, str | None]:
 def ff_merge(cwd: Path, holding: str) -> str | None:
     """FF-merge cwd HEAD onto the explicit ``holding`` branch.
 
-    Returns None on success.  Returns ``"not-ff"`` when the merge is genuinely
+    Returns None on success.  Returns ``"not_ff"`` when the merge is genuinely
     not fast-forward (holding tip is not an ancestor of cwd HEAD).  Returns
-    ``"git-error"`` for any git or setup failure (rev-parse, empty worktree
+    ``"git_error"`` for any git or setup failure (rev-parse, empty worktree
     list, update-ref / fetch error) so callers can report the correct cause.
     """
     sha_r = _run(["rev-parse", "HEAD"], cwd=cwd)
     if sha_r.returncode != 0:
-        return "git-error"
+        return "git_error"
     sha = sha_r.stdout.strip()
     entries = worktree_list(cwd=cwd)
     if not entries:
-        return "git-error"
+        return "git_error"
     # Find which worktree (if any) has holding checked out — git fetch refuses
     # to update a currently-checked-out branch regardless of which worktree
     # holds it, so we must use update-ref via that worktree specifically.
@@ -292,10 +292,10 @@ def ff_merge(cwd: Path, holding: str) -> str | None:
         # working-tree touch, works dirty).
         tip_r = _run(["rev-parse", f"refs/heads/{holding}"], cwd=holding_wt)
         if tip_r.returncode != 0:
-            return "git-error"
+            return "git_error"
         anc = _run(["merge-base", "--is-ancestor", tip_r.stdout.strip(), sha], cwd=holding_wt)
         if anc.returncode != 0:
-            return "not-ff"
+            return "not_ff"
         r = _run(["update-ref", f"refs/heads/{holding}", sha], cwd=holding_wt)
     else:
         # Not checked out anywhere — verify ff before fetch (fetch exit code alone
@@ -303,9 +303,9 @@ def ff_merge(cwd: Path, holding: str) -> str | None:
         main_wt = Path(entries[0]["worktree"])
         tip_r = _run(["rev-parse", f"refs/heads/{holding}"], cwd=main_wt)
         if tip_r.returncode != 0:
-            return "git-error"
+            return "git_error"
         anc = _run(["merge-base", "--is-ancestor", tip_r.stdout.strip(), sha], cwd=main_wt)
         if anc.returncode != 0:
-            return "not-ff"
+            return "not_ff"
         r = _run(["fetch", ".", f"{sha}:refs/heads/{holding}"], cwd=main_wt)
-    return None if r.returncode == 0 else "git-error"
+    return None if r.returncode == 0 else "git_error"

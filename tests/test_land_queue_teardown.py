@@ -46,7 +46,7 @@ def _install_stubs(
 
     def fake_ff(chunk, holding):
         if ff_fail and chunk.slug in ff_fail:
-            return "not-ff"
+            return "not_ff"
         return None
 
     def fake_teardown(chunk: land_queue.Chunk) -> None:
@@ -78,7 +78,7 @@ def test_drain_tears_down_after_rebase_eject(tmp_path, monkeypatch) -> None:
     results = land_queue.drain([chunk], holding="holding")
 
     assert results[0]["status"] == "eject"
-    assert results[0]["reason"] == "rebase-conflicted"
+    assert results[0]["reason"] == "rebase_conflicted"
     assert "conflict-slug" in torn_down
 
 
@@ -90,7 +90,7 @@ def test_drain_tears_down_after_gate_eject(tmp_path, monkeypatch) -> None:
     results = land_queue.drain([chunk], holding="holding")
 
     assert results[0]["status"] == "eject"
-    assert results[0]["reason"] == "gate-failed"
+    assert results[0]["reason"] == "gate_failed"
     assert "blocked-slug" in torn_down
 
 
@@ -102,7 +102,7 @@ def test_drain_tears_down_after_not_ff(tmp_path, monkeypatch) -> None:
     results = land_queue.drain([chunk], holding="holding")
 
     assert results[0]["status"] == "eject"
-    assert results[0]["reason"] == "not-ff"
+    assert results[0]["reason"] == "not_ff"
     assert "noff-slug" in torn_down
 
 

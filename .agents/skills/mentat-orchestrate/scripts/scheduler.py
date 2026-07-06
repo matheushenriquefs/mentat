@@ -204,7 +204,7 @@ class Scheduler:
             # blocking. A declared-downstream auto chunk is re-evaluated against
             # the new holding tip rather than blind-cascaded — it lands if it
             # builds without the ejected change, and only ejects on its own
-            # merit if it genuinely can't (rebase-conflicted / gate-failed).
+            # merit if it genuinely can't (rebase_conflicted / gate_failed).
             if deps - self._landed - self._ejected:
                 continue
             ready.append(slug)

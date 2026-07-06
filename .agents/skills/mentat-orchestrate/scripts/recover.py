@@ -1,6 +1,6 @@
 """Model-driven JIT recovery for transiently-ejected AFK chunks — ADR-0015.
 
-When a chunk ejects for a *transient* reason (worker-died / not-ff: the environment
+When a chunk ejects for a *transient* reason (worker_died / not_ff: the environment
 failed it, not its code — ``lib.events.is_transient_eject``) the batch need not give
 up. This pass runs AFTER the drain settles, serially: for each transient **AFK** slug
 within its attempt cap it hands a recovery AGENT the failure context and applies the
@@ -63,7 +63,7 @@ def _int_config(key: str, default: int, *, minimum: int = 1) -> int:
     raw = _config.read_config().get(key, default)
     try:
         return max(minimum, int(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
 
 
@@ -84,7 +84,7 @@ def recovery_restart_window() -> float:
     raw = _config.read_config().get("recovery_restart_window", DEFAULT_RESTART_WINDOW)
     try:
         return max(0.0, float(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return DEFAULT_RESTART_WINDOW
 
 
@@ -97,7 +97,7 @@ def recovery_budget() -> float | None:
         return None
     try:
         return max(0.0, float(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -346,7 +346,7 @@ def _parse_decision(raw: str) -> dict[str, str]:
     safe escalate rung (never a blind retry against an unclassifiable failure)."""
     try:
         obj = json.loads(_extract_json(raw))
-    except (json.JSONDecodeError, ValueError):
+    except json.JSONDecodeError, ValueError:
         return {"action": ABANDON, "rationale": "unparseable recovery decision"}
     # _extract_json only ever returns a ``{...}``-bounded slice, so a successful
     # json.loads always yields a dict — a JSON array / scalar reply fails to parse

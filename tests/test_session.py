@@ -88,12 +88,12 @@ def test_verdict_for_chunk_ejected_implement_failed(tmp_path):
             {
                 "ts": "2026-01-01T00:00:00+00:00",
                 "event": "chunk.ejected",
-                "payload": {"slug": "my-chunk", "reason": "implement-failed", "where": "/tmp"},
+                "payload": {"slug": "my-chunk", "reason": "implement_failed", "where": "/tmp"},
             },
         ],
     )
     verdict = diag_mod.build_verdict(session_dir)
-    assert "implement-failed" in verdict or "TDD" in verdict or "gate" in verdict.lower()
+    assert "implement_failed" in verdict or "TDD" in verdict or "gate" in verdict.lower()
 
 
 def test_verdict_for_chunk_ejected_hitl_required(tmp_path):
@@ -106,7 +106,7 @@ def test_verdict_for_chunk_ejected_hitl_required(tmp_path):
             {
                 "ts": "2026-01-01T00:00:00+00:00",
                 "event": "chunk.ejected",
-                "payload": {"slug": "my-chunk", "reason": "hitl-required", "where": "/tmp"},
+                "payload": {"slug": "my-chunk", "reason": "hitl_required", "where": "/tmp"},
             },
         ],
     )
@@ -126,12 +126,12 @@ def test_verdict_for_worker_died_names_slug_and_reason(tmp_path):
             {
                 "ts": "2026-01-01T00:00:00+00:00",
                 "event": "chunk.ejected",
-                "payload": {"slug": "dead-chunk", "reason": "worker-died", "where": "/tmp/wt"},
+                "payload": {"slug": "dead-chunk", "reason": "worker_died", "where": "/tmp/wt"},
             },
         ],
     )
     verdict = diag_mod.build_verdict(session_dir)
-    assert "worker-died" in verdict
+    assert "worker_died" in verdict
     assert "dead-chunk" in verdict
     assert "Unknown reason" not in verdict
     assert "Suspect: None" not in verdict
@@ -155,7 +155,7 @@ def test_verdict_worker_died_not_masked_by_later_land(tmp_path):
             {
                 "ts": "2026-01-01T00:00:02+00:00",
                 "event": "chunk.ejected",
-                "payload": {"slug": "dead-chunk", "reason": "worker-died", "where": "/tmp/wt"},
+                "payload": {"slug": "dead-chunk", "reason": "worker_died", "where": "/tmp/wt"},
             },
             {
                 "ts": "2026-01-01T00:00:03+00:00",
@@ -167,7 +167,7 @@ def test_verdict_worker_died_not_masked_by_later_land(tmp_path):
     verdict = diag_mod.build_verdict(session_dir)
     assert "Reason: chunk.landed" not in verdict
     assert "Suspect: None" not in verdict
-    assert "worker-died" in verdict
+    assert "worker_died" in verdict
     assert "dead-chunk" in verdict
 
 
@@ -225,12 +225,12 @@ def test_summary_for_chunk_ejected_carries_failure(tmp_path):
             {
                 "ts": "2026-01-01T00:00:00+00:00",
                 "event": "chunk.ejected",
-                "payload": {"slug": "my-chunk", "reason": "gate-failed", "where": "/x"},
+                "payload": {"slug": "my-chunk", "reason": "gate_failed", "where": "/x"},
             },
         ],
     )
     summary = diag_mod.build_summary(session_dir)
-    assert "gate-failed" in summary
+    assert "gate_failed" in summary
 
 
 def test_write_summary_writes_summary_md(tmp_path):
@@ -287,7 +287,7 @@ def test_report_shows_failure_for_ejected(tmp_path, monkeypatch):
             {
                 "ts": "2026-01-01T00:00:00+00:00",
                 "event": "chunk.ejected",
-                "payload": {"slug": "c", "reason": "gate-failed", "where": "/x"},
+                "payload": {"slug": "c", "reason": "gate_failed", "where": "/x"},
             },
         ],
         repo="myrepo",
@@ -296,7 +296,7 @@ def test_report_shows_failure_for_ejected(tmp_path, monkeypatch):
     with redirect_stdout(buf):
         rc = session_mod.cmd_report("sess-1")
     assert rc == 0
-    assert "gate-failed" in buf.getvalue()
+    assert "gate_failed" in buf.getvalue()
 
 
 def test_expected_vs_actual_derived(tmp_path):
@@ -309,7 +309,7 @@ def test_expected_vs_actual_derived(tmp_path):
             {
                 "ts": "2026-01-01T00:00:00+00:00",
                 "event": "chunk.ejected",
-                "payload": {"slug": "x", "reason": "gate-failed", "where": "/tmp"},
+                "payload": {"slug": "x", "reason": "gate_failed", "where": "/tmp"},
             },
         ],
     )
@@ -327,7 +327,7 @@ def test_regression_marks_unknown_when_no_prior_landed(tmp_path):
             {
                 "ts": "2026-01-01T00:00:00+00:00",
                 "event": "chunk.ejected",
-                "payload": {"slug": "x", "reason": "implement-failed", "where": "/tmp"},
+                "payload": {"slug": "x", "reason": "implement_failed", "where": "/tmp"},
             },
         ],
     )
@@ -570,7 +570,7 @@ def test_verdict_hitl_blocker_appended_to_suspect(tmp_path):
             {
                 "ts": "2026-01-01T00:00:00+00:00",
                 "event": "chunk.ejected",
-                "payload": {"slug": "c", "reason": "hitl-required", "where": "/wt", "summary": "need a decision"},
+                "payload": {"slug": "c", "reason": "hitl_required", "where": "/wt", "summary": "need a decision"},
             }
         ],
     )
@@ -600,7 +600,7 @@ def test_summary_hitl_blocker_appended(tmp_path):
             {
                 "ts": "2026-01-01T00:00:00+00:00",
                 "event": "chunk.ejected",
-                "payload": {"slug": "c", "reason": "hitl-required", "summary": "blocked here"},
+                "payload": {"slug": "c", "reason": "hitl_required", "summary": "blocked here"},
             }
         ],
     )

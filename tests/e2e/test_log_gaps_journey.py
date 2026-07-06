@@ -50,13 +50,13 @@ def test_emit_valid_eject_reason_is_written(tmp_path, monkeypatch):
     args = argparse.Namespace(
         agent="mentat-orchestrate",
         event="chunk.ejected",
-        payload=json.dumps({"slug": "s", "reason": "gate-failed", "where": "land"}),
+        payload=json.dumps({"slug": "s", "reason": "gate_failed", "where": "land"}),
     )
     assert log.cmd_emit(args) == 0
 
     rows = agent_events(session)
     assert rows[0]["event"] == "chunk.ejected"
-    assert rows[0]["payload"]["reason"] == "gate-failed"
+    assert rows[0]["payload"]["reason"] == "gate_failed"
 
 
 def test_validate_skips_blank_lines(tmp_path, monkeypatch):

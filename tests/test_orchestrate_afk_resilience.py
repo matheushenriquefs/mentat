@@ -1,6 +1,6 @@
 """Tests for mentat-afk-resilience-orchestrate slices 1-5.
 
-Slice 1: _partition_fanout is total — rc=1/69/70 → eject not land.
+Slice 1: partition_by_outcome is total — rc=1/69/70 → eject not land.
 Slice 2: _fan_out_plans kills hung child after deadline, returns rc<0.
 Slice 3: run_orchestrate names ejected chunks on stdout.
 Slice 4: _prune_stale_containers runs even with dirty worktrees.
@@ -41,11 +41,11 @@ def test_signal_exit_base_constant_is_128():
     assert orch._SIGNAL_EXIT_BASE == 128, "_SIGNAL_EXIT_BASE must equal 128"
 
 
-# ── Slice 1: _partition_fanout totality ──────────────────────────────────────
+# ── Slice 1: partition_by_outcome totality ──────────────────────────────────────
 
 
 def _run_partition(tmp_path, rc: int) -> tuple[list, set]:
-    """Helper: run _partition_fanout with a single plan returning rc."""
+    """Helper: run partition_by_outcome with a single plan returning rc."""
     orch = load_module("orchestrate")
     bind_plan("slug-a")
     plan = _make_plan_obj(tmp_path, "slug-a")
@@ -53,62 +53,62 @@ def _run_partition(tmp_path, rc: int) -> tuple[list, set]:
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda *a, **k: None):
-            chunks, hitl, _transient = orch._partition_fanout(
+            chunks, hitl, _transient = orch.partition_by_outcome(
                 [(plan, rc)],
                 mark_ejected=lambda slug: ejected.append(slug) or [],
             )
     return chunks, hitl
 
 
-def test_partition_fanout_rc_0_is_landable(tmp_path):
+def testpartition_by_outcome_rc_0_is_landable(tmp_path):
     chunks, hitl = _run_partition(tmp_path, 0)
     assert len(chunks) == 1, "rc=0 must be landable"
     assert len(hitl) == 0
 
 
-def test_partition_fanout_rc_42_is_hitl(tmp_path):
+def testpartition_by_outcome_rc_42_is_hitl(tmp_path):
     chunks, hitl = _run_partition(tmp_path, 42)
     assert len(chunks) == 0, "rc=42 (HITL_REQUIRED) must not land"
     assert "slug-a" in hitl
 
 
-def test_partition_fanout_rc_1_ejects_not_lands(tmp_path):
+def testpartition_by_outcome_rc_1_ejects_not_lands(tmp_path):
     """rc=1 (EX_FAILURE) must → eject, not land (Slice 1 fix)."""
     chunks, hitl = _run_partition(tmp_path, 1)
     assert len(chunks) == 0, "rc=1 must be ejected, not landable"
 
 
-def test_partition_fanout_rc_69_ejects_not_lands(tmp_path):
+def testpartition_by_outcome_rc_69_ejects_not_lands(tmp_path):
     """rc=69 (EX_UNAVAILABLE / container down) must → eject, not land."""
     chunks, hitl = _run_partition(tmp_path, 69)
     assert len(chunks) == 0, "rc=69 must be ejected, not landable"
 
 
-def test_partition_fanout_rc_70_ejects_not_lands(tmp_path):
+def testpartition_by_outcome_rc_70_ejects_not_lands(tmp_path):
     """rc=70 (EX_SOFTWARE) must → eject, not land."""
     chunks, hitl = _run_partition(tmp_path, 70)
     assert len(chunks) == 0, "rc=70 must be ejected, not landable"
 
 
-def test_partition_fanout_rc_65_ejects_not_lands(tmp_path):
+def testpartition_by_outcome_rc_65_ejects_not_lands(tmp_path):
     """rc=65 (EX_DATAERR / malformed plan) must → eject, not land."""
     chunks, hitl = _run_partition(tmp_path, 65)
     assert len(chunks) == 0, "rc=65 must be ejected, not landable"
 
 
-def test_partition_fanout_rc_signal_ejects(tmp_path):
+def testpartition_by_outcome_rc_signal_ejects(tmp_path):
     """rc=-9 (signal kill) must → eject with WORKER_DIED."""
     chunks, hitl = _run_partition(tmp_path, -9)
     assert len(chunks) == 0, "rc=-9 must be ejected"
 
 
-def test_partition_fanout_rc_128plus_ejects(tmp_path):
+def testpartition_by_outcome_rc_128plus_ejects(tmp_path):
     """rc=130 (128+signum) must → eject with WORKER_DIED."""
     chunks, hitl = _run_partition(tmp_path, 130)
     assert len(chunks) == 0, "rc=130 must be ejected"
 
 
-def test_partition_fanout_rc_69_emits_ejection(tmp_path):
+def testpartition_by_outcome_rc_69_emits_ejection(tmp_path):
     """rc=69 must emit chunk.ejected event."""
     orch = load_module("orchestrate")
     plan = _make_plan_obj(tmp_path, "slug-b")
@@ -116,7 +116,7 @@ def test_partition_fanout_rc_69_emits_ejection(tmp_path):
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda ev, payload: emitted.append((ev, payload))):
-            orch._partition_fanout(
+            orch.partition_by_outcome(
                 [(plan, 69)],
                 mark_ejected=lambda slug: [],
             )
@@ -124,7 +124,7 @@ def test_partition_fanout_rc_69_emits_ejection(tmp_path):
     assert any(ev == "chunk.ejected" for ev, _ in emitted), "rc=69 must emit chunk.ejected"
 
 
-def test_partition_fanout_rc_1_reason_is_implement_failed(tmp_path):
+def testpartition_by_outcome_rc_1_reason_is_implement_failed(tmp_path):
     """rc=1 eject reason must be implement-failed, not worker-died."""
     orch = load_module("orchestrate")
     plan = _make_plan_obj(tmp_path, "slug-c")
@@ -132,7 +132,7 @@ def test_partition_fanout_rc_1_reason_is_implement_failed(tmp_path):
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda ev, payload: emitted.append((ev, payload))):
-            orch._partition_fanout(
+            orch.partition_by_outcome(
                 [(plan, 1)],
                 mark_ejected=lambda slug: [],
             )
@@ -140,10 +140,10 @@ def test_partition_fanout_rc_1_reason_is_implement_failed(tmp_path):
     eject_events = [(ev, p) for ev, p in emitted if ev == "chunk.ejected"]
     assert eject_events, "rc=1 must emit chunk.ejected"
     reason = eject_events[0][1].get("reason")
-    assert reason == "implement-failed", f"rc=1 reason must be implement-failed, got {reason!r}"
+    assert reason == "implement_failed", f"rc=1 reason must be implement-failed, got {reason!r}"
 
 
-def test_partition_fanout_rc_69_reason_is_worker_died(tmp_path):
+def testpartition_by_outcome_rc_69_reason_is_worker_died(tmp_path):
     """rc=69 eject reason must be worker-died (infra failure)."""
     orch = load_module("orchestrate")
     plan = _make_plan_obj(tmp_path, "slug-d")
@@ -151,20 +151,20 @@ def test_partition_fanout_rc_69_reason_is_worker_died(tmp_path):
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda ev, payload: emitted.append((ev, payload))):
-            orch._partition_fanout(
+            orch.partition_by_outcome(
                 [(plan, 69)],
                 mark_ejected=lambda slug: [],
             )
 
     eject_events = [(ev, p) for ev, p in emitted if ev == "chunk.ejected"]
     reason = eject_events[0][1].get("reason")
-    assert reason == "worker-died", f"rc=69 reason must be worker-died, got {reason!r}"
+    assert reason == "worker_died", f"rc=69 reason must be worker-died, got {reason!r}"
 
 
 # ── S2: worker-died is self-describing (timed_out / killed_by + logs_path) ────
 
 
-def test_partition_fanout_timeout_kill_payload_is_self_describing(tmp_path):
+def testpartition_by_outcome_timeout_kill_payload_is_self_describing(tmp_path):
     """A timeout-killed chunk (rc<0) → payload timed_out:true + logs_path at its
     own session dir."""
     orch = load_module("orchestrate")
@@ -173,18 +173,18 @@ def test_partition_fanout_timeout_kill_payload_is_self_describing(tmp_path):
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-            orch._partition_fanout(
+            orch.partition_by_outcome(
                 [(plan, -9, "/logs/sess-t")],
                 mark_ejected=lambda slug: [],
             )
 
     p = [p for ev, p in emitted if ev == "chunk.ejected"][0]
-    assert p["reason"] == "worker-died"
+    assert p["reason"] == "worker_died"
     assert p["timed_out"] is True
     assert p["logs_path"] == "/logs/sess-t"
 
 
-def test_partition_fanout_container_down_payload_names_killer(tmp_path):
+def testpartition_by_outcome_container_down_payload_names_killer(tmp_path):
     """A container-down chunk (rc69) → payload killed_by:'container-down' + logs_path."""
     orch = load_module("orchestrate")
     plan = _make_plan_obj(tmp_path, "slug-cd")
@@ -192,13 +192,13 @@ def test_partition_fanout_container_down_payload_names_killer(tmp_path):
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-            orch._partition_fanout(
+            orch.partition_by_outcome(
                 [(plan, 69, "/logs/sess-cd")],
                 mark_ejected=lambda slug: [],
             )
 
     p = [p for ev, p in emitted if ev == "chunk.ejected"][0]
-    assert p["reason"] == "worker-died"
+    assert p["reason"] == "worker_died"
     assert p["killed_by"] == "container-down"
     assert p["logs_path"] == "/logs/sess-cd"
     assert "timed_out" not in p, "container-down is not a timeout"
@@ -207,7 +207,7 @@ def test_partition_fanout_container_down_payload_names_killer(tmp_path):
 # ── S4: partition tears down ejected containers; reaper stops on timeout ──────
 
 
-def test_partition_fanout_tears_down_ejected_container(tmp_path):
+def testpartition_by_outcome_tears_down_ejected_container(tmp_path):
     """A partition-ejected chunk → devcontainer.down(slug) + chunk.teardown emitted
     (it never reaches the land queue that normally tears containers down)."""
     orch = load_module("orchestrate")
@@ -219,7 +219,7 @@ def test_partition_fanout_tears_down_ejected_container(tmp_path):
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch._devcontainer, "down", lambda slug: down_calls.append(slug) or True):
             with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-                orch._partition_fanout([(plan, -9, "/logs/ej")], mark_ejected=lambda s: [])
+                orch.partition_by_outcome([(plan, -9, "/logs/ej")], mark_ejected=lambda s: [])
 
     assert down_calls == [chunk_label("ej")], f"ejected chunk container must be torn down: {down_calls}"
     teardowns = [p for ev, p in emitted if ev == "chunk.teardown"]
@@ -376,7 +376,7 @@ def test_fan_out_plans_harvest_order_matches_submission(monkeypatch, tmp_path):
 
 
 def test_fan_out_plans_killed_child_ejects_worker_died(monkeypatch, tmp_path):
-    """A killed child (rc<0) → _partition_fanout routes to WORKER_DIED."""
+    """A killed child (rc<0) → partition_by_outcome routes to WORKER_DIED."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
 
@@ -385,20 +385,20 @@ def test_fan_out_plans_killed_child_ejects_worker_died(monkeypatch, tmp_path):
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-            chunks, _hitl, _transient = orch._partition_fanout(
+            chunks, _hitl, _transient = orch.partition_by_outcome(
                 [(plan, -9)],
                 mark_ejected=lambda slug: [],
             )
 
     assert len(chunks) == 0
     eject = [p for ev, p in emitted if ev == "chunk.ejected"]
-    assert eject and eject[0]["reason"] == "worker-died"
+    assert eject and eject[0]["reason"] == "worker_died"
 
 
-# ── S3: _partition_fanout returns the transient (retryable) set ──────────────
+# ── S3: partition_by_outcome returns the transient (retryable) set ──────────────
 
 
-def test_partition_fanout_worker_died_is_in_transient_set(tmp_path):
+def testpartition_by_outcome_worker_died_is_in_transient_set(tmp_path):
     """A worker-died chunk (timeout / container-down) is returned in the transient
     set — the engine seam — not silently swallowed."""
     orch = load_module("orchestrate")
@@ -407,7 +407,7 @@ def test_partition_fanout_worker_died_is_in_transient_set(tmp_path):
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda *a, **k: None):
-            chunks, hitl, transient = orch._partition_fanout(
+            chunks, hitl, transient = orch.partition_by_outcome(
                 [(plan, -9, "/logs/td")],
                 mark_ejected=lambda slug: [],
             )
@@ -415,7 +415,7 @@ def test_partition_fanout_worker_died_is_in_transient_set(tmp_path):
     assert "td" in transient, "worker-died must be in the transient set"
 
 
-def test_partition_fanout_container_down_is_transient(tmp_path):
+def testpartition_by_outcome_container_down_is_transient(tmp_path):
     """A container-down chunk (rc69) is transient too."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
@@ -423,14 +423,14 @@ def test_partition_fanout_container_down_is_transient(tmp_path):
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda *a, **k: None):
-            _c, _h, transient = orch._partition_fanout(
+            _c, _h, transient = orch.partition_by_outcome(
                 [(plan, 69, "/logs/cd")],
                 mark_ejected=lambda slug: [],
             )
     assert "cd" in transient
 
 
-def test_partition_fanout_implement_failed_stays_terminal(tmp_path):
+def testpartition_by_outcome_implement_failed_stays_terminal(tmp_path):
     """A terminal eject (rc=1 implement-failed) must NOT be in the transient set."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
@@ -438,14 +438,14 @@ def test_partition_fanout_implement_failed_stays_terminal(tmp_path):
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda *a, **k: None):
-            _c, _h, transient = orch._partition_fanout(
+            _c, _h, transient = orch.partition_by_outcome(
                 [(plan, 1, "/logs/tf")],
                 mark_ejected=lambda slug: [],
             )
     assert "tf" not in transient, "implement-failed is terminal, not transient"
 
 
-def test_partition_fanout_transient_chunks_not_marked_ejected_by_partition(tmp_path):
+def testpartition_by_outcome_transient_chunks_not_marked_ejected_by_partition(tmp_path):
     """Transient ejects are RETURNED for the caller, not mark_ejected'd inside
     partition — that is the seam the recovery engine owns."""
     orch = load_module("orchestrate")
@@ -455,7 +455,7 @@ def test_partition_fanout_transient_chunks_not_marked_ejected_by_partition(tmp_p
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda *a, **k: None):
-            _c, _h, transient = orch._partition_fanout(
+            _c, _h, transient = orch.partition_by_outcome(
                 [(plan, -9, "/logs/wd")],
                 mark_ejected=lambda slug: marked.append(slug) or [],
             )

@@ -232,7 +232,7 @@ def test_main_refuses_when_left_in_main_tree(main_repo, tmp_path, monkeypatch):
 
     assert exc.value.code == impl.EX_USAGE
     mock_run.assert_not_called()  # refused before any plan execution
-    assert any(event == "chunk.ejected" and payload.get("reason") == "main-tree-refused" for event, payload in emits)
+    assert any(event == "chunk.ejected" and payload.get("reason") == "main_tree_refused" for event, payload in emits)
 
 
 def test_main_emits_eject_on_preflight_conflict(main_repo, tmp_path, monkeypatch):
@@ -258,7 +258,7 @@ def test_main_emits_eject_on_preflight_conflict(main_repo, tmp_path, monkeypatch
 
     assert exc.value.code == 65
     assert any(
-        event == "chunk.ejected" and payload.get("reason") == "preflight-worktree-failed" for event, payload in emits
+        event == "chunk.ejected" and payload.get("reason") == "preflight_worktree_failed" for event, payload in emits
     )
 
 

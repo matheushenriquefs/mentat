@@ -115,9 +115,9 @@ def test_only_overdue_chunk_killed(monkeypatch, tmp_path):
 
     with patch.object(orch, "_worktree_for_slug", side_effect=fake_worktree):
         with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-            chunks, hitl, _transient = orch._partition_fanout(results, mark_ejected=lambda _slug: [])
+            chunks, hitl, _transient = orch.partition_by_outcome(results, mark_ejected=lambda _slug: [])
 
     assert not hitl
     assert [c.slug for c in chunks] == ["b"], "B must be the only landable chunk"
     a_ejects = [p for ev, p in emitted if ev == "chunk.ejected" and p["slug"] == "a"]
-    assert a_ejects and a_ejects[0]["reason"] == "worker-died"
+    assert a_ejects and a_ejects[0]["reason"] == "worker_died"

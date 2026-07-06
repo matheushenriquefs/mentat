@@ -147,7 +147,7 @@ def test_recovery_respawn_ejects_on_rebase_conflict(monkeypatch, tmp_path):
     out = orch._recovery_respawn(
         _plan(orch, "core"), 1, holding="hold", harness=None, model=None, session_id="s1", seed={"seed_summary": "note"}
     )
-    assert out[0]["status"] == "eject" and out[0]["reason"] == "rebase-conflicted"
+    assert out[0]["status"] == "eject" and out[0]["reason"] == "rebase_conflicted"
     assert any(ev == "chunk.ejected" for ev, _ in emitted)
 
 
@@ -161,7 +161,7 @@ def test_recovery_respawn_ejects_on_implement_failure(monkeypatch, tmp_path):
     out = orch._recovery_respawn(
         _plan(orch, "core"), 1, holding="hold", harness=None, model=None, session_id="s1", seed={"seed_summary": "note"}
     )
-    assert out[0]["status"] == "eject" and out[0]["reason"] == "implement-failed"
+    assert out[0]["status"] == "eject" and out[0]["reason"] == "implement_failed"
 
 
 # ── _reslice_agent + _recovery_reslice ────────────────────────────────────────
@@ -365,7 +365,7 @@ def test_run_recovery_abandon_dead_letters(monkeypatch, tmp_path):
         {"core"}, plans_by_slug={"core": plan}, holding="hold", session_id="s1", harness=None, model=None
     )
     assert ok == set() and dead == {"core"}
-    assert any(ev == "chunk.ejected" and p["reason"] == "hitl-required" for ev, p in emitted)
+    assert any(ev == "chunk.ejected" and p["reason"] == "hitl_required" for ev, p in emitted)
 
 
 def test_run_recovery_retry_without_success_not_marked_recovered(monkeypatch, tmp_path):
@@ -386,7 +386,7 @@ def test_run_recovery_retry_without_success_not_marked_recovered(monkeypatch, tm
     monkeypatch.setattr(
         orch,
         "_recovery_respawn",
-        lambda p, a, ctx=None, **k: [{"slug": p.slug, "status": "eject", "reason": "gate-failed"}],
+        lambda p, a, ctx=None, **k: [{"slug": p.slug, "status": "eject", "reason": "gate_failed"}],
     )
     monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
     plan = _plan(orch, "core")

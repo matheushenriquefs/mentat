@@ -357,7 +357,7 @@ def test_run_orchestrate_prints_drain_eject_reasons(tmp_path, capsys):
     fail_obj = routing.Plan(slug="p-fail", class_="AFK", blocked_by=[], path=fail)
     land_obj = routing.Plan(slug="p-land", class_="AFK", blocked_by=[], path=land)
 
-    drain_out = [{"slug": "p-land", "status": "eject", "reason": "gate-failed"}]
+    drain_out = [{"slug": "p-land", "status": "eject", "reason": "gate_failed"}]
 
     with (
         patch.object(orch, "_fan_out_plans", return_value=[(fail_obj, 1), (land_obj, 0)]),
@@ -381,7 +381,7 @@ def test_run_orchestrate_prints_drain_eject_reasons(tmp_path, capsys):
     assert rc == 1
     err = capsys.readouterr().err
     # drain-carried eject → slug + reason line
-    assert "ejected p-land — gate-failed" in err, err
+    assert "ejected p-land — gate_failed" in err, err
     # partition-ejected slug (not in drain) → bare slug line
     assert "ejected p-fail" in err, err
 

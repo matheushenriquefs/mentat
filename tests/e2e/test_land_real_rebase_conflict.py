@@ -95,7 +95,7 @@ def test_second_sibling_rebase_conflict_ejects_clean(tmp_path):
 
     # B hits a genuine rebase conflict and ejects.
     assert by_slug["b"]["status"] == "eject", f"B must eject: {by_slug['b']}"
-    assert by_slug["b"]["reason"] == lq.EjectReason.REBASE_CONFLICTED
+    assert by_slug["b"]["reason"] == lq.REBASE_CONFLICTED
 
     # B's worktree is clean — rebase --abort ran: no rebase in progress, no unmerged paths.
     status = subprocess.run(

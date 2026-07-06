@@ -195,7 +195,6 @@ import argparse as _argparse  # noqa: E402
 import os as _os  # noqa: E402
 
 import log as log_mod  # noqa: E402
-import pytest  # noqa: E402
 
 
 def _make_emit_args(agent: str, event: str, payload: str):
@@ -384,7 +383,7 @@ def test_emit_chunk_ejected_catalog_reason_accepted(tmp_path, monkeypatch):
     args = _make_emit_args(
         "test-agent",
         "chunk.ejected",
-        _json.dumps({"slug": "x", "reason": "implement-failed", "where": "land"}),
+        _json.dumps({"slug": "x", "reason": "implement_failed", "where": "land"}),
     )
     rc = log_mod.cmd_emit(args)
     assert rc == 0, "catalog reason must be accepted"

@@ -14,7 +14,15 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import git as _git  # noqa: E402
-from lib.events import EjectReason, bind, ejected_payload  # noqa: E402
+from lib.events import (
+    GATE_FAILED,
+    GIT_ERROR,
+    NOT_FF,
+    REBASE_CONFLICTED,
+    UPSTREAM_EJECTED,
+    bind,
+    ejected_payload,
+)  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
 _utils = load_sibling(__file__, "plans")
@@ -68,8 +76,8 @@ def _run_gates(chunk: Chunk) -> tuple[str, str]:
 def _ff_merge(chunk: Chunk, holding: str) -> str | None:
     """FF-merge chunk HEAD onto the explicit holding branch.
 
-    Returns None on success, ``"not-ff"`` when the merge is genuinely not
-    fast-forward, or ``"git-error"`` for any git/setup failure.
+    Returns None on success, ``"not_ff"`` when the merge is genuinely not
+    fast-forward, or ``"git_error"`` for any git/setup failure.
     """
     return _git.ff_merge(chunk.worktree, holding)
 
@@ -85,7 +93,7 @@ def _concurrency_cap() -> int:
     raw = _utils.read_config().get("concurrency", 3)
     try:
         want = max(1, int(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         want = 3
     cores = os.cpu_count() or 1
     return min(want, max(1, cores // 2))
@@ -106,12 +114,12 @@ def land(chunk: Chunk, *, holding: str) -> dict[str, object]:
     if err:
         _emit_event(
             "chunk.ejected",
-            ejected_payload(chunk.slug, EjectReason.REBASE_CONFLICTED, str(chunk.worktree)),
+            ejected_payload(chunk.slug, REBASE_CONFLICTED, str(chunk.worktree)),
         )
         return {
             "slug": chunk.slug,
             "status": "eject",
-            "reason": EjectReason.REBASE_CONFLICTED,
+            "reason": REBASE_CONFLICTED,
             "tip": None,
             "conflicted_files": [],
         }
@@ -120,19 +128,19 @@ def land(chunk: Chunk, *, holding: str) -> dict[str, object]:
     if verdict == "block":
         _emit_event(
             "chunk.ejected",
-            ejected_payload(chunk.slug, EjectReason.GATE_FAILED, str(chunk.worktree)),
+            ejected_payload(chunk.slug, GATE_FAILED, str(chunk.worktree)),
         )
         return {
             "slug": chunk.slug,
             "status": "eject",
-            "reason": EjectReason.GATE_FAILED,
+            "reason": GATE_FAILED,
             "tip": tip,
             "findings": [message],
         }
 
     ff_err = _ff_merge(chunk, holding)
     if ff_err is not None:
-        reason = EjectReason.NOT_FF if ff_err == "not-ff" else EjectReason.GIT_ERROR
+        reason = NOT_FF if ff_err == "not_ff" else GIT_ERROR
         _emit_event(
             "chunk.ejected",
             ejected_payload(chunk.slug, reason, str(chunk.worktree)),
@@ -298,13 +306,13 @@ def drain(
             where = str(chunk.worktree) if chunk else ""
             _emit_event(
                 "chunk.ejected",
-                ejected_payload(downstream, EjectReason.UPSTREAM_EJECTED, where, upstream=ready),
+                ejected_payload(downstream, UPSTREAM_EJECTED, where, upstream=ready),
             )
             results.append(
                 {
                     "slug": downstream,
                     "status": "eject",
-                    "reason": EjectReason.UPSTREAM_EJECTED,
+                    "reason": UPSTREAM_EJECTED,
                     "upstream": ready,
                 }
             )

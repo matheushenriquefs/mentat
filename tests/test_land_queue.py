@@ -44,7 +44,7 @@ def test_land_queue_emits_chunk_ejected_with_gate_failed():
                 result = lq.land(chunk, holding="main")
 
     assert result["status"] == "eject"
-    assert result["reason"] == "gate-failed"
+    assert result["reason"] == "gate_failed"
     emitted = [c.args[0] for c in mock_emit.call_args_list]
     assert any("chunk.ejected" in e for e in emitted)
 
@@ -242,20 +242,20 @@ def _setup_divergent_repo(tmp_path):
 
 
 def test_ff_merge_non_ancestor_returns_not_ff(tmp_path) -> None:
-    """Non-ancestor SHA must return 'not-ff', not a generic error."""
+    """Non-ancestor SHA must return 'not_ff', not a generic error."""
     _main_repo, chunk, lq = _setup_divergent_repo(tmp_path)
     result = lq._ff_merge(chunk, "holding")
-    assert result == "not-ff", f"expected 'not-ff', got {result!r}"
+    assert result == "not_ff", f"expected 'not_ff', got {result!r}"
 
 
 def test_ff_merge_non_git_dir_returns_git_error(tmp_path) -> None:
-    """Non-git worktree dir must return 'git-error', not 'not-ff'."""
+    """Non-git worktree dir must return 'git_error', not 'not_ff'."""
     lq = load_module("land_queue")
     # tmp_path has no .git — rev-parse HEAD will fail
     chunk = lq.Chunk(slug="err-chunk", worktree=tmp_path)
     result = lq._ff_merge(chunk, "holding")
-    assert result == "git-error", f"expected 'git-error', got {result!r}"
-    assert result != "not-ff"
+    assert result == "git_error", f"expected 'git_error', got {result!r}"
+    assert result != "not_ff"
 
 
 def test_land_ejects_with_not_ff_reason_on_non_ancestor(tmp_path) -> None:
@@ -269,9 +269,9 @@ def test_land_ejects_with_not_ff_reason_on_non_ancestor(tmp_path) -> None:
                 result = lq.land(chunk, holding="holding")
 
     assert result["status"] == "eject"
-    assert result["reason"] == "not-ff"
+    assert result["reason"] == "not_ff"
     emitted_reasons = [c.args[1].get("reason") for c in mock_emit.call_args_list if "reason" in c.args[1]]
-    assert any(r == "not-ff" for r in emitted_reasons)
+    assert any(r == "not_ff" for r in emitted_reasons)
 
 
 def test_land_ejects_with_git_error_reason_on_git_failure(tmp_path) -> None:
@@ -285,9 +285,9 @@ def test_land_ejects_with_git_error_reason_on_git_failure(tmp_path) -> None:
                 result = lq.land(chunk, holding="holding")
 
     assert result["status"] == "eject"
-    assert result["reason"] != "not-ff", "git-error must not be reported as not-ff"
+    assert result["reason"] != "not_ff", "git-error must not be reported as not-ff"
     emitted_reasons = [c.args[1].get("reason") for c in mock_emit.call_args_list if "reason" in c.args[1]]
-    assert not any(r == "not-ff" for r in emitted_reasons)
+    assert not any(r == "not_ff" for r in emitted_reasons)
 
 
 # ── drain cascade: downstream already gone from pending is skipped ───────────
@@ -299,7 +299,7 @@ def test_drain_cascade_skips_downstream_not_in_pending():
     a, b = make_chunk("a"), make_chunk("b")
 
     def fake_land(chunk, *, holding):
-        return {"slug": chunk.slug, "status": "eject", "reason": "gate-failed"}
+        return {"slug": chunk.slug, "status": "eject", "reason": "gate_failed"}
 
     def fake_list_ready_slices(pending):
         return [pending[0]] if pending else []

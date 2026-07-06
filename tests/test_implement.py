@@ -182,7 +182,7 @@ def test_implement_emits_chunk_ejected_with_hitl_reason(tmp_path):
     payloads = [c.args[1] for c in mock_emit.call_args_list if "ejected" in c.args[0]]
     assert payloads
     ejected_payload = payloads[0]
-    assert "hitl-required" in str(ejected_payload)
+    assert "hitl_required" in str(ejected_payload)
 
 
 # ── AFK success (in-session gates deferred to land per ADR-0004) ───────────────

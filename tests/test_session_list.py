@@ -77,7 +77,7 @@ def test_derive_status_nonterminal_stale_is_crashed():
 
 def test_derive_status_hitl_eject_is_waiting():
     sessions = load_module("sessions")
-    row = _ev("chunk.ejected", 0, slug="x", reason="hitl-required", where="impl")
+    row = _ev("chunk.ejected", 0, slug="x", reason="hitl_required", where="impl")
     assert sessions.derive_status(row, sessions.STALE_SECS + 999) == "waiting"
 
 
@@ -111,7 +111,7 @@ def test_list_sessions_full_rank_order(tmp_path, monkeypatch):
     _write_log(
         tmp_path,
         "s-waiting",
-        [_ev("chunk.ejected", now - 5, slug="w", reason="hitl-required", where="impl")],
+        [_ev("chunk.ejected", now - 5, slug="w", reason="hitl_required", where="impl")],
     )
     _write_log(
         tmp_path,
@@ -245,7 +245,7 @@ def test_cmd_list_renders_table(tmp_path, monkeypatch):
     _write_log(
         tmp_path,
         "implement-a-1",
-        [_ev("chunk.ejected", 1_000_000.0, slug="a", reason="hitl-required", where="impl")],
+        [_ev("chunk.ejected", 1_000_000.0, slug="a", reason="hitl_required", where="impl")],
     )
     env = {"MENTAT_LOG_PATH": str(tmp_path / "logs"), "MENTAT_REPO": "myrepo"}
     buf = io.StringIO()
@@ -288,7 +288,7 @@ def test_list_sessions_active_only_drops_old_idle(tmp_path, monkeypatch):
     _write_log(
         tmp_path,
         "s-waiting",
-        [_ev("chunk.ejected", now - (recency + 9999), slug="x", reason="hitl-required", where="impl")],
+        [_ev("chunk.ejected", now - (recency + 9999), slug="x", reason="hitl_required", where="impl")],
     )
     _write_log(
         tmp_path,

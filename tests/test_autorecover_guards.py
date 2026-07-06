@@ -224,7 +224,7 @@ def test_fan_out_plans_progress_resets_stall_window(monkeypatch, tmp_path):
     assert reason is None, f"a live chunk must not be killed, got reason={reason!r}"
 
 
-def test_partition_fanout_stalled_kill_names_killer(tmp_path):
+def testpartition_by_outcome_stalled_kill_names_killer(tmp_path):
     """A stalled kill (rc<0 + reason 'stalled') → payload killed_by:'stalled',
     reason worker-died, and it is transient (retryable)."""
     orch = load_module("orchestrate")
@@ -234,13 +234,13 @@ def test_partition_fanout_stalled_kill_names_killer(tmp_path):
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch._devcontainer, "down", lambda slug: True):
             with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-                _c, _h, transient = orch._partition_fanout(
+                _c, _h, transient = orch.partition_by_outcome(
                     [(plan, -9, "/logs/st", "stalled")],
                     mark_ejected=lambda slug: [],
                 )
 
     p = [p for ev, p in emitted if ev == "chunk.ejected"][0]
-    assert p["reason"] == "worker-died"
+    assert p["reason"] == "worker_died"
     assert p["killed_by"] == "stalled"
     assert "timed_out" not in p, "a stall is not a wall timeout"
     assert "st" in transient
@@ -424,7 +424,7 @@ def test_supervisor_records_rc69_as_breaker_failure(monkeypatch, tmp_path):
     assert b.state == "open", "two consecutive rc69 spawns must open the breaker"
 
 
-def test_partition_fanout_breaker_open_names_killer(tmp_path):
+def testpartition_by_outcome_breaker_open_names_killer(tmp_path):
     """A breaker short-circuit (rc69 + reason 'breaker-open') → killed_by:'breaker-open'."""
     orch = load_module("orchestrate")
     plan = _make_plan_obj(tmp_path, "bo")
@@ -433,7 +433,7 @@ def test_partition_fanout_breaker_open_names_killer(tmp_path):
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch._devcontainer, "down", lambda slug: True):
             with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-                _c, _h, transient = orch._partition_fanout(
+                _c, _h, transient = orch.partition_by_outcome(
                     [(plan, orch.EX_UNAVAILABLE, None, "breaker-open")],
                     mark_ejected=lambda slug: [],
                 )
