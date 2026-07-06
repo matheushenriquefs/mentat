@@ -6,10 +6,9 @@ _POPEN_NEW_GROUP = "start_new_session"
 
 import asyncio
 import contextlib
-import os
+import os  # noqa: F401 — patch seam for tests (cpu_count, getpgid, getloadavg)
 import signal
 import sys
-import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -19,20 +18,23 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib import devcontainer as _devcontainer  # noqa: E402
 from lib import git as _git  # noqa: E402
+from lib.agent import agent_dir as _agent_dir
+from lib.agent import summary_file as _summary_file
 from lib.events import bind as _bind  # noqa: E402
 from lib.exits import EX_UNAVAILABLE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
-from lib.agent import agent_dir as _agent_dir
-from lib.agent import summary_file as _summary_file
 
 _utils = load_sibling(__file__, "plans")
 _scheduler = load_sibling(__file__, "scheduler")
 _spawn = load_sibling(__file__, "spawn")
+_guardrails = load_sibling(__file__, "guardrails")
 
 # slugs chunked (spawned or bound to a worktree) this run — scoped prune/GC reads it.
 _run_chunk_slugs: set[str] = set()
 
 _emit_event = _bind("mentat-orchestrate")
+
+_CircuitBreaker = _guardrails.CircuitBreaker
 
 
 def _track_chunk_slug(plan_slug: str) -> None:
@@ -98,192 +100,35 @@ _concurrency_cap = _utils.concurrency_cap
 
 
 def _load_headroom_ok() -> bool:
-    """Best-effort advisory: True when the 1-min load average leaves a spare core.
-
-    Consulted before opening an asyncio slot as a second line behind the cap
-    clamp — if the host is already saturated (load-per-core >= 1.0), spawning
-    another heavy agent only deepens the contention that trips deadlines. It
-    never blocks (the clamp is the real guard); an unavailable ``getloadavg``
-    (not all platforms expose it) degrades to permissive.
-    """
-    try:
-        load1 = os.getloadavg()[0]
-    except OSError, AttributeError:
-        return True
-    cores = os.cpu_count() or 1
-    return load1 < cores
+    return _guardrails.load_headroom_ok()
 
 
 def _chunk_timeout() -> int:
-    """Wall-clock deadline per chunk in seconds. Default 1800 (30 min).
-
-    Reads MENTAT_CHUNK_TIMEOUT env first, then config key ``chunk_timeout``.
-    Must be greater than the container sibling's devcontainer-up cap so a
-    slow-but-live build is never killed before its inner timeout fires.
-    """
-    env_val = os.environ.get("MENTAT_CHUNK_TIMEOUT")
-    if env_val is not None:
-        try:
-            return max(1, int(env_val))
-        except ValueError:
-            pass
-    raw = _utils.read_config().get("chunk_timeout", 1800)
-    try:
-        return max(1, int(raw))
-    except TypeError, ValueError:
-        return 1800
+    return _guardrails.chunk_timeout(_utils.read_config)
 
 
 def _stall_timeout() -> int:
-    """No-progress window per chunk in seconds. Default 300 (5 min); ``<=0`` disables.
-
-    Distinct from the wall deadline (``_chunk_timeout``): the wall kills a chunk
-    that runs *too long*; the stall window kills one that goes *silent* — no new
-    audit event for the whole window while the wall clock still has budget. That
-    catches an agent looping or hung on a dead socket (OpenHands' StuckDetector /
-    a K8s liveness probe) instead of burning the full 30-min wall on a corpse.
-
-    Reads ``MENTAT_STALL_TIMEOUT`` env first, then config key ``stall_timeout``.
-    """
-    env_val = os.environ.get("MENTAT_STALL_TIMEOUT")
-    if env_val is not None:
-        try:
-            return int(env_val)
-        except ValueError:
-            pass
-    raw = _utils.read_config().get("stall_timeout", 300)
-    try:
-        return int(raw)
-    except TypeError, ValueError:
-        return 300
-
-
-class _CircuitBreaker:
-    """Nygard circuit breaker over a shared backend (devcontainer daemon / model API).
-
-    Repeated container-down (rc69) / API-overload spawns across chunks are a sign
-    the shared backend is sick, not that each chunk is individually bad. Spawning
-    harder against it is a restart-storm that deepens the outage. The breaker
-    counts *consecutive* backend failures; at ``threshold`` it OPENS and further
-    ``allow()`` calls short-circuit (no spawn) until a ``cooldown_s`` window
-    passes, after which it HALF-OPENs and lets exactly one probe through. A probe
-    success CLOSEs it (backend recovered); a probe failure re-OPENs it.
-
-    Single-threaded: the asyncio supervisor drives it cooperatively, so no lock.
-    ``clock`` is injectable for deterministic tests.
-    """
-
-    def __init__(
-        self, threshold: int, *, cooldown_s: float = 30.0, clock: Callable[[], float] = time.monotonic
-    ) -> None:
-        self.threshold = max(1, threshold)
-        self.cooldown_s = cooldown_s
-        self._clock = clock
-        self.state = "closed"
-        self.consecutive_failures = 0
-        self._opened_at = 0.0
-        self._probe_inflight = False
-
-    def allow(self) -> bool:
-        """True iff a spawn may proceed now. Transitions open→half-open on cooldown."""
-        if self.state == "closed":
-            return True
-        if self.state == "open":
-            if self._clock() - self._opened_at >= self.cooldown_s:
-                self.state = "half_open"
-                self._probe_inflight = True
-                return True  # single probe
-            return False  # short-circuit: backend still cooling down
-        # half_open: only the one in-flight probe runs; siblings short-circuit
-        return not self._probe_inflight
-
-    def record_success(self) -> None:
-        self.consecutive_failures = 0
-        self._probe_inflight = False
-        self.state = "closed"
-
-    def record_failure(self) -> None:
-        self.consecutive_failures += 1
-        self._probe_inflight = False
-        if self.consecutive_failures >= self.threshold:
-            self.state = "open"
-            self._opened_at = self._clock()
-
-    def record_abandoned(self) -> None:
-        """Release a probe that ended WITHOUT a backend verdict — our own deadline
-        killed it, not the backend. We learned nothing, so don't score it as success
-        or failure, but DO free the single-probe token and return to cooling: else a
-        killed probe leaves ``_probe_inflight`` set forever, wedging the breaker
-        half-open so every queued chunk short-circuits 'breaker-open'. A no-op unless
-        half-open, so a non-probe kill never perturbs a healthy backend."""
-        if self.state == "half_open":
-            self._probe_inflight = False
-            self.state = "open"
-            self._opened_at = self._clock()
+    return _guardrails.stall_timeout(_utils.read_config)
 
 
 def _breaker_threshold() -> int:
-    """Consecutive backend-failure count that trips the breaker. Default 3."""
-    raw = _utils.read_config().get("breaker_threshold", 3)
-    try:
-        return max(1, int(raw))
-    except TypeError, ValueError:
-        return 3
+    return _guardrails.breaker_threshold(_utils.read_config)
 
 
 def _breaker_cooldown() -> float:
-    """Seconds the breaker stays open before half-opening for a probe. Default 30."""
-    raw = _utils.read_config().get("breaker_cooldown", 30)
-    try:
-        return max(0.0, float(raw))
-    except TypeError, ValueError:
-        return 30.0
+    return _guardrails.breaker_cooldown(_utils.read_config)
 
 
 def _make_breaker() -> _CircuitBreaker:
-    """Build the run's shared breaker from config. Patch point for tests."""
-    return _CircuitBreaker(_breaker_threshold(), cooldown_s=_breaker_cooldown())
+    return _guardrails.make_breaker(_utils.read_config)
 
 
 def _event_age(agent_id: str) -> float | None:
-    """Seconds since the chunk's agent log was last written, or None if absent.
-
-    The chunk's ``transcript.jsonl`` is appended to on every audit event / harness
-    stream chunk, so its mtime is a proxy for liveness. None (no log yet) means
-    "no progress signal" — the caller must not treat that as a stall, since a
-    just-spawned chunk may not have written its first line.
-    """
-    log = _agent_dir(agent_id) / "transcript.jsonl"
-    try:
-        return max(0.0, time.time() - log.stat().st_mtime)
-    except OSError:
-        return None
+    return _guardrails.event_age(agent_id, agent_dir_fn=_agent_dir)
 
 
 def _kill_proc_group(proc: object) -> None:
-    """SIGKILL the child's whole process group.
-
-    spawn spawns the child with ``**{_POPEN_NEW_GROUP: True}``, so it leads its own
-    process group and the harness grandchild inherits it. Signalling the group —
-    not just ``proc.pid`` — reaps the grandchild that otherwise orphans (reparents
-    to init) and keeps mutating the worktree / holding the container (Bug A).
-
-    Guarded: a child already reaped (ProcessLookupError) or a test double without a
-    real pid falls back to ``proc.kill()``.
-    """
-    pid = getattr(proc, "pid", None)
-    if pid is None:
-        with contextlib.suppress(Exception):
-            proc.kill()  # type: ignore[attr-defined]
-        return
-    try:
-        pgid = os.getpgid(pid)
-    except ProcessLookupError, OSError:
-        with contextlib.suppress(Exception):
-            proc.kill()  # type: ignore[attr-defined]
-        return
-    with contextlib.suppress(ProcessLookupError):
-        os.killpg(pgid, signal.SIGKILL)
+    _guardrails.kill_proc_group(proc)
 
 
 def _read_chunk_seed(agent_id: str) -> str | None:
