@@ -1,7 +1,7 @@
 """E2E: the mentat-track CLI wiring — parser, dispatch, and thin helpers.
 
 Loads the real skill script ``.agents/skills/mentat-track/scripts/track.py``
-via ``load_script`` (which runs its sys.path bootstrap + ``from lib.session ...``
+via ``load_script`` (which runs its sys.path bootstrap + ``from lib.agent ...``
 + ``load_sibling`` of sessions/doctor/track/diagnose at import). Targets the CLI
 seams that the report/registry journeys don't exercise: ``_session_dir`` path
 arithmetic, ``build_parser`` subcommand/namespace shape (including the required

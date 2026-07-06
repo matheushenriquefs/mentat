@@ -25,16 +25,16 @@ def default_harness() -> str:
     return harness if isinstance(harness, str) else "claude-code"
 
 
-def detect_self_answer(session_log_path: Path | str | None) -> bool:
+def detect_self_answer(agent_log_path: Path | str | None) -> bool:
     """Return True if any assistant turn invoked AskUserQuestion.
 
     The AskUserQuestion stream-json shape is owned by `lib.harness_stream`; this
-    scans the captured session log (written when MENTAT_SESSION_LOG is set) for
+    scans the captured agent log (written when MENTAT_AGENT_LOG is set) for
     any such row — the self-answer signal for AFK plans (eject with exit 42).
     """
-    if not session_log_path:
+    if not agent_log_path:
         return False
-    path = Path(session_log_path)
+    path = Path(agent_log_path)
     if not path.exists():
         return False
     return any(harness_stream.is_ask_user_question(row) for row in _track_registry.iter_rows(path))

@@ -32,7 +32,7 @@ def test_latest_session_excludes_mentat_manual(tmp_path, monkeypatch):
         "real-session",
         [{"ts": _ts(2_000.0), "event": "chunk_landed", "payload": {"slug": "x", "sha": "a", "holding": "h"}}],
     )
-    result = sessions.latest_session(repo_dir)
+    result = sessions.latest_agent(repo_dir)
     assert result == "real-session"
 
 
@@ -40,7 +40,7 @@ def test_returns_none_when_only_manual_present(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
     repo_dir = tmp_path / "logs" / "myrepo"
     _make_dirs(repo_dir, ["mentat-manual-111-222", "mentat-manual-333-444"])
-    assert sessions.latest_session(repo_dir) is None
+    assert sessions.latest_agent(repo_dir) is None
 
 
 def test_latest_session_returns_most_recent(tmp_path, monkeypatch):
@@ -70,4 +70,4 @@ def test_latest_session_returns_most_recent(tmp_path, monkeypatch):
             }
         ],
     )
-    assert sessions.latest_session(repo_dir) == "session-b"
+    assert sessions.latest_agent(repo_dir) == "session-b"

@@ -41,20 +41,20 @@ def _record_of(entry: object) -> dict[str, object]:
     return cast("dict[str, object]", entry[0] if isinstance(entry, tuple) else entry)
 
 
-def resolve_focus_index(entries: Sequence[object], pinned_session: str | None, fallback: int | None) -> int | None:
-    """Index of the record whose `session == pinned_session`, pinning focus to identity.
+def resolve_focus_index(entries: Sequence[object], pinned_agent: str | None, fallback: int | None) -> int | None:
+    """Index of the record whose `agent == pinned_agent`, pinning focus to identity.
 
     Pure. The registry re-sorts by (rank, age) every tick, so a fixed integer index
     drifts onto a different agent after a status flip — tracking the *name* instead
     keeps focus and the list cursor glued to the agent the operator chose.
 
-    `pinned_session is None` (nothing pinned yet) → `fallback`. Pinned but gone from
+    `pinned_agent is None` (nothing pinned yet) → `fallback`. Pinned but gone from
     the registry (reaped) → `None`, so the caller can drop focus / clamp the cursor.
     """
-    if pinned_session is None:
+    if pinned_agent is None:
         return fallback
     for i, e in enumerate(entries):
-        if _record_of(e).get("session") == pinned_session:
+        if _record_of(e).get("agent") == pinned_agent:
             return i
     return None
 
@@ -122,7 +122,7 @@ def render_list(records: list[dict[str, object]], selected: int, *, viewport_hei
         dot = tui.status_dot(str(r["status"]))
         last = r.get("last_event") or "-"
         age = _registry_mod._humanize_age(cast("float", r.get("age", 0.0)))
-        all_lines.append(f"{cursor} {dot} {r['status']:<{_STATUS_COL}} {r['session']}  {age:>9}  {last}")
+        all_lines.append(f"{cursor} {dot} {r['status']:<{_STATUS_COL}} {r['agent']}  {age:>9}  {last}")
 
     if viewport_height is None or len(all_lines) <= viewport_height:
         return all_lines
@@ -148,7 +148,7 @@ def render_preview(tool_names: list[str]) -> list[str]:
 def _focus_frame(record: dict[str, object], content: list[str], *, scroll_top: int | None, height: int) -> list[str]:
     """Scroll-windowed focus frame: bold header, ↑/↓ affordances, the visible window, hint."""
     visible, above, below = window_lines(content, scroll_top=scroll_top, height=height)
-    lines = [tui.color(tui.section_rule(f"{record['session']} — {record['status']}"), tui.BOLD)]
+    lines = [tui.color(tui.section_rule(f"{record['agent']} — {record['status']}"), tui.BOLD)]
     if above:
         lines.append(tui.color(f"↑ {above} more", tui.DIM))
     lines += visible
@@ -202,7 +202,7 @@ def _frame(entries: list[Entry], selected: int, repo: str, *, rows: int) -> list
     loop, which owns the scroll window.
     """
     records = [rec for rec, _ in entries]
-    lines = [tui.section_rule(f"{repo} — {len(records)} session(s)")]
+    lines = [tui.section_rule(f"{repo} — {len(records)} agent(s)")]
     overhead = 5  # section_rule + blank + preview-section_rule + blank + hint
     available = max(6, rows - overhead)
     preview_cap = min(PREVIEW_LINES, max(3, available // 2))
@@ -211,7 +211,7 @@ def _frame(entries: list[Entry], selected: int, repo: str, *, rows: int) -> list
     if entries:
         record, agent_dir = _selected(entries, selected)
         lines.append("")
-        lines.append(tui.section_rule(str(record["session"])))
+        lines.append(tui.section_rule(str(record["agent"])))
         lines += render_preview(_tools(agent_dir, limit=preview_cap))
     lines.append("")
     lines.append(tui.color("j/k move · enter focus · x kill · q quit", tui.DIM))
@@ -254,9 +254,9 @@ def _navigate_tty(repo_dir: Path, *, repo: str, active_only: bool) -> int:  # pr
 
     selected, focused, view = 0, False, _render._VIEW_TRANSCRIPT
     scroll_top: int | None = None  # None = follow tail; int = frozen absolute top
-    # Pin the list cursor and (when zoomed) focus to the *session name*, not the
+    # Pin the list cursor and (when zoomed) focus to the *agent name*, not the
     # integer index a background re-sort keeps shuffling (flicker root cause A).
-    cursor_session: str | None = str(entries[0][0]["session"]) if entries else None
+    cursor_agent: str | None = str(entries[0][0]["agent"]) if entries else None
     pinned: str | None = None
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
@@ -326,12 +326,12 @@ def _navigate_tty(repo_dir: Path, *, repo: str, active_only: bool) -> int:  # pr
             elif key is not None:
                 selected, action = handle_key(key, selected, len(entries))
                 if entries:
-                    cursor_session = str(_selected(entries, selected)[0]["session"])
+                    cursor_agent = str(_selected(entries, selected)[0]["agent"])
                 if action == "quit":
                     break
                 if action == "focus" and entries:
                     focused, scroll_top = True, None
-                    pinned = str(_selected(entries, selected)[0]["session"])
+                    pinned = str(_selected(entries, selected)[0]["agent"])
                 if action == "toggle":
                     view = _render.toggle_view(view)
                 if action == "kill" and entries:
@@ -339,16 +339,16 @@ def _navigate_tty(repo_dir: Path, *, repo: str, active_only: bool) -> int:  # pr
             entries = _registry_entries(repo_dir, active_only=active_only)
             # Re-resolve the cursor against the freshly re-sorted registry; if its
             # agent was reaped, clamp to the old slot.
-            cursor_idx = resolve_focus_index(entries, cursor_session, None)
+            cursor_idx = resolve_focus_index(entries, cursor_agent, None)
             selected = cursor_idx if cursor_idx is not None else min(selected, max(len(entries) - 1, 0))
-            cursor_session = str(_selected(entries, selected)[0]["session"]) if entries else None
+            cursor_agent = str(_selected(entries, selected)[0]["agent"]) if entries else None
             # Re-resolve focus the same way; a reaped focus agent drops the zoom.
             if focused:
                 focus_idx = resolve_focus_index(entries, pinned, None)
                 if focus_idx is None:
                     focused, pinned, scroll_top = False, None, None
                 else:
-                    selected, cursor_session = focus_idx, pinned
+                    selected, cursor_agent = focus_idx, pinned
             if not entries:
                 focused, scroll_top = False, None
     finally:
@@ -363,7 +363,7 @@ def _navigate_tty(repo_dir: Path, *, repo: str, active_only: bool) -> int:  # pr
 def _registry_entries(repo_dir: Path, *, active_only: bool = True) -> list[Entry]:
     """Registry from the canonical store, paired with each agent's log dir."""
     rows = store.list_track_entries(repo_dir.name, active_only=active_only)
-    return [(r, repo_dir / str(r["session"])) for r in rows]
+    return [(r, repo_dir / str(r["agent"])) for r in rows]
 
 
 _registry = _registry_entries

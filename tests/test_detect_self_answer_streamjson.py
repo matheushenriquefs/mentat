@@ -1,5 +1,5 @@
 """detect_self_answer parses stream-json schema (the format the AFK adapter
-writes to MENTAT_SESSION_LOG)."""
+writes to MENTAT_AGENT_LOG)."""
 
 from __future__ import annotations
 

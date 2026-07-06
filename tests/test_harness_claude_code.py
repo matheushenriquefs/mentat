@@ -62,8 +62,8 @@ def test_invoke_no_headless_flag(monkeypatch):
         return FakeResult()
 
     monkeypatch.setattr(claude_code.subprocess, "run", fake_run)
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
 
     claude_code.invoke("hi", afk=False, model=None)
 
@@ -83,8 +83,8 @@ def test_invoke_afk_adds_disallowed_tools(monkeypatch):
         return FakeResult()
 
     monkeypatch.setattr(claude_code.subprocess, "run", fake_run)
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
 
     claude_code.invoke("hi", afk=True, model=None)
 
@@ -105,8 +105,8 @@ def test_invoke_model_flag(monkeypatch):
         return FakeResult()
 
     monkeypatch.setattr(claude_code.subprocess, "run", fake_run)
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
 
     claude_code.invoke("hi", afk=False, model="claude-opus-4-7")
 

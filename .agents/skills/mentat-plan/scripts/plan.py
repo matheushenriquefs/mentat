@@ -12,7 +12,7 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import plans as _plans  # noqa: E402
-from lib.session import ensure_session  # noqa: E402
+from lib.agent import ensure_agent  # noqa: E402
 
 
 def resolve_plan(ref: str) -> Path:
@@ -26,7 +26,7 @@ def write_plan(slug: str, body_path: Path, *, plans_dir: Path | None = None) -> 
     plans_dir.mkdir(parents=True, exist_ok=True)
     dest = plans_dir / f"{slug}.md"
 
-    ensure_session("mentat-plan", slug)
+    ensure_agent("mentat-plan", slug)
     dest.write_text(body_path.read_text())
     return dest
 

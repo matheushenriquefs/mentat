@@ -51,8 +51,8 @@ def test_invoke_uses_cursor_agent_binary(monkeypatch):
         return FakeResult()
 
     monkeypatch.setattr(cursor.subprocess, "run", fake_run)
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
 
     cursor.invoke("hi", afk=False, model=None)
 
@@ -71,8 +71,8 @@ def test_invoke_cursor_no_headless_flag(monkeypatch):
         return FakeResult()
 
     monkeypatch.setattr(cursor.subprocess, "run", fake_run)
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
 
     cursor.invoke("hi", afk=False, model=None)
 
@@ -92,8 +92,8 @@ def test_invoke_cursor_no_session_id_flag(monkeypatch):
         return FakeResult()
 
     monkeypatch.setattr(cursor.subprocess, "run", fake_run)
-    monkeypatch.setenv("MENTAT_SESSION", "test-session-123")
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.setenv("MENTAT_AGENT", "test-session-123")
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
 
     cursor.invoke("hi", afk=False, model=None)
 
@@ -112,8 +112,8 @@ def test_invoke_cursor_no_disallowed_tools_flag(monkeypatch):
         return FakeResult()
 
     monkeypatch.setattr(cursor.subprocess, "run", fake_run)
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
 
     cursor.invoke("hi", afk=True, model=None)
 
@@ -134,8 +134,8 @@ def test_invoke_cursor_model_flag(monkeypatch):
         return FakeResult()
 
     monkeypatch.setattr(cursor.subprocess, "run", fake_run)
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
 
     cursor.invoke("hi", afk=False, model="claude-sonnet-4-6")
 

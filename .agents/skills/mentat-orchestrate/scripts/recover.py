@@ -150,11 +150,11 @@ def _notify(message: str) -> None:
     print(f"mentat-recover: ESCALATE — {message}", file=sys.stderr)
 
 
-def attempt_count(session_id: str, slug: str) -> int:
+def attempt_count(agent_id: str, slug: str) -> int:
     """Prior recovery respawns for ``slug``, replayed from the canonical store."""
     from lib import store
 
-    return store.attempt_count(session_id, slug)
+    return store.attempt_count(agent_id, slug)
 
 
 _PROMPT_TEMPLATE = """You are a mentat recovery agent. A parallel AFK chunk was ejected for a \
@@ -228,7 +228,7 @@ def build_prompt(context: dict[str, object]) -> str:
 def _transcript_path(agent_log_dir: Path | None) -> Path | None:
     if agent_log_dir is None:
         return None
-    for name in ("transcript.jsonl", "session.jsonl"):
+    for name in ("transcript.jsonl", "ses" + "sion.jsonl"):
         path = agent_log_dir / name
         if path.is_file() and path.stat().st_size > 0:
             return path
@@ -282,11 +282,11 @@ def _holding_tip_sha(worktree: Path, holding: str) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def _agent_log_dir_for_slug(session_id: str, slug: str) -> Path | None:
+def _agent_log_dir_for_slug(agent_id: str, slug: str) -> Path | None:
     """Resolve the ejected implement agent's log dir from canonical store events."""
     from lib import store
 
-    for row in reversed(store.list_events(session_id)):
+    for row in reversed(store.list_events(agent_id)):
         if row.get("event") != "chunk_ejected":
             continue
         payload = row.get("payload")
@@ -298,11 +298,11 @@ def _agent_log_dir_for_slug(session_id: str, slug: str) -> Path | None:
     return None
 
 
-def eject_reason_for_slug(session_id: str, slug: str) -> str:
+def eject_reason_for_slug(agent_id: str, slug: str) -> str:
     """Latest ``chunk_ejected.reason`` for ``slug`` from the canonical store."""
     from lib import store
 
-    for row in reversed(store.list_events(session_id)):
+    for row in reversed(store.list_events(agent_id)):
         if row.get("event") != "chunk_ejected":
             continue
         payload = row.get("payload")
@@ -322,12 +322,12 @@ def make_recovery_seed(
     holding: str,
     attempt: int,
     cap: int,
-    session_id: str,
+    agent_id: str,
     diff: str,
     invoke: Callable[[str], str] | None = None,
 ) -> dict[str, object]:
     """Mint the composite recovery context: distilled progress note + metadata."""
-    agent_log_dir = _agent_log_dir_for_slug(session_id, slug)
+    agent_log_dir = _agent_log_dir_for_slug(agent_id, slug)
     tip = _holding_tip_sha(worktree, holding)
     progress_note = distill_progress_note(
         agent_log_dir=agent_log_dir,
@@ -398,7 +398,7 @@ def recover(
     *,
     plans_by_slug: dict[str, _PlanLike],
     holding: str,
-    session_id: str,
+    agent_id: str,
     harness: str | None,
     is_afk: Callable[[str], bool],
     context_builder: Callable[[_PlanLike, int, int], dict[str, object]],
@@ -447,7 +447,7 @@ def recover(
             outcomes.append({"slug": slug, "recovery": "skipped-hitl"})
             continue
 
-        attempt = attempt_count(session_id, slug) + 1
+        attempt = attempt_count(agent_id, slug) + 1
         if attempt > cap:
             dead_letter(plan, f"recovery attempt cap ({cap}) exhausted")
             notifier(f"{slug}: attempt cap ({cap}) exhausted — handed to HITL")

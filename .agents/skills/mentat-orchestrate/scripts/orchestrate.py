@@ -14,11 +14,11 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib import git as _git  # noqa: E402
 from lib import plans as _plans_lib  # noqa: E402
-from lib.events import HITL_IN_SESSION, UPSTREAM_EJECTED, ejected_payload, spawned_payload  # noqa: E402
+from lib.events import HITL_IN_AGENT, UPSTREAM_EJECTED, ejected_payload, spawned_payload  # noqa: E402
 from lib.events import bind as _bind  # noqa: E402
 from lib.exits import EX_CONFIG, EX_DATAERR, EX_NOINPUT  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
-from lib.session import ensure_session  # noqa: E402
+from lib.agent import ensure_agent  # noqa: E402
 
 _utils = load_sibling(__file__, "plans")
 _scheduler = load_sibling(__file__, "scheduler")
@@ -94,12 +94,12 @@ def _load_plans(paths: list[Path], *, _expanding: bool = False) -> list[_schedul
 
 
 def _emit_anchored_chunks(plans: list[_scheduler.Plan], *, harness: str | None, model: str | None) -> list[str]:
-    """Emit chunk_started{harness:hitl-in-session} per anchored plan, no subprocess.
+    """Emit chunk_started{harness:hitl-in-agent} per anchored plan, no subprocess.
 
-    HITL plans run in the **calling Claude session** — never via subprocess —
+    HITL plans run in the **calling Claude agent** — never via subprocess —
     so AskUserQuestion works. The caller queries the audit log
-    (`mentat-log query chunk_started --session=$MENTAT_SESSION`) and drives
-    `/mentat-implement <slug>` in-session per anchored slug, then re-invokes
+    (`mentat-log query chunk_started --agent=$MENTAT_AGENT`) and drives
+    `/mentat-implement <slug>` in-agent per anchored slug, then re-invokes
     `orchestrate land-queue <holding>` with the HITL slugs on stdin.
 
     Returns slugs anchored this invocation (caller may use them to drive
@@ -110,9 +110,9 @@ def _emit_anchored_chunks(plans: list[_scheduler.Plan], *, harness: str | None, 
     for plan in plans:
         _utils.emit_event(
             "chunk_started",
-            spawned_payload(plan.slug, str(plan.path), harness=HITL_IN_SESSION, worktree=str(Path.cwd())),
+            spawned_payload(plan.slug, str(plan.path), harness=HITL_IN_AGENT, worktree=str(Path.cwd())),
         )
-        _utils.emit_event("agent_started", {"harness": HITL_IN_SESSION})
+        _utils.emit_event("agent_started", {"harness": HITL_IN_AGENT})
         chunks.append(plan.slug)
     return chunks
 
@@ -125,8 +125,8 @@ def run_orchestrate(
     model: str | None,
     dry_run: bool,
 ) -> int:
-    session_id = ensure_session("orchestrate", holding)
-    print(f"mentat-orchestrate: track this run with `mentat-track track {session_id}`", file=sys.stderr)
+    agent_id = ensure_agent("orchestrate", holding)
+    print(f"mentat-orchestrate: track this run with `mentat-track track {agent_id}`", file=sys.stderr)
     try:
         _git.require_commit_identity()
     except _git.GitError as e:
@@ -142,7 +142,7 @@ def run_orchestrate(
         _batch._land_all([], holding=holding)
         _utils.emit_event(
             "batch_reviewed",
-            {"session": session_id, "summary": f"batch review for session {session_id} — advisory"},
+            {"agent_id": agent_id, "summary": f"batch review for agent {agent_id} — advisory"},
         )
         return 0
 
@@ -190,7 +190,7 @@ def run_orchestrate(
             transient,
             plans_by_slug={p.slug: p for p in (anchored + auto)},
             holding=holding,
-            session_id=session_id,
+            agent_id=agent_id,
             harness=harness,
             model=model,
             load_plans=_load_plans,
@@ -219,7 +219,7 @@ def run_orchestrate(
 
         _utils.emit_event(
             "batch_reviewed",
-            {"session": session_id, "summary": f"batch review for session {session_id} — advisory"},
+            {"agent_id": agent_id, "summary": f"batch review for agent {agent_id} — advisory"},
         )
 
         # A recovered chunk landed on a later attempt — drop it from the ejection
@@ -270,7 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
     lq_p.add_argument("holding", help="Holding branch")
 
     fr_p = sub.add_parser("batch-review", help="Debug: re-run batch review")
-    fr_p.add_argument("session", help="Session ID")
+    fr_p.add_argument("agent_id", help="Agent ID")
 
     return p
 
@@ -312,7 +312,7 @@ def main() -> None:
     elif args.cmd == "batch-review":
         _utils.emit_event(
             "batch_reviewed",
-            {"session": args.session, "summary": f"batch review for session {args.session} — advisory"},
+            {"agent_id": args.agent_id, "summary": f"batch review for agent {args.agent_id} — advisory"},
         )
 
 

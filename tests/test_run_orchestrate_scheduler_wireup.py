@@ -65,7 +65,7 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrate._batch, "_worktree_for_slug", lambda slug: worktrees[slug])
     monkeypatch.setattr(orchestrate._batch._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
-    monkeypatch.setattr(orchestrate, "ensure_session", lambda *a, **k: "sess-1")
+    monkeypatch.setattr(orchestrate, "ensure_agent", lambda *a, **k: "sess-1")
 
     with patch_orchestrate_worktree(orchestrate, tmp_path):
         rc = orchestrate.run_orchestrate(

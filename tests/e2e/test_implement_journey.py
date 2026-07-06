@@ -59,7 +59,7 @@ def _recorder(monkeypatch, obj, name):
 
 
 def test_logs_path_lands_under_session_dir(impl, monkeypatch, tmp_path):
-    monkeypatch.setenv("MENTAT_SESSION", "implement-x-1")
+    monkeypatch.setenv("MENTAT_AGENT", "implement-x-1")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
     p = impl._logs_path()
@@ -182,31 +182,31 @@ def test_compaction_threshold_non_int_raises(impl, monkeypatch, tmp_path):
 
 
 def test_checkpoint_none_threshold_is_noop(impl, monkeypatch, tmp_path):
-    monkeypatch.setenv("MENTAT_SESSION", "s")
+    monkeypatch.setenv("MENTAT_AGENT", "s")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
     impl._checkpoint_if_needed(_fake_result(usage_tokens=99), slug="s", threshold=None)
-    from lib.session import summary_file
+    from lib.agent import summary_file
 
     assert not summary_file("s").exists()
 
 
 def test_checkpoint_below_threshold_is_noop(impl, monkeypatch, tmp_path):
-    monkeypatch.setenv("MENTAT_SESSION", "s")
+    monkeypatch.setenv("MENTAT_AGENT", "s")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
     impl._checkpoint_if_needed(_fake_result(usage_tokens=10), slug="s", threshold=5000)
-    from lib.session import summary_file
+    from lib.agent import summary_file
 
     assert not summary_file("s").exists()
 
 
 def test_checkpoint_at_threshold_writes_summary(impl, monkeypatch, tmp_path):
-    monkeypatch.setenv("MENTAT_SESSION", "s")
+    monkeypatch.setenv("MENTAT_AGENT", "s")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
     impl._checkpoint_if_needed(_fake_result(usage_tokens=6000), slug="s", threshold=5000)
-    from lib.session import summary_file
+    from lib.agent import summary_file
 
     body = summary_file("s").read_text()
     assert "Token checkpoint" in body
@@ -281,12 +281,12 @@ def test_preflight_veto_missing_reports_names(impl, monkeypatch, tmp_path):
 
 
 def test_blocked_summary_path_none_without_session(impl, monkeypatch):
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
     assert impl._blocked_summary_path() is None
 
 
 def test_blocked_summary_path_set_returns_summary_file(impl, monkeypatch, tmp_path):
-    monkeypatch.setenv("MENTAT_SESSION", "s")
+    monkeypatch.setenv("MENTAT_AGENT", "s")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
     assert impl._blocked_summary_path().name == "summary.md"
@@ -405,7 +405,7 @@ def test_run_plan_hitl_emits_spawned_returns_zero(impl, monkeypatch, tmp_path):
     assert impl.run_plan(plan) == 0
     assert invoked == []  # no harness spawn on HITL
     assert events[0][0] == "chunk_started"
-    assert events[0][1]["harness"] == impl.HITL_IN_SESSION
+    assert events[0][1]["harness"] == impl.HITL_IN_AGENT
 
 
 def test_run_plan_afk_clean_result_returns_zero(impl, monkeypatch, tmp_path):
@@ -508,7 +508,7 @@ def test_run_and_doctor_ok_hitl_no_summary_no_doctor(impl, monkeypatch, tmp_path
 
 
 def test_run_session_cmd_missing_script_no_spawn(impl, monkeypatch, tmp_path):
-    monkeypatch.setattr(impl, "_SESSION_SCRIPT", tmp_path / "nope.py")
+    monkeypatch.setattr(impl, "_AGENT_SCRIPT", tmp_path / "nope.py")
     with _recorder(monkeypatch, impl.subprocess, "run") as ran:
         impl._run_session_cmd("doctor")
     assert ran == []
@@ -517,8 +517,8 @@ def test_run_session_cmd_missing_script_no_spawn(impl, monkeypatch, tmp_path):
 def test_run_session_cmd_present_appends_session_id(impl, monkeypatch, tmp_path):
     script = tmp_path / "session.py"
     script.write_text("# stub\n")
-    monkeypatch.setattr(impl, "_SESSION_SCRIPT", script)
-    monkeypatch.setenv("MENTAT_SESSION", "sess-9")
+    monkeypatch.setattr(impl, "_AGENT_SCRIPT", script)
+    monkeypatch.setenv("MENTAT_AGENT", "sess-9")
     captured: list = []
     monkeypatch.setattr(impl.subprocess, "run", lambda cmd, **k: captured.append(cmd))
     impl._run_session_cmd("report")
@@ -800,7 +800,7 @@ def test_build_parser_requires_subcommand(impl):
 def _wire_main(impl, monkeypatch):
     """Neutralize every seam main() touches so tests set only what they assert."""
     monkeypatch.setattr(impl.os, "chdir", lambda *a, **k: None)
-    monkeypatch.setattr(impl, "ensure_session", lambda role, slug: "sess")
+    monkeypatch.setattr(impl, "ensure_agent", lambda role, slug: "sess")
     monkeypatch.setattr(impl, "_prune_worktrees_preflight", lambda: None)
     monkeypatch.setattr(impl._utils, "default_harness", lambda: "claude-code")
     monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda h, reuse_worktree=False: (0, []))
@@ -986,7 +986,7 @@ def test_implement_one_slice_commits_via_pre_commit_hook(impl, tmp_path, monkeyp
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    monkeypatch.setenv("MENTAT_SESSION", "implement-tiny-slice-1")
+    monkeypatch.setenv("MENTAT_AGENT", "implement-tiny-slice-1")
     monkeypatch.chdir(repo)
 
     before = _git(["rev-list", "--count", "HEAD"], cwd=repo)

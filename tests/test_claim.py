@@ -143,29 +143,29 @@ def test_release_emits_task_released(task_file: Path) -> None:
 
 
 def test_cmd_create_sets_session_when_unset(td: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Without MENTAT_SESSION, tasks calls ensure_session → MENTAT_SESSION set to an opaque uuid."""
+    """Without MENTAT_AGENT, tasks calls ensure_agent → MENTAT_AGENT set to an opaque uuid."""
     import re
 
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
     monkeypatch.setattr(sys, "stdin", io.StringIO("# body\n"))
     t = _reload("tasks")
     with patch("lib.events._spawn"):
         t.main(["create", "test-task"])
-    session = os.environ.get("MENTAT_SESSION")
-    assert session is not None, "MENTAT_SESSION not set; ensure_session not called"
+    session = os.environ.get("MENTAT_AGENT")
+    assert session is not None, "MENTAT_AGENT not set; ensure_agent not called"
     assert re.fullmatch(r"[0-9a-f]{32}", session), f"expected uuid session, got {session!r}"
 
 
 def test_cmd_create_inherits_parent_session_unchanged(td: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """With MENTAT_SESSION already set, ensure_session must not overwrite it."""
-    monkeypatch.setenv("MENTAT_SESSION", "orchestrate-parent-999")
+    """With MENTAT_AGENT already set, ensure_agent must not overwrite it."""
+    monkeypatch.setenv("MENTAT_AGENT", "orchestrate-parent-999")
     monkeypatch.setattr(sys, "stdin", io.StringIO("# body\n"))
     t = _reload("tasks")
     with patch("lib.events._spawn"):
         t.main(["create", "test-task"])
-    assert os.environ.get("MENTAT_SESSION") == "orchestrate-parent-999"
+    assert os.environ.get("MENTAT_AGENT") == "orchestrate-parent-999"
 
 
 # ── LT3: state machine guard tests ───────────────────────────────────────────

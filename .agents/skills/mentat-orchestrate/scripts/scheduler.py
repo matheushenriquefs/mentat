@@ -244,7 +244,7 @@ class Scheduler:
         self._landed.add(slug)
 
     def _is_anchored(self, slug: str) -> bool:
-        """True if `slug`'s plan is anchored (runs in-session, never re-tested
+        """True if `slug`'s plan is anchored (runs in-agent, never re-tested
         by the land queue). Mirrors the `partition` rule so the eject cascade
         targets exactly the plans the land queue can't re-evaluate."""
         plan = self._plans.get(slug)
@@ -265,7 +265,7 @@ class Scheduler:
 
         NNFI (Zuul): the cascade reaches only *anchored* downstream — plans the
         land queue never re-tests (HITL, or AFK anchored via a HITL relation).
-        They run in-session, so a dead upstream must block them or the operator
+        They run in-agent, so a dead upstream must block them or the operator
         would land them on a missing change. *Auto* downstream are deliberately
         left un-ejected: the land queue re-evaluates each against the new
         holding tip and lands the ones that build without the ejected change.

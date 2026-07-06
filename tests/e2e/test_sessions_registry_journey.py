@@ -31,7 +31,7 @@ def _seed(
 ) -> None:
     session_dir.mkdir(parents=True, exist_ok=True)
     if stream is not None:
-        (session_dir / "session.jsonl").write_text("".join(json.dumps(r) + "\n" for r in stream))
+        (session_dir / "transcript.jsonl").write_text("".join(json.dumps(r) + "\n" for r in stream))
     if events is not None:
         (session_dir / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
     if age:
@@ -114,14 +114,14 @@ def test_latest_session_picks_newest_dir(tmp_path, monkeypatch):
     (repo_dir / "old").mkdir(parents=True, exist_ok=True)
     (repo_dir / "new").mkdir(parents=True, exist_ok=True)
     _seed(repo_dir / "mentat-manual-x", events=[{"ts": "t", "event": "chunk_started", "payload": {"path": "p"}}])
-    assert ss.latest_session(repo_dir) == "new"
+    assert ss.latest_agent(repo_dir) == "new"
 
 
 def test_latest_session_empty_repo_is_none(tmp_path):
     ss = _sessions()
     repo_dir = tmp_path / "empty"
     repo_dir.mkdir()
-    assert ss.latest_session(repo_dir) is None
+    assert ss.latest_agent(repo_dir) is None
 
 
 def test_humanize_age_buckets(tmp_path):
@@ -163,14 +163,14 @@ def test_list_sessions_ranks_attention_to_top(tmp_path, monkeypatch):
         ],
     )
     (repo_dir / "done").mkdir(parents=True, exist_ok=True)
-    records = ss.list_sessions(repo_dir, active_only=False)
-    order = [r["session"] for r in records]
+    records = ss.list_agents(repo_dir, active_only=False)
+    order = [r["agent"] for r in records]
     assert order.index("waiter") < order.index("done"), "waiting floats above idle"
-    statuses = {r["session"]: r["status"] for r in records}
+    statuses = {r["agent"]: r["status"] for r in records}
     assert statuses["waiter"] == "waiting"
     assert statuses["done"] == "idle"
 
 
 def test_list_sessions_missing_repo_is_empty(tmp_path):
     ss = _sessions()
-    assert ss.list_sessions(tmp_path / "nope", active_only=True) == []
+    assert ss.list_agents(tmp_path / "nope", active_only=True) == []

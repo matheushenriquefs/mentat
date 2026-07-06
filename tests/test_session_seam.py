@@ -27,7 +27,7 @@ def _load(key: str, path: Path):
 
 
 def _load_session():
-    return _load("lib.session", _LIB / "session.py")
+    return _load("lib.agent", _LIB / "agent.py")
 
 
 def _load_fan_out():
@@ -46,27 +46,27 @@ def _load_mentat_session_py():
 
 
 def test_seam_exports_log_root():
-    """lib.session must export log_root()."""
+    """lib.agent must export log_root()."""
     session = _load_session()
-    assert callable(getattr(session, "log_root", None)), "lib.session missing log_root()"
+    assert callable(getattr(session, "log_root", None)), "lib.agent missing log_root()"
 
 
 def test_seam_exports_repo_name():
-    """lib.session must export repo_name()."""
+    """lib.agent must export repo_name()."""
     session = _load_session()
-    assert callable(getattr(session, "repo_name", None)), "lib.session missing repo_name()"
+    assert callable(getattr(session, "repo_name", None)), "lib.agent missing repo_name()"
 
 
 def test_seam_exports_session_dir():
-    """lib.session must export session_dir(sid)."""
+    """lib.agent must export session_dir(sid)."""
     session = _load_session()
-    assert callable(getattr(session, "session_dir", None)), "lib.session missing session_dir()"
+    assert callable(getattr(agent, "agent_dir", None)), "lib.agent missing session_dir()"
 
 
 def test_seam_exports_summary_file():
-    """lib.session must export summary_file(sid)."""
+    """lib.agent must export summary_file(sid)."""
     session = _load_session()
-    assert callable(getattr(session, "summary_file", None)), "lib.session missing summary_file()"
+    assert callable(getattr(session, "summary_file", None)), "lib.agent missing summary_file()"
 
 
 # ── seam correctness ──────────────────────────────────────────────────────────
@@ -77,21 +77,21 @@ def test_session_dir_uses_env_vars(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
     # Force reimport so env is picked up at call time
-    if "lib.session" in sys.modules:
-        del sys.modules["lib.session"]
+    if "lib.agent" in sys.modules:
+        del sys.modules["lib.agent"]
     session = _load_session()
-    result = session.session_dir("implement-myplan-1234")
+    result = agent.agent_dir("implement-myplan-1234")
     assert result == tmp_path / "myrepo" / "implement-myplan-1234"
 
 
 def test_summary_file_under_session_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    if "lib.session" in sys.modules:
-        del sys.modules["lib.session"]
+    if "lib.agent" in sys.modules:
+        del sys.modules["lib.agent"]
     session = _load_session()
     sid = "implement-myplan-1234"
-    assert session.summary_file(sid) == session.session_dir(sid) / "summary.md"
+    assert session.summary_file(sid) == agent.agent_dir(sid) / "summary.md"
 
 
 # ── repo identity stable across worktrees (regression: "couldn't track sessions") ──
@@ -119,7 +119,7 @@ def test_repo_name_stable_from_worktree(tmp_path, monkeypatch):
         capture_output=True,
     )
     monkeypatch.chdir(worktree)
-    sys.modules.pop("lib.session", None)
+    sys.modules.pop("lib.agent", None)
     session = _load_session()
     assert session.repo_name() == "myrepo"
 
@@ -133,7 +133,7 @@ def test_repo_name_stable_from_subdir(tmp_path, monkeypatch):
     nested = repo / "a" / "b"
     nested.mkdir(parents=True)
     monkeypatch.chdir(nested)
-    sys.modules.pop("lib.session", None)
+    sys.modules.pop("lib.agent", None)
     session = _load_session()
     assert session.repo_name() == "myrepo"
 
@@ -142,7 +142,7 @@ def test_repo_name_env_wins(tmp_path, monkeypatch):
     """An explicit MENTAT_REPO short-circuits git resolution (writer-frozen identity)."""
     monkeypatch.setenv("MENTAT_REPO", "frozen")
     monkeypatch.chdir(tmp_path)
-    sys.modules.pop("lib.session", None)
+    sys.modules.pop("lib.agent", None)
     session = _load_session()
     assert session.repo_name() == "frozen"
 
@@ -153,7 +153,7 @@ def test_repo_name_falls_back_to_unknown_outside_git(tmp_path, monkeypatch):
     outside = tmp_path / "not-a-repo"
     outside.mkdir()
     monkeypatch.chdir(outside)
-    sys.modules.pop("lib.session", None)
+    sys.modules.pop("lib.agent", None)
     session = _load_session()
     assert session.repo_name() == "unknown"
 
@@ -167,7 +167,7 @@ def test_repo_name_falls_back_when_git_binary_missing(tmp_path, monkeypatch):
     outside = tmp_path / "no-git-here"
     outside.mkdir()
     monkeypatch.chdir(outside)
-    sys.modules.pop("lib.session", None)
+    sys.modules.pop("lib.agent", None)
     session = _load_session()
 
     def raise_oserror(*a, **k):
@@ -183,7 +183,7 @@ def test_repo_name_falls_back_when_common_dir_empty(tmp_path, monkeypatch):
     outside = tmp_path / "empty-out"
     outside.mkdir()
     monkeypatch.chdir(outside)
-    sys.modules.pop("lib.session", None)
+    sys.modules.pop("lib.agent", None)
     session = _load_session()
 
     class _Result:
@@ -201,11 +201,11 @@ def test_all_callers_resolve_same_dir(tmp_path, monkeypatch):
     """The seam and all five callers must produce the same dir for a given session id.
 
     Callers tested:
-      - lib.session.session_dir (the seam itself)
+      - lib.agent.session_dir (the seam itself)
       - fan_out._log_dir_for
       - log.py _session_dir (via _log_root + _repo)
       - mentat-track/agent.py _agent_dir (via _log_root + _repo)
-    implement._logs_path is tested separately below (needs MENTAT_SESSION env).
+    implement._logs_path is tested separately below (needs MENTAT_AGENT env).
     """
     base = str(tmp_path)
     repo = "myrepo"
@@ -215,11 +215,11 @@ def test_all_callers_resolve_same_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", repo)
 
     # Clear cached modules to pick up fresh env
-    for key in ["lib.session", "mentat_orchestrate.spawn", "mentat_log.log", "mentat_session.session"]:
+    for key in ["lib.agent", "mentat_orchestrate.spawn", "mentat_log.log", "mentat_session.session"]:
         sys.modules.pop(key, None)
 
-    session_mod = _load_session()
-    expected = session_mod.session_dir(sid)
+    agent_mod = _load_session()
+    expected = agent_mod.agent_dir(sid)
 
     # fan_out._log_dir_for
     fan_out_mod = _load_fan_out()
@@ -227,7 +227,7 @@ def test_all_callers_resolve_same_dir(tmp_path, monkeypatch):
 
     # log.py _session_dir (call with same base/repo/session args)
     log_mod = _load_log()
-    assert log_mod._session_dir(tmp_path, repo, sid) == expected, "log._session_dir diverges from seam"
+    assert log_mod._agent_log_dir(tmp_path, repo, sid) == expected, "log._session_dir diverges from seam"
 
     # mentat-track/agent.py _agent_dir
     mss = _load_mentat_session_py()
@@ -238,29 +238,29 @@ def test_session_dir_slash_is_flattened(tmp_path, monkeypatch):
     """session_dir('a/b') must land in ONE flat dir (no nested subdir from the slash)."""
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sys.modules.pop("lib.session", None)
+    sys.modules.pop("lib.agent", None)
     session = _load_session()
-    result = session.session_dir("orchestrate-branch/guidelines-revamp-81212")
+    result = agent.agent_dir("orchestrate-branch/guidelines-revamp-81212")
     assert result.parent == tmp_path / "myrepo"
     assert "/" not in result.name
     assert "branch" in result.name and "guidelines" in result.name
 
 
 def test_implement_logs_path_matches_seam(tmp_path, monkeypatch):
-    """implement._logs_path must equal seam.session_dir for the current MENTAT_SESSION."""
+    """implement._logs_path must equal seam.session_dir for the current MENTAT_AGENT."""
     base = str(tmp_path)
     repo = "myrepo"
     sid = "implement-myplan-1234"
 
     monkeypatch.setenv("MENTAT_LOG_PATH", base)
     monkeypatch.setenv("MENTAT_REPO", repo)
-    monkeypatch.setenv("MENTAT_SESSION", sid)
+    monkeypatch.setenv("MENTAT_AGENT", sid)
 
-    for key in ["lib.session", "mentat_implement.implement"]:
+    for key in ["lib.agent", "mentat_implement.implement"]:
         sys.modules.pop(key, None)
 
-    session_mod = _load_session()
-    expected = session_mod.session_dir(sid)
+    agent_mod = _load_session()
+    expected = agent_mod.agent_dir(sid)
 
     impl = _load("mentat_implement.implement", _SKILLS / "mentat-implement/scripts/implement.py")
     assert Path(impl._logs_path()) == expected, "implement._logs_path diverges from seam"

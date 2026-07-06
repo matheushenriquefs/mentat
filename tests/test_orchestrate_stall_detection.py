@@ -30,7 +30,7 @@ def test_run_orchestrate_returns_1_on_stalled_drain(tmp_path: Path) -> None:
     stalled_results = [{"slug": None, "status": "stalled", "pending": ["stall-plan"]}]
 
     with patch.object(orch._batch, "_fan_out_plans", return_value=[]):
-        with patch.object(orch, "ensure_session", return_value="orch-test"):
+        with patch.object(orch, "ensure_agent", return_value="orch-test"):
             with patch.object(orch._batch._land_queue, "drain", return_value=stalled_results):
                 with patch.object(orch._batch, "_prune_stale_containers", lambda: None):
                     with patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None):
@@ -57,7 +57,7 @@ def test_run_orchestrate_returns_0_on_no_stall(tmp_path: Path) -> None:
     success_results = [{"slug": "ok-plan", "status": "success", "tip": "abc123"}]
 
     with patch.object(orch._batch, "_fan_out_plans", return_value=[]):
-        with patch.object(orch, "ensure_session", return_value="orch-test"):
+        with patch.object(orch, "ensure_agent", return_value="orch-test"):
             with patch.object(orch._batch._land_queue, "drain", return_value=success_results):
                 with patch.object(orch._batch, "_prune_stale_containers", lambda: None):
                     with patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None):
@@ -76,7 +76,7 @@ def test_run_orchestrate_returns_0_on_no_stall(tmp_path: Path) -> None:
 def test_run_orchestrate_fails_without_git_identity(tmp_path: Path, monkeypatch) -> None:
     orch = load_module("orchestrate")
     plan = _make_plan_file(tmp_path, "no-id-plan")
-    monkeypatch.setattr(orch, "ensure_session", lambda *a, **k: "orch-test")
+    monkeypatch.setattr(orch, "ensure_agent", lambda *a, **k: "orch-test")
     monkeypatch.setattr(
         orch._git,
         "require_commit_identity",

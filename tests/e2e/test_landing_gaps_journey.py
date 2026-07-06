@@ -67,7 +67,7 @@ def _configure_env(monkeypatch, tmp_path: Path, main_repo: Path) -> str:
     monkeypatch.setenv("MENTAT_REPO", "repo")
     session = "orchestrate-holding-gaps"
     monkeypatch.setenv("MENTAT_AGENT", session)
-    monkeypatch.setenv("MENTAT_SESSION", session)
+    monkeypatch.setenv("MENTAT_AGENT", session)
     monkeypatch.chdir(main_repo)
     return session
 
@@ -107,7 +107,7 @@ def test_teardown_container_fires_real_teardown_event(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "repo")
     session = "orchestrate-teardown-gaps"
     monkeypatch.setenv("MENTAT_AGENT", session)
-    monkeypatch.setenv("MENTAT_SESSION", session)
+    monkeypatch.setenv("MENTAT_AGENT", session)
 
     from lib import devcontainer
 

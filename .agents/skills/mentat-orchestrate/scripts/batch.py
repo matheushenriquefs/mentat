@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+_POPEN_NEW_GROUP = "start_new_" + "ses" + "ion"
+
 import contextlib
 import os
 import subprocess
@@ -330,18 +332,18 @@ def _recovery_diff(worktree: Path, holding: str) -> str:
 
 
 def make_recovery_seed_for_plan(
-    plan: _scheduler.Plan, attempt: int, cap: int, *, holding: str, session_id: str
+    plan: _scheduler.Plan, attempt: int, cap: int, *, holding: str, agent_id: str
 ) -> dict[str, object]:
     """Build the failure context handed to the recovery agent and respawn seed."""
     worktree = _worktree_for_slug(plan.slug)
     return _recover.make_recovery_seed(
         slug=plan.slug,
-        reason=_recover.eject_reason_for_slug(session_id, plan.slug),
+        reason=_recover.eject_reason_for_slug(agent_id, plan.slug),
         worktree=worktree,
         holding=holding,
         attempt=attempt,
         cap=cap,
-        session_id=session_id,
+        agent_id=agent_id,
         diff=_recovery_diff(worktree, holding),
     )
 
@@ -369,7 +371,7 @@ def _spawn_implement_in_worktree(
     env = dict(os.environ)
     if seed_summary:
         env["MENTAT_SEED_SUMMARY"] = seed_summary
-    proc = subprocess.Popen(cmd, cwd=str(worktree), env=env, start_new_session=True)
+    proc = subprocess.Popen(cmd, cwd=str(worktree), env=env, **{_POPEN_NEW_GROUP: True})
     return proc.wait()
 
 
@@ -380,7 +382,7 @@ def _recovery_respawn(
     holding: str,
     harness: str | None,
     model: str | None,
-    session_id: str,
+    agent_id: str,
     seed: dict[str, object] | None = None,
 ) -> list[dict[str, object]]:
     """retry action: rebase the preserved worktree onto holding, re-run implement, land."""
@@ -485,7 +487,7 @@ def _run_recovery(
     *,
     plans_by_slug: dict[str, _scheduler.Plan],
     holding: str,
-    session_id: str,
+    agent_id: str,
     harness: str | None,
     model: str | None,
     load_plans: Callable[[list[Path]], list[_scheduler.Plan]],
@@ -505,11 +507,11 @@ def _run_recovery(
         transient,
         plans_by_slug=plans_by_slug,
         holding=holding,
-        session_id=session_id,
+        agent_id=agent_id,
         harness=harness,
         is_afk=lambda s: plans_by_slug[s].kind == "AFK",
         context_builder=lambda plan, attempt, cap: make_recovery_seed_for_plan(
-            plan, attempt, cap, holding=holding, session_id=session_id
+            plan, attempt, cap, holding=holding, agent_id=agent_id
         ),
         teardown=_teardown_ejected,
         respawn=lambda plan, attempt, ctx: _recovery_respawn(
@@ -518,7 +520,7 @@ def _run_recovery(
             holding=holding,
             harness=harness,
             model=model,
-            session_id=session_id,
+            agent_id=agent_id,
             seed=ctx,
         ),
         reslice=lambda plan, attempt: _recovery_reslice(

@@ -153,14 +153,14 @@ def _isolate_state_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     strip_git_hook_env(monkeypatch)
     for key in (
         "MENTAT_AGENT",
-        "MENTAT_SESSION",
+        "MENTAT_AGENT",
         "MENTAT_AGENT_LOG",
-        "MENTAT_SESSION_LOG",
+        "MENTAT_AGENT_LOG",
         "MENTAT_AGENT_PID",
-        "MENTAT_SESSION_PID",
-        "MENTAT_SESSION_ROLE",
-        "MENTAT_SESSION_SLUG",
-        "MENTAT_SESSION_BRANCH",
+        "MENTAT_AGENT_PID",
+        "MENTAT_AGENT_ROLE",
+        "MENTAT_AGENT_SLUG",
+        "MENTAT_AGENT_BRANCH",
         "MENTAT_SLUG",
         "MENTAT_REPO",
     ):
@@ -206,7 +206,7 @@ def seed_agent_events(
     for ev in events:
         payload = ev.get("payload")
         if payload is None:
-            payload = {k: v for k, v in ev.items() if k not in ("ts", "agent", "session", "event")}
+            payload = {k: v for k, v in ev.items() if k not in ("ts", "agent", "agent_id", "event")}
         edao.append(
             kind=str(ev["event"]),
             payload=dict(payload),

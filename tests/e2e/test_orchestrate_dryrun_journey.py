@@ -27,8 +27,8 @@ def audit_env(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", "orchrepo")
     monkeypatch.setenv("MENTAT_AGENT", session)
-    monkeypatch.setenv("MENTAT_SESSION", session)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.setenv("MENTAT_AGENT", session)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
     monkeypatch.chdir(tmp_path)
     return session
 

@@ -16,10 +16,10 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib import store as _store  # noqa: E402
 from lib.events import EJECT_REASONS as _EJECT_REASONS  # noqa: E402
-from lib.session import agent_id_from_env as _agent_id_from_env
-from lib.session import log_root as _log_root  # noqa: E402
-from lib.session import make_agent_id as _make_agent_id
-from lib.session import repo_name as _repo
+from lib.agent import agent_id_from_env as _agent_id_from_env
+from lib.agent import log_root as _log_root  # noqa: E402
+from lib.agent import make_agent_id as _make_agent_id
+from lib.agent import repo_name as _repo
 
 EVENT_CATALOG: dict[str, list[str]] = {
     "slice_scheduled": ["slug"],
@@ -34,7 +34,7 @@ EVENT_CATALOG: dict[str, list[str]] = {
     "chunk_teardown": ["slug", "ok"],
     "gate_evaluated": ["gate", "verdict", "severity", "message"],
     "review_submitted": ["reviewer", "score", "threshold", "verdict"],
-    "batch_reviewed": ["session", "summary"],
+    "batch_reviewed": ["agent_id", "summary"],
     "task_created": ["id", "slug"],
     "task_claimed": ["id", "agent", "expires_at"],
     "task_released": ["id"],
@@ -50,7 +50,7 @@ EVENT_OPTIONAL_FIELDS: dict[str, list[str]] = {
 }
 
 
-def _session() -> str | None:
+def _agent_id() -> str | None:
     return _agent_id_from_env()
 
 
@@ -58,12 +58,12 @@ def _agent_slug() -> str:
     return os.environ.get("MENTAT_SLUG", f"agent-{os.getpid()}")
 
 
-def _session_dir(base: Path, repo: str, session: str) -> Path:
-    return base / repo / session.replace("/", "-")
+def _agent_log_dir(base: Path, repo: str, agent: str) -> Path:
+    return base / repo / agent.replace("/", "-")
 
 
-def _sidecar_file(base: Path, repo: str, session: str, agent: str, slug: str) -> Path:
-    return _session_dir(base, repo, session) / ".stderr" / f"{agent}-{slug}.stderr"
+def _sidecar_file(base: Path, repo: str, agent_id: str, skill: str, slug: str) -> Path:
+    return _agent_log_dir(base, repo, agent_id) / ".stderr" / f"{skill}-{slug}.stderr"
 
 
 def _ensure_log_dir(log_root: Path) -> None:
@@ -71,8 +71,8 @@ def _ensure_log_dir(log_root: Path) -> None:
     log_root.chmod(0o700)
 
 
-def _reject(base: Path, repo: str, session: str, agent: str, slug: str, event: str, reason: str) -> None:
-    sc = _sidecar_file(base, repo, session, agent, slug)
+def _reject(base: Path, repo: str, agent_id: str, skill: str, slug: str, event: str, reason: str) -> None:
+    sc = _sidecar_file(base, repo, agent_id, skill, slug)
     sc.parent.mkdir(parents=True, exist_ok=True)
     ts = datetime.datetime.now(datetime.UTC).isoformat()
     sc.parent.parent.parent.mkdir(parents=True, exist_ok=True)
@@ -83,7 +83,7 @@ def _reject(base: Path, repo: str, session: str, agent: str, slug: str, event: s
 
 def _validate_row(row: dict[str, object]) -> list[str]:
     errors: list[str] = []
-    for field in ("ts", "agent", "session", "event", "payload"):
+    for field in ("ts", "agent", "agent_id", "event", "payload"):
         if field not in row:
             errors.append(f"missing field: {field}")
     if errors:
@@ -127,26 +127,25 @@ def cmd_emit(args: argparse.Namespace) -> int:
 
     base = _log_root()
     repo = _repo()
-    session = _session() or _make_agent_id("mentat-log", "adhoc")
+    run_agent = _agent_id() or _make_agent_id("mentat-log", "adhoc")
     slug = _agent_slug()
 
     _ensure_log_dir(base)
-    session_dir = _session_dir(base, repo, session)
-    session_dir.mkdir(parents=True, exist_ok=True)
+    agent_log_dir = _agent_log_dir(base, repo, run_agent)
+    agent_log_dir.mkdir(parents=True, exist_ok=True)
 
     if missing:
-        _reject(base, repo, session, agent, slug, event, f"missing-required:{','.join(missing)}")
+        _reject(base, repo, run_agent, agent, slug, event, f"missing-required:{','.join(missing)}")
         return 1
 
     if event == "chunk_ejected":
         reason = payload.get("reason", "")
         if reason not in _EJECT_REASONS:
-            _reject(base, repo, session, agent, slug, event, f"invalid-reason:{reason!r}")
+            _reject(base, repo, run_agent, agent, slug, event, f"invalid-reason:{reason!r}")
             return 1
 
     env = dict(os.environ)
-    env["MENTAT_AGENT"] = session
-    env.setdefault("MENTAT_SESSION", session)
+    env["MENTAT_AGENT"] = run_agent
     if not env.get("MENTAT_HARNESS"):
         env["MENTAT_HARNESS"] = agent
     _store.record_emit(env, event, payload)
@@ -210,15 +209,15 @@ def cmd_prune(args: argparse.Namespace) -> int:
         return 0
 
     pruned = 0
-    for session_dir in repo_dir.iterdir():
-        if not session_dir.is_dir():
+    for agent_log_dir in repo_dir.iterdir():
+        if not agent_log_dir.is_dir():
             continue
-        mtime = datetime.date.fromtimestamp(session_dir.stat().st_mtime)
+        mtime = datetime.date.fromtimestamp(agent_log_dir.stat().st_mtime)
         if mtime < cutoff:
-            shutil.rmtree(session_dir)
+            shutil.rmtree(agent_log_dir)
             pruned += 1
 
-    print(f"mentat-log: pruned {pruned} session(s) older than {cutoff}")
+    print(f"mentat-log: pruned {pruned} agent(s) older than {cutoff}")
     return 0
 
 
@@ -251,7 +250,7 @@ def build_parser() -> argparse.ArgumentParser:
     qry_p.add_argument("--agent", default=None, help="Filter by emitting skill name")
     qry_p.add_argument("--format", default="jsonl", choices=("jsonl",))
 
-    prune_p = sub.add_parser("prune", help="Delete old session dirs")
+    prune_p = sub.add_parser("prune", help="Delete old agent log dirs")
     prune_p.add_argument("--before", required=True, metavar="YYYY-MM-DD", help="Delete dirs older than this date")
 
     return p

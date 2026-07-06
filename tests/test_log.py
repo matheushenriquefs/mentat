@@ -33,7 +33,7 @@ def test_emit_appends_jsonl(tmp_path):
     env = {
         "MENTAT_LOG_PATH": str(tmp_path),
         "MENTAT_DB": str(db),
-        "MENTAT_SESSION": "s1",
+        "MENTAT_AGENT": "s1",
         "MENTAT_REPO": "repo1",
     }
     result = run_log(
@@ -55,7 +55,7 @@ def test_emit_appends_jsonl(tmp_path):
 
 
 def test_emit_unknown_event_rejected(tmp_path):
-    env = {"MENTAT_LOG_PATH": str(tmp_path), "MENTAT_SESSION": "s1", "MENTAT_REPO": "repo1"}
+    env = {"MENTAT_LOG_PATH": str(tmp_path), "MENTAT_AGENT": "s1", "MENTAT_REPO": "repo1"}
     result = run_log(
         [
             "emit",
@@ -70,7 +70,7 @@ def test_emit_unknown_event_rejected(tmp_path):
 
 
 def test_emit_missing_required_field_routes_to_sidecar(tmp_path):
-    env = {"MENTAT_LOG_PATH": str(tmp_path), "MENTAT_SESSION": "s1", "MENTAT_REPO": "repo1"}
+    env = {"MENTAT_LOG_PATH": str(tmp_path), "MENTAT_AGENT": "s1", "MENTAT_REPO": "repo1"}
     # chunk_started requires slug/plan/harness/worktree
     result = run_log(["emit", "mentat-plan", "chunk_started", "{}"], env=env)
     assert result.returncode != 0
@@ -80,7 +80,7 @@ def test_emit_missing_required_field_routes_to_sidecar(tmp_path):
 
 def test_emit_creates_log_dir_0700(tmp_path):
     log_root = tmp_path / "logs"
-    env = {"MENTAT_LOG_PATH": str(log_root), "MENTAT_SESSION": "s1", "MENTAT_REPO": "repo1"}
+    env = {"MENTAT_LOG_PATH": str(log_root), "MENTAT_AGENT": "s1", "MENTAT_REPO": "repo1"}
     result = run_log(
         [
             "emit",
@@ -116,7 +116,7 @@ def test_validate_catches_missing_field(tmp_path):
         {
             "ts": "2026-01-01T00:00:00+00:00",
             "agent": "mentat-plan",
-            "session": "s1",
+            "agent": "s1",
             "event": "chunk_started",
             "payload": {},  # missing slug/plan/harness/worktree
         }
@@ -132,7 +132,7 @@ def test_query_filters_by_event(tmp_path):
     env = {
         "MENTAT_LOG_PATH": str(tmp_path),
         "MENTAT_DB": str(db),
-        "MENTAT_SESSION": "s1",
+        "MENTAT_AGENT": "s1",
         "MENTAT_REPO": "repo1",
     }
     run_log(
@@ -155,7 +155,7 @@ def test_query_filters_by_agent(tmp_path):
     env = {
         "MENTAT_LOG_PATH": str(tmp_path),
         "MENTAT_DB": str(db),
-        "MENTAT_SESSION": "s1",
+        "MENTAT_AGENT": "s1",
         "MENTAT_REPO": "repo1",
     }
     run_log(
@@ -217,11 +217,12 @@ def test_event_catalog_matches_parent_plan():
         "task_released",
         "task_resolved",
         "task_canceled",
+        "test_writable_requested",
     }
     assert set(catalog.keys()) == expected, (
         f"catalog mismatch. extra={set(catalog) - expected} missing={expected - set(catalog)}"
     )
-    assert len(catalog) == 18
+    assert len(catalog) == 19
 
 
 # ── log module-API tests ─────────────────────────────────────────────────────
@@ -257,7 +258,7 @@ def test_session_fallback_is_opaque_uuid(tmp_path, monkeypatch):
     import json as _json
     import re as _re
 
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
     monkeypatch.setenv("MENTAT_SLUG", "test-agent")
@@ -282,7 +283,7 @@ def test_emit_chunk_teardown_accepted(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-123")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-123")
     monkeypatch.setenv("MENTAT_SLUG", "test-agent")
 
     args = _make_emit_args("test-agent", "chunk_teardown", _json.dumps({"slug": "x", "ok": True}))
@@ -302,7 +303,7 @@ def test_chunk_teardown_missing_slug_rejected(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-456")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-456")
     monkeypatch.setenv("MENTAT_SLUG", "test-agent")
 
     args = _make_emit_args("test-agent", "chunk_teardown", _json.dumps({}))
@@ -320,7 +321,7 @@ def test_emit_task_created_accepted(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-tc1")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-tc1")
     monkeypatch.setenv("MENTAT_SLUG", "test-agent")
     args = _make_emit_args("test-agent", "task_created", _json.dumps({"id": "T001", "slug": "x"}))
     assert log_mod.cmd_emit(args) == 0
@@ -331,7 +332,7 @@ def test_emit_task_claimed_accepted(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-tc2")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-tc2")
     monkeypatch.setenv("MENTAT_SLUG", "test-agent")
     args = _make_emit_args(
         "test-agent",
@@ -346,7 +347,7 @@ def test_emit_task_released_accepted(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-tc3")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-tc3")
     monkeypatch.setenv("MENTAT_SLUG", "test-agent")
     args = _make_emit_args("test-agent", "task_released", _json.dumps({"id": "T001"}))
     assert log_mod.cmd_emit(args) == 0
@@ -357,7 +358,7 @@ def test_emit_task_done_accepted(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-tc4")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-tc4")
     monkeypatch.setenv("MENTAT_SLUG", "test-agent")
     args = _make_emit_args("test-agent", "task_resolved", _json.dumps({"id": "T001"}))
     assert log_mod.cmd_emit(args) == 0
@@ -368,7 +369,7 @@ def test_emit_task_wontfix_accepted(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-tc5")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-tc5")
     monkeypatch.setenv("MENTAT_SLUG", "test-agent")
     args = _make_emit_args("test-agent", "task_canceled", _json.dumps({"id": "T001"}))
     assert log_mod.cmd_emit(args) == 0
@@ -379,7 +380,7 @@ def test_emit_session_prune_accepted(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-sp1")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-sp1")
     monkeypatch.setenv("MENTAT_SLUG", "test-agent")
     args = _make_emit_args("test-agent", "agent_reaped", _json.dumps({"reclaimed_bytes": 12345}))
     assert log_mod.cmd_emit(args) == 0
@@ -390,7 +391,7 @@ def test_emit_session_prune_null_bytes_accepted(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-sp2")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-sp2")
     monkeypatch.setenv("MENTAT_SLUG", "test-agent")
     args = _make_emit_args("test-agent", "agent_reaped", _json.dumps({"reclaimed_bytes": None}))
     assert log_mod.cmd_emit(args) == 0
@@ -401,7 +402,7 @@ def test_emit_chunk_ejected_unknown_reason_rejected(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-lt1-bad")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-lt1-bad")
     monkeypatch.setenv("MENTAT_SLUG", "test-agent")
     args = _make_emit_args(
         "test-agent",
@@ -417,7 +418,7 @@ def test_emit_chunk_ejected_catalog_reason_accepted(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "test-repo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-lt1-good")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-lt1-good")
     monkeypatch.setenv("MENTAT_SLUG", "test-agent")
     args = _make_emit_args(
         "test-agent",
@@ -437,19 +438,19 @@ def test_validate_row_missing_top_level_field_reported():
 
 
 def test_validate_row_unknown_event_reported():
-    row = {"ts": "t", "agent": "a", "session": "s", "event": "not.real", "payload": {}}
+    row = {"ts": "t", "agent": "a", "agent_id": "s", "event": "not.real", "payload": {}}
     errs = log_mod._validate_row(row)
     assert any("unknown event" in e for e in errs)
 
 
 def test_validate_row_payload_not_dict_reported():
-    row = {"ts": "t", "agent": "a", "session": "s", "event": "chunk_started", "payload": [1, 2]}
+    row = {"ts": "t", "agent": "a", "agent_id": "s", "event": "chunk_started", "payload": [1, 2]}
     errs = log_mod._validate_row(row)
     assert any("payload must be object" in e for e in errs)
 
 
 def test_validate_row_missing_required_payload_field_reported():
-    row = {"ts": "t", "agent": "a", "session": "s", "event": "chunk_started", "payload": {}}
+    row = {"ts": "t", "agent": "a", "agent_id": "s", "event": "chunk_started", "payload": {}}
     errs = log_mod._validate_row(row)
     assert any("missing required payload field" in e and "'slug'" in e for e in errs)
 
@@ -458,7 +459,7 @@ def test_validate_row_valid_row_no_errors():
     row = {
         "ts": "t",
         "agent": "a",
-        "session": "s",
+        "agent_id": "s",
         "event": "chunk_started",
         "payload": {"slug": "x", "plan": "/x.md", "harness": "default", "worktree": "/wt"},
     }
@@ -473,7 +474,7 @@ def test_emit_unknown_event_returns_rc1(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "r")
-    monkeypatch.setenv("MENTAT_SESSION", "s-ue")
+    monkeypatch.setenv("MENTAT_AGENT", "s-ue")
     args = _make_emit_args("a", "not.a.real.event", _json.dumps({}))
     assert log_mod.cmd_emit(args) == 1
 
@@ -481,7 +482,7 @@ def test_emit_unknown_event_returns_rc1(tmp_path, monkeypatch):
 def test_emit_invalid_json_payload_returns_rc1(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "r")
-    monkeypatch.setenv("MENTAT_SESSION", "s-ij")
+    monkeypatch.setenv("MENTAT_AGENT", "s-ij")
     args = _make_emit_args("a", "chunk_started", "not-valid-json{{{")
     assert log_mod.cmd_emit(args) == 1
 
@@ -491,7 +492,7 @@ def test_emit_payload_not_dict_returns_rc1(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "r")
-    monkeypatch.setenv("MENTAT_SESSION", "s-nd")
+    monkeypatch.setenv("MENTAT_AGENT", "s-nd")
     args = _make_emit_args("a", "chunk_started", _json.dumps([1, 2, 3]))
     assert log_mod.cmd_emit(args) == 1
 
@@ -523,7 +524,7 @@ def test_validate_empty_lines_skipped_returns_0(tmp_path):
     row = {
         "ts": "t",
         "agent": "a",
-        "session": "s",
+        "agent_id": "s",
         "event": "chunk_started",
         "payload": {"slug": "x", "plan": "/x.md", "harness": "default", "worktree": "/wt"},
     }
@@ -538,7 +539,7 @@ def test_validate_valid_file_returns_0(tmp_path):
     row = {
         "ts": "t",
         "agent": "a",
-        "session": "s",
+        "agent_id": "s",
         "event": "chunk_started",
         "payload": {"slug": "x", "plan": "/x.md", "harness": "default", "worktree": "/wt"},
     }
@@ -575,7 +576,7 @@ def test_query_no_filter_returns_all_events(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "r")
-    monkeypatch.setenv("MENTAT_SESSION", "s-qall")
+    monkeypatch.setenv("MENTAT_AGENT", "s-qall")
     monkeypatch.setenv("MENTAT_SLUG", "ag")
     for event, payload in [
         ("chunk_started", {"slug": "a", "plan": "/a.md", "harness": "default", "worktree": "/wt"}),
@@ -635,7 +636,7 @@ def test_emit_missing_required_key_rejected(tmp_path, monkeypatch):
         ("agent_reaped", {}),
     ]
     for i, (event, payload) in enumerate(cases):
-        monkeypatch.setenv("MENTAT_SESSION", f"sess-rej-{i}")
+        monkeypatch.setenv("MENTAT_AGENT", f"sess-rej-{i}")
         args = _make_emit_args("test-agent", event, _json.dumps(payload))
         rc = log_mod.cmd_emit(args)
         assert rc == 1, f"expected rc=1 for {event} with payload {payload}, got {rc}"
@@ -650,7 +651,7 @@ def test_validate_row_with_errors_prints_and_returns_rc1(tmp_path):
     import json as _json
 
     f = tmp_path / "bad.jsonl"
-    row = {"ts": "t", "agent": "a", "session": "s", "event": "chunk_started", "payload": {}}  # missing path
+    row = {"ts": "t", "agent": "a", "agent_id": "s", "event": "chunk_started", "payload": {}}  # missing path
     f.write_text(_json.dumps(row) + "\n")
     assert log_mod.cmd_validate(_make_validate_args(str(f))) == 1
 
@@ -740,7 +741,7 @@ def test_main_dispatches_to_command(tmp_path, monkeypatch):
     row = {
         "ts": "t",
         "agent": "a",
-        "session": "s",
+        "agent_id": "s",
         "event": "chunk_started",
         "payload": {"slug": "x", "plan": "/x", "harness": "default", "worktree": "/wt"},
     }

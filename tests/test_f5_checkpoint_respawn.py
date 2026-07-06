@@ -91,7 +91,7 @@ def test_checkpoint_if_needed_writes_summary_when_threshold_crossed(
 ) -> None:
     """F5 tracer: threshold crossed → summary.md written with status: succeeded."""
     impl = _impl()
-    monkeypatch.setenv("MENTAT_SESSION", "test-session-f5")
+    monkeypatch.setenv("MENTAT_AGENT", "test-session-f5")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
 
@@ -100,7 +100,7 @@ def test_checkpoint_if_needed_writes_summary_when_threshold_crossed(
 
     impl._checkpoint_if_needed(result_mock, slug="myplan", threshold=100000)
 
-    from lib.session import summary_file
+    from lib.agent import summary_file
 
     path = summary_file("test-session-f5")
     assert path.exists(), "summary.md not written after threshold crossed"
@@ -113,7 +113,7 @@ def test_checkpoint_if_needed_writes_summary_when_threshold_crossed(
 def test_checkpoint_if_needed_noop_below_threshold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """F5 tracer: usage below threshold → no summary written."""
     impl = _impl()
-    monkeypatch.setenv("MENTAT_SESSION", "test-session-f5-below")
+    monkeypatch.setenv("MENTAT_AGENT", "test-session-f5-below")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
 
@@ -122,7 +122,7 @@ def test_checkpoint_if_needed_noop_below_threshold(tmp_path: Path, monkeypatch: 
 
     impl._checkpoint_if_needed(result_mock, slug="myplan", threshold=100000)
 
-    from lib.session import summary_file
+    from lib.agent import summary_file
 
     path = summary_file("test-session-f5-below")
     assert not path.exists(), "summary.md written when below threshold — should be noop"
@@ -246,7 +246,7 @@ def test_fan_out_plans_seeds_next_chunk_from_completed_summary(tmp_path: Path, m
     # Write a summary file for plan-a's session after plan-a "completes"
     # We must know the session_id ahead of time to pre-write the file — use the first sid
     first_sid = "implement-plan-a-1"
-    from lib.session import summary_file
+    from lib.agent import summary_file
 
     sf = summary_file(first_sid)
     sf.parent.mkdir(parents=True, exist_ok=True)

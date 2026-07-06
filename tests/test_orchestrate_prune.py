@@ -70,7 +70,7 @@ def test_run_orchestrate_prunes_before_fanout(tmp_path, monkeypatch):
         lambda chunks, **kw: [{"slug": c.slug, "status": "success"} for c in chunks],
     )
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
-    monkeypatch.setattr(orchestrate, "ensure_session", lambda *a, **k: "orch-test")
+    monkeypatch.setattr(orchestrate, "ensure_agent", lambda *a, **k: "orch-test")
     monkeypatch.setattr(orchestrate._git, "require_commit_identity", lambda **kw: ("T", "t@t"))
 
     with patch_orchestrate_worktree(orchestrate, tmp_path):
@@ -542,7 +542,7 @@ def test_prune_failure_does_not_abort(tmp_path, monkeypatch):
         lambda chunks, **kw: [{"slug": c.slug, "status": "success"} for c in chunks],
     )
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
-    monkeypatch.setattr(orchestrate, "ensure_session", lambda *a, **k: "orch-test")
+    monkeypatch.setattr(orchestrate, "ensure_agent", lambda *a, **k: "orch-test")
     monkeypatch.setattr(orchestrate._git, "require_commit_identity", lambda **kw: ("T", "t@t"))
 
     with patch_orchestrate_worktree(orchestrate, tmp_path):

@@ -39,11 +39,11 @@ def test_record_emit_and_list_track_roundtrip(tmp_path, monkeypatch):
         (log_root / repo / agent_id).mkdir(parents=True, exist_ok=True)
 
     active = store.list_track_entries(repo, active_only=True)
-    active_by_id = {str(r["session"]): str(r["status"]) for r in active}
+    active_by_id = {str(r["agent"]): str(r["status"]) for r in active}
     assert active_by_id["live"] == "working"
     assert active_by_id["idle"] == "idle"
     assert active_by_id["done"] == "idle"
-    full = {r["session"] for r in store.list_track_entries(repo, active_only=False)}
+    full = {r["agent"] for r in store.list_track_entries(repo, active_only=False)}
     assert full == {"live", "idle", "done"}
 
 
@@ -74,7 +74,7 @@ def test_list_track_marks_stale_running_as_crashed(tmp_path, monkeypatch):
         conn.close()
 
     entries = store.list_track_entries(repo, active_only=False, now=time.time())
-    by_id = {str(e["session"]): e for e in entries}
+    by_id = {str(e["agent"]): e for e in entries}
     assert by_id["stale"]["status"] == "?"
 
 

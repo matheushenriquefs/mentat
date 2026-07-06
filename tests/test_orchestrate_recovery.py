@@ -361,7 +361,7 @@ def test_run_orchestrate_invokes_recovery_for_worker_died(tmp_path, monkeypatch)
     monkeypatch.setattr(orch._batch, "_gc_preserved_worktrees", lambda **kw: None)
     monkeypatch.setattr(orch._batch, "_emit_event", lambda *a, **k: None)
     monkeypatch.setattr(orch._utils, "emit_event", lambda *a, **k: None)
-    monkeypatch.setattr(orch, "ensure_session", lambda *a, **k: "sess-1")
+    monkeypatch.setattr(orch, "ensure_agent", lambda *a, **k: "sess-1")
 
     captured = {}
 
@@ -369,7 +369,7 @@ def test_run_orchestrate_invokes_recovery_for_worker_died(tmp_path, monkeypatch)
         captured["transient"] = set(transient)
         return set(), set(), set()
 
-    monkeypatch.setattr(orch, "ensure_session", lambda *a, **k: "orch-test")
+    monkeypatch.setattr(orch, "ensure_agent", lambda *a, **k: "orch-test")
     monkeypatch.setattr(orch._git, "require_commit_identity", lambda **kw: ("T", "t@t"))
     monkeypatch.setattr(orch._batch, "_run_recovery", fake_recovery)
     orch.run_orchestrate("holding", [a], harness=None, model=None, dry_run=False)

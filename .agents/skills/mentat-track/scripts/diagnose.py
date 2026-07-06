@@ -166,7 +166,7 @@ def build_summary(agent_dir: Path) -> str:
         else:
             outcome += " See diagnose output."
     else:
-        outcome = "Completed in session; not yet landed (landing is orchestrate's job)."
+        outcome = "Completed in agent; not yet landed (landing is orchestrate's job)."
 
     return f"## Summary\n- Plan: {plan}\n- Outcome: {outcome}\n- Events recorded: {len(events)}\n"
 

@@ -45,7 +45,7 @@ def test_latest_session_excludes_manual(tmp_path, monkeypatch):
             }
         ],
     )
-    session = load_module("registry").latest_session(repo_dir)
+    session = load_module("registry").latest_agent(repo_dir)
     assert session == "sess-1"
 
 
@@ -161,7 +161,7 @@ def test_verdict_worker_died_not_masked_by_later_land(tmp_path):
 
 
 def test_doctor_writes_diagnosis_in_session_dir(tmp_path, monkeypatch):
-    session_mod = load_module("track")
+    agent_mod = load_module("track")
     monkeypatch.setenv("MENTAT_REPO", "testrepo")
     _write_log(
         tmp_path,
@@ -177,7 +177,7 @@ def test_doctor_writes_diagnosis_in_session_dir(tmp_path, monkeypatch):
     )
     buf = io.StringIO()
     with redirect_stdout(buf):
-        rc = session_mod.cmd_doctor("sess-1")
+        rc = agent_mod.cmd_doctor("sess-1")
     assert rc == 0
     assert "## Verdict" in buf.getvalue()
 
@@ -243,7 +243,7 @@ def test_write_summary_writes_summary_md(tmp_path):
 
 
 def test_report_prints_success_summary(tmp_path, monkeypatch):
-    session_mod = load_module("track")
+    agent_mod = load_module("track")
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
     _write_log(
         tmp_path,
@@ -260,13 +260,13 @@ def test_report_prints_success_summary(tmp_path, monkeypatch):
     )
     buf = io.StringIO()
     with redirect_stdout(buf):
-        rc = session_mod.cmd_report("sess-1")
+        rc = agent_mod.cmd_report("sess-1")
     assert rc == 0
     assert "abc999" in buf.getvalue()
 
 
 def test_report_shows_failure_for_ejected(tmp_path, monkeypatch):
-    session_mod = load_module("track")
+    agent_mod = load_module("track")
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
     _write_log(
         tmp_path,
@@ -283,7 +283,7 @@ def test_report_shows_failure_for_ejected(tmp_path, monkeypatch):
     )
     buf = io.StringIO()
     with redirect_stdout(buf):
-        rc = session_mod.cmd_report("sess-1")
+        rc = agent_mod.cmd_report("sess-1")
     assert rc == 0
     assert "gate_failed" in buf.getvalue()
 
@@ -363,33 +363,33 @@ def test_diagnose_feeds_doctor_output_into_loop(tmp_path):
 
 
 def _make_session_env(tmp_path: Path, monkeypatch) -> tuple:
-    """Return (session_mod, log_root) with env vars pointing to tmp dirs."""
-    session_mod = load_module("track")
+    """Return (agent_mod, log_root) with env vars pointing to tmp dirs."""
+    agent_mod = load_module("track")
     log_root = tmp_path / "logs"
     log_root.mkdir()
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", "testrepo")
-    return session_mod, log_root
+    return agent_mod, log_root
 
 
 def test_cmd_track_no_session_id_calls_navigate(tmp_path, monkeypatch):
-    session_mod, log_root = _make_session_env(tmp_path, monkeypatch)
+    agent_mod, log_root = _make_session_env(tmp_path, monkeypatch)
     (log_root / "testrepo").mkdir()
     navigate_calls: list = []
-    with patch.object(session_mod._panes, "navigate", side_effect=lambda *a, **kw: navigate_calls.append(kw) or 0):
-        rc = session_mod.cmd_track(None)
+    with patch.object(agent_mod._panes, "navigate", side_effect=lambda *a, **kw: navigate_calls.append(kw) or 0):
+        rc = agent_mod.cmd_track(None)
     assert rc == 0
     assert navigate_calls
 
 
 def test_cmd_track_session_not_found_returns_1(tmp_path, monkeypatch):
-    session_mod, _ = _make_session_env(tmp_path, monkeypatch)
-    rc = session_mod.cmd_track("nonexistent-session-xyz")
+    agent_mod, _ = _make_session_env(tmp_path, monkeypatch)
+    rc = agent_mod.cmd_track("nonexistent-session-xyz")
     assert rc == 1
 
 
 def test_cmd_track_session_found_calls_view_agent(tmp_path, monkeypatch):
-    session_mod, log_root = _make_session_env(tmp_path, monkeypatch)
+    agent_mod, log_root = _make_session_env(tmp_path, monkeypatch)
     from lib import store
 
     session_dir = log_root / "testrepo" / "sess-abc"
@@ -400,34 +400,34 @@ def test_cmd_track_session_found_calls_view_agent(tmp_path, monkeypatch):
         {"slug": "x"},
     )
     view_calls: list = []
-    with patch.object(session_mod._render, "view_agent", side_effect=lambda sd: view_calls.append(sd)):
-        rc = session_mod.cmd_track("sess-abc")
+    with patch.object(agent_mod._render, "view_agent", side_effect=lambda sd: view_calls.append(sd)):
+        rc = agent_mod.cmd_track("sess-abc")
     assert rc == 0
     assert view_calls
 
 
 def test_resolve_agent_no_sessions_returns_1(tmp_path, monkeypatch):
-    session_mod, log_root = _make_session_env(tmp_path, monkeypatch)
+    agent_mod, log_root = _make_session_env(tmp_path, monkeypatch)
     (log_root / "testrepo").mkdir()
     result = load_module("agent")._resolve_agent(None)
     assert result == 1
 
 
 def test_resolve_agent_dir_not_found_returns_1(tmp_path, monkeypatch):
-    session_mod, log_root = _make_session_env(tmp_path, monkeypatch)
+    agent_mod, log_root = _make_session_env(tmp_path, monkeypatch)
     (log_root / "testrepo").mkdir()
     result = load_module("agent")._resolve_agent("does-not-exist-xyz")
     assert result == 1
 
 
 def test_cmd_doctor_invalid_session_returns_1(tmp_path, monkeypatch):
-    session_mod, _ = _make_session_env(tmp_path, monkeypatch)
-    rc = session_mod.cmd_doctor("no-such-session")
+    agent_mod, _ = _make_session_env(tmp_path, monkeypatch)
+    rc = agent_mod.cmd_doctor("no-such-session")
     assert rc == 1
 
 
 def test_cmd_doctor_valid_session_writes_diagnosis(tmp_path, monkeypatch):
-    session_mod, _ = _make_session_env(tmp_path, monkeypatch)
+    agent_mod, _ = _make_session_env(tmp_path, monkeypatch)
     seed_agent_events(
         tmp_path,
         "testrepo",
@@ -441,32 +441,32 @@ def test_cmd_doctor_valid_session_writes_diagnosis(tmp_path, monkeypatch):
         ],
     )
     buf = io.StringIO()
-    with patch.object(session_mod._diagnose, "build_verdict", return_value="## Verdict\n- landed\n"):
+    with patch.object(agent_mod._diagnose, "build_verdict", return_value="## Verdict\n- landed\n"):
         with redirect_stdout(buf):
-            rc = session_mod.cmd_doctor("sess-doc")
+            rc = agent_mod.cmd_doctor("sess-doc")
     assert rc == 0
     assert "Verdict" in buf.getvalue()
 
 
 def test_cmd_report_invalid_session_returns_1(tmp_path, monkeypatch):
-    session_mod, _ = _make_session_env(tmp_path, monkeypatch)
-    rc = session_mod.cmd_report("no-such-session")
+    agent_mod, _ = _make_session_env(tmp_path, monkeypatch)
+    rc = agent_mod.cmd_report("no-such-session")
     assert rc == 1
 
 
 def test_cmd_diagnose_invalid_session_returns_1(tmp_path, monkeypatch):
-    session_mod, _ = _make_session_env(tmp_path, monkeypatch)
-    rc = session_mod.cmd_diagnose("no-such-session")
+    agent_mod, _ = _make_session_env(tmp_path, monkeypatch)
+    rc = agent_mod.cmd_diagnose("no-such-session")
     assert rc == 1
 
 
 def test_cmd_diagnose_valid_session_calls_run_diagnose(tmp_path, monkeypatch):
-    session_mod, log_root = _make_session_env(tmp_path, monkeypatch)
+    agent_mod, log_root = _make_session_env(tmp_path, monkeypatch)
     session_dir = log_root / "testrepo" / "sess-diag"
     session_dir.mkdir(parents=True)
     calls: list = []
-    with patch.object(session_mod._diagnose, "run_diagnose", side_effect=lambda sd: calls.append(sd)):
-        rc = session_mod.cmd_diagnose("sess-diag")
+    with patch.object(agent_mod._diagnose, "run_diagnose", side_effect=lambda sd: calls.append(sd)):
+        rc = agent_mod.cmd_diagnose("sess-diag")
     assert rc == 0
     assert calls
 
@@ -475,30 +475,30 @@ def test_cmd_diagnose_valid_session_calls_run_diagnose(tmp_path, monkeypatch):
 
 
 def test_humanize_age_seconds():
-    session_mod = load_module("track")
-    assert session_mod._humanize_age(45) == "45s ago"
+    agent_mod = load_module("track")
+    assert agent_mod._humanize_age(45) == "45s ago"
 
 
 def test_humanize_age_minutes():
-    session_mod = load_module("track")
-    assert session_mod._humanize_age(120) == "2m ago"
+    agent_mod = load_module("track")
+    assert agent_mod._humanize_age(120) == "2m ago"
 
 
 def test_humanize_age_hours():
-    session_mod = load_module("track")
-    assert session_mod._humanize_age(7200) == "2h ago"
+    agent_mod = load_module("track")
+    assert agent_mod._humanize_age(7200) == "2h ago"
 
 
 def test_humanize_age_days():
-    session_mod = load_module("track")
-    assert session_mod._humanize_age(172800) == "2d ago"
+    agent_mod = load_module("track")
+    assert agent_mod._humanize_age(172800) == "2d ago"
 
 
 # ── main() dispatch ───────────────────────────────────────────────────────────
 
 
 def test_main_dispatches_list(tmp_path, monkeypatch):
-    session_mod = load_module("track")
+    agent_mod = load_module("track")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "testrepo")
     (tmp_path / "logs" / "testrepo").mkdir(parents=True)
@@ -506,21 +506,21 @@ def test_main_dispatches_list(tmp_path, monkeypatch):
     import pytest as _pytest
 
     with _pytest.raises(SystemExit) as exc:
-        session_mod.main()
+        agent_mod.main()
     assert exc.value.code == 0
 
 
 def test_main_dispatches_track_no_session(tmp_path, monkeypatch):
-    session_mod = load_module("track")
+    agent_mod = load_module("track")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "testrepo")
     (tmp_path / "logs" / "testrepo").mkdir(parents=True)
     monkeypatch.setattr("sys.argv", ["session.py", "track"])
     import pytest as _pytest
 
-    with patch.object(session_mod._panes, "navigate", return_value=0):
+    with patch.object(agent_mod._panes, "navigate", return_value=0):
         with _pytest.raises(SystemExit) as exc:
-            session_mod.main()
+            agent_mod.main()
     assert exc.value.code == 0
 
 
@@ -609,7 +609,7 @@ def test_iter_rows_from_text_skips_non_dict_and_garbage():
 
 def test_list_sessions_empty_when_repo_dir_missing(tmp_path):
     load_module("registry")
-    assert load_module("registry").list_sessions(tmp_path / "nope") == []
+    assert load_module("registry").list_agents(tmp_path / "nope") == []
 
 
 def test_status_from_signals_waiting_on_ask_user_question():

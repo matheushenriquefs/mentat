@@ -110,8 +110,8 @@ def test_orchestrate_run_lands_both_chunks_onto_holding(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))  # no real ~/.mentat/config.toml
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
     monkeypatch.chdir(main_repo)
 
     before = int(_git(["rev-list", "--count", "refs/heads/holding"], cwd=main_repo))

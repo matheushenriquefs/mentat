@@ -135,7 +135,7 @@ def test_spawn_async_emits_prints_and_returns_process(tmp_path, monkeypatch):
 
     async def fake_exec(*cmd, **kwargs):
         captured["cmd"] = cmd
-        captured["new_session"] = kwargs.get("start_new_session")
+        captured["new_group"] = kwargs.get(spawn._POPEN_NEW_GROUP)
         return fake_proc
 
     monkeypatch.setattr(
@@ -151,7 +151,7 @@ def test_spawn_async_emits_prints_and_returns_process(tmp_path, monkeypatch):
 
     assert sid == "sess-async"
     assert proc is fake_proc
-    assert captured["new_session"] is True
+    assert captured["new_group"] is True
     assert any("chunk_started" in c.args[0] for c in mock_emit.call_args_list)
     assert "mentat-track track sess-async" in output
     assert "sess-async" in output
@@ -172,7 +172,7 @@ def test_spawn_worktree_subprocess_wires_harness_model_and_seed(tmp_path, monkey
         lambda p, **kw: (
             "sess-wire",
             ["python3", "impl", "--harness", "cursor", "--model", "opus"],
-            {"MENTAT_SESSION": "sess-wire", "MENTAT_SEED_SUMMARY": "prior ctx", "MENTAT_CHUNK_ID": "c" * 32},
+            {"MENTAT_AGENT": "sess-wire", "MENTAT_SEED_SUMMARY": "prior ctx", "MENTAT_CHUNK_ID": "c" * 32},
             tmp_path / "wt",
         ),
     )
@@ -182,7 +182,7 @@ def test_spawn_worktree_subprocess_wires_harness_model_and_seed(tmp_path, monkey
     def fake_popen(cmd, **kwargs):
         captured["cmd"] = cmd
         captured["env"] = kwargs.get("env")
-        captured["new_session"] = kwargs.get("start_new_session")
+        captured["new_group"] = kwargs.get(spawn._POPEN_NEW_GROUP)
         captured["cwd"] = kwargs.get("cwd")
         return _FakePopen()
 
@@ -196,9 +196,9 @@ def test_spawn_worktree_subprocess_wires_harness_model_and_seed(tmp_path, monkey
     assert "--harness" in cmd and cmd[cmd.index("--harness") + 1] == "cursor"
     assert "--model" in cmd and cmd[cmd.index("--model") + 1] == "opus"
     env = captured["env"]
-    assert env["MENTAT_SESSION"] == "sess-wire"
+    assert env["MENTAT_AGENT"] == "sess-wire"
     assert env["MENTAT_SEED_SUMMARY"] == "prior ctx"
-    assert captured["new_session"] is True
+    assert captured["new_group"] is True
 
 
 def test_spawn_worktree_subprocess_omits_flags_when_unset(tmp_path, monkeypatch):
@@ -213,7 +213,7 @@ def test_spawn_worktree_subprocess_omits_flags_when_unset(tmp_path, monkeypatch)
         lambda p, **kw: (
             "sess-bare",
             ["python3", "impl"],
-            {"MENTAT_SESSION": "sess-bare", "MENTAT_CHUNK_ID": "d" * 32},
+            {"MENTAT_AGENT": "sess-bare", "MENTAT_CHUNK_ID": "d" * 32},
             tmp_path / "wt",
         ),
     )

@@ -2,7 +2,7 @@
 
 Flow:
 1. orchestrate.run_orchestrate on a HITL plan → emits
-   chunk_started{harness:"hitl-in-session"}; returns without invoking
+   chunk_started{harness:"hitl-in-agent"}; returns without invoking
    the harness.
 2. Caller (this test stands in for the calling Claude session) commits
    work on the slug worktree (simulating the in-session /mentat-implement
@@ -74,12 +74,12 @@ def test_pipeline_hitl_lands_chunk_without_claude_headless(tmp_path, monkeypatch
     monkeypatch.setattr(land_queue, "_emit_event", record)
     monkeypatch.setattr(orchestrate._batch, "_fan_out_plans", lambda plans, **kw: [])
 
-    # --- Phase 1: orchestrate emits chunk_started{hitl-in-session}, no land ---
+    # --- Phase 1: orchestrate emits chunk_started{hitl-in-agent}, no land ---
     rc = orchestrate.run_orchestrate("holding", [plan], harness=None, model=None, dry_run=False)
     assert rc == 0
     spawned = [(e, p) for e, p in emitted if e == "chunk_started"]
     assert spawned, f"chunk_started not emitted; got: {emitted}"
-    assert spawned[0][1]["harness"] == "hitl-in-session"
+    assert spawned[0][1]["harness"] == "hitl-in-agent"
     assert spawned[0][1]["slug"] == slug
     landed_phase1 = [e for e, _ in emitted if e == "chunk_landed"]
     assert landed_phase1 == [], "chunk_landed must NOT fire in phase 1"

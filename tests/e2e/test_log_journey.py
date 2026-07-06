@@ -23,7 +23,7 @@ def _log_env(monkeypatch, log_root: Path, repo: str, session: str) -> None:
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", repo)
     monkeypatch.setenv("MENTAT_AGENT", session)
-    monkeypatch.setenv("MENTAT_SESSION", session)
+    monkeypatch.setenv("MENTAT_AGENT", session)
 
 
 def _dispatch(log, argv: list[str]) -> int:
@@ -158,9 +158,9 @@ def test_log_validate_flags_bad_rows(tmp_path, monkeypatch, capsys):
     _log_env(monkeypatch, tmp_path / "logs", "r", "s")
     bad = tmp_path / "bad.jsonl"
     bad.write_text(
-        json.dumps({"ts": "t", "agent": "a", "session": "s", "event": "chunk_landed", "payload": {"slug": "x"}})
+        json.dumps({"ts": "t", "agent": "a", "agent_id": "s", "event": "chunk_landed", "payload": {"slug": "x"}})
         + "\nnot json\n"
-        + json.dumps({"ts": "t", "agent": "a", "session": "s", "event": "made.up", "payload": {}})
+        + json.dumps({"ts": "t", "agent": "a", "agent_id": "s", "event": "made.up", "payload": {}})
         + "\n"
     )
     rc = _dispatch(log, ["validate", str(bad)])

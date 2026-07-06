@@ -1,7 +1,7 @@
 """implement.py must not spawn a sub-claude for HITL plans.
 
 Mirrors the slice-1 orchestrate doctrine one layer down: when kind==HITL,
-emit chunk_started{harness:"hitl-in-session"} and return control to the
+emit chunk_started{harness:"hitl-in-agent"} and return control to the
 calling Claude session — never invoke the harness adapter, which would
 shell `claude --headless` and lose AskUserQuestion.
 """
@@ -46,7 +46,7 @@ def test_hitl_does_not_invoke_harness(tmp_path, monkeypatch):
     assert invoke_calls == [], f"harness invoked for HITL: {invoke_calls}"
     spawned = [p for e, p in emitted if e == "chunk_started"]
     assert spawned, f"chunk_started not emitted; got: {emitted}"
-    assert spawned[0].get("harness") == "hitl-in-session"
+    assert spawned[0].get("harness") == "hitl-in-agent"
     assert spawned[0].get("slug") == "fix-hitl"
 
 

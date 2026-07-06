@@ -31,7 +31,7 @@ def store(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_TASKS_DIR", str(tasks_dir))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", "taskrepo")
-    monkeypatch.setenv("MENTAT_SESSION", "orchestrate-main-1")
+    monkeypatch.setenv("MENTAT_AGENT", "orchestrate-main-1")
     return tasks_dir, log_root
 
 

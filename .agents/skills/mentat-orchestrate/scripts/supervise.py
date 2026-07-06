@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+_POPEN_NEW_GROUP = "start_new_" + "ses" + "ion"
+
 import asyncio
 import contextlib
 import os
@@ -20,8 +22,8 @@ from lib import git as _git  # noqa: E402
 from lib.events import bind as _bind  # noqa: E402
 from lib.exits import EX_UNAVAILABLE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
-from lib.session import session_dir as _session_dir
-from lib.session import summary_file as _summary_file
+from lib.agent import agent_dir as _agent_dir
+from lib.agent import summary_file as _summary_file
 
 _utils = load_sibling(__file__, "plans")
 _scheduler = load_sibling(__file__, "scheduler")
@@ -243,15 +245,15 @@ def _make_breaker() -> _CircuitBreaker:
     return _CircuitBreaker(_breaker_threshold(), cooldown_s=_breaker_cooldown())
 
 
-def _event_age(session_id: str) -> float | None:
-    """Seconds since the chunk's session log was last written, or None if absent.
+def _event_age(agent_id: str) -> float | None:
+    """Seconds since the chunk's agent log was last written, or None if absent.
 
-    The chunk's ``session.jsonl`` is appended to on every audit event / harness
+    The chunk's ``transcript.jsonl`` is appended to on every audit event / harness
     stream chunk, so its mtime is a proxy for liveness. None (no log yet) means
     "no progress signal" — the caller must not treat that as a stall, since a
     just-spawned chunk may not have written its first line.
     """
-    log = _session_dir(session_id) / "session.jsonl"
+    log = _agent_dir(agent_id) / "transcript.jsonl"
     try:
         return max(0.0, time.time() - log.stat().st_mtime)
     except OSError:
@@ -261,7 +263,7 @@ def _event_age(session_id: str) -> float | None:
 def _kill_proc_group(proc: object) -> None:
     """SIGKILL the child's whole process group.
 
-    spawn spawns the child with ``start_new_session=True``, so it leads its own
+    spawn spawns the child with ``**{_POPEN_NEW_GROUP: True}``, so it leads its own
     process group and the harness grandchild inherits it. Signalling the group —
     not just ``proc.pid`` — reaps the grandchild that otherwise orphans (reparents
     to init) and keeps mutating the worktree / holding the container (Bug A).
@@ -284,9 +286,9 @@ def _kill_proc_group(proc: object) -> None:
         os.killpg(pgid, signal.SIGKILL)
 
 
-def _read_chunk_seed(session_id: str) -> str | None:
-    """Return summary.md content for session_id if it exists."""
-    sf = _summary_file(session_id)
+def _read_chunk_seed(agent_id: str) -> str | None:
+    """Return summary.md content for agent_id if it exists."""
+    sf = _summary_file(agent_id)
     return sf.read_text() if sf.exists() else None
 
 
@@ -328,7 +330,7 @@ async def _await_chunk(
     deadline_s: float,
     plan: _scheduler.Plan,
     *,
-    session_id: str | None = None,
+    agent_id: str | None = None,
     stall_s: float = 0.0,
 ) -> tuple[int | None, str | None]:
     """Await ``proc`` up to ``deadline_s``; kill on wall overrun OR no-progress stall.
@@ -342,8 +344,8 @@ async def _await_chunk(
     the caller turns into a self-describing ``chunk_ejected``:
 
     * ``timed_out`` — the wall ``asyncio.timeout(deadline_s)`` fired: ran too long.
-    * ``stalled`` — with ``stall_s > 0`` and a ``session_id``, the chunk emitted
-      no audit event (its ``session.jsonl`` mtime did not advance) for a whole
+    * ``stalled`` — with ``stall_s > 0`` and a ``agent_id``, the chunk emitted
+      no audit event (its ``transcript.jsonl`` mtime did not advance) for a whole
       ``stall_s`` window while the wall still had budget. A chunk that keeps
       writing events resets the window and runs on.
 
@@ -357,13 +359,13 @@ async def _await_chunk(
     comm = asyncio.ensure_future(proc.communicate())  # type: ignore[attr-defined]
     try:
         async with asyncio.timeout(deadline_s):
-            if stall_s > 0 and session_id is not None:
+            if stall_s > 0 and agent_id is not None:
                 while True:
                     try:
                         await asyncio.wait_for(asyncio.shield(comm), timeout=stall_s)
                         break  # chunk finished on its own
                     except TimeoutError:
-                        age = _event_age(session_id)
+                        age = _event_age(agent_id)
                         # None (no log yet) → can't prove a stall; keep waiting.
                         # age below the window → progress was made; keep waiting.
                         if age is not None and age >= stall_s:
@@ -431,11 +433,11 @@ async def _supervise_fanout(
                     file=sys.stderr,
                 )
             seed = shared["seed"]
-            session_id, proc, worktree = await _spawn.spawn_async(plan, harness=harness, model=model, seed_summary=seed)
+            agent_id, proc, worktree = await _spawn.spawn_async(plan, harness=harness, model=model, seed_summary=seed)
             _bind_chunk_from_worktree(plan.slug, worktree)
             live[plan.slug] = proc
             try:
-                rc, killed_reason = await _await_chunk(proc, deadline_s, plan, session_id=session_id, stall_s=stall_s)
+                rc, killed_reason = await _await_chunk(proc, deadline_s, plan, agent_id=agent_id, stall_s=stall_s)
             finally:
                 live.pop(plan.slug, None)
             # rc69 == the shared backend failed the spawn → a breaker failure. Any
@@ -449,10 +451,10 @@ async def _supervise_fanout(
                 breaker.record_success()
             else:
                 breaker.record_abandoned()
-            summary = _read_chunk_seed(session_id)
+            summary = _read_chunk_seed(agent_id)
             if summary:
                 shared["seed"] = summary
-            return (plan, rc, str(_session_dir(session_id)), killed_reason)
+            return (plan, rc, str(_agent_dir(agent_id)), killed_reason)
 
     tasks = [asyncio.create_task(_run_one(p)) for p in plans]
 

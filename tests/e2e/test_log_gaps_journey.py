@@ -24,7 +24,7 @@ def _log_env(monkeypatch, log_root: Path, repo: str, session: str) -> None:
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", repo)
     monkeypatch.setenv("MENTAT_AGENT", session)
-    monkeypatch.setenv("MENTAT_SESSION", session)
+    monkeypatch.setenv("MENTAT_AGENT", session)
 
 
 def test_validate_row_flags_missing_top_level_fields():
@@ -36,7 +36,7 @@ def test_validate_row_flags_missing_top_level_fields():
 
 def test_validate_row_flags_non_object_payload():
     log = _log()
-    row = {"ts": "t", "agent": "a", "session": "s", "event": "chunk_started", "payload": ["not", "an", "object"]}
+    row = {"ts": "t", "agent": "a", "agent_id": "s", "event": "chunk_started", "payload": ["not", "an", "object"]}
     errs = log._validate_row(row)
     assert errs == ["payload must be object"]
 
@@ -66,7 +66,7 @@ def test_validate_skips_blank_lines(tmp_path, monkeypatch):
     row = {
         "ts": "t",
         "agent": "a",
-        "session": "s",
+        "agent_id": "s",
         "event": "chunk_started",
         "payload": {"slug": "x", "plan": "p.md", "harness": "default", "worktree": "/wt"},
     }

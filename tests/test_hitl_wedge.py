@@ -230,11 +230,11 @@ def testpartition_by_outcome_all_clean_lands_all():
 # ── MENTAT_REPO frozen pre-chdir so the log dir doesn't split (bug-review fix) ─
 
 
-def test_ensure_session_freezes_mentat_repo(tmp_path, monkeypatch):
-    """ensure_session exports MENTAT_REPO from the pre-chdir cwd, so a later
+def test_ensure_agent_freezes_mentat_repo(tmp_path, monkeypatch):
+    """ensure_agent exports MENTAT_REPO from the pre-chdir cwd, so a later
     os.chdir into the worktree can't make _logs_path / doctor / emit resolve to
     the slug dir while transcript.jsonl sits under the repo dir."""
-    from lib import session as session_mod
+    from lib import agent as agent_mod
 
     from tests.conftest import init_git_repo
 
@@ -242,11 +242,11 @@ def test_ensure_session_freezes_mentat_repo(tmp_path, monkeypatch):
     init_git_repo(repo)
     monkeypatch.chdir(repo)
     monkeypatch.delenv("MENTAT_REPO", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
 
-    session_mod.ensure_session("implement", "my-slug")
+    agent_mod.ensure_agent("implement", "my-slug")
     assert os.environ["MENTAT_REPO"] == "myrepo"
 
     # simulate implement's chdir into its worktree — the frozen value must hold
@@ -310,7 +310,7 @@ def test_read_blocked_summary_reads_from_session_log_dir(tmp_path, monkeypatch):
     impl = _impl()
     sid = "implement-f1test-9999"
     repo = "myrepo"
-    monkeypatch.setenv("MENTAT_SESSION", sid)
+    monkeypatch.setenv("MENTAT_AGENT", sid)
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", repo)
 
@@ -326,10 +326,10 @@ def test_read_blocked_summary_reads_from_session_log_dir(tmp_path, monkeypatch):
 
 def test_afk_ambiguity_prompt_directs_to_session_log_dir(tmp_path):
     """F1 tracer: the AFK prompt must direct the agent to write summary.md in
-    the session log dir (via MENTAT_SESSION_LOG), not the worktree root."""
+    the session log dir (via MENTAT_AGENT_LOG), not the worktree root."""
     impl = _impl()
     contract = impl._AFK_AMBIGUITY_CONTRACT
     # Must mention the session env var so the agent can resolve the log dir
-    assert "MENTAT_SESSION_LOG" in contract or "session log" in contract.lower(), (
+    assert "MENTAT_AGENT_LOG" in contract or "session log" in contract.lower(), (
         "_AFK_AMBIGUITY_CONTRACT must direct to session log dir, not worktree"
     )

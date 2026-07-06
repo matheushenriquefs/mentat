@@ -126,14 +126,14 @@ def _write_stream(session_dir: Path, name: str, rows: list[dict]) -> Path:
 def test_session_stream_tools_returns_tool_names_in_order(tmp_path):
     load_module("registry")
     sd = tmp_path / "s-1"
-    _write_stream(sd, "session", [_assistant("Read"), {"type": "user"}, _assistant("Edit", "Bash")])
+    _write_stream(sd, "transcript", [_assistant("Read"), {"type": "user"}, _assistant("Edit", "Bash")])
     assert registry.agent_stream_tools(sd) == ["Read", "Edit", "Bash"]
 
 
 def test_session_stream_tools_tails_last_n(tmp_path):
     load_module("registry")
     sd = tmp_path / "s-1"
-    _write_stream(sd, "session", [_assistant(f"T{i}") for i in range(10)])
+    _write_stream(sd, "transcript", [_assistant(f"T{i}") for i in range(10)])
     assert registry.agent_stream_tools(sd, limit=3) == ["T7", "T8", "T9"]
 
 
@@ -142,7 +142,7 @@ def test_session_stream_tools_ignores_audit_rows(tmp_path):
     load_module("registry")
     sd = tmp_path / "s-1"
     _write_stream(sd, "mentat-implement", [{"ts": "t", "event": "chunk_started", "payload": {}}])
-    _write_stream(sd, "session", [_assistant("Read")])
+    _write_stream(sd, "transcript", [_assistant("Read")])
     assert registry.agent_stream_tools(sd) == ["Read"]
 
 
@@ -205,7 +205,7 @@ def test_handle_key_unknown_is_noop():
 
 
 def _rec(session: str, status: str, last_event: str | None = None) -> dict:
-    return {"session": session, "status": status, "mtime": 0.0, "age": 0.0, "last_event": last_event}
+    return {"agent": session, "status": status, "mtime": 0.0, "age": 0.0, "last_event": last_event}
 
 
 def test_render_list_marks_selection_and_status():
@@ -243,7 +243,7 @@ def test_render_preview_empty_still_renders_gutter():
 def test_render_focus_shows_session_rule_and_tools(tmp_path):
     load_module("track")
     sd = tmp_path / "s-a"
-    _write_stream(sd, "session", [_assistant("Read", "Bash")])
+    _write_stream(sd, "transcript", [_assistant("Read", "Bash")])
     rec = _rec("s-a", "working", "chunk_started")
     lines = render.render_focus(rec, sd)
     body = "\n".join(lines)
@@ -335,7 +335,7 @@ def test_render_focus_transcript_shows_chat(tmp_path):
     """render_focus in transcript view shows assistant text and tool names."""
     load_module("track")
     sd = tmp_path / "s-1"
-    _write_stream(sd, "session", [_assistant("Read", text="doing stuff")])
+    _write_stream(sd, "transcript", [_assistant("Read", text="doing stuff")])
     rec = _rec("s-1", "working")
     lines = render.render_focus(rec, sd, "transcript")
     body = "\n".join(lines)
@@ -523,22 +523,22 @@ def test_render_audit_lines_stream_only_shows_placeholder(tmp_path):
     """Harness stream rows (no event key) are filtered out — audit shows placeholder."""
     load_module("track")
     sd = tmp_path / "stream-only"
-    _write_stream(sd, "session", [_assistant("Read")])
+    _write_stream(sd, "transcript", [_assistant("Read")])
     lines = render.render_audit_lines(sd)
     assert any("no audit events yet" in ln for ln in lines)
 
 
-# ── view_session non-tty path ─────────────────────────────────────────────────
+# ── view_agent non-tty path ─────────────────────────────────────────────────
 
 
-def test_view_session_non_tty_prints_transcript_and_returns(tmp_path, monkeypatch):
+def test_view_agent_non_tty_prints_transcript_and_returns(tmp_path, monkeypatch):
     load_module("track")
     sd = tmp_path / "s-view"
-    _write_stream(sd, "session", [_assistant("Read", text="doing work")])
+    _write_stream(sd, "transcript", [_assistant("Read", text="doing work")])
     monkeypatch.setattr("sys.stdin", type("FakeStdin", (), {"isatty": lambda self: False})())
     lines_captured = []
     monkeypatch.setattr("builtins.print", lambda *a, **kw: lines_captured.append(" ".join(str(x) for x in a)))
-    render.view_session(sd)
+    render.view_agent(sd)
     body = "\n".join(lines_captured)
     assert "Read" in body or "doing work" in body
 
@@ -617,15 +617,15 @@ def test_terminal_size_fallback_on_oserror(monkeypatch):
 
 def test_selected_clamps_to_range():
     load_module("track")
-    entries = [({"session": "a"}, Path("/a")), ({"session": "b"}, Path("/b"))]
-    assert panes._selected(entries, 5)[0]["session"] == "b"
-    assert panes._selected(entries, 0)[0]["session"] == "a"
+    entries = [({"agent": "a"}, Path("/a")), ({"agent": "b"}, Path("/b"))]
+    assert panes._selected(entries, 5)[0]["agent"] == "b"
+    assert panes._selected(entries, 0)[0]["agent"] == "a"
 
 
 def test_tools_delegates_to_stream_tools(tmp_path):
     load_module("track")
     sd = tmp_path / "s-tools"
-    _write_stream(sd, "session", [_assistant("Read", "Grep")])
+    _write_stream(sd, "transcript", [_assistant("Read", "Grep")])
     assert panes._tools(sd, limit=10) == ["Read", "Grep"]
 
 
@@ -644,7 +644,7 @@ def test_registry_pairs_records_with_dirs(tmp_path, monkeypatch):
     entries = panes._registry(repo_dir, active_only=False)
     assert entries, "expected the seeded session in the registry"
     rec, sd = entries[0]
-    assert rec["session"] == "implement-a-1"
+    assert rec["agent"] == "implement-a-1"
     assert sd == repo_dir / "implement-a-1"
 
 
@@ -665,7 +665,7 @@ def test_registry_reads_sqlite_lists_live_and_idle(tmp_path, monkeypatch):
     (logs / "repo" / "idle").mkdir(parents=True)
     repo_dir = logs / "repo"
     entries = panes._registry(repo_dir, active_only=True)
-    assert {rec["session"] for rec, _ in entries} == {"live", "idle"}
+    assert {rec["agent"] for rec, _ in entries} == {"live", "idle"}
     assert repo_dir / "live" in {sd for _, sd in entries}
 
 
@@ -735,11 +735,11 @@ def test_frame_builds_list_view_with_repo_and_hint(tmp_path, monkeypatch):
     store.record_emit(env, "chunk_started", {"slug": "x"})
     repo_dir = logs / "repo"
     (repo_dir / "implement-a-1").mkdir(parents=True)
-    _write_stream(repo_dir / "implement-a-1", "session", [_assistant("Read", "Grep")])
+    _write_stream(repo_dir / "implement-a-1", "transcript", [_assistant("Read", "Grep")])
     entries = panes._registry(repo_dir, active_only=False)
     body = "\n".join(panes._frame(entries, 0, "myrepo", rows=24))
     assert "myrepo" in body
-    assert "session(s)" in body
+    assert "agent(s)" in body
     assert "move" in body  # the list-view key hint
 
 
@@ -756,14 +756,14 @@ def test_transcript_content_continues_after_tool_row(tmp_path):
     load_module("track")
     sd = tmp_path / "s-multi"
     rows = [_assistant("Read"), {"type": "system", "subtype": "init"}, _assistant(text="after")]
-    _write_stream(sd, "session", rows)
+    _write_stream(sd, "transcript", rows)
     body = "\n".join(render.render_transcript_lines(sd))
     assert "Read" in body and "after" in body
 
 
 def test_focus_frame_shows_scroll_affordances():
     load_module("track")
-    record = {"session": "s", "status": "working"}
+    record = {"agent": "s", "status": "working"}
     content = [f"line {i}" for i in range(20)]
     body = "\n".join(panes._focus_frame(record, content, scroll_top=5, height=5))
     assert "more" in body  # both ↑ and ↓ affordances render mid-scroll
@@ -777,7 +777,7 @@ def test_transcript_content_skips_user_row_without_result(tmp_path):
         {"type": "user", "message": {"content": [{"type": "text", "text": "hi"}]}},
         _assistant(text=""),
     ]
-    _write_stream(sd, "session", rows)
+    _write_stream(sd, "transcript", rows)
     lines = render.render_transcript_lines(sd)
     assert any("no transcript yet" in ln for ln in lines)
 
@@ -785,14 +785,14 @@ def test_transcript_content_skips_user_row_without_result(tmp_path):
 # ── entrypoint dispatch (tty branch delegates to the pragma'd I/O shell) ───────
 
 
-def test_view_session_tty_dispatches_to_loop(tmp_path, monkeypatch):
+def test_view_agent_tty_dispatches_to_loop(tmp_path, monkeypatch):
     load_module("track")
     sd = tmp_path / "s-vt"
     sd.mkdir()
     monkeypatch.setattr("sys.stdin", type("FakeStdin", (), {"isatty": lambda self: True})())
     seen: list[Path] = []
     monkeypatch.setattr(render, "_view_agent_tty", lambda d: seen.append(d))
-    render.view_session(sd)
+    render.view_agent(sd)
     assert seen == [sd]
 
 
@@ -808,7 +808,7 @@ def test_navigate_non_tty_prints_list_and_returns_zero(tmp_path, monkeypatch):
     store.record_emit(env, "chunk_started", {"slug": "x"})
     repo_dir = logs / "repo"
     (repo_dir / "implement-x-1").mkdir(parents=True)
-    _write_stream(repo_dir / "implement-x-1", "session", [_assistant("Read", text="hi")])
+    _write_stream(repo_dir / "implement-x-1", "transcript", [_assistant("Read", text="hi")])
     monkeypatch.setattr("sys.stdin", type("FakeStdin", (), {"isatty": lambda self: False})())
     out: list[str] = []
     monkeypatch.setattr("builtins.print", lambda *a, **k: out.append(" ".join(str(x) for x in a)))

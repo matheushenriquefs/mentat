@@ -3,8 +3,8 @@
 The id is an opaque ``uuid7`` — repo/branch/pid are recorded as *fields*, never
 encoded into the id, so a ``/``-branch can't nest a dir, a reused pid can't
 collide, and no ``orphan-session-`` fallback is reachable. One helper mints it;
-``ensure_session`` exports ``MENTAT_SESSION`` + ``MENTAT_SESSION_LOG`` (and the
-``MENTAT_SESSION_{ROLE,SLUG,PID,BRANCH}`` fields) before any harness spawn.
+``ensure_agent`` exports ``MENTAT_AGENT`` + ``MENTAT_AGENT_LOG`` (and the
+``MENTAT_AGENT_{ROLE,SLUG,PID,BRANCH}`` fields) before any harness spawn.
 """
 
 from __future__ import annotations
@@ -21,14 +21,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILLS = REPO_ROOT / ".agents/skills"
 
 sys.path.insert(0, str(REPO_ROOT / ".agents"))
-from lib import session as session_mod  # noqa: E402
+from lib import agent as agent_mod  # noqa: E402
 
 UUID_HEX = re.compile(r"^[0-9a-f]{32}$")
 UUID_V7_HEX = re.compile(r"^[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$")
 
 
 def test_make_agent_id_is_opaque_uuid7() -> None:
-    sid = session_mod.make_agent_id("implement", "my-plan", pid=4242)
+    sid = agent_mod.make_agent_id("implement", "my-plan", pid=4242)
     assert UUID_V7_HEX.match(sid), f"expected uuid7 hex, got {sid!r}"
     assert "implement" not in sid
     assert "my-plan" not in sid
@@ -36,8 +36,8 @@ def test_make_agent_id_is_opaque_uuid7() -> None:
 
 
 def test_make_agent_id_is_unique_per_call() -> None:
-    a = session_mod.make_agent_id("orchestrate", "batch")
-    b = session_mod.make_agent_id("orchestrate", "batch")
+    a = agent_mod.make_agent_id("orchestrate", "batch")
+    b = agent_mod.make_agent_id("orchestrate", "batch")
     assert a != b
     assert UUID_V7_HEX.match(a) and UUID_V7_HEX.match(b)
 
@@ -46,24 +46,24 @@ def test_make_agent_id_slash_slug_stays_flat(tmp_path, monkeypatch) -> None:
     """A '/'-bearing slug (branch) never nests the session dir — the id is a uuid."""
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "demo")
-    sid = session_mod.make_agent_id("implement", "feat/x")
+    sid = agent_mod.make_agent_id("implement", "feat/x")
     assert "/" not in sid
-    sd = session_mod.session_dir(sid)
+    sd = agent_mod.agent_dir(sid)
     assert sd.parent == tmp_path / "demo"  # one canonical dir, not nested under feat/
 
 
-def test_ensure_session_exports_env(monkeypatch, tmp_path) -> None:
+def test_ensure_agent_exports_env(monkeypatch, tmp_path) -> None:
     monkeypatch.delenv("MENTAT_AGENT", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
     monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
     monkeypatch.delenv("MENTAT_SLUG", raising=False)
     monkeypatch.delenv("MENTAT_AGENT_PID", raising=False)
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "demo")
-    sid = session_mod.ensure_session("implement", "p")
+    sid = agent_mod.ensure_agent("implement", "p")
     assert os.environ["MENTAT_AGENT"] == sid
-    assert os.environ["MENTAT_SESSION"] == sid
+    assert os.environ["MENTAT_AGENT"] == sid
     assert UUID_V7_HEX.match(sid), f"expected uuid7, got {sid!r}"
     log = Path(os.environ["MENTAT_AGENT_LOG"])
     assert log == tmp_path / "demo" / sid / "transcript.jsonl"
@@ -73,9 +73,9 @@ def test_ensure_session_exports_env(monkeypatch, tmp_path) -> None:
 
 
 def test_emit_without_session_env_mints_uuid_not_orphan(monkeypatch, tmp_path) -> None:
-    """A raw emit with MENTAT_SESSION unset lands in a real uuid dir — never orphan-session-*."""
+    """A raw emit with MENTAT_AGENT unset lands in a real uuid dir — never orphan-session-*."""
     log_mod = _load_log()
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "demo")
     monkeypatch.setenv("MENTAT_SLUG", "agent")
@@ -95,26 +95,26 @@ def test_emit_without_session_env_mints_uuid_not_orphan(monkeypatch, tmp_path) -
     assert UUID_HEX.match(name), f"expected uuid session dir, got {name!r}"
 
 
-def test_ensure_session_records_branch_when_resolvable(monkeypatch, tmp_path) -> None:
+def test_ensure_agent_records_branch_when_resolvable(monkeypatch, tmp_path) -> None:
     """Branch is no longer exported as an env var (V1 agent entity)."""
     monkeypatch.delenv("MENTAT_AGENT", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "demo")
-    monkeypatch.setattr(session_mod, "current_branch", lambda: "trunk")
-    session_mod.ensure_session("orchestrate", "hold")
-    assert "MENTAT_SESSION_BRANCH" not in os.environ
+    monkeypatch.setattr(agent_mod, "current_branch", lambda: "trunk")
+    agent_mod.ensure_agent("orchestrate", "hold")
+    assert "MENTAT_AGENT_BRANCH" not in os.environ
 
 
-def test_ensure_session_skips_branch_when_unresolvable(monkeypatch, tmp_path) -> None:
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
-    monkeypatch.delenv("MENTAT_SESSION_BRANCH", raising=False)
+def test_ensure_agent_skips_branch_when_unresolvable(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT_BRANCH", raising=False)
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "demo")
-    monkeypatch.setattr(session_mod, "current_branch", lambda: None)
-    session_mod.ensure_session("orchestrate", "hold")
-    assert "MENTAT_SESSION_BRANCH" not in os.environ
+    monkeypatch.setattr(agent_mod, "current_branch", lambda: None)
+    agent_mod.ensure_agent("orchestrate", "hold")
+    assert "MENTAT_AGENT_BRANCH" not in os.environ
 
 
 def test_current_branch_success(monkeypatch) -> None:
@@ -122,8 +122,8 @@ def test_current_branch_success(monkeypatch) -> None:
         returncode = 0
         stdout = "main\n"
 
-    monkeypatch.setattr(session_mod.subprocess, "run", lambda *a, **k: _R())
-    assert session_mod.current_branch() == "main"
+    monkeypatch.setattr(agent_mod.subprocess, "run", lambda *a, **k: _R())
+    assert agent_mod.current_branch() == "main"
 
 
 def test_current_branch_nonzero_rc_is_none(monkeypatch) -> None:
@@ -131,8 +131,8 @@ def test_current_branch_nonzero_rc_is_none(monkeypatch) -> None:
         returncode = 128
         stdout = ""
 
-    monkeypatch.setattr(session_mod.subprocess, "run", lambda *a, **k: _R())
-    assert session_mod.current_branch() is None
+    monkeypatch.setattr(agent_mod.subprocess, "run", lambda *a, **k: _R())
+    assert agent_mod.current_branch() is None
 
 
 def test_current_branch_empty_stdout_is_none(monkeypatch) -> None:
@@ -140,16 +140,16 @@ def test_current_branch_empty_stdout_is_none(monkeypatch) -> None:
         returncode = 0
         stdout = "\n"
 
-    monkeypatch.setattr(session_mod.subprocess, "run", lambda *a, **k: _R())
-    assert session_mod.current_branch() is None
+    monkeypatch.setattr(agent_mod.subprocess, "run", lambda *a, **k: _R())
+    assert agent_mod.current_branch() is None
 
 
 def test_current_branch_oserror_is_none(monkeypatch) -> None:
     def _boom(*a, **k):
         raise OSError("no git")
 
-    monkeypatch.setattr(session_mod.subprocess, "run", _boom)
-    assert session_mod.current_branch() is None
+    monkeypatch.setattr(agent_mod.subprocess, "run", _boom)
+    assert agent_mod.current_branch() is None
 
 
 def _load_log():
@@ -167,13 +167,13 @@ def argparse_ns(**kw):
     return argparse.Namespace(**kw)
 
 
-def test_ensure_session_preserves_existing(monkeypatch, tmp_path) -> None:
+def test_ensure_agent_preserves_existing(monkeypatch, tmp_path) -> None:
     """A child inheriting orchestrate's id keeps it — not re-minted."""
-    monkeypatch.setenv("MENTAT_SESSION", "orchestrate-batch-9")
-    monkeypatch.delenv("MENTAT_SESSION_LOG", raising=False)
+    monkeypatch.setenv("MENTAT_AGENT", "orchestrate-batch-9")
+    monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "demo")
-    assert session_mod.ensure_session("implement", "p") == "orchestrate-batch-9"
+    assert agent_mod.ensure_agent("implement", "p") == "orchestrate-batch-9"
 
 
 # ── source contract: no legacy formats survive at any session-minting site ──
@@ -209,4 +209,4 @@ def test_no_legacy_session_literals(rel: str) -> None:
     ],
 )
 def test_entrypoints_use_shared_minter(rel: str) -> None:
-    assert "lib.session" in (SKILLS / rel).read_text(), f"{rel} does not import lib.session"
+    assert "lib.agent" in (SKILLS / rel).read_text(), f"{rel} does not import lib.agent"

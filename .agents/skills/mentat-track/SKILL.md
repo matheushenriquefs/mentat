@@ -11,9 +11,9 @@ Terminal tool — run on PATH (no slash form; this is not a harness slash comman
 
 ```
 mentat-track list
-mentat-track track [<session>]
-mentat-track doctor [<session>]
-mentat-track report [<session>]
+mentat-track track [<agent-id>]
+mentat-track doctor [<agent-id>]
+mentat-track report [<agent-id>]
 mentat-track diagnose
 ```
 
@@ -89,7 +89,7 @@ Glyphs (shared with `lib/tui.py`): tool calls `Read ·` `Edit ~` `Write +` `Bash
 |---|---|
 | 0 | Success |
 | 64 | CLI arg parse error / unknown subcommand |
-| 66 | Session ID not found in log path |
+| 66 | Agent ID not found in log path |
 | 70 | Unhandled Python exception |
 
 ## Rules
@@ -105,4 +105,4 @@ Glyphs (shared with `lib/tui.py`): tool calls `Read ·` `Edit ~` `Write +` `Bash
 
 - Read-only: `track` and `doctor` never write events or modify plan state.
 - `diagnose` is interactive; requires `AskUserQuestion` — do not invoke in AFK kind plans.
-- Agent lookup uses `$MENTAT_AGENT` (or legacy `$MENTAT_SESSION`) when set; otherwise latest agent in log dir.
+- Agent lookup uses `$MENTAT_AGENT` (or legacy `$MENTAT_AGENT`) when set; otherwise latest agent in log dir.

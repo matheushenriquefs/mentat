@@ -117,8 +117,8 @@ def _doctor_section_mentat_state(wt: Path) -> tuple[list[str], list[str]]:
             warnings.append(f"repo {r_warn}")
     logs_dir = mentat_dir / "logs"
     if logs_dir.exists():
-        session_n = sum(1 for _ in logs_dir.iterdir() if _.is_dir())
-        print(_col("logs dir", f"{session_n} sessions"))
+        agent_n = sum(1 for _ in logs_dir.iterdir() if _.is_dir())
+        print(_col("logs dir", f"{agent_n} agents"))
     else:
         print(_col("logs dir", "absent"))
     print()

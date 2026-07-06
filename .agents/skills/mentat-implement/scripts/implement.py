@@ -20,7 +20,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 from lib.support import paths  # noqa: E402
 
-_SESSION_SCRIPT = paths.SKILLS_DIR / "mentat-track/scripts/session.py"
+_AGENT_SCRIPT = paths.SKILLS_DIR / "mentat-track/scripts/agent.py"
 _GIT_SCRIPT = paths.SKILLS_DIR / "mentat-git/scripts/git.py"
 _GIT_WORKTREE_PY = paths.SKILLS_DIR / "mentat-git/scripts/worktree.py"
 
@@ -35,13 +35,13 @@ from lib.exits import (  # noqa: E402
     EX_USAGE,
 )
 from lib.loader import load_sibling  # noqa: E402
-from lib.session import ensure_session  # noqa: E402
-from lib.session import session_dir as _session_dir_fn
+from lib.agent import ensure_agent  # noqa: E402
+from lib.agent import agent_dir as _agent_dir_fn
 from lib.support import frontmatter as _frontmatter  # noqa: E402
 
 
 def _logs_path() -> str:
-    return str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual")))
+    return str(_agent_dir_fn(os.environ.get("MENTAT_AGENT", "manual")))
 
 
 # Exit codes that trigger auto-doctor: TDD/gate fail, HITL ambiguity, CLI/plan errors,
@@ -122,7 +122,7 @@ def parse_frontmatter(plan_path: Path) -> dict[str, str]:
 
 
 from lib.events import (
-    HITL_IN_SESSION,
+    HITL_IN_AGENT,
     HITL_REQUIRED,
     IMPLEMENT_FAILED,
     MAIN_TREE_REFUSED,
@@ -161,9 +161,9 @@ def _checkpoint_if_needed(result: Any, *, slug: str, threshold: int | None) -> N
     usage = getattr(result, "usage_tokens", None)
     if usage is None or usage < threshold:
         return
-    from lib.session import summary_file as _summary_file
+    from lib.agent import summary_file as _summary_file
 
-    sid = os.environ.get("MENTAT_SESSION", slug)
+    sid = os.environ.get("MENTAT_AGENT", slug)
     path = _summary_file(sid)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -226,30 +226,30 @@ def _teardown_worktree(target: Path) -> None:
         print(f"mentat-implement: preserving dirty worktree {target}", file=sys.stderr)
 
 
-def _run_session_cmd(subcmd: str) -> None:
-    """Run `session.py <subcmd> [<session_id>]`.
+def _run_agent_cmd(subcmd: str) -> None:
+    """Run `agent.py <subcmd> [<agent_id>]`.
 
-    Session id appended only when set; session.py falls back to latest session for
+    Agent id appended only when set; agent.py falls back to latest agent for
     the repo when absent, so doctor/report always fires on a diagnosable death even
-    when MENTAT_SESSION is unset.
+    when MENTAT_AGENT is unset.
     """
-    if not _SESSION_SCRIPT.exists():
+    if not _AGENT_SCRIPT.exists():
         return
-    cmd = ["python3", str(_SESSION_SCRIPT), subcmd]
-    session_id = os.environ.get("MENTAT_SESSION")
-    if session_id:
-        cmd.append(session_id)
+    cmd = ["python3", str(_AGENT_SCRIPT), subcmd]
+    agent_id = os.environ.get("MENTAT_AGENT")
+    if agent_id:
+        cmd.append(agent_id)
     subprocess.run(cmd, capture_output=True, check=False)
 
 
 def _auto_doctor() -> None:
     """Spawn mentat-track doctor on death; it prints the verdict to stdout."""
-    _run_session_cmd("doctor")
+    _run_agent_cmd("doctor")
 
 
 def _auto_summary() -> None:
     """On clean finish, write success-side report-back summary."""
-    _run_session_cmd("report")
+    _run_agent_cmd("report")
 
 
 def _is_main_worktree(cwd: Path) -> bool:
@@ -272,7 +272,7 @@ def _skip_preflight(*, reuse_worktree: bool = False) -> bool:
 
 def _in_shared_main_tree(*, reuse_worktree: bool = False) -> bool:
     """True iff running in the shared main worktree, where a ``git checkout``
-    flips HEAD for every concurrent session sharing that working tree — the
+    flips HEAD for every concurrent agent sharing that working tree — the
     branch-leak risk. Separate worktrees each own their HEAD (git refuses
     cross-worktree branch sharing), so an own-worktree run is leak-proof.
 
@@ -282,7 +282,7 @@ def _in_shared_main_tree(*, reuse_worktree: bool = False) -> bool:
 
     ``--reuse-worktree`` / ``MENTAT_SKIP_PREFLIGHT`` returns False by design: test /
     recovery isolation escape hatches. A run that sets either and switches branches
-    in a tmp main tree is its own private repo with no concurrent sessions to leak
+    in a tmp main tree is its own private repo with no concurrent agents to leak
     into — the hatch trades the (vacuous) leak risk for hermetic, worktree-free runs.
     Non-repo cwds likewise have no shared HEAD to leak.
     """
@@ -348,7 +348,7 @@ def _run_and_doctor(plan_path: Path, *, harness: str | None = None, model: str |
         return rc
     if rc == EX_OK and parse_frontmatter(plan_path).get("kind", "HITL") == "AFK":
         # Summary only for AFK runs that completed the plan. HITL returns 0 by handing
-        # off to the calling session — a success summary there would be premature.
+        # off to the calling agent — a success summary there would be premature.
         _auto_summary()
     return rc
 
@@ -385,18 +385,18 @@ def _invoke_harness(
 
 
 def _detect_self_answer(result: Any) -> bool:
-    session_log = getattr(result, "session_log", None)
-    if session_log is None:
+    agent_log = getattr(result, "agent_log", None)
+    if agent_log is None:
         return False
-    return _utils.detect_self_answer(Path(session_log))
+    return _utils.detect_self_answer(Path(agent_log))
 
 
 def _blocked_summary_path() -> Path | None:
-    """The canonical summary.md path for the current session, or None if session is unset."""
-    sid = os.environ.get("MENTAT_SESSION")
+    """The canonical summary.md path for the current agent, or None if agent is unset."""
+    sid = os.environ.get("MENTAT_AGENT")
     if not sid:
         return None
-    from lib.session import summary_file as _summary_file
+    from lib.agent import summary_file as _summary_file
 
     return _summary_file(sid)
 
@@ -418,25 +418,25 @@ def _read_summary_at(path: Path) -> str | None:
 def _read_blocked_summary(worktree: Path) -> str | None:
     """The agent's blocker body if it wedged, else None.
 
-    Reads from the session log dir (lib.session.summary_file) — the one
-    canonical location the AFK agent writes to via $MENTAT_SESSION_LOG.
-    Falls back to the worktree path when $MENTAT_SESSION_LOG is unset.
+    Reads from the agent log dir (lib.agent.summary_file) — the one
+    canonical location the AFK agent writes to via $MENTAT_AGENT_LOG.
+    Falls back to the worktree path when $MENTAT_AGENT_LOG is unset.
     """
     seam = _blocked_summary_path()
     if seam is not None:
         result = _read_summary_at(seam)
         if result is not None:
             return result
-    # Worktree fallback (MENTAT_SESSION unset)
+    # Worktree fallback (MENTAT_AGENT unset)
     return _read_summary_at(worktree / SUMMARY_FILE)
 
 
 def _promote_blocked_summary(body: str) -> None:
-    """Ensure the blocker body is in the session log dir's summary.md so
+    """Ensure the blocker body is in the agent log dir's summary.md so
     ``mentat-track report`` surfaces it. Agent already writes there on a wedge;
     this covers the self-answer case where it never wrote the file."""
     seam = _blocked_summary_path()
-    target = seam if seam is not None else _session_dir_fn(os.environ.get("MENTAT_SESSION", "manual")) / SUMMARY_FILE
+    target = seam if seam is not None else _agent_dir_fn(os.environ.get("MENTAT_AGENT", "manual")) / SUMMARY_FILE
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(f"---\nstatus: {_BLOCKED_STATUS}\n---\n{body}\n")
 
@@ -493,10 +493,10 @@ _AFK_AMBIGUITY_CONTRACT = (
     "AFK contract: no human is available to answer questions. If you hit a "
     "decision the plan does not resolve and cannot resolve it safely yourself, "
     "do NOT guess or fabricate. Write the blocker — the question plus the "
-    "options you see — to `summary.md` in the session log directory with YAML "
+    "options you see — to `summary.md` in the agent log directory with YAML "
     "frontmatter `---` then `status: blocked` then `---`, and stop immediately. "
-    "The session log directory is the parent of `$MENTAT_SESSION_LOG` "
-    "(i.e. `$(dirname $MENTAT_SESSION_LOG)/summary.md`). "
+    "The agent log directory is the parent of `$MENTAT_AGENT_LOG` "
+    "(i.e. `$(dirname $MENTAT_AGENT_LOG)/summary.md`). "
     "That file hands the slice back to the operator cleanly; guessing produces "
     "wrong work that looks finished."
 )
@@ -512,19 +512,19 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
 
     slug = plan_path.stem
 
-    # HITL plans run in the calling Claude session — never spawn a sub-claude
+    # HITL plans run in the calling Claude agent — never spawn a sub-claude
     # via the harness adapter (it would shell `claude --headless` and lose
-    # AskUserQuestion). Emit chunk_started{harness:"hitl-in-session"} and
-    # return control to the caller; the calling session reads the audit log
+    # AskUserQuestion). Emit chunk_started{harness:"hitl-in-agent"} and
+    # return control to the caller; the calling agent reads the audit log
     # and drives the TDD loop itself.
     if not afk:
         _emit_event(
             "chunk_started",
-            spawned_payload(slug, str(plan_path), harness=HITL_IN_SESSION, worktree=str(Path.cwd())),
+            spawned_payload(slug, str(plan_path), harness=HITL_IN_AGENT, worktree=str(Path.cwd())),
         )
-        _emit_event("agent_started", {"harness": HITL_IN_SESSION})
+        _emit_event("agent_started", {"harness": HITL_IN_AGENT})
         print(
-            f"mentat-implement: {slug} is kind:HITL — drive in calling Claude session.\nPlan: {plan_path}",
+            f"mentat-implement: {slug} is kind:HITL — drive in calling Claude agent.\nPlan: {plan_path}",
             file=sys.stderr,
         )
         return 0
@@ -552,7 +552,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
     # (the root cause of silent AFK kills reading as plain failures).
     blocker = _read_blocked_summary(Path.cwd())
     if blocker is not None or _detect_self_answer(result):
-        summary = blocker or "AFK ambiguity — self-answer detected in the session stream."
+        summary = blocker or "AFK ambiguity — self-answer detected in the agent stream."
         _promote_blocked_summary(summary)
         _emit_event(
             "chunk_ejected",
@@ -560,7 +560,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
                 slug,
                 HITL_REQUIRED,
                 str(plan_path.parent),
-                logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
+                logs_path=str(_agent_dir_fn(os.environ.get("MENTAT_AGENT", "manual"))),
                 summary=summary,
             ),
         )
@@ -573,7 +573,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
                 slug,
                 IMPLEMENT_FAILED,
                 str(plan_path.parent),
-                logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
+                logs_path=str(_agent_dir_fn(os.environ.get("MENTAT_AGENT", "manual"))),
             ),
         )
         return 1
@@ -675,13 +675,13 @@ def main() -> None:
         sys.exit(1)
 
     slug = plan_path.stem
-    # Mint + export MENTAT_SESSION before any emit (preflight can eject) and
-    # before the harness spawn — closes the standalone no-session gap and makes
-    # session.jsonl capture happen for standalone runs too. Computed while still
+    # Mint + export MENTAT_AGENT before any emit (preflight can eject) and
+    # before the harness spawn — closes the standalone no-agent gap and makes
+    # transcript capture happen for standalone runs too. Computed while still
     # in the main worktree so MENTAT_REPO resolves to the repo, not the slug dir.
-    ensure_session("implement", slug)
-    session_id = os.environ.get("MENTAT_SESSION", slug)
-    print(f"mentat-implement: track this run with `mentat-track track {session_id}`", file=sys.stderr)
+    ensure_agent("implement", slug)
+    agent_id = os.environ.get("MENTAT_AGENT", slug)
+    print(f"mentat-implement: track this run with `mentat-track track {agent_id}`", file=sys.stderr)
     _prune_worktrees_preflight()
     harness = _utils.default_harness()
     reuse_worktree = bool(getattr(args, "reuse_worktree", False))
@@ -703,7 +703,7 @@ def main() -> None:
                 slug,
                 PREFLIGHT_WORKTREE_FAILED,
                 str(plan_path.parent),
-                logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
+                logs_path=str(_agent_dir_fn(os.environ.get("MENTAT_AGENT", "manual"))),
                 preflight_exit=pf_rc,
             ),
         )
@@ -717,7 +717,7 @@ def main() -> None:
 
     # Fail closed if preflight did not isolate us into our own worktree. A run
     # in the shared main tree leaks branch switches across every concurrent
-    # session — refuse rather than risk the leak.
+    # agent — refuse rather than risk the leak.
     if _in_shared_main_tree(reuse_worktree=reuse_worktree):
         _emit_event(
             "chunk_ejected",
@@ -725,12 +725,12 @@ def main() -> None:
                 slug,
                 MAIN_TREE_REFUSED,
                 str(Path.cwd()),
-                logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
+                logs_path=str(_agent_dir_fn(os.environ.get("MENTAT_AGENT", "manual"))),
             ),
         )
         print(
             "mentat-implement: refusing to run in the shared main worktree — a branch "
-            "switch there flips HEAD for every concurrent session. Run inside a "
+            "switch there flips HEAD for every concurrent agent. Run inside a "
             ".mentat/worktrees/ worktree (preflight normally creates one).",
             file=sys.stderr,
         )

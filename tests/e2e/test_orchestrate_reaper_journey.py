@@ -142,7 +142,7 @@ def test_run_orchestrate_failing_batch_reports_stall_cascade_and_ejects(monkeypa
     core = scheduler.Plan(slug="core", kind="AFK", blocked_by=[], path=tmp_path / "core.md")
     ui = scheduler.Plan(slug="ui", kind="AFK", blocked_by=["core", "gate"], path=tmp_path / "ui.md")
 
-    monkeypatch.setattr(orch, "ensure_session", lambda role, slug: "sess-x")
+    monkeypatch.setattr(orch, "ensure_agent", lambda role, slug: "sess-x")
     monkeypatch.setattr(orch, "_load_plans", lambda paths: [gate, core, ui])
     monkeypatch.setattr(orch._batch, "_prune_stale_containers", lambda: None)
     monkeypatch.setattr(orch._batch, "_prune_stale_worktrees", lambda *, preserve=None: None)

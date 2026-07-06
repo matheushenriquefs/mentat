@@ -31,7 +31,7 @@ Subcommands: `emit`, `validate`, `list`, `prune`. (`query` is a deprecated alias
 | `chunk_teardown` | `slug`, `ok` |
 | `gate_evaluated` | `gate`, `verdict`, `severity`, `message` |
 | `review_submitted` | `reviewer`, `score`, `threshold`, `verdict` |
-| `batch_reviewed` | `session`, `summary` |
+| `batch_reviewed` | `agent_id`, `summary` |
 | `task_created` | `id`, `slug` |
 | `task_claimed` | `id`, `agent`, `expires_at` |
 | `task_released` | `id` |
@@ -47,7 +47,7 @@ Subcommands: `emit`, `validate`, `list`, `prune`. (`query` is a deprecated alias
 | `MENTAT_DB` | `~/.mentat/mentat.db` | Canonical sqlite store |
 | `MENTAT_LOG_PATH` | `~/.mentat/logs` | Agent log dirs (transcript, summary) |
 | `MENTAT_AGENT` | minted on emit | Agent id |
-| `MENTAT_SESSION` | same as agent | Legacy alias |
+| `MENTAT_AGENT` | same as agent | Legacy alias |
 | `MENTAT_REPO` | from git / `unknown` | Repo name for log path |
 | `MENTAT_SLUG` | `agent-<pid>` | Sidecar filename segment |
 

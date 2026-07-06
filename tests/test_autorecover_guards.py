@@ -165,7 +165,7 @@ def test_stall_timeout_zero_disables(monkeypatch):
 def test_event_age_none_when_no_log(tmp_path, monkeypatch):
     """No session.jsonl → None (not a stall — a just-spawned chunk)."""
     orch = load_module("orchestrate")
-    monkeypatch.setattr(orch._supervise, "_session_dir", lambda sid: tmp_path)
+    monkeypatch.setattr(orch._supervise, "_agent_dir", lambda sid: tmp_path)
     assert orch._supervise._event_age("sess-x") is None
 
 
@@ -178,7 +178,7 @@ def test_event_age_reads_mtime(tmp_path, monkeypatch):
     log = tmp_path / "session.jsonl"
     log.write_text("{}\n")
     _os.utime(log, (_time.time() - 42, _time.time() - 42))
-    monkeypatch.setattr(orch._supervise, "_session_dir", lambda sid: tmp_path)
+    monkeypatch.setattr(orch._supervise, "_agent_dir", lambda sid: tmp_path)
     age = orch._supervise._event_age("sess-x")
     assert age is not None and age >= 40
 

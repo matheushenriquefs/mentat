@@ -96,7 +96,7 @@ def test_claude_code_parses_usage_from_stream_json(tmp_path: Path) -> None:
             fh.write(log_line)
         return MagicMock(returncode=0)
 
-    env = {**os.environ, "MENTAT_SESSION_LOG": str(log)}
+    env = {**os.environ, "MENTAT_AGENT_LOG": str(log)}
     with patch("subprocess.run", fake_run), patch.dict("os.environ", env, clear=False):
         result = cc.invoke("do the thing", afk=False, model=None)
 

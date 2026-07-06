@@ -124,9 +124,9 @@ def test_list_sessions_full_rank_order(tmp_path, monkeypatch):
         [_ev("gate_evaluated", now - 5, gate="g", verdict="p", severity="", message="")],
     )
 
-    rows = sessions.list_sessions(repo_dir, now=now)
+    rows = sessions.list_agents(repo_dir, now=now)
     assert [r["status"] for r in rows] == ["waiting", "idle", "?", "working"]
-    assert [r["session"] for r in rows] == ["s-waiting", "s-idle", "s-crashed", "s-working"]
+    assert [r["agent"] for r in rows] == ["s-waiting", "s-idle", "s-crashed", "s-working"]
 
 
 def test_list_sessions_age_tiebreak_within_rank(tmp_path, monkeypatch):
@@ -145,8 +145,8 @@ def test_list_sessions_age_tiebreak_within_rank(tmp_path, monkeypatch):
         "s-new",
         [_ev("gate_evaluated", now - 5, gate="g", verdict="p", severity="", message="")],
     )
-    rows = sessions.list_sessions(repo_dir, now=now)
-    assert [r["session"] for r in rows] == ["s-new", "s-old"]
+    rows = sessions.list_agents(repo_dir, now=now)
+    assert [r["agent"] for r in rows] == ["s-new", "s-old"]
 
 
 def test_list_sessions_survives_vanished_file(tmp_path, monkeypatch):
@@ -159,7 +159,7 @@ def test_list_sessions_survives_vanished_file(tmp_path, monkeypatch):
         "s-1",
         [_ev("gate_evaluated", 1_000_000.0, gate="g", verdict="p", severity="", message="")],
     )
-    rows = sessions.list_sessions(repo_dir, now=1_000_000.0)
+    rows = sessions.list_agents(repo_dir, now=1_000_000.0)
     assert isinstance(rows, list)
 
 
@@ -173,10 +173,10 @@ def test_list_sessions_killed_shows_crashed(tmp_path, monkeypatch):
         "implement-dead-9",
         [_ev("chunk_started", now - (sessions.STALE_SECS + 60), slug="d", plan="p", harness="h", worktree="w")],
     )
-    rows = sessions.list_sessions(repo_dir, now=now, active_only=False)
+    rows = sessions.list_agents(repo_dir, now=now, active_only=False)
     assert len(rows) == 1
     assert rows[0]["status"] == "?"
-    assert rows[0]["session"] == "implement-dead-9"
+    assert rows[0]["agent"] == "implement-dead-9"
 
 
 def test_list_sessions_empty_repo(tmp_path, monkeypatch):
@@ -184,7 +184,7 @@ def test_list_sessions_empty_repo(tmp_path, monkeypatch):
     sessions = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     repo_dir.mkdir(parents=True)
-    assert sessions.list_sessions(repo_dir, now=1.0) == []
+    assert sessions.list_agents(repo_dir, now=1.0) == []
 
 
 def test_list_sessions_records_mtime_and_last_event(tmp_path, monkeypatch):
@@ -197,7 +197,7 @@ def test_list_sessions_records_mtime_and_last_event(tmp_path, monkeypatch):
         "implement-a-1",
         [_ev("gate_evaluated", event_ts, gate="g", verdict="p", severity="", message="")],
     )
-    rows = sessions.list_sessions(repo_dir, now=1_234_600.0)
+    rows = sessions.list_agents(repo_dir, now=1_234_600.0)
     assert rows[0]["last_event"] == "gate_evaluated"
     assert rows[0]["mtime"] == event_ts
     assert rows[0]["age"] == 100.0
@@ -282,15 +282,15 @@ def test_list_sessions_active_only_drops_old_idle(tmp_path, monkeypatch):
         ],
     )
 
-    rows_active = sessions.list_sessions(repo_dir, now=now, active_only=True)
-    names_active = {r["session"] for r in rows_active}
+    rows_active = sessions.list_agents(repo_dir, now=now, active_only=True)
+    names_active = {r["agent"] for r in rows_active}
     assert "s-working" in names_active
     assert "s-waiting" in names_active
     assert "s-idle-recent" in names_active
     assert "s-idle-old" not in names_active
     assert "s-crashed-old" not in names_active
 
-    rows_all = sessions.list_sessions(repo_dir, now=now, active_only=False)
+    rows_all = sessions.list_agents(repo_dir, now=now, active_only=False)
     assert len(rows_all) == 5
 
 

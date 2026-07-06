@@ -116,7 +116,7 @@ def test_run_orchestrate_passes_all_plans_to_scheduler(tmp_path, monkeypatch) ->
 
     monkeypatch.setattr(orchestrate._batch._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
-    monkeypatch.setattr(orchestrate, "ensure_session", lambda *a, **k: "orch-test")
+    monkeypatch.setattr(orchestrate, "ensure_agent", lambda *a, **k: "orch-test")
     monkeypatch.setattr(orchestrate._git, "require_commit_identity", lambda **kw: ("T", "t@t"))
 
     with patch_orchestrate_worktree(orchestrate, tmp_path):

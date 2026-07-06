@@ -433,4 +433,4 @@ def test_main_batch_review_emits_event(monkeypatch):
         orch.main()
 
     assert events and events[0][0] == "batch_reviewed"
-    assert events[0][1]["session"] == "sess-xyz"
+    assert events[0][1]["agent_id"] == "sess-xyz"

@@ -78,7 +78,7 @@ def test_main_tears_down_worktree_on_failure(tmp_path, monkeypatch):
 
     monkeypatch.setattr(impl.sys, "argv", ["implement.py", "run", str(plan)])
     monkeypatch.setattr(impl, "resolve_plan_path", lambda _ref: plan)
-    monkeypatch.setattr(impl, "ensure_session", lambda *a, **k: "sess")
+    monkeypatch.setattr(impl, "ensure_agent", lambda *a, **k: "sess")
     monkeypatch.setattr(impl, "_prune_worktrees_preflight", lambda: None)
     monkeypatch.setattr(impl._utils, "default_harness", lambda: "claude-code")
     monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda _h, reuse_worktree=False: (0, []))

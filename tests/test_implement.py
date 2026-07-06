@@ -106,7 +106,7 @@ def test_implement_single_hitl_plan_hands_off_to_caller(tmp_path):
     """HITL plans must NOT spawn a sub-claude via the harness adapter.
 
     The harness shells `claude --headless` which loses AskUserQuestion.
-    implement.py emits chunk_started{harness:"hitl-in-session"} and returns 0,
+    implement.py emits chunk_started{harness:"hitl-in-agent"} and returns 0,
     handing control back to the calling Claude session which drives the TDD
     loop in-session.
     """
@@ -125,7 +125,7 @@ def test_implement_single_hitl_plan_hands_off_to_caller(tmp_path):
     events = [c.args[0] for c in mock_emit.call_args_list]
     assert "chunk_started" in events
     spawned_payload = next(c.args[1] for c in mock_emit.call_args_list if c.args[0] == "chunk_started")
-    assert spawned_payload.get("harness") == "hitl-in-session"
+    assert spawned_payload.get("harness") == "hitl-in-agent"
 
 
 def test_implement_harness_flag_overrides_config(tmp_path):
@@ -305,7 +305,7 @@ def test_main_run_subcommand_explicit(tmp_path, monkeypatch):
     impl = load_module("implement")
     monkeypatch.setenv("MENTAT_SKIP_PREFLIGHT", "1")
     plan = _write_plan(tmp_path, "run-plan", kind="AFK")
-    with patch.object(impl, "ensure_session"):
+    with patch.object(impl, "ensure_agent"):
         with patch.object(impl, "_prune_worktrees_preflight"):
             with patch.object(impl, "preflight_worktree", return_value=(0, None)):
                 with patch.object(impl, "_in_shared_main_tree", return_value=False):
@@ -398,8 +398,8 @@ def test_auto_summary_invokes_session_report(tmp_path, monkeypatch):
     impl = load_module("implement")
     fake_script = tmp_path / "session.py"
     fake_script.write_text("")
-    monkeypatch.setattr(impl, "_SESSION_SCRIPT", fake_script)
-    monkeypatch.setenv("MENTAT_SESSION", "implement-foo-99")
+    monkeypatch.setattr(impl, "_AGENT_SCRIPT", fake_script)
+    monkeypatch.setenv("MENTAT_AGENT", "implement-foo-99")
 
     with patch.object(impl.subprocess, "run") as mock_run:
         impl._auto_summary()
@@ -441,14 +441,14 @@ def test_promote_blocked_summary_readable_as_blocked(tmp_path):
 
 
 def test_auto_doctor_fires_when_session_unset(tmp_path, monkeypatch):
-    """S2: the MENTAT_SESSION-unset early-return is gone — doctor always fires on
+    """S2: the MENTAT_AGENT-unset early-return is gone — doctor always fires on
     death. Previously an unset session silently skipped doctor, the root cause of
     silently-killed standalone AFK sessions going undiagnosed."""
     impl = load_module("implement")
     fake_script = tmp_path / "session.py"
     fake_script.write_text("")
-    monkeypatch.setattr(impl, "_SESSION_SCRIPT", fake_script)
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
+    monkeypatch.setattr(impl, "_AGENT_SCRIPT", fake_script)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
     monkeypatch.delenv("EDITOR", raising=False)
 
     with patch.object(impl.subprocess, "run") as mock_run:
@@ -465,8 +465,8 @@ def test_auto_doctor_passes_session_id_when_set(tmp_path, monkeypatch):
     impl = load_module("implement")
     fake_script = tmp_path / "session.py"
     fake_script.write_text("")
-    monkeypatch.setattr(impl, "_SESSION_SCRIPT", fake_script)
-    monkeypatch.setenv("MENTAT_SESSION", "implement-foo-99")
+    monkeypatch.setattr(impl, "_AGENT_SCRIPT", fake_script)
+    monkeypatch.setenv("MENTAT_AGENT", "implement-foo-99")
     monkeypatch.delenv("EDITOR", raising=False)
 
     with patch.object(impl.subprocess, "run") as mock_run:
@@ -481,7 +481,7 @@ def test_implement_chunk_ejected_includes_logs_path(tmp_path, monkeypatch):
     impl = load_module("implement")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-001")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-001")
     plan = _write_plan(tmp_path, "ej-plan", kind="AFK")
 
     fake_result = MagicMock(returncode=1)
@@ -501,14 +501,14 @@ def test_implement_logs_path_dir_holds_jsonl_and_diagnosis(tmp_path, monkeypatch
     impl = load_module("implement")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-002")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-002")
 
     session_dir = tmp_path / "logs" / "myrepo" / "sess-002"
     session_dir.mkdir(parents=True)
     (session_dir / "mentat-implement-impl.jsonl").write_text('{"event": "chunk_started"}\n')
     (session_dir / "diagnosis.md").write_text("## Verdict\n- Reason: test\n")
 
-    logs_dir = impl._session_dir_fn(impl.os.environ.get("MENTAT_SESSION", "manual"))
+    logs_dir = impl._agent_dir_fn(impl.os.environ.get("MENTAT_AGENT", "manual"))
     assert logs_dir == session_dir
     assert any(logs_dir.glob("*.jsonl"))
     assert (logs_dir / "diagnosis.md").exists()
@@ -600,7 +600,7 @@ def test_implement_diff_suggestion_is_raw_git_diff(tmp_path, monkeypatch, capsys
 
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(impl, "resolve_plan_path", lambda _: plan_file)
-    monkeypatch.setattr(impl, "ensure_session", lambda *a, **k: "sess-b5")
+    monkeypatch.setattr(impl, "ensure_agent", lambda *a, **k: "sess-b5")
     monkeypatch.setattr(impl, "_prune_worktrees_preflight", lambda: None)
     monkeypatch.setattr(impl._utils, "default_harness", lambda: "default")
     monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda _h, reuse_worktree=False: (0, []))
@@ -666,15 +666,15 @@ def test_repo_root_from_worktree_falls_back_on_git_error(tmp_path, monkeypatch):
     assert impl._repo_root_from_worktree(wt) == wt.parents[2]
 
 
-# ── _run_session_cmd + _auto_doctor ──────────────────────────────────────────
+# ── _run_agent_cmd + _auto_doctor ──────────────────────────────────────────
 
 
-def test_run_session_cmd_noop_when_script_missing(monkeypatch):
+def test_run_agent_cmd_noop_when_script_missing(monkeypatch):
     impl = load_module("implement")
-    monkeypatch.setattr(impl, "_SESSION_SCRIPT", Path("/nonexistent/session.py"))
+    monkeypatch.setattr(impl, "_AGENT_SCRIPT", Path("/nonexistent/session.py"))
     called: list = []
     monkeypatch.setattr(impl.subprocess, "run", lambda *a, **k: called.append(a))
-    impl._run_session_cmd("doctor")
+    impl._run_agent_cmd("doctor")
     assert not called
 
 
@@ -688,10 +688,10 @@ class _FakeStdout:
 
 def test_auto_doctor_opens_editor_when_set(tmp_path, monkeypatch):
     impl = load_module("implement")
-    monkeypatch.setattr(impl, "_run_session_cmd", lambda _sub: None)
+    monkeypatch.setattr(impl, "_run_agent_cmd", lambda _sub: None)
     monkeypatch.setenv("EDITOR", "my-editor")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-1")
-    monkeypatch.setattr(impl, "_session_dir_fn", lambda _sid: tmp_path)
+    monkeypatch.setenv("MENTAT_AGENT", "sess-1")
+    monkeypatch.setattr(impl, "_agent_dir_fn", lambda _sid: tmp_path)
     monkeypatch.setattr(impl.sys, "stdout", _FakeStdout(True))
     (tmp_path / "diagnosis.md").write_text("diag")
     runs: list = []
@@ -706,10 +706,10 @@ def test_auto_doctor_skips_editor_when_not_a_tty(tmp_path, monkeypatch):
     the doctor diagnosis is still written."""
     impl = load_module("implement")
     doctored: list = []
-    monkeypatch.setattr(impl, "_run_session_cmd", lambda sub: doctored.append(sub))
+    monkeypatch.setattr(impl, "_run_agent_cmd", lambda sub: doctored.append(sub))
     monkeypatch.setenv("EDITOR", "vim")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-1")
-    monkeypatch.setattr(impl, "_session_dir_fn", lambda _sid: tmp_path)
+    monkeypatch.setenv("MENTAT_AGENT", "sess-1")
+    monkeypatch.setattr(impl, "_agent_dir_fn", lambda _sid: tmp_path)
     monkeypatch.setattr(impl.sys, "stdout", _FakeStdout(False))
     (tmp_path / "diagnosis.md").write_text("diag")
     runs: list = []
@@ -769,7 +769,7 @@ def test_load_mod_raises_when_no_loader(tmp_path):
 
 def test_blocked_summary_path_none_without_session(monkeypatch):
     impl = load_module("implement")
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)
     assert impl._blocked_summary_path() is None
 
 
@@ -787,14 +787,14 @@ def test_read_summary_at_returns_none_on_oserror(tmp_path, monkeypatch):
 
 def test_read_blocked_summary_falls_back_to_worktree(tmp_path, monkeypatch):
     impl = load_module("implement")
-    monkeypatch.delenv("MENTAT_SESSION", raising=False)  # seam is None → worktree fallback
+    monkeypatch.delenv("MENTAT_AGENT", raising=False)  # seam is None → worktree fallback
     (tmp_path / impl.SUMMARY_FILE).write_text("---\nstatus: blocked\n---\nthe blocker text")
     assert impl._read_blocked_summary(tmp_path) == "the blocker text"
 
 
 def test_promote_blocked_summary_surfaces_oserror(monkeypatch):
     impl = load_module("implement")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-x")
+    monkeypatch.setenv("MENTAT_AGENT", "sess-x")
 
     def boom(*a, **k):
         raise OSError("mkdir failed")
@@ -870,7 +870,7 @@ def test_main_preflight_veto_failure_names_missing_and_exits(tmp_path, monkeypat
     plan.write_text("---\nid: p\nkind: AFK\n---\n")
     monkeypatch.setattr(impl.sys, "argv", ["implement.py", "run", str(plan)])
     monkeypatch.setattr(impl, "resolve_plan_path", lambda _ref: plan)
-    monkeypatch.setattr(impl, "ensure_session", lambda *a, **k: "sess")
+    monkeypatch.setattr(impl, "ensure_agent", lambda *a, **k: "sess")
     monkeypatch.setattr(impl, "_prune_worktrees_preflight", lambda: None)
     monkeypatch.setattr(impl._utils, "default_harness", lambda: "claude-code")
     monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda _h, reuse_worktree=False: (1, ["mentat-bug-reviewer"]))
@@ -894,10 +894,10 @@ def test_mark_test_writable_idempotent_when_already_open(tmp_path, monkeypatch):
 
 def test_auto_doctor_editor_set_but_no_diagnosis_file(tmp_path, monkeypatch):
     impl = load_module("implement")
-    monkeypatch.setattr(impl, "_run_session_cmd", lambda _sub: None)
+    monkeypatch.setattr(impl, "_run_agent_cmd", lambda _sub: None)
     monkeypatch.setenv("EDITOR", "my-editor")
-    monkeypatch.setenv("MENTAT_SESSION", "sess-1")
-    monkeypatch.setattr(impl, "_session_dir_fn", lambda _sid: tmp_path)  # no diagnosis.md written
+    monkeypatch.setenv("MENTAT_AGENT", "sess-1")
+    monkeypatch.setattr(impl, "_agent_dir_fn", lambda _sid: tmp_path)  # no diagnosis.md written
     monkeypatch.setattr(impl.sys, "stdout", _FakeStdout(True))  # TTY, so only absence gates
     runs: list = []
     monkeypatch.setattr(impl.subprocess, "run", lambda *a, **k: runs.append(a))

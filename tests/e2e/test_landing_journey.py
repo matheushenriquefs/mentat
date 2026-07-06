@@ -68,7 +68,7 @@ def _configure_env(monkeypatch, tmp_path: Path, main_repo: Path) -> str:
     monkeypatch.setenv("MENTAT_REPO", "repo")
     session = "orchestrate-holding-1"
     monkeypatch.setenv("MENTAT_AGENT", session)
-    monkeypatch.setenv("MENTAT_SESSION", session)
+    monkeypatch.setenv("MENTAT_AGENT", session)
     monkeypatch.chdir(main_repo)
     return session
 

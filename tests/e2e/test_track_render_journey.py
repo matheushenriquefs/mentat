@@ -1,11 +1,11 @@
 """E2E journey: the track navigator's pure render + reduce layer.
 
-``track``'s raw-tty loops (``_navigate_tty`` / ``_view_session_tty``) are
+``track``'s raw-tty loops (``_navigate_tty`` / ``_view_agent_tty``) are
 ``# pragma: no cover`` I/O shells; everything they drive — the transcript/audit
 renderers, the keypress reducer, the scroll/window math, the focus-index pin, the
 list/preview/focus frame builders, and the sqlite-backed registry + kill bind —
 is pure and exercised here against real on-disk session dirs. Non-tty stdin (the
-pytest default) also drives the one-shot fallbacks of ``view_session`` /
+pytest default) also drives the one-shot fallbacks of ``view_agent`` /
 ``navigate``.
 """
 
@@ -128,10 +128,10 @@ def test_transcript_and_audit_renderers(tmp_path):
     assert "no audit events yet" in m.render_audit_lines(empty)[0]
 
 
-def test_view_session_non_tty_prints_transcript(tmp_path, capsys):
+def test_view_agent_non_tty_prints_transcript(tmp_path, capsys):
     m = _track()
     sd = tmp_path / "sess"
-    _write(sd, "session", [_assistant("Read", text="hi")])
+    _write(sd, "transcript", [_assistant("Read", text="hi")])
     m.view_agent(sd)  # non-tty stdin → one-shot transcript print
     assert "hi" in capsys.readouterr().out
 
@@ -141,7 +141,7 @@ def test_view_session_non_tty_prints_transcript(tmp_path, capsys):
 
 def test_resolve_focus_index():
     m = _track()
-    entries = [({"session": "a"}, Path("/a")), ({"session": "b"}, Path("/b"))]
+    entries = [({"agent": "a"}, Path("/a")), ({"agent": "b"}, Path("/b"))]
     assert m.resolve_focus_index(entries, None, 7) == 7  # nothing pinned → fallback
     assert m.resolve_focus_index(entries, "b", None) == 1  # pinned → its index
     assert m.resolve_focus_index(entries, "gone", None) is None  # reaped → None
@@ -193,7 +193,7 @@ def test_handle_key_all_actions():
 
 
 def _records(n: int) -> list[dict]:
-    return [{"session": f"s{i}", "status": "running", "last_event": "chunk_started", "age": 1.0 * i} for i in range(n)]
+    return [{"agent": f"s{i}", "status": "running", "last_event": "chunk_started", "age": 1.0 * i} for i in range(n)]
 
 
 def test_render_list_selection_viewport_and_affordance():
@@ -218,8 +218,8 @@ def test_render_preview_and_focus_and_frame(tmp_path):
     assert any("Read" in line for line in m.render_preview(["Read", "Edit"]))
 
     sd = tmp_path / "sess"
-    _write(sd, "session", [_assistant("Read", text="body"), _audit("chunk_landed", slug="a")])
-    rec = {"session": "sess", "status": "running"}
+    _write(sd, "transcript", [_assistant("Read", text="body"), _audit("chunk_landed", slug="a")])
+    rec = {"agent": "sess", "status": "running"}
 
     focus_t = m.render_focus(rec, sd, m._VIEW_TRANSCRIPT)
     assert any("body" in line for line in focus_t)
@@ -264,12 +264,12 @@ def test_registry_frame_navigate_and_kill(tmp_path, monkeypatch, capsys):
     (repo_dir / "s1").mkdir()
 
     entries = m._registry(repo_dir)
-    assert entries and entries[0][0]["session"] == "s1"
+    assert entries and entries[0][0]["agent"] == "s1"
     assert entries[0][1] == repo_dir / "s1"
 
     frame = m._frame(entries, 0, "myrepo", rows=24)
-    assert any("session(s)" in line for line in frame)
-    assert m._selected(entries, 99)[0]["session"] == "s1"  # clamped
+    assert any("agent(s)" in line for line in frame)
+    assert m._selected(entries, 99)[0]["agent"] == "s1"  # clamped
 
     (cols, rows) = m._terminal_size()  # falls back to (80, 20) with no tty
     assert cols > 0 and rows > 0
@@ -280,7 +280,7 @@ def test_registry_frame_navigate_and_kill(tmp_path, monkeypatch, capsys):
 
     # _kill reads the worktree from the spawn audit and shells out to git (stubbed).
     sd = repo_dir / "s1"
-    _write(sd, "session", [_audit("chunk_started", slug="s1", worktree="/tmp/wt-s1")])
+    _write(sd, "transcript", [_audit("chunk_started", slug="s1", worktree="/tmp/wt-s1")])
     calls: list = []
     monkeypatch.setattr(m.subprocess, "run", lambda cmd, **kw: calls.append(cmd))
     m._kill(sd)

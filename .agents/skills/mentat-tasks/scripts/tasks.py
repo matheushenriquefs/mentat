@@ -19,7 +19,7 @@ if str(_AGENTS_DIR) not in sys.path:
 from lib.events import bind  # noqa: E402
 from lib.exits import EX_USAGE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
-from lib.session import ensure_session as _ensure_session  # noqa: E402
+from lib.agent import ensure_agent as _ensure_agent  # noqa: E402
 from lib.support import frontmatter  # noqa: E402
 
 _utils: _types.ModuleType = load_sibling(__file__, "lifecycle")  # type: ignore[assignment]
@@ -221,7 +221,7 @@ def main(argv: list[str] | None = None) -> None:
         rc = EX_USAGE
     else:
         if args.cmd in _EMIT_CMDS:
-            _ensure_session("mentat-tasks", "cli")
+            _ensure_agent("mentat-tasks", "cli")
         rc = handler(args)
     if rc != 0:
         sys.exit(rc)

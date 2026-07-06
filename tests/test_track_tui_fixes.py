@@ -26,7 +26,7 @@ registry = load_module("registry")
 
 
 def _rec(session: str, status: str = "working", age: float = 0.0, last_event: str | None = None) -> dict:
-    return {"session": session, "status": status, "mtime": 0.0, "age": age, "last_event": last_event}
+    return {"agent": session, "status": status, "mtime": 0.0, "age": age, "last_event": last_event}
 
 
 # ── Slice 1: focus + list cursor pinned to session identity (flicker A) ───────
@@ -67,7 +67,7 @@ def test_humanize_age_buckets():
     assert reg._humanize_age(172800) == "2d ago"  # else
 
 
-def test_session_module_reexports_humanize_age():
+def test_agent_module_reexports_humanize_age():
     """cmd_list still reaches _humanize_age after the relocate (no duplicate impl)."""
     track = load_module("track")
     reg = load_module("registry")
@@ -152,7 +152,7 @@ def test_render_transcript_lines_returns_full_history(tmp_path):
     """Drop the pre-tail cap so the focus pane has something to scroll."""
     load_module("track")
     sd = tmp_path / "s-1"
-    _write_stream(sd, "session", [_assistant(f"line {i}") for i in range(60)])  # > old FOCUS_LINES cap
+    _write_stream(sd, "transcript", [_assistant(f"line {i}") for i in range(60)])  # > old FOCUS_LINES cap
     lines = render.render_transcript_lines(sd)
     body = "\n".join(lines)
     assert "line 0" in body and "line 59" in body  # head and tail both present
@@ -225,7 +225,7 @@ def test_empty_hint_audit_without_last_event():
 
 def test_empty_hint_transcript():
     load_module("track")
-    assert render.empty_hint("transcript", None) == "(no transcript — audit-only session; press t for lifecycle)"
+    assert render.empty_hint("transcript", None) == "(no transcript — audit-only agent; press t for lifecycle)"
 
 
 def test_empty_hint_last_event_only_used_for_audit():
@@ -254,7 +254,7 @@ def test_transcript_tool_use_line_is_cyan(tmp_path, monkeypatch):
     tui = _tui()
     _as_tty(monkeypatch, tui)
     sd = tmp_path / "s"
-    _write_stream(sd, "session", [_tool("Read")])
+    _write_stream(sd, "transcript", [_tool("Read")])
     line = next(ln for ln in render._transcript_content(sd) if "Read" in ln)
     assert tui.CYAN in line
     assert tui.tool_glyph("Read") in line
@@ -265,7 +265,7 @@ def test_transcript_assistant_text_is_uncolored_prose(tmp_path, monkeypatch):
     tui = _tui()
     _as_tty(monkeypatch, tui)
     sd = tmp_path / "s"
-    _write_stream(sd, "session", [_assistant("plain prose here")])
+    _write_stream(sd, "transcript", [_assistant("plain prose here")])
     line = next(ln for ln in render._transcript_content(sd) if "plain prose here" in ln)
     assert tui.CYAN not in line and tui.YELLOW not in line  # only the dim gutter, no role color
 
@@ -275,7 +275,7 @@ def test_transcript_ask_user_question_is_yellow(tmp_path, monkeypatch):
     tui = _tui()
     _as_tty(monkeypatch, tui)
     sd = tmp_path / "s"
-    _write_stream(sd, "session", [_tool("AskUserQuestion")])
+    _write_stream(sd, "transcript", [_tool("AskUserQuestion")])
     line = next(ln for ln in render._transcript_content(sd) if "AskUserQuestion" in ln)
     assert tui.YELLOW in line and tui.CYAN not in line
 
@@ -285,7 +285,7 @@ def test_transcript_tool_result_is_dim_gutter(tmp_path, monkeypatch):
     tui = _tui()
     _as_tty(monkeypatch, tui)
     sd = tmp_path / "s"
-    _write_stream(sd, "session", [_tool_result_row("file contents")])
+    _write_stream(sd, "transcript", [_tool_result_row("file contents")])
     line = next(ln for ln in render._transcript_content(sd) if "└" in ln)
     assert tui.DIM in line
 
@@ -295,7 +295,7 @@ def test_transcript_non_tty_stays_unwrapped(tmp_path, monkeypatch):
     tui = _tui()
     _as_tty(monkeypatch, tui, on=False)
     sd = tmp_path / "s"
-    _write_stream(sd, "session", [_tool("Read")])
+    _write_stream(sd, "transcript", [_tool("Read")])
     body = "\n".join(render._transcript_content(sd))
     assert tui.CYAN not in body and tui.DIM not in body  # tty guard no-ops every wrap
 

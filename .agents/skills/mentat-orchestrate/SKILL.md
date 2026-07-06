@@ -3,7 +3,7 @@ name: mentat-orchestrate
 description: Fan out multiple plans in parallel, land them serially onto a holding branch. Use when you want to orchestrate a batch of plan slices across worktrees.
 ---
 
-Hybrid orchestrator: one bin, stage modules (`spawn`, `landing`, `supervise`, `batch`), four subcommands. Reads plan frontmatter to partition plans into anchored (HITL) and auto-spawned (AFK) groups. Spawns AFK plans in parallel via `subprocess.Popen` with manual polling; runs HITL plans in the current session. Lands all chunks serially onto the holding branch with gate checks.
+Hybrid orchestrator: one bin, stage modules (`spawn`, `landing`, `supervise`, `batch`), four subcommands. Reads plan frontmatter to partition plans into anchored (HITL) and auto-spawned (AFK) groups. Spawns AFK plans in parallel via `subprocess.Popen` with manual polling; runs HITL plans in the current agent. Lands all chunks serially onto the holding branch with gate checks.
 
 ## How to invoke
 
@@ -13,10 +13,10 @@ Slash form (in-harness) leads; each runs the `python3 .../orchestrate.py <sub> �
 /mentat-orchestrate run [--harness <n>] [--model <s>] [--dry-run] <holding-branch> <plan-ref>+
 /mentat-orchestrate fan-out <plan-ref>+
 /mentat-orchestrate land-queue <holding-branch>
-/mentat-orchestrate batch-review <session>
+/mentat-orchestrate batch-review <agent-id>
 ```
 
-Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the holding branch FIRST, then plan refs — the inverse of `implement <plan-ref>` (no branch, does NOT land). The arg-order asymmetry is by design: orchestrate lands a batch onto a holding branch, implement runs one plan in-session with no branch. Not an inconsistency.
+Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the holding branch FIRST, then plan refs — the inverse of `implement <plan-ref>` (no branch, does NOT land). The arg-order asymmetry is by design: orchestrate lands a batch onto a holding branch, implement runs one plan in-agent with no branch. Not an inconsistency.
 
 ## Routing algorithm
 
@@ -32,14 +32,14 @@ Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the hol
    - HITL plans → anchored_here
    - AFK with downstream HITL dep → anchored_here
    - AFK with upstream HITL dep → anchored_here (caller must drive the
-     upstream HITL in-session before the downstream AFK can spawn)
+     upstream HITL in-agent before the downstream AFK can spawn)
    - AFK with no HITL anywhere in the dep chain → auto_spawn
 4. Spawn auto_spawn in parallel (subprocess.Popen with manual polling).
    Print track command immediately after spawn.
-5. Emit `chunk_started{harness:"hitl-in-session"}` per anchored plan and
+5. Emit `chunk_started{harness:"hitl-in-agent"}` per anchored plan and
    return control. Caller queries the audit log
-   (`mentat-log list chunk_started --session=$MENTAT_AGENT`) and invokes
-   `/mentat-implement <slug>` in-session per anchored slug, then re-invokes
+   (`mentat-log list chunk_started --agent=$MENTAT_AGENT`) and invokes
+   `/mentat-implement <slug>` in-agent per anchored slug, then re-invokes
    `orchestrate land-queue <holding>` with the HITL slugs on stdin. Orchestrate
    never subprocess-runs HITL implement — interactivity would be lost.
 6. Poll/wait for auto_spawn completions.
@@ -85,9 +85,9 @@ Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the hol
   participate in topo sort. No plan may reference a parent-index slug in its
   own `blocked_by`; use sibling slugs directly.
 - Plans without `blocked_by` run in parallel with any other independent plan.
-- HITL plans always anchor in the calling session; AFK plans can auto-spawn.
-- AFK plan with a downstream HITL dep anchors in the calling session.
-- AFK plan with an upstream HITL dep anchors in the calling session — its
+- HITL plans always anchor in the calling agent; AFK plans can auto-spawn.
+- AFK plan with a downstream HITL dep anchors in the calling agent.
+- AFK plan with an upstream HITL dep anchors in the calling agent — its
   worktree can't safely spawn before the upstream HITL lands.
 - Cross-chunk dep gating in `land-queue`: `Scheduler.next_ready` orders
   the drain by `blocked_by`; an ejected upstream cascades `upstream_ejected`
@@ -104,7 +104,7 @@ Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the hol
 - Container required per chunk (ADR-0004). Exit 69 if container unavailable.
 - Plan kind read from frontmatter only; no env var override.
 - `--dry-run` prints what would run; does not spawn or land.
-- Session id from `$MENTAT_AGENT` for audit events.
+- Agent id from `$MENTAT_AGENT` for audit events.
 - `batch-review` is always advisory; ejected counts do not affect its exit code.
 - Config resolved as layered stack: CLI flag > `<repo-root>/.mentat/config.toml` > `~/.mentat/config.toml`. Scaffold repo overlay with `mentat-install --repo`.
 

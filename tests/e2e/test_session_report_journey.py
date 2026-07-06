@@ -151,7 +151,7 @@ def test_doctor_verdict_hitl_eject_cites_blocker(repo_log, tmp_path, capsys):
             {
                 "ts": "2026-06-30T00:00:00Z",
                 "event": "chunk_started",
-                "payload": {"slug": "tiny", "plan": "tiny.md", "harness": "hitl-in-session", "worktree": "/wt"},
+                "payload": {"slug": "tiny", "plan": "tiny.md", "harness": "hitl-in-agent", "worktree": "/wt"},
             },
             {
                 "ts": "2026-06-30T00:00:01Z",

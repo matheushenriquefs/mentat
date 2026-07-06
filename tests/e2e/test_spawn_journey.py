@@ -113,9 +113,9 @@ def test_spawn_worktree_env_carries_session_and_log(isolate_logs, tmp_path):
     plan = _plan_file(tmp_path)
     session_id, _proc, _wt = spawn_mod._spawn_worktree_subprocess(plan)
     proc = isolate_logs.captured["proc"]
-    assert proc.env["MENTAT_SESSION"] == session_id
+    assert proc.env["MENTAT_AGENT"] == session_id
     expected_log = isolate_logs.log_root / "fixrepo" / session_id / "session.jsonl"
-    assert proc.env["MENTAT_SESSION_LOG"] == str(expected_log)
+    assert proc.env["MENTAT_AGENT_LOG"] == str(expected_log)
 
 
 def test_spawn_worktree_omits_seed_summary_when_absent(isolate_logs, tmp_path):

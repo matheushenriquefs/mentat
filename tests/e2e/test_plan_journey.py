@@ -26,7 +26,7 @@ def audit(tmp_path, monkeypatch):
     log_root = tmp_path / "logs"
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", "planrepo")
-    monkeypatch.setenv("MENTAT_SESSION", "orchestrate-main-1")
+    monkeypatch.setenv("MENTAT_AGENT", "orchestrate-main-1")
     return log_root
 
 

@@ -1,9 +1,9 @@
 ---
 name: mentat-implement
-description: Execute a single mentat plan atomically in the current session. Use when you want to implement one plan slice-by-slice with TDD, gates, and per-slice commits.
+description: Execute a single mentat plan atomically in the current agent. Use when you want to implement one plan slice-by-slice with TDD, gates, and per-slice commits.
 ---
 
-Atomic single-plan executor. ONE job: execute one plan in the calling session. No routing, no worktree spawning, no multi-plan dispatch — those are orchestrate concerns.
+Atomic single-plan executor. ONE job: execute one plan in the calling agent. No routing, no worktree spawning, no multi-plan dispatch — those are orchestrate concerns.
 
 ## How to invoke
 
@@ -16,7 +16,7 @@ Atomic single-plan executor. ONE job: execute one plan in the calling session. N
 
 Subcommands (peers): `run` (default), `mark-test-writable <slug> <path>`.
 
-`--land`: after all slices green, rebase onto `<holding>` (default `main`), fast-forward merge, spawn advisory batch review — no `mentat-orchestrate` needed. Use for a single plan start→finish in one session. `--holding` order is intentionally swapped vs. `orchestrate run <branch> <plan>+`.
+`--land`: after all slices green, rebase onto `<holding>` (default `main`), fast-forward merge, spawn advisory batch review — no `mentat-orchestrate` needed. Use for a single plan start→finish in one agent. `--holding` order is intentionally swapped vs. `orchestrate run <branch> <plan>+`.
 
 ## Preflight
 

@@ -10,10 +10,10 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import store as _store  # noqa: E402
-from lib.session import agent_dir as _agent_dir_fn  # noqa: E402
-from lib.session import log_root as _log_root  # noqa: E402
-from lib.session import repo_name as _repo  # noqa: E402
-from lib.session import resolve_agent_dir as _resolve_agent_dir  # noqa: E402
+from lib.agent import agent_dir as _agent_dir_fn  # noqa: E402
+from lib.agent import log_root as _log_root  # noqa: E402
+from lib.agent import repo_name as _repo  # noqa: E402
+from lib.agent import resolve_agent_dir as _resolve_agent_dir  # noqa: E402
 
 
 def _agent_dir(repo: str, agent_id: str) -> Path:

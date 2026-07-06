@@ -259,7 +259,7 @@ def test_list_track_entries_scoped_to_repo_log_dir(tmp_path, monkeypatch):
     (logs / "repo" / "agent-a").mkdir(parents=True)
     rows = store.list_track_entries("repo", active_only=True)
     assert len(rows) == 1
-    assert rows[0]["session"] == "agent-a"
+    assert rows[0]["agent"] == "agent-a"
 
 
 def test_get_agent_returns_none_for_missing(tmp_path, monkeypatch):

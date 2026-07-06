@@ -15,10 +15,10 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib import store as _store
 from lib.loader import load_sibling  # noqa: E402
-from lib.session import agent_dir as _agent_dir_fn  # noqa: E402
-from lib.session import log_root as _log_root  # noqa: E402
-from lib.session import repo_name as _repo
-from lib.session import resolve_agent_dir as _resolve_agent_dir
+from lib.agent import agent_dir as _agent_dir_fn  # noqa: E402
+from lib.agent import log_root as _log_root  # noqa: E402
+from lib.agent import repo_name as _repo
+from lib.agent import resolve_agent_dir as _resolve_agent_dir
 
 _registry = load_sibling(__file__, "registry")
 _render = load_sibling(__file__, "render")
@@ -30,33 +30,33 @@ _diagnose = load_sibling(__file__, "diagnose")
 _humanize_age = _registry._humanize_age
 
 
-def cmd_track(session_id: str | None, all_sessions: bool = False) -> int:
+def cmd_track(agent_id: str | None, all_agents: bool = False) -> int:
     repo = _repo()
     repo_dir = _log_root() / repo
-    if session_id is None:
-        return _panes.navigate(repo_dir, repo=repo, active_only=not all_sessions)
-    agent = _store.get_agent(session_id)
+    if agent_id is None:
+        return _panes.navigate(repo_dir, repo=repo, active_only=not all_agents)
+    agent = _store.get_agent(agent_id)
     if agent is None:
-        print(f"mentat-track: agent not found: {session_id}", file=sys.stderr)
+        print(f"mentat-track: agent not found: {agent_id}", file=sys.stderr)
         return 1
-    ad = _resolve_agent_dir(session_id) or _agent_dir_fn(session_id)
+    ad = _resolve_agent_dir(agent_id) or _agent_dir_fn(agent_id)
     ad.mkdir(parents=True, exist_ok=True)
     _render.view_agent(ad)
     return 0
 
 
-def cmd_doctor(session_id: str | None) -> int:
-    ad = _agent._resolve_agent(session_id)
+def cmd_doctor(agent_id: str | None) -> int:
+    ad = _agent._resolve_agent(agent_id)
     if isinstance(ad, int):
         return ad
     print(_diagnose.build_verdict(ad))
     return 0
 
 
-def cmd_report(session_id: str | None) -> int:
+def cmd_report(agent_id: str | None) -> int:
     """Render the success-side report-back summary. Operator sees what an AFK
     agent implemented without asking the main harness."""
-    ad = _agent._resolve_agent(session_id)
+    ad = _agent._resolve_agent(agent_id)
     if isinstance(ad, int):
         return ad
     summary = _diagnose.write_summary(ad)
@@ -73,23 +73,23 @@ _humanize_age = _registry._humanize_age
 _STATUS_MARK = {"waiting": "◆", "idle": "✓", "?": "?", "working": "•"}
 
 
-def cmd_list(all_sessions: bool = False) -> int:
+def cmd_list(all_agents: bool = False) -> int:
     """Repo-wide agent registry from the canonical store."""
     repo = _repo()
-    rows = _store.list_track_entries(repo, active_only=not all_sessions)
+    rows = _store.list_track_entries(repo, active_only=not all_agents)
     if not rows:
         print(f"mentat-track: no agents for {repo}")
         return 0
-    width = max(len(r["session"]) for r in rows)
+    width = max(len(r["agent"]) for r in rows)
     for r in rows:
         mark = _STATUS_MARK.get(r["status"], "?")
         last = r["last_event"] or "-"
-        print(f"{mark} {r['status']:<8} {r['session']:<{width}}  {_humanize_age(r['age']):>9}  {last}")
+        print(f"{mark} {r['status']:<8} {r['agent']:<{width}}  {_humanize_age(r['age']):>9}  {last}")
     return 0
 
 
-def cmd_diagnose(session_id: str | None) -> int:
-    ad = _agent._resolve_agent(session_id)
+def cmd_diagnose(agent_id: str | None) -> int:
+    ad = _agent._resolve_agent(agent_id)
     if isinstance(ad, int):
         return ad
     _diagnose.run_diagnose(ad)
@@ -100,21 +100,21 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="mentat-track")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    list_p = sub.add_parser("list", help="Repo-wide session registry (attention-ordered)")
-    list_p.add_argument("--all", dest="all_sessions", action="store_true", default=False, help="Show all sessions")
+    list_p = sub.add_parser("list", help="Repo-wide agent registry (attention-ordered)")
+    list_p.add_argument("--all", dest="all_agents", action="store_true", default=False, help="Show all agents")
 
     track_p = sub.add_parser("track", help="Stream live events")
-    track_p.add_argument("session", nargs="?", default=None)
-    track_p.add_argument("--all", dest="all_sessions", action="store_true", default=False, help="Show all sessions")
+    track_p.add_argument("agent", nargs="?", default=None)
+    track_p.add_argument("--all", dest="all_agents", action="store_true", default=False, help="Show all agents")
 
     doctor_p = sub.add_parser("doctor", help="Build verdict markdown")
-    doctor_p.add_argument("session", nargs="?", default=None)
+    doctor_p.add_argument("agent", nargs="?", default=None)
 
     report_p = sub.add_parser("report", help="Render the success-side report-back summary")
-    report_p.add_argument("session", nargs="?", default=None)
+    report_p.add_argument("agent", nargs="?", default=None)
 
     diag_p = sub.add_parser("diagnose", help="Doctor-first diagnose loop")
-    diag_p.add_argument("session", nargs="?", default=None)
+    diag_p.add_argument("agent", nargs="?", default=None)
 
     return p
 
@@ -122,14 +122,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    session = getattr(args, "session", None)
-    all_sessions = getattr(args, "all_sessions", False)
+    agent = getattr(args, "agent", None)
+    all_agents = getattr(args, "all_agents", False)
     dispatch = {
-        "list": lambda: cmd_list(all_sessions),
-        "track": lambda: cmd_track(session, all_sessions),
-        "doctor": lambda: cmd_doctor(session),
-        "report": lambda: cmd_report(session),
-        "diagnose": lambda: cmd_diagnose(session),
+        "list": lambda: cmd_list(all_agents),
+        "track": lambda: cmd_track(agent, all_agents),
+        "doctor": lambda: cmd_doctor(agent),
+        "report": lambda: cmd_report(agent),
+        "diagnose": lambda: cmd_diagnose(agent),
     }
     sys.exit(dispatch[args.cmd]())
 

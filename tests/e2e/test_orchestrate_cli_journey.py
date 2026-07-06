@@ -144,7 +144,7 @@ def test_emit_anchored_chunks_emits_spawned_per_plan(orch, monkeypatch):
         "chunk_started",
         "agent_started",
     ]
-    assert all(e[1]["harness"] == orch.HITL_IN_SESSION for e in events)
+    assert all(e[1]["harness"] == orch.HITL_IN_AGENT for e in events)
 
 
 # ── _concurrency_cap ──────────────────────────────────────────────────────────
@@ -374,7 +374,7 @@ def test_land_all_with_plans_passes_scheduler_hooks(orch, monkeypatch, tmp_path)
 def test_run_orchestrate_dry_run(orch, monkeypatch, capsys):
     land_calls = []
     events = []
-    monkeypatch.setattr(orch, "ensure_session", lambda role, holding: "sess-1")
+    monkeypatch.setattr(orch, "ensure_agent", lambda role, holding: "sess-1")
     monkeypatch.setattr(orch, "_load_plans", lambda paths: [_plan(orch, "afk-one", kind="AFK")])
     monkeypatch.setattr(orch._batch, "_land_all", lambda slugs, *, holding: land_calls.append((slugs, holding)) or [])
     monkeypatch.setattr(orch._utils, "emit_event", lambda ev, payload: events.append((ev, payload)))
@@ -388,7 +388,7 @@ def test_run_orchestrate_dry_run(orch, monkeypatch, capsys):
     assert events == [
         (
             "batch_reviewed",
-            {"session": "sess-1", "summary": "batch review for session sess-1 — advisory"},
+            {"agent": "sess-1", "summary": "batch review for agent sess-1 — advisory"},
         )
     ]
 
@@ -488,6 +488,6 @@ def test_main_batch_review_emits_event(orch, monkeypatch):
     assert events == [
         (
             "batch_reviewed",
-            {"session": "sess-9", "summary": "batch review for session sess-9 — advisory"},
+            {"agent": "sess-9", "summary": "batch review for agent sess-9 — advisory"},
         )
     ]

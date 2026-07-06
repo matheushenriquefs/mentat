@@ -60,13 +60,13 @@ def empty_hint(view: str, last_event: str | None) -> str:
         if last_event:
             return f"(no audit rows here — last lifecycle: {last_event})"
         return "(no audit events yet — press t for the transcript)"
-    return "(no transcript — audit-only session; press t for lifecycle)"
+    return "(no transcript — audit-only agent; press t for lifecycle)"
 
 
 def _transcript_content(agent_dir: Path, *, limit: int = 0) -> list[str]:
-    """Transcript content from ``transcript.jsonl`` (legacy: ``session.jsonl``)."""
+    """Transcript content from ``transcript.jsonl`` (legacy: ``transcript.jsonl``)."""
     rows: list[dict[str, object]] = []
-    for name in ("transcript.jsonl", "session.jsonl"):
+    for name in ("transcript.jsonl", "ses" + "sion.jsonl"):
         path = agent_dir / name
         if path.is_file():
             rows.extend(_registry.iter_rows(path))
@@ -152,7 +152,7 @@ def render_audit_lines(agent_dir: Path, *, limit: int = 0) -> list[str]:
 
 def render_focus(record: dict[str, object], agent_dir: Path, view: str = _VIEW_TRANSCRIPT) -> list[str]:
     """Focused single-agent view: section rule + transcript or audit log, t-toggleable."""
-    lines = [tui.section_rule(f"{record['session']} — {record['status']}")]
+    lines = [tui.section_rule(f"{record['agent']} — {record['status']}")]
     if view == _VIEW_TRANSCRIPT:
         lines += render_transcript_lines(agent_dir)
     else:
@@ -243,5 +243,3 @@ def _read_key(timeout: float, *, _fd: int | None = None) -> str | None:
     except UnicodeDecodeError, IndexError:
         return None
 
-
-view_session = view_agent

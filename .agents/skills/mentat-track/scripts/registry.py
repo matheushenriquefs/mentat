@@ -11,7 +11,7 @@ from typing import Literal, TypedDict, cast
 
 
 class Agent(TypedDict):
-    session: str
+    agent: str
     status: str
     mtime: float
     age: float
@@ -59,7 +59,7 @@ def _humanize_age(age_secs: float) -> str:
     return f"{secs // 86400}d ago"
 
 
-def latest_session(repo_dir: Path) -> str | None:
+def latest_agent(repo_dir: Path) -> str | None:
     """Return the most recently modified agent dir (legacy name)."""
     return get_latest_agent(repo_dir)
 
@@ -223,16 +223,6 @@ def _event_name(audit: dict[str, object] | None) -> str | None:
     return event if isinstance(event, str) else None
 
 
-def list_sessions(
-    repo_dir: Path,
-    *,
-    now: float | None = None,
-    stale_secs: float = STALE_SECS,
-    active_only: bool = True,
-) -> list[Agent]:
-    return list_agents(repo_dir, now=now, stale_secs=stale_secs, active_only=active_only)
-
-
 def list_agents(
     repo_dir: Path,
     *,
@@ -249,7 +239,7 @@ def list_agents(
 def agent_stream_tools(agent_dir: Path, *, limit: int = 20) -> list[str]:
     """The last `limit` harness tool-call names from an agent's stream (preview pane).
 
-    Reads the harness transcript (`transcript.jsonl`, legacy `session.jsonl`). Only
+    Reads the harness transcript (`transcript.jsonl`, legacy transcript filename). Only
     assistant tool_use blocks count. Order is the file's append order.
     """
     names: list[str] = []
@@ -284,13 +274,9 @@ def _build_record(sub: Path, clock: float, stale_secs: float) -> Agent | None:
         return None
     age = max(0.0, clock - mtime)
     return {
-        "session": sub.name,
+        "agent": sub.name,
         "status": scan.derive(),
         "mtime": mtime,
         "age": age,
         "last_event": _event_name(scan.audit_tail),
     }
-
-
-session_stream_tools = agent_stream_tools
-session_worktree = agent_worktree
