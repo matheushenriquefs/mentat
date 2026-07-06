@@ -15,7 +15,7 @@ from lib.exits import EX_UNAVAILABLE, EX_USAGE  # noqa: E402
 from lib.git import host_commit_identity  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
-utils = load_sibling(__file__, "identity")
+utils = load_sibling(__file__, "worktree")
 
 
 def _workspace_in_container(wt: Path) -> str:

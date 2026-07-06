@@ -23,6 +23,18 @@ from lib.exits import EX_DATAERR, EX_NOINPUT, EX_SOFTWARE  # noqa: E402
 from lib.worktrees import is_dirty, worktrees_root  # noqa: E402
 
 
+def container_id_for_cwd() -> str | None:
+    """Return container ID for the current worktree, or None."""
+    from lib import devcontainer
+
+    wt = Path.cwd()
+    parts = wt.resolve().parts
+    for i, part in enumerate(parts):
+        if part == "worktrees" and i + 2 < len(parts):
+            return devcontainer.container_id_for_slug(f"{parts[i + 1]}/{parts[i + 2]}")
+    return devcontainer.container_id_for_slug(wt.name)
+
+
 def _git(args: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],

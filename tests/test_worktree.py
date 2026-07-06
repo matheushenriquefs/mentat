@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util as _importlib_util
 import subprocess
 import sys
 from pathlib import Path
@@ -14,13 +13,6 @@ _GIT_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-git/
 sys.path.insert(0, str(_GIT_SCRIPTS))
 
 import worktree as wt  # noqa: E402
-
-# Load identity explicitly to bypass sys.modules cache (other test files may have
-# cached a different module; mentat-git/scripts/identity is the one we need).
-_utils_spec = _importlib_util.spec_from_file_location("mentat_git_utils", _GIT_SCRIPTS / "identity.py")
-_utils_mod = _importlib_util.module_from_spec(_utils_spec)
-_utils_spec.loader.exec_module(_utils_mod)
-
 from lib import devcontainer as _dc_mod  # noqa: E402
 
 
@@ -165,11 +157,11 @@ def test_container_id_for_cwd_delegates(monkeypatch, tmp_path):
 
     repo = tmp_path / "repo"
     init_git_repo(repo)
-    wt = repo / ".mentat" / "worktrees" / TEST_CHUNK_ID / "my-slug"
-    wt.mkdir(parents=True)
-    monkeypatch.chdir(wt)
+    worktree_path = repo / ".mentat" / "worktrees" / TEST_CHUNK_ID / "my-slug"
+    worktree_path.mkdir(parents=True)
+    monkeypatch.chdir(worktree_path)
     monkeypatch.setattr(_dc_mod, "container_id_for_slug", lambda slug, **kw: "abc123")
-    result = _utils_mod.container_id_for_cwd()
+    result = wt.container_id_for_cwd()
     assert result == "abc123"
 
 
@@ -177,7 +169,7 @@ def test_mentat_git_does_not_call_docker_directly():
     import ast
 
     scripts_dir = _GIT_SCRIPTS
-    source = (scripts_dir / "identity.py").read_text()
+    source = (scripts_dir / "worktree.py").read_text()
     tree = ast.parse(source)
 
     docker_calls: list[int] = []
@@ -196,4 +188,4 @@ def test_mentat_git_does_not_call_docker_directly():
         if isinstance(first_elem, ast.Constant) and first_elem.value == "docker":
             docker_calls.append(node.lineno)
 
-    assert not docker_calls, f"docker called directly via subprocess in identity.py at lines: {docker_calls}"
+    assert not docker_calls, f"docker called directly via subprocess in worktree.py at lines: {docker_calls}"

@@ -24,7 +24,7 @@ def _ok(stdout: str = "", returncode: int = 0) -> MagicMock:
 
 def test_commit_routes_to_container_when_present():
     commit_mod = load_module("commit")
-    utils_mod = load_module("identity")
+    utils_mod = load_module("worktree")
 
     with (
         patch.object(utils_mod, "container_id_for_cwd", return_value="abc123"),
@@ -46,7 +46,7 @@ def test_commit_routes_to_container_when_present():
 
 def test_commit_auto_ups_when_no_container_then_commits():
     commit_mod = load_module("commit")
-    utils_mod = load_module("identity")
+    utils_mod = load_module("worktree")
 
     cid_sequence = iter([None, "abc123"])
     with (
@@ -70,7 +70,7 @@ def test_commit_auto_ups_when_no_container_then_commits():
 
 def test_commit_exits_69_when_bringup_fails():
     commit_mod = load_module("commit")
-    utils_mod = load_module("identity")
+    utils_mod = load_module("worktree")
 
     with (
         patch.object(utils_mod, "container_id_for_cwd", return_value=None),
@@ -98,12 +98,12 @@ def test_host_identity_skips_unset_key(monkeypatch):
     assert args == ["-c", "user.name=Alice"]
 
 
-# ── identity.py: container_id_for_cwd delegates to lib.devcontainer ────────────
+# ── worktree.py: container_id_for_cwd delegates to lib.devcontainer ────────────
 
 
 def test_container_id_for_cwd_delegates_to_devcontainer(tmp_path, monkeypatch):
     """container_id_for_cwd derives the chunk slug from cwd and asks lib.devcontainer."""
-    identity = load_module("identity")
+    identity = load_module("worktree")
     repo = tmp_path / "repo"
     init_git_repo(repo)
     wt = repo / ".mentat" / "worktrees" / TEST_CHUNK_ID / "my-slug"
