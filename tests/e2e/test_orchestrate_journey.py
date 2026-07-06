@@ -65,7 +65,7 @@ def _setup_repo(tmp_path: Path) -> tuple[Path, Path, Path]:
 
 def _write_plan(plans_dir: Path, slug: str) -> Path:
     plan = plans_dir / f"{slug}.md"
-    plan.write_text(f"---\nid: {slug}\nclass: AFK\n---\n# {slug}\nAdd {slug}.txt and commit.\n")
+    plan.write_text(f"---\nid: {slug}\nkind: AFK\n---\n# {slug}\nAdd {slug}.txt and commit.\n")
     return plan
 
 

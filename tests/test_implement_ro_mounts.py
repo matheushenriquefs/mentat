@@ -24,10 +24,10 @@ def _load():
     return load_script(_IMPL, "impl_ro")
 
 
-def _write_plan(plans_dir: Path, slug: str, *, class_: str = "AFK") -> Path:
+def _write_plan(plans_dir: Path, slug: str, *, kind: str = "AFK") -> Path:
     plans_dir.mkdir(parents=True, exist_ok=True)
     p = plans_dir / f"{slug}.md"
-    p.write_text(f"---\nid: {slug}\nclass: {class_}\n---\n# body\n")
+    p.write_text(f"---\nid: {slug}\nkind: {kind}\n---\n# body\n")
     return p
 
 

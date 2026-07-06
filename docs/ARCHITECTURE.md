@@ -64,7 +64,7 @@ See [ADR-0014](./adr/0014-coverage-gate.md).
 
 ## AFK vs HITL routing
 
-Each slice carries a `class:` tag in its plan frontmatter:
+Each slice carries a `kind:` tag in its plan frontmatter:
 
 - **AFK** — headless, no interactive user-prompt tool allowed. Ambiguity at runtime is ejection, not a question. The harness adapter disables its interactive-prompt tool (e.g. Claude Code's `AskUserQuestion`, Cursor's equivalent) and adds a system clause forbidding self-answer.
 - **HITL** — interactive. Stalls for review at decision points.

@@ -146,7 +146,7 @@ def test_main_invokes_preflight_then_chdir(main_repo, tmp_path, monkeypatch):
     plan_dir = tmp_path / "plans"
     plan_dir.mkdir()
     plan = plan_dir / "feat-cli.md"
-    plan.write_text("---\nid: feat-cli\nclass: AFK\n---\n# x\n")
+    plan.write_text("---\nid: feat-cli\nkind: AFK\n---\n# x\n")
 
     chdir_targets: list[Path] = []
     real_chdir = impl.os.chdir
@@ -215,7 +215,7 @@ def test_main_refuses_when_left_in_main_tree(main_repo, tmp_path, monkeypatch):
     plan_dir = tmp_path / "plans"
     plan_dir.mkdir()
     plan = plan_dir / "feat-leak.md"
-    plan.write_text("---\nid: feat-leak\nclass: AFK\n---\n# x\n")
+    plan.write_text("---\nid: feat-leak\nkind: AFK\n---\n# x\n")
 
     emits = []
 
@@ -240,7 +240,7 @@ def test_main_emits_eject_on_preflight_conflict(main_repo, tmp_path, monkeypatch
     plan_dir = tmp_path / "plans"
     plan_dir.mkdir()
     plan = plan_dir / "feat-conflict.md"
-    plan.write_text("---\nid: feat-conflict\nclass: AFK\n---\n# x\n")
+    plan.write_text("---\nid: feat-conflict\nkind: AFK\n---\n# x\n")
     conflict = main_repo / ".mentat" / "worktrees" / _CID / "feat-conflict"
     conflict.mkdir(parents=True)
 

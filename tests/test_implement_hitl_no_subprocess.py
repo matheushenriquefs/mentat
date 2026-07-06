@@ -1,6 +1,6 @@
 """implement.py must not spawn a sub-claude for HITL plans.
 
-Mirrors the slice-1 orchestrate doctrine one layer down: when class==HITL,
+Mirrors the slice-1 orchestrate doctrine one layer down: when kind==HITL,
 emit chunk_started{harness:"hitl-in-session"} and return control to the
 calling Claude session — never invoke the harness adapter, which would
 shell `claude --headless` and lose AskUserQuestion.
@@ -19,9 +19,9 @@ def _load(name: str):
     return load_script(IMPL_SCRIPTS / f"{name}.py", key=f"impl_{name}")
 
 
-def _write_plan(tmp_path: Path, slug: str, class_: str) -> Path:
+def _write_plan(tmp_path: Path, slug: str, kind: str) -> Path:
     p = tmp_path / f"{slug}.md"
-    p.write_text(f"---\nid: {slug}\nstatus: ready\nclass: {class_}\nblocked_by: []\n---\n# {slug}\n")
+    p.write_text(f"---\nid: {slug}\nstatus: ready\nkind: {kind}\nblocked_by: []\n---\n# {slug}\n")
     return p
 
 

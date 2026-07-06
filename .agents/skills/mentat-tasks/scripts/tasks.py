@@ -52,7 +52,7 @@ def cmd_create(args: argparse.Namespace) -> int:
     fm: dict[str, str] = {
         "id": tid,
         "status": "todo",
-        "class": "",
+        "kind": "",
         "claimed_by": "",
         "claim_expires_at": "",
         "created_at": _utils.now_rfc3339(),
@@ -112,7 +112,7 @@ def cmd_list(args: argparse.Namespace) -> int:
             (
                 fm.get("id", stem),
                 fm.get("status", ""),
-                fm.get("class", ""),
+                fm.get("kind", ""),
                 fm.get("claimed_by", ""),
                 stem,
             )

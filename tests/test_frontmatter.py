@@ -14,9 +14,9 @@ import frontmatter  # noqa: E402
 
 
 def test_parse_returns_dict_and_body_offset():
-    text = "---\nname: x\nclass: AFK\n---\n# body\n"
+    text = "---\nname: x\nkind: AFK\n---\n# body\n"
     fm, offset = frontmatter.parse(text)
-    assert fm == {"name": "x", "class": "AFK"}
+    assert fm == {"name": "x", "kind": "AFK"}
     assert offset == 4  # body starts at line index 4
 
 

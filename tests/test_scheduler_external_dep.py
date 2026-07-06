@@ -8,7 +8,7 @@ import scheduler
 
 
 def _plan(slug: str, blocked_by: list[str] | None = None) -> scheduler.Plan:
-    return scheduler.Plan(slug=slug, class_="AFK", blocked_by=blocked_by or [], path=Path(f"/tmp/{slug}.md"))
+    return scheduler.Plan(slug=slug, kind="AFK", blocked_by=blocked_by or [], path=Path(f"/tmp/{slug}.md"))
 
 
 def test_external_dep_not_in_batch_does_not_gate() -> None:

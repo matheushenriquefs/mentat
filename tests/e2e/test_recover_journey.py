@@ -27,9 +27,9 @@ def _recover():
 
 
 class _Plan:
-    def __init__(self, slug: str, class_: str = "AFK") -> None:
+    def __init__(self, slug: str, kind: str = "AFK") -> None:
         self.slug = slug
-        self.class_ = class_
+        self.kind = kind
         self.path = Path(f"/plans/{slug}.md")
 
 
@@ -247,7 +247,7 @@ def test_recover_skips_unknown_and_hitl(monkeypatch, tmp_path):
     out, _ = _run(
         m,
         {"real", "ghost", "ui"},
-        {**plans, "ui": _Plan("ui", class_="HITL")},
+        {**plans, "ui": _Plan("ui", kind="HITL")},
         monkeypatch=monkeypatch,
         tmp_path=tmp_path,
         is_afk=lambda s: s != "ui",

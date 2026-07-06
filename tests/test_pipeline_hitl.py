@@ -63,7 +63,7 @@ def test_pipeline_hitl_lands_chunk_without_claude_headless(tmp_path, monkeypatch
     chunk_tip = _git(wt, "rev-parse", "HEAD").stdout.strip()
 
     plan = tmp_path / f"{slug}.md"
-    plan.write_text(f"---\nid: {slug}\nstatus: ready\nclass: HITL\nblocked_by: []\n---\n# {slug}\n")
+    plan.write_text(f"---\nid: {slug}\nstatus: ready\nkind: HITL\nblocked_by: []\n---\n# {slug}\n")
 
     emitted: list[tuple[str, dict]] = []
 

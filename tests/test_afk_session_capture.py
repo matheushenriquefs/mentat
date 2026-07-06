@@ -28,7 +28,7 @@ def _load(path: Path, name: str):
 
 def _write_plan(tmp_path: Path, slug: str) -> Path:
     p = tmp_path / f"{slug}.md"
-    p.write_text(f"---\nid: {slug}\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# {slug}\n")
+    p.write_text(f"---\nid: {slug}\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# {slug}\n")
     return p
 
 

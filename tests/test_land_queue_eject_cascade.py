@@ -23,10 +23,10 @@ import land_queue
 import scheduler
 
 
-def _plan(slug: str, blocked_by: list[str] | None = None, class_: str = "AFK") -> scheduler.Plan:
+def _plan(slug: str, blocked_by: list[str] | None = None, kind: str = "AFK") -> scheduler.Plan:
     return scheduler.Plan(
         slug=slug,
-        class_=class_,
+        kind=kind,
         blocked_by=blocked_by or [],
         path=Path(f"/tmp/{slug}.md"),
     )
@@ -206,9 +206,9 @@ def test_event_envelope_unchanged(tmp_path, monkeypatch) -> None:
 
 def test_cascade_targets_anchored_not_auto() -> None:
     """mark_ejected cascades to HITL/anchored downstream, never to auto downstream."""
-    a = _plan("a", class_="AFK")
-    b = _plan("b", blocked_by=["a"], class_="HITL")  # anchored downstream
-    c = _plan("c", blocked_by=["a"], class_="AFK")  # auto downstream — re-test candidate
+    a = _plan("a", kind="AFK")
+    b = _plan("b", blocked_by=["a"], kind="HITL")  # anchored downstream
+    c = _plan("c", blocked_by=["a"], kind="AFK")  # auto downstream — re-test candidate
     sched = scheduler.Scheduler([a, b, c])
 
     cascaded = sched.mark_ejected("a")

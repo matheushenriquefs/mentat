@@ -15,8 +15,8 @@ def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
 
 
-def _make_plan(tmp_path: Path, slug: str, class_: str = "AFK", blocked_by: list[str] | None = None) -> Path:
-    body = f"---\nid: {slug}\nclass: {class_}\n"
+def _make_plan(tmp_path: Path, slug: str, kind: str = "AFK", blocked_by: list[str] | None = None) -> Path:
+    body = f"---\nid: {slug}\nkind: {kind}\n"
     if blocked_by:
         body += f"blocked_by: [{', '.join(blocked_by)}]\n"
     body += "---\n"
@@ -40,7 +40,7 @@ def test_load_plans_allows_on_disk_external_blocked_by(tmp_path: Path) -> None:
     """blocked_by may name a plan file that exists on disk outside the batch."""
     orch = load_module("orchestrate")
     external = tmp_path / "external-plan.md"
-    external.write_text("---\nid: external-plan\nclass: AFK\n---\n")
+    external.write_text("---\nid: external-plan\nkind: AFK\n---\n")
     plan_a = _make_plan(tmp_path, "plan-a", blocked_by=[str(external)])
 
     plans = orch._load_plans([plan_a])
@@ -54,7 +54,7 @@ def test_load_plans_exits_65_on_parent_index_blocked_by(tmp_path: Path) -> None:
     orch = load_module("orchestrate")
     _make_plan(tmp_path, "sib")
     parent = tmp_path / "parent-idx.md"
-    parent.write_text("---\nid: parent-idx\nclass: AFK\nblocked_by: []\nsiblings: [sib]\n---\n")
+    parent.write_text("---\nid: parent-idx\nkind: AFK\nblocked_by: []\nsiblings: [sib]\n---\n")
     blocker = _make_plan(tmp_path, "child", blocked_by=["parent-idx"])
 
     with pytest.raises(SystemExit) as exc_info:

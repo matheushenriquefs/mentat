@@ -41,7 +41,7 @@ def _load(name: str):
 
 def _make_plans(tmp_path: Path) -> list[Path]:
     p = tmp_path / "a.md"
-    p.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
+    p.write_text("---\nid: a\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# a\n")
     return [p]
 
 

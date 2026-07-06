@@ -32,7 +32,7 @@ def td(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _make_task(td: Path, tid: str, slug: str, status: str, cls: str = "AFK") -> Path:
     p = td / f"{tid}-{slug}.md"
-    p.write_text(f"---\nid: {tid}\nstatus: {status}\nclass: {cls}\nclaimed_by: \nclaim_expires_at: \n---\n# {slug}\n")
+    p.write_text(f"---\nid: {tid}\nstatus: {status}\nkind: {cls}\nclaimed_by: \nclaim_expires_at: \n---\n# {slug}\n")
     return p
 
 
@@ -43,7 +43,7 @@ def test_list_empty_dir(td: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert out.strip() == ""
 
 
-def test_list_shows_id_status_class_claimed_by(td: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_list_shows_id_status_kind_claimed_by(td: Path, capsys: pytest.CaptureFixture[str]) -> None:
     _make_task(td, "T001", "alpha", "todo", "AFK")
     _make_task(td, "T002", "beta", "in-progress", "HITL")
     _make_task(td, "T003", "gamma", "done", "AFK")
@@ -56,7 +56,7 @@ def test_list_shows_id_status_class_claimed_by(td: Path, capsys: pytest.CaptureF
     assert lines[0].startswith("T001")
     assert lines[1].startswith("T002")
     assert lines[2].startswith("T003")
-    # TSV columns: id  status  class  claimed_by
+    # TSV columns: id  status  kind  claimed_by
     cols = lines[1].split("\t")
     assert cols[0] == "T002"
     assert cols[1] == "in-progress"

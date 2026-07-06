@@ -354,7 +354,7 @@ def _run_and_doctor(plan_path: Path, *, harness: str | None = None, model: str |
     if rc in _DOCTOR_EXIT_CODES:
         _auto_doctor()
         return rc
-    if rc == EX_OK and parse_frontmatter(plan_path).get("class", "HITL") == "AFK":
+    if rc == EX_OK and parse_frontmatter(plan_path).get("kind", "HITL") == "AFK":
         # Summary only for AFK runs that completed the plan. HITL returns 0 by handing
         # off to the calling session — a success summary there would be premature.
         _auto_summary()
@@ -515,8 +515,8 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
         harness = _utils.default_harness()
 
     fm = parse_frontmatter(plan_path)
-    plan_class = fm.get("class", "HITL")
-    afk = plan_class == "AFK"
+    plan_kind = fm.get("kind", "HITL")
+    afk = plan_kind == "AFK"
 
     slug = plan_path.stem
 
@@ -532,7 +532,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
         )
         _emit_event("agent_started", {"harness": HITL_IN_SESSION})
         print(
-            f"mentat-implement: {slug} is class:HITL — drive in calling Claude session.\nPlan: {plan_path}",
+            f"mentat-implement: {slug} is kind:HITL — drive in calling Claude session.\nPlan: {plan_path}",
             file=sys.stderr,
         )
         return 0

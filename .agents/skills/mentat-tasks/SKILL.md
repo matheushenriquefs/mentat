@@ -1,8 +1,7 @@
 ---
 name: mentat-tasks
 description: Local md task store. Atomic claim, TTL refresh, vertical-slice + HITL/AFK doctrine.
-allowed-tools:
-  - Bash(python3 ~/.agents/skills/mentat-tasks/scripts/tasks.py *)
+allowed-tools: Bash(python3 ~/.agents/skills/mentat-tasks/scripts/tasks.py *)
 ---
 
 # mentat-tasks
@@ -21,7 +20,7 @@ Board-home vs worktree separation (ADR-0002): task files live on the holding bra
 ---
 id: T001
 status: todo            # todo | in-progress | review | done | wontfix
-class: HITL             # HITL | AFK — vertical-slice classification (required before pick)
+kind: HITL              # HITL | AFK — vertical-slice classification (required before pick)
 claimed_by: ""          # agent id or empty
 claim_expires_at: ""    # RFC3339; empty if unclaimed
 created_at: 2026-06-06T00:00:00Z
@@ -47,7 +46,7 @@ All operations route through `scripts/tasks.py`. Set `MENTAT_TASKS_DIR` to overr
 | `refresh <file> <ttl_s>` | — | Bump `claim_expires_at` |
 | `done <file>` | — | Terminal state: done |
 | `wontfix <file>` | — | Terminal state: wontfix |
-| `list [--status <s>]` | — | Enumerate tasks as TSV (id, status, class, claimed_by) |
+| `list [--status <s>]` | — | Enumerate tasks as TSV (id, status, kind, claimed_by) |
 
 ## Atomic-write invariant
 
@@ -57,7 +56,7 @@ All frontmatter mutations use `lib.frontmatter.mutate` — tmp+`os.replace` same
 
 Pick only if:
 1. `status` is `todo`, or `in-progress` with `claim_expires_at < now` (stale — release then re-claim).
-2. `class` is set (`HITL` or `AFK`). Never pick untriaged.
+2. `kind` is set (`HITL` or `AFK`). Never pick untriaged.
 3. No `.lock` sentinel exists for a non-expired claim.
 
 ## Events emitted
@@ -73,10 +72,10 @@ Pick only if:
 ## Boundary with other skills
 
 Intake skill → writes task via `mentat-tasks create`.
-`triage` → mutates `class` + `status`.
+`triage` → mutates `kind` + `status`.
 `mentat-prd` → references task ids as `T###` in prose.
 `mentat-tasks` owns schema + filesystem protocol only.
 
 ## Deferred
 
-Typed dep graph, `touches:` write-set lease, `kind:` field, priority/tags/due/estimate. Add only on demonstrated need.
+Typed dep graph, `touches:` write-set lease, priority/tags/due/estimate. Add only on demonstrated need.

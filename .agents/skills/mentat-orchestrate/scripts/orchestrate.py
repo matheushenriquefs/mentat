@@ -150,7 +150,7 @@ def _load_plans(paths: list[Path], *, _expanding: bool = False) -> list[_schedul
             plans.append(
                 _scheduler.Plan(
                     slug=slug,
-                    class_=fm.get("class", "HITL"),
+                    kind=fm.get("kind", "HITL"),
                     blocked_by=blocked_by,
                     path=path,
                     touches=tuple(_parse_list_field(fm.get("touches", ""))),
@@ -1089,7 +1089,7 @@ def _run_recovery(
         holding=holding,
         session_id=session_id,
         harness=harness,
-        is_afk=lambda s: plans_by_slug[s].class_ == "AFK",
+        is_afk=lambda s: plans_by_slug[s].kind == "AFK",
         context_builder=lambda plan, attempt, cap: make_recovery_seed_for_plan(
             plan, attempt, cap, holding=holding, session_id=session_id
         ),

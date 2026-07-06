@@ -1,8 +1,6 @@
 ---
 name: mentat-implement
-description: >
-  Execute a single mentat plan atomically in the current session.
-  Use when you want to implement one plan slice-by-slice with TDD, gates, and per-slice commits.
+description: Execute a single mentat plan atomically in the current session. Use when you want to implement one plan slice-by-slice with TDD, gates, and per-slice commits.
 ---
 
 Atomic single-plan executor. ONE job: execute one plan in the calling session. No routing, no worktree spawning, no multi-plan dispatch — those are orchestrate concerns.
@@ -46,7 +44,7 @@ Fail → fix, re-commit, re-spawn. No rebase on FAIL. Dismissals require refuted
 
 ## Execution flow
 
-1. Read `class` from plan frontmatter.
+1. Read `kind` from plan frontmatter.
 2. AFK: adapter invoked `--disallowedTools AskUserQuestion`; unresolvable call → write `summary.md{status: blocked}`, stop.
 3. HITL: adapter invoked normally (`AskUserQuestion` allowed).
 4. TDD loop: red test → impl → gate → commit per slice.

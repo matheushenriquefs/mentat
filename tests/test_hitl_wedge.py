@@ -44,9 +44,9 @@ def _diagnose():
     return load_script(SESSION_SCRIPTS / "diagnose.py", "diagnose_wedge")
 
 
-def _write_plan(tmp_path: Path, slug: str, class_: str = "AFK") -> Path:
+def _write_plan(tmp_path: Path, slug: str, kind: str = "AFK") -> Path:
     p = tmp_path / f"{slug}.md"
-    p.write_text(f"---\nid: {slug}\nclass: {class_}\nblocked_by: []\n---\n# {slug}\nbody\n")
+    p.write_text(f"---\nid: {slug}\nkind: {kind}\nblocked_by: []\n---\n# {slug}\nbody\n")
     return p
 
 
@@ -190,8 +190,8 @@ def testpartition_by_outcome_excludes_hitl_children_from_landing():
     sched = _scheduler()
     bind_plan("a")
     bind_plan("b")
-    plan_a = sched.Plan(slug="a", class_="AFK", blocked_by=[], path=Path("/p/a.md"))
-    plan_b = sched.Plan(slug="b", class_="AFK", blocked_by=[], path=Path("/p/b.md"))
+    plan_a = sched.Plan(slug="a", kind="AFK", blocked_by=[], path=Path("/p/a.md"))
+    plan_b = sched.Plan(slug="b", kind="AFK", blocked_by=[], path=Path("/p/b.md"))
 
     emitted: list[tuple[str, dict]] = []
     ejected_slugs: list[str] = []
@@ -216,7 +216,7 @@ def testpartition_by_outcome_all_clean_lands_all():
     sched = _scheduler()
     bind_plan("x")
     bind_plan("y")
-    plans = [sched.Plan(slug=s, class_="AFK", blocked_by=[], path=Path(f"/p/{s}.md")) for s in ("x", "y")]
+    plans = [sched.Plan(slug=s, kind="AFK", blocked_by=[], path=Path(f"/p/{s}.md")) for s in ("x", "y")]
     with patch.object(orch, "_emit_event", lambda e, p: None):
         with patch.object(orch, "_worktree_for_slug", side_effect=lambda s: Path(f"/wt/{s}")):
             chunks, hitl, _transient = orch.partition_by_outcome(

@@ -104,5 +104,5 @@ Glyphs (shared with `lib/tui.py`): tool calls `Read ·` `Edit ~` `Write +` `Bash
 ## Constraints
 
 - Read-only: `track` and `doctor` never write events or modify plan state.
-- `diagnose` is interactive; requires `AskUserQuestion` — do not invoke in AFK class plans.
+- `diagnose` is interactive; requires `AskUserQuestion` — do not invoke in AFK kind plans.
 - Session lookup uses `$MENTAT_AGENT` (or legacy `$MENTAT_SESSION`) when set; otherwise latest agent in log dir.

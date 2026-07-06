@@ -28,10 +28,10 @@ def fixture_batch(tmp_path: Path):
     log_dir.mkdir(parents=True)
 
     afk_plan = plans_dir / "afk-slice.md"
-    afk_plan.write_text("---\nid: afk-slice\nclass: AFK\n---\n# AFK plan\n")
+    afk_plan.write_text("---\nid: afk-slice\nkind: AFK\n---\n# AFK plan\n")
 
     hitl_plan = plans_dir / "hitl-slice.md"
-    hitl_plan.write_text("---\nid: hitl-slice\nclass: HITL\n---\n# HITL plan\n")
+    hitl_plan.write_text("---\nid: hitl-slice\nkind: HITL\n---\n# HITL plan\n")
 
     return {
         "plans_dir": plans_dir,
@@ -47,8 +47,8 @@ def fixture_batch(tmp_path: Path):
 def test_smoke_routing_partitions_afk_and_hitl(fixture_batch):
     routing = load_module_from(REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts/scheduler.py", "scheduler")
     plans = [
-        routing.Plan(slug="afk-slice", class_="AFK", blocked_by=[], path=fixture_batch["afk_plan"]),
-        routing.Plan(slug="hitl-slice", class_="HITL", blocked_by=[], path=fixture_batch["hitl_plan"]),
+        routing.Plan(slug="afk-slice", kind="AFK", blocked_by=[], path=fixture_batch["afk_plan"]),
+        routing.Plan(slug="hitl-slice", kind="HITL", blocked_by=[], path=fixture_batch["hitl_plan"]),
     ]
     anchored, auto = routing.partition(plans)
     assert any(p.slug == "hitl-slice" for p in anchored)

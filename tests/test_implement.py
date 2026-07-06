@@ -18,11 +18,11 @@ def load_module(name: str, package_path: Path | None = None):
     return load_script((package_path or SCRIPTS) / f"{name}.py", name)
 
 
-def _write_plan(tmp_path: Path, slug: str, class_: str = "AFK", extra: str = "") -> Path:
+def _write_plan(tmp_path: Path, slug: str, kind: str = "AFK", extra: str = "") -> Path:
     plan_dir = tmp_path / "plans"
     plan_dir.mkdir(exist_ok=True)
     plan_file = plan_dir / f"{slug}.md"
-    plan_file.write_text(f"---\nid: {slug}\nclass: {class_}\n---\n# Plan\n{extra}\n")
+    plan_file.write_text(f"---\nid: {slug}\nkind: {kind}\n---\n# Plan\n{extra}\n")
     return plan_file
 
 
@@ -31,14 +31,14 @@ def _write_plan(tmp_path: Path, slug: str, class_: str = "AFK", extra: str = "")
 
 def test_parse_frontmatter_extracts_class(tmp_path):
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "test-plan", class_="AFK")
+    plan = _write_plan(tmp_path, "test-plan", kind="AFK")
     fm = impl.parse_frontmatter(plan)
-    assert fm["class"] == "AFK"
+    assert fm["kind"] == "AFK"
 
 
 def test_parse_frontmatter_extracts_id(tmp_path):
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "test-plan", class_="HITL")
+    plan = _write_plan(tmp_path, "test-plan", kind="HITL")
     fm = impl.parse_frontmatter(plan)
     assert fm["id"] == "test-plan"
 
@@ -64,7 +64,7 @@ def test_implement_accepts_bare_slug(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     plans_dir = tmp_path / ".agents" / "plans"
     plans_dir.mkdir(parents=True)
-    (plans_dir / "bare-plan.md").write_text("---\nid: bare-plan\nclass: AFK\n---\n")
+    (plans_dir / "bare-plan.md").write_text("---\nid: bare-plan\nkind: AFK\n---\n")
     path = impl.resolve_plan_path("bare-plan")
     assert path == plans_dir / "bare-plan.md"
 
@@ -79,7 +79,7 @@ def test_implement_accepts_full_path(tmp_path):
 def test_implement_accepts_tilde_path(tmp_path, monkeypatch):
     impl = load_module("implement")
     monkeypatch.setenv("HOME", str(tmp_path))
-    (tmp_path / "myplan.md").write_text("---\nid: x\nclass: AFK\n---\n")
+    (tmp_path / "myplan.md").write_text("---\nid: x\nkind: AFK\n---\n")
     path = impl.resolve_plan_path("~/myplan.md")
     assert path.is_absolute()
 
@@ -89,7 +89,7 @@ def test_implement_accepts_tilde_path(tmp_path, monkeypatch):
 
 def test_implement_single_afk_plan_succeeds(tmp_path):
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "afk-plan", class_="AFK")
+    plan = _write_plan(tmp_path, "afk-plan", kind="AFK")
 
     fake_result = MagicMock()
     fake_result.returncode = 0
@@ -111,7 +111,7 @@ def test_implement_single_hitl_plan_hands_off_to_caller(tmp_path):
     loop in-session.
     """
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "hitl-plan", class_="HITL")
+    plan = _write_plan(tmp_path, "hitl-plan", kind="HITL")
 
     fake_result = MagicMock()
     fake_result.returncode = 0
@@ -130,7 +130,7 @@ def test_implement_single_hitl_plan_hands_off_to_caller(tmp_path):
 
 def test_implement_harness_flag_overrides_config(tmp_path):
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "plan", class_="AFK")
+    plan = _write_plan(tmp_path, "plan", kind="AFK")
 
     fake_result = MagicMock(returncode=0)
     with patch.object(impl, "_invoke_harness", return_value=fake_result) as mock_invoke:
@@ -146,7 +146,7 @@ def test_implement_harness_flag_overrides_config(tmp_path):
 
 def test_implement_afk_plan_self_answer_detected_exits_42(tmp_path):
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "afk-ambi", class_="AFK")
+    plan = _write_plan(tmp_path, "afk-ambi", kind="AFK")
 
     session_log = tmp_path / "session.jsonl"
     session_log.write_text(
@@ -169,7 +169,7 @@ def test_implement_afk_plan_self_answer_detected_exits_42(tmp_path):
 
 def test_implement_emits_chunk_ejected_with_hitl_reason(tmp_path):
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "afk-hitl", class_="AFK")
+    plan = _write_plan(tmp_path, "afk-hitl", kind="AFK")
 
     fake_result = MagicMock(returncode=0)
 
@@ -190,7 +190,7 @@ def test_implement_emits_chunk_ejected_with_hitl_reason(tmp_path):
 
 def test_implement_afk_harness_success_exits_0(tmp_path):
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "tdd-plan", class_="AFK")
+    plan = _write_plan(tmp_path, "tdd-plan", kind="AFK")
 
     fake_result = MagicMock(returncode=0)
 
@@ -304,7 +304,7 @@ def test_main_run_subcommand_explicit(tmp_path, monkeypatch):
     plan execution (parity with the bare `implement <plan>` form)."""
     impl = load_module("implement")
     monkeypatch.setenv("MENTAT_SKIP_PREFLIGHT", "1")
-    plan = _write_plan(tmp_path, "run-plan", class_="AFK")
+    plan = _write_plan(tmp_path, "run-plan", kind="AFK")
     with patch.object(impl, "ensure_session"):
         with patch.object(impl, "_prune_worktrees_preflight"):
             with patch.object(impl, "preflight_worktree", return_value=(0, None)):
@@ -324,7 +324,7 @@ def test_main_run_subcommand_explicit(tmp_path, monkeypatch):
 def test_implement_auto_doctors_on_nonzero_exit(tmp_path):
     """rc in {1, 42, 64, 65, 66, 69, 70, 78} → doctor fires."""
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "fail-plan", class_="AFK")
+    plan = _write_plan(tmp_path, "fail-plan", kind="AFK")
 
     with patch.object(impl, "run_plan", return_value=1):
         with patch.object(impl, "_auto_doctor") as mock_doc:
@@ -337,7 +337,7 @@ def test_implement_auto_doctors_on_nonzero_exit(tmp_path):
 def test_implement_no_doctor_on_zero_exit(tmp_path):
     """rc == 0 → doctor does NOT fire."""
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "ok-plan", class_="AFK")
+    plan = _write_plan(tmp_path, "ok-plan", kind="AFK")
 
     with patch.object(impl, "run_plan", return_value=0):
         with patch.object(impl, "_auto_doctor") as mock_doc:
@@ -351,7 +351,7 @@ def test_implement_no_doctor_on_zero_exit(tmp_path):
 def test_implement_auto_summary_on_success(tmp_path):
     """S8: rc == 0 → success summary is written (the success-side twin of doctor)."""
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "ok-plan", class_="AFK")
+    plan = _write_plan(tmp_path, "ok-plan", kind="AFK")
 
     with patch.object(impl, "run_plan", return_value=0):
         with patch.object(impl, "_auto_summary") as mock_sum:
@@ -366,7 +366,7 @@ def test_implement_auto_summary_on_success(tmp_path):
 def test_implement_no_summary_on_failure(tmp_path):
     """S8: a failing run gets a diagnosis, not a success summary."""
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "fail-plan", class_="AFK")
+    plan = _write_plan(tmp_path, "fail-plan", kind="AFK")
 
     with patch.object(impl, "run_plan", return_value=1):
         with patch.object(impl, "_auto_summary") as mock_sum:
@@ -381,7 +381,7 @@ def test_implement_no_summary_on_hitl_handoff(tmp_path):
     (nothing implemented yet) — no premature 'completed' success summary. Summary
     is for AFK runs that actually executed the plan to completion."""
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "hitl-handoff", class_="HITL")
+    plan = _write_plan(tmp_path, "hitl-handoff", kind="HITL")
 
     with patch.object(impl, "run_plan", return_value=0):
         with patch.object(impl, "_auto_summary") as mock_sum:
@@ -411,7 +411,7 @@ def test_auto_summary_invokes_session_report(tmp_path, monkeypatch):
 def test_implement_no_doctor_on_signal_exit(tmp_path):
     """SIGINT (130) / SIGTERM (143) skip doctor — signal exits aren't TDD failures."""
     impl = load_module("implement")
-    plan = _write_plan(tmp_path, "sig-plan", class_="AFK")
+    plan = _write_plan(tmp_path, "sig-plan", kind="AFK")
 
     for sig_rc in (130, 143):
         with patch.object(impl, "run_plan", return_value=sig_rc):
@@ -482,7 +482,7 @@ def test_implement_chunk_ejected_includes_logs_path(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
     monkeypatch.setenv("MENTAT_SESSION", "sess-001")
-    plan = _write_plan(tmp_path, "ej-plan", class_="AFK")
+    plan = _write_plan(tmp_path, "ej-plan", kind="AFK")
 
     fake_result = MagicMock(returncode=1)
     with patch.object(impl, "_invoke_harness", return_value=fake_result):
@@ -517,9 +517,9 @@ def test_implement_logs_path_dir_holds_jsonl_and_diagnosis(tmp_path, monkeypatch
 # ── AFK commit contract + HITL prompt ────────────────────────────────────────
 
 
-def _make_plan_for_contract(tmp_path: Path, plan_class: str, body: str = "## Slice 1\nDo the thing.") -> Path:
+def _make_plan_for_contract(tmp_path: Path, plan_kind: str, body: str = "## Slice 1\nDo the thing.") -> Path:
     plan = tmp_path / "fake-plan.md"
-    plan.write_text(f"---\nclass: {plan_class}\nslug: fake-plan\n---\n{body}")
+    plan.write_text(f"---\nkind: {plan_kind}\nslug: fake-plan\n---\n{body}")
     return plan
 
 
@@ -555,7 +555,7 @@ def test_afk_prompt_contains_commit_contract(tmp_path, monkeypatch):
         return FakeResult()
 
     monkeypatch.setattr(impl, "_invoke_harness", fake_invoke_harness)
-    monkeypatch.setattr(impl, "parse_frontmatter", lambda p: {"class": "AFK"})
+    monkeypatch.setattr(impl, "parse_frontmatter", lambda p: {"kind": "AFK"})
     _patch_impl_common(monkeypatch, impl)
 
     plan = _make_plan_for_contract(tmp_path, "AFK")
@@ -575,7 +575,7 @@ def test_hitl_prompt_unchanged(tmp_path, monkeypatch):
         captured["invoke_called"] = True
 
     monkeypatch.setattr(impl, "_invoke_harness", fake_invoke_harness)
-    monkeypatch.setattr(impl, "parse_frontmatter", lambda p: {"class": "HITL"})
+    monkeypatch.setattr(impl, "parse_frontmatter", lambda p: {"kind": "HITL"})
     _patch_impl_common(monkeypatch, impl)
 
     plan = _make_plan_for_contract(tmp_path, "HITL")
@@ -596,7 +596,7 @@ def test_implement_diff_suggestion_is_raw_git_diff(tmp_path, monkeypatch, capsys
 
     # Minimal monkeypatches to make main() reach the diff suggestion print
     plan_file = tmp_path / "b5-plan.md"
-    plan_file.write_text("---\nid: b5-plan\nclass: AFK\n---\nbody\n")
+    plan_file.write_text("---\nid: b5-plan\nkind: AFK\n---\nbody\n")
 
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(impl, "resolve_plan_path", lambda _: plan_file)
@@ -867,7 +867,7 @@ def test_main_plan_not_found_exits_1(monkeypatch, capsys):
 def test_main_preflight_veto_failure_names_missing_and_exits(tmp_path, monkeypatch, capsys):
     impl = load_module("implement")
     plan = tmp_path / "p.md"
-    plan.write_text("---\nid: p\nclass: AFK\n---\n")
+    plan.write_text("---\nid: p\nkind: AFK\n---\n")
     monkeypatch.setattr(impl.sys, "argv", ["implement.py", "run", str(plan)])
     monkeypatch.setattr(impl, "resolve_plan_path", lambda _ref: plan)
     monkeypatch.setattr(impl, "ensure_session", lambda *a, **k: "sess")

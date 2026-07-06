@@ -25,7 +25,7 @@ def _plan(
 ) -> scheduler.Plan:
     return scheduler.Plan(
         slug=slug,
-        class_="AFK",
+        kind="AFK",
         blocked_by=blocked_by or [],
         path=Path(f"/tmp/{slug}.md"),
         touches=touches,
@@ -37,7 +37,7 @@ def _plan(
 
 def test_plan_touches_defaults_empty() -> None:
     """Existing callers that omit `touches` still construct a valid Plan."""
-    p = scheduler.Plan(slug="a", class_="AFK", blocked_by=[], path=Path("/tmp/a.md"))
+    p = scheduler.Plan(slug="a", kind="AFK", blocked_by=[], path=Path("/tmp/a.md"))
     assert p.touches == ()
 
 

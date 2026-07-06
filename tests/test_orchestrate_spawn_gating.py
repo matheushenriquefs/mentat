@@ -69,8 +69,8 @@ def test_blocked_chunk_not_spawned_until_upstream_lands(tmp_path, monkeypatch):
 
     a = tmp_path / "a.md"
     b = tmp_path / "b.md"
-    a.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
-    b.write_text("---\nid: b\nstatus: ready\nclass: AFK\nblocked_by: [a]\n---\n# b\n")
+    a.write_text("---\nid: a\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# a\n")
+    b.write_text("---\nid: b\nstatus: ready\nkind: AFK\nblocked_by: [a]\n---\n# b\n")
 
     waves = _wire(orchestrate, monkeypatch, tmp_path)
     rc = orchestrate.run_orchestrate("holding", [a, b], harness=None, model=None, dry_run=False)
@@ -87,8 +87,8 @@ def test_shared_write_set_chunks_never_spawn_concurrently(tmp_path, monkeypatch)
 
     a = tmp_path / "a.md"
     b = tmp_path / "b.md"
-    a.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\ntouches: [src/routes.py]\n---\n# a\n")
-    b.write_text("---\nid: b\nstatus: ready\nclass: AFK\nblocked_by: []\ntouches: [src/routes.py]\n---\n# b\n")
+    a.write_text("---\nid: a\nstatus: ready\nkind: AFK\nblocked_by: []\ntouches: [src/routes.py]\n---\n# a\n")
+    b.write_text("---\nid: b\nstatus: ready\nkind: AFK\nblocked_by: []\ntouches: [src/routes.py]\n---\n# b\n")
 
     waves = _wire(orchestrate, monkeypatch, tmp_path)
     orchestrate.run_orchestrate("holding", [a, b], harness=None, model=None, dry_run=False)
@@ -105,8 +105,8 @@ def test_run_batch_stalls_when_dep_never_resolves(tmp_path, monkeypatch):
     orchestrate = _load("orchestrate")
     scheduler = _load("scheduler")
 
-    A = scheduler.Plan(slug="A", class_="HITL", blocked_by=[], path=Path("/tmp/A.md"))
-    B = scheduler.Plan(slug="B", class_="AFK", blocked_by=["A"], path=Path("/tmp/B.md"))
+    A = scheduler.Plan(slug="A", kind="HITL", blocked_by=[], path=Path("/tmp/A.md"))
+    B = scheduler.Plan(slug="B", kind="AFK", blocked_by=["A"], path=Path("/tmp/B.md"))
     sched = scheduler.Scheduler([A, B])
 
     wt_map: dict[str, Path] = {}
@@ -133,8 +133,8 @@ def test_independent_chunks_fan_out_in_one_wave(tmp_path, monkeypatch):
 
     a = tmp_path / "a.md"
     b = tmp_path / "b.md"
-    a.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
-    b.write_text("---\nid: b\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# b\n")
+    a.write_text("---\nid: a\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# a\n")
+    b.write_text("---\nid: b\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# b\n")
 
     waves = _wire(orchestrate, monkeypatch, tmp_path)
     orchestrate.run_orchestrate("holding", [a, b], harness=None, model=None, dry_run=False)

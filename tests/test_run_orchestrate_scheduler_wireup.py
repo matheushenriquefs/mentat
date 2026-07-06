@@ -36,8 +36,8 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
 
     a_path = tmp_path / "a.md"
     b_path = tmp_path / "b.md"
-    a_path.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
-    b_path.write_text("---\nid: b\nstatus: ready\nclass: AFK\nblocked_by: [a]\n---\n# b\n")
+    a_path.write_text("---\nid: a\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# a\n")
+    b_path.write_text("---\nid: b\nstatus: ready\nkind: AFK\nblocked_by: [a]\n---\n# b\n")
 
     # Stub fan_out to return (plan, 0) tuples — proves plan slugs reach land queue.
     worktrees: dict[str, Path] = {}
@@ -98,8 +98,8 @@ def test_run_orchestrate_independent_afks_keep_plan_slug_identity(tmp_path, monk
 
     a_path = tmp_path / "a.md"
     b_path = tmp_path / "b.md"
-    a_path.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
-    b_path.write_text("---\nid: b\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# b\n")
+    a_path.write_text("---\nid: a\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# a\n")
+    b_path.write_text("---\nid: b\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# b\n")
 
     worktrees: dict[str, Path] = {}
 

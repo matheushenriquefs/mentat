@@ -25,7 +25,7 @@ def _sched():
 
 
 def _plan(mod, slug: str, cls: str = "AFK", blocked_by: list[str] | None = None):
-    return mod.Plan(slug=slug, class_=cls, blocked_by=blocked_by or [], path=Path(f"/plans/{slug}.md"))
+    return mod.Plan(slug=slug, kind=cls, blocked_by=blocked_by or [], path=Path(f"/plans/{slug}.md"))
 
 
 # ── _topo_sort: a blocked_by pointing at an unloaded slug ─────────────────────

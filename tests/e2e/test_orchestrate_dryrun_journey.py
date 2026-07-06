@@ -38,7 +38,7 @@ def _orch():
 
 
 def _plan(plans_dir: Path, slug: str, *, cls: str = "AFK", blocked_by: str = "", siblings: str = "") -> Path:
-    lines = ["---", f"id: {slug}", f"class: {cls}"]
+    lines = ["---", f"id: {slug}", f"kind: {cls}"]
     if blocked_by:
         lines.append(f"blocked_by: {blocked_by}")
     if siblings:

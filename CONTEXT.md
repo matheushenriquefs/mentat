@@ -144,9 +144,14 @@ Present-tense facts, not promises of future work.
 | [0006](docs/adr/0006-soft-readonly-test-enforcement.md) | Soft read-only tests | No kernel mount. Impl-only-after-red contract + runner-redirection blacklist entry. Both agnostic. |
 | [0007](docs/adr/0007-audit-envelope.md) | Audit envelope | 18-event flat snake_case catalog, SQLite canonical store (`mentat.db`), transcript at `~/.mentat/logs/<repo>/<agent_id>/`. |
 | [0008](docs/adr/0008-python-runtime.md) | Python runtime | Stdlib-only at the bin layer; uv/ruff/pyright/pytest at the dev layer. Container-required Python 3.11+. |
-| [0009](docs/adr/0009-plugin-api.md) | Plugin API | Vite-derived, one slot (harness), entry-point discovery. Mentat core stays minimal. |
+| [0009](docs/adr/0009-plugin-api.md) | Plugin API | Vite-derived, one slot (harness), entry-point discovery. Mentat core stays minimal. Number reused — the original ADR-0009 (audit envelope) was renumbered to ADR-0007; retired here, not superseded. |
 | [0010](docs/adr/0010-readonly-test-mount.md) | Read-only test mount | OCP `<plan>.tests.json` manifest + container bind-mount with `readonly` flag. |
 | [0011](docs/adr/0011-compose-aware-container.md) | Compose-aware container | Sidecar detection + dev-service layering; host opt-out forfeits isolation. |
 | [0012](docs/adr/0012-code-rules-layer.md) | Code-rules layer | `.agents/rules/` code conventions, enforced by `mentat-rules-reviewer` (veto). |
-| [0013](docs/adr/0013-session-continuity-over-compaction.md) | Session continuity | Checkpoint at slice boundary, write summary, spawn fresh seeded session — harness-agnostic. |
+| [0013](docs/adr/0013-session-continuity-over-compaction.md) | Session continuity | Checkpoint at slice boundary, write agent summary, spawn fresh seeded agent — harness-agnostic. "Session" here means the harness's own conversation, not the `Agent` entity. |
+| [0014](docs/adr/0014-coverage-gate.md) | Coverage gate | Unit 90% testable-line floor (amended down from 100% — Goodhart trap, see ADR-0016) + e2e journey floor 45%, both blocking. |
+| [0015](docs/adr/0015-auto-recovery.md) | Model-driven auto-recovery | JIT retry/reslice/abandon over transient ejects; storm/budget/attempt caps. Superseded by ADR-0007 v7 (SQLite canonical store) for its audit substrate. |
+| [0016](docs/adr/0016-mutation-signal.md) | Mutation signal | Advisory surviving-mutant hint (`task mutation`, mutmut) scoped to changed shipped-source files. Never a gate. |
+| [0017](docs/adr/0017-per-run-isolation.md) | Per-run isolation | Chunk-keyed identity, override-config, run-scoped prune, OOM recovery. |
+| 0018 | Skill-modularization boundaries + rename-map | Reserved for `mentat-skill-modularize` — not yet authored, ledger entry only. |
 

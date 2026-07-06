@@ -9,7 +9,7 @@ Long-running AFK chunks can hit the harness context window before all slices are
 green. Each harness handles compaction differently: claude-code compacts
 in-process; cursor-agent has its own mechanism. Neither is blockable from the
 outside. Mentat needs a harness-agnostic way to checkpoint at a slice boundary,
-write a session summary, and spawn a fresh seeded session so the chunk continues
+write an agent summary, and spawn a fresh seeded agent so the chunk continues
 without losing critical context.
 
 ## Spike findings

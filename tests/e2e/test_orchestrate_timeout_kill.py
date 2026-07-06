@@ -72,7 +72,7 @@ def test_timeout_group_kill_reaps_grandchild(monkeypatch, tmp_path):
     child_script.write_text(_CHILD_SRC)
     pidfile = tmp_path / "grandchild.pid"
 
-    plan = scheduler.Plan(slug="hung", class_="AFK", blocked_by=[], path=tmp_path / "hung.md")
+    plan = scheduler.Plan(slug="hung", kind="AFK", blocked_by=[], path=tmp_path / "hung.md")
 
     async def fake_spawn(_plan, *, harness=None, model=None, seed_summary=None):
         proc = await asyncio.create_subprocess_exec(

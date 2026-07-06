@@ -1,8 +1,8 @@
-"""Topo-sort + class-partition + dep-aware land scheduling for mentat-orchestrate.
+"""Topo-sort + kind-partition + dep-aware land scheduling for mentat-orchestrate.
 
 Owns three pieces of plan-graph logic:
 
-  - `Plan` NamedTuple: the loaded plan tuple (slug, class_, blocked_by, path).
+  - `Plan` NamedTuple: the loaded plan tuple (slug, kind, blocked_by, path).
   - `partition(plans)`: split plans into (anchored, auto) groups.
   - `_has_upstream_hitl` / `_has_downstream_hitl`: directional walks over the
     blocked_by graph used by the partition rule.
@@ -32,7 +32,7 @@ _emit = bind("mentat-orchestrate")
 
 class Plan(NamedTuple):
     slug: str
-    class_: str
+    kind: str
     blocked_by: list[str]
     path: Path
     touches: tuple[str, ...] = ()
@@ -144,7 +144,7 @@ def _has_downstream_hitl(slug: str, plans_by_slug: dict[str, Plan]) -> bool:
         visited.add(s)
         for plan in plans_by_slug.values():
             if s in plan.blocked_by:
-                if plan.class_ == "HITL":
+                if plan.kind == "HITL":
                     return True
                 if _walk(plan.slug):
                     return True
@@ -168,7 +168,7 @@ def _has_upstream_hitl(slug: str, plans_by_slug: dict[str, Plan]) -> bool:
             dep_plan = plans_by_slug.get(dep)
             if dep_plan is None:
                 continue
-            if dep_plan.class_ == "HITL":
+            if dep_plan.kind == "HITL":
                 return True
             if _walk(dep_plan.slug):
                 return True
@@ -250,7 +250,7 @@ class Scheduler:
         plan = self._plans.get(slug)
         if plan is None:
             return False
-        return plan.class_ == "HITL" or _has_downstream_hitl(slug, self._plans) or _has_upstream_hitl(slug, self._plans)
+        return plan.kind == "HITL" or _has_downstream_hitl(slug, self._plans) or _has_upstream_hitl(slug, self._plans)
 
     def has_ejections(self) -> bool:
         """True if any slug has been ejected (includes cascade victims)."""
@@ -303,7 +303,7 @@ def partition(plans: list[Plan]) -> tuple[list[Plan], list[Plan]]:
 
     for plan in topo:
         if (
-            plan.class_ == "HITL"
+            plan.kind == "HITL"
             or _has_downstream_hitl(plan.slug, plans_by_slug)
             or _has_upstream_hitl(plan.slug, plans_by_slug)
         ):

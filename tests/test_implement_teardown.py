@@ -66,7 +66,7 @@ _SCRIPTS = REPO_ROOT / ".agents/skills/mentat-implement/scripts"
 
 def _write_plan(tmp_path: Path, slug: str = "failme") -> Path:
     p = tmp_path / f"{slug}.md"
-    p.write_text(f"---\nid: {slug}\nclass: AFK\n---\n# {slug}\n")
+    p.write_text(f"---\nid: {slug}\nkind: AFK\n---\n# {slug}\n")
     return p
 
 

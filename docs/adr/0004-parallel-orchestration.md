@@ -27,7 +27,7 @@ Stage modules under `scripts/`: `fan_out.py`, `land_queue.py`, `batch_review.py`
 
 **Routing partition (HITL contract folded from ADR-0010):**
 
-Read each plan's `class: AFK|HITL` frontmatter. Topological sort by `blocked_by`.
+Read each plan's `kind: AFK|HITL` frontmatter. Topological sort by `blocked_by`.
 - `HITL` plans → anchored in current interactive session.
 - `AFK` plans with no HITL anywhere in the dep chain → auto-spawned headless.
 - `AFK` plans with a downstream HITL → anchored (HITL must complete first).

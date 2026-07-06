@@ -21,7 +21,7 @@ import scheduler
 def _plan(slug: str, blocked_by: list[str] | None = None) -> scheduler.Plan:
     return scheduler.Plan(
         slug=slug,
-        class_="AFK",
+        kind="AFK",
         blocked_by=blocked_by or [],
         path=Path(f"/tmp/{slug}.md"),
     )

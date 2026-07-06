@@ -65,7 +65,7 @@ def _spawner(tmp_path: Path, behavior: dict[str, tuple[float, int]]):
 
 
 def _plan(scheduler, slug: str):
-    return scheduler.Plan(slug=slug, class_="AFK", blocked_by=[], path=Path(f"/tmp/{slug}.md"))
+    return scheduler.Plan(slug=slug, kind="AFK", blocked_by=[], path=Path(f"/tmp/{slug}.md"))
 
 
 def _pin_cap_one(monkeypatch, orch) -> None:
@@ -138,9 +138,9 @@ def test_run_orchestrate_failing_batch_reports_stall_cascade_and_ejects(monkeypa
     # core — an auto chunk with a HITL *downstream* would itself be anchored by
     # the partition rule, so it would never fan out. When core's chunk fails,
     # mark_ejected cascades to the anchored ui (which also blocks on core).
-    gate = scheduler.Plan(slug="gate", class_="HITL", blocked_by=[], path=tmp_path / "gate.md")
-    core = scheduler.Plan(slug="core", class_="AFK", blocked_by=[], path=tmp_path / "core.md")
-    ui = scheduler.Plan(slug="ui", class_="AFK", blocked_by=["core", "gate"], path=tmp_path / "ui.md")
+    gate = scheduler.Plan(slug="gate", kind="HITL", blocked_by=[], path=tmp_path / "gate.md")
+    core = scheduler.Plan(slug="core", kind="AFK", blocked_by=[], path=tmp_path / "core.md")
+    ui = scheduler.Plan(slug="ui", kind="AFK", blocked_by=["core", "gate"], path=tmp_path / "ui.md")
 
     monkeypatch.setattr(orch, "ensure_session", lambda role, slug: "sess-x")
     monkeypatch.setattr(orch, "_load_plans", lambda paths: [gate, core, ui])

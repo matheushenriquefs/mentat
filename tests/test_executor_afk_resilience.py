@@ -119,7 +119,7 @@ def test_afk_body_not_rewritten_when_agents_dir_absent(tmp_path, monkeypatch):
     home_agents = str(Path.home()) + "/.agents/"
     plan_body = f"See {home_agents}plans/my-plan.md for implementation details."
     plan_file = tmp_path / "test-plan.md"
-    plan_file.write_text(f"---\nid: test-plan\nclass: AFK\n---\n{plan_body}")
+    plan_file.write_text(f"---\nid: test-plan\nkind: AFK\n---\n{plan_body}")
 
     prompt = _run_plan_capture_prompt(impl, plan_file)
     assert prompt is not None
@@ -141,7 +141,7 @@ def test_afk_body_rewritten_when_agents_dir_exists(tmp_path, monkeypatch):
 
     plan_body = f"See {home_agents}plans/my-plan.md for reference."
     plan_file = tmp_path / "test-plan.md"
-    plan_file.write_text(f"---\nid: test-plan\nclass: AFK\n---\n{plan_body}")
+    plan_file.write_text(f"---\nid: test-plan\nkind: AFK\n---\n{plan_body}")
 
     prompt = _run_plan_capture_prompt(impl, plan_file)
     assert prompt is not None

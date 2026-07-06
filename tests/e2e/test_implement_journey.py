@@ -42,8 +42,8 @@ def _fake_result(*, returncode=0, usage_tokens=None, session_log=None):
     return SimpleNamespace(returncode=returncode, usage_tokens=usage_tokens, session_log=session_log)
 
 
-def _write_plan(path: Path, *, class_="AFK", body="body") -> Path:
-    path.write_text(f"---\nid: {path.stem}\nclass: {class_}\n---\n{body}\n")
+def _write_plan(path: Path, *, kind="AFK", body="body") -> Path:
+    path.write_text(f"---\nid: {path.stem}\nkind: {kind}\n---\n{body}\n")
     return path
 
 
@@ -143,8 +143,8 @@ def test_resolve_plan_path_ends_in_ref_md(impl):
 
 
 def test_parse_frontmatter_reads_class(impl, tmp_path):
-    plan = _write_plan(tmp_path / "p.md", class_="AFK")
-    assert impl.parse_frontmatter(plan).get("class") == "AFK"
+    plan = _write_plan(tmp_path / "p.md", kind="AFK")
+    assert impl.parse_frontmatter(plan).get("kind") == "AFK"
 
 
 # ── _compaction_threshold ─────────────────────────────────────────────────────
@@ -400,7 +400,7 @@ def test_run_plan_hitl_emits_spawned_returns_zero(impl, monkeypatch, tmp_path):
     events = _wire_run_plan(impl, monkeypatch)
     invoked: list = []
     monkeypatch.setattr(impl, "_invoke_harness", lambda *a, **k: invoked.append(a) or _fake_result())
-    plan = _write_plan(tmp_path / "hitl.md", class_="HITL")
+    plan = _write_plan(tmp_path / "hitl.md", kind="HITL")
     monkeypatch.chdir(tmp_path)
     assert impl.run_plan(plan) == 0
     assert invoked == []  # no harness spawn on HITL
@@ -414,7 +414,7 @@ def test_run_plan_afk_clean_result_returns_zero(impl, monkeypatch, tmp_path):
     monkeypatch.setattr(impl, "_read_blocked_summary", lambda wt: None)
     monkeypatch.setattr(impl, "_detect_self_answer", lambda r: False)
     monkeypatch.setattr(impl, "_compaction_threshold", lambda: None)
-    plan = _write_plan(tmp_path / "afk.md", class_="AFK")
+    plan = _write_plan(tmp_path / "afk.md", kind="AFK")
     monkeypatch.chdir(tmp_path)
     assert impl.run_plan(plan) == 0
 
@@ -424,7 +424,7 @@ def test_run_plan_afk_wedge_via_blocked_summary(impl, monkeypatch, tmp_path):
     monkeypatch.setattr(impl, "_invoke_harness", lambda *a, **k: _fake_result(returncode=0))
     monkeypatch.setattr(impl, "_read_blocked_summary", lambda wt: "blocker text")
     monkeypatch.setattr(impl, "_promote_blocked_summary", lambda body: None)
-    plan = _write_plan(tmp_path / "afk.md", class_="AFK")
+    plan = _write_plan(tmp_path / "afk.md", kind="AFK")
     monkeypatch.chdir(tmp_path)
     assert impl.run_plan(plan) == impl.EX_HITL_REQUIRED
     ejected = [p for ev, p in events if ev == "chunk_ejected"]
@@ -438,7 +438,7 @@ def test_run_plan_afk_self_answer(impl, monkeypatch, tmp_path):
     monkeypatch.setattr(impl, "_read_blocked_summary", lambda wt: None)
     monkeypatch.setattr(impl, "_detect_self_answer", lambda r: True)
     monkeypatch.setattr(impl, "_promote_blocked_summary", lambda body: None)
-    plan = _write_plan(tmp_path / "afk.md", class_="AFK")
+    plan = _write_plan(tmp_path / "afk.md", kind="AFK")
     monkeypatch.chdir(tmp_path)
     assert impl.run_plan(plan) == impl.EX_HITL_REQUIRED
     reasons = [p["reason"] for ev, p in events if ev == "chunk_ejected"]
@@ -450,7 +450,7 @@ def test_run_plan_afk_nonzero_return_is_implement_failed(impl, monkeypatch, tmp_
     monkeypatch.setattr(impl, "_invoke_harness", lambda *a, **k: _fake_result(returncode=3))
     monkeypatch.setattr(impl, "_read_blocked_summary", lambda wt: None)
     monkeypatch.setattr(impl, "_detect_self_answer", lambda r: False)
-    plan = _write_plan(tmp_path / "afk.md", class_="AFK")
+    plan = _write_plan(tmp_path / "afk.md", kind="AFK")
     monkeypatch.chdir(tmp_path)
     assert impl.run_plan(plan) == 1
     reasons = [p["reason"] for ev, p in events if ev == "chunk_ejected"]
@@ -465,7 +465,7 @@ def test_run_plan_afk_sets_ro_mounts_from_manifest(impl, monkeypatch, tmp_path):
     monkeypatch.setattr(impl, "_detect_self_answer", lambda r: False)
     monkeypatch.setattr(impl, "_compaction_threshold", lambda: None)
     monkeypatch.delenv("MENTAT_RO_MOUNTS", raising=False)
-    plan = _write_plan(tmp_path / "afk.md", class_="AFK")
+    plan = _write_plan(tmp_path / "afk.md", kind="AFK")
     monkeypatch.chdir(tmp_path)
     assert impl.run_plan(plan) == 0
     assert json.loads(impl.os.environ["MENTAT_RO_MOUNTS"]) == ["tests/a_test.py"]
@@ -478,7 +478,7 @@ def test_run_and_doctor_doctors_on_diagnosable_code(impl, monkeypatch, tmp_path)
     monkeypatch.setattr(impl, "run_plan", lambda *a, **k: 1)
     with _recorder(monkeypatch, impl, "_auto_doctor") as doctored:
         with _recorder(monkeypatch, impl, "_auto_summary") as summarized:
-            plan = _write_plan(tmp_path / "afk.md", class_="AFK")
+            plan = _write_plan(tmp_path / "afk.md", kind="AFK")
             assert impl._run_and_doctor(plan) == 1
     assert len(doctored) == 1
     assert summarized == []
@@ -488,7 +488,7 @@ def test_run_and_doctor_summary_on_ok_afk(impl, monkeypatch, tmp_path):
     monkeypatch.setattr(impl, "run_plan", lambda *a, **k: impl.EX_OK)
     with _recorder(monkeypatch, impl, "_auto_summary") as summarized:
         with _recorder(monkeypatch, impl, "_auto_doctor") as doctored:
-            plan = _write_plan(tmp_path / "afk.md", class_="AFK")
+            plan = _write_plan(tmp_path / "afk.md", kind="AFK")
             assert impl._run_and_doctor(plan) == impl.EX_OK
     assert len(summarized) == 1
     assert doctored == []
@@ -498,7 +498,7 @@ def test_run_and_doctor_ok_hitl_no_summary_no_doctor(impl, monkeypatch, tmp_path
     monkeypatch.setattr(impl, "run_plan", lambda *a, **k: impl.EX_OK)
     with _recorder(monkeypatch, impl, "_auto_summary") as summarized:
         with _recorder(monkeypatch, impl, "_auto_doctor") as doctored:
-            plan = _write_plan(tmp_path / "hitl.md", class_="HITL")
+            plan = _write_plan(tmp_path / "hitl.md", kind="HITL")
             assert impl._run_and_doctor(plan) == impl.EX_OK
     assert summarized == []
     assert doctored == []
@@ -845,7 +845,7 @@ def test_main_mark_test_writable_dispatch(impl, monkeypatch):
 
 def test_main_default_run_insertion(impl, monkeypatch, tmp_path):
     _wire_main(impl, monkeypatch)
-    plan = _write_plan(tmp_path / "p.md", class_="HITL")
+    plan = _write_plan(tmp_path / "p.md", kind="HITL")
     monkeypatch.setattr(impl, "resolve_plan_path", lambda ref: plan)
     monkeypatch.setattr(impl.sys, "argv", ["i", "p"])  # no subcommand
     with pytest.raises(SystemExit) as exc:
@@ -874,7 +874,7 @@ def test_main_plan_not_found(impl, monkeypatch, tmp_path, capsys):
 
 def test_main_veto_preflight_fail(impl, monkeypatch, tmp_path, capsys):
     _wire_main(impl, monkeypatch)
-    plan = _write_plan(tmp_path / "p.md", class_="AFK")
+    plan = _write_plan(tmp_path / "p.md", kind="AFK")
     monkeypatch.setattr(impl, "resolve_plan_path", lambda ref: plan)
     monkeypatch.setattr(impl, "preflight_veto_reviewers", lambda h, reuse_worktree=False: (1, ["mentat-plan-reviewer"]))
     monkeypatch.setattr(impl.sys, "argv", ["i", "run", "p"])
@@ -886,7 +886,7 @@ def test_main_veto_preflight_fail(impl, monkeypatch, tmp_path, capsys):
 
 def test_main_preflight_worktree_fail_emits_and_exits(impl, monkeypatch, tmp_path):
     events = _wire_main(impl, monkeypatch)
-    plan = _write_plan(tmp_path / "p.md", class_="AFK")
+    plan = _write_plan(tmp_path / "p.md", kind="AFK")
     monkeypatch.setattr(impl, "resolve_plan_path", lambda ref: plan)
     monkeypatch.setattr(impl, "preflight_worktree", lambda slug, reuse_worktree=False: (65, None))
     monkeypatch.setattr(impl.sys, "argv", ["i", "run", "p"])
@@ -899,7 +899,7 @@ def test_main_preflight_worktree_fail_emits_and_exits(impl, monkeypatch, tmp_pat
 
 def test_main_main_tree_refused(impl, monkeypatch, tmp_path):
     events = _wire_main(impl, monkeypatch)
-    plan = _write_plan(tmp_path / "p.md", class_="AFK")
+    plan = _write_plan(tmp_path / "p.md", kind="AFK")
     monkeypatch.setattr(impl, "resolve_plan_path", lambda ref: plan)
     monkeypatch.setattr(impl, "preflight_worktree", lambda slug, reuse_worktree=False: (0, None))
     monkeypatch.setattr(impl, "_in_shared_main_tree", lambda reuse_worktree=False: True)
@@ -913,7 +913,7 @@ def test_main_main_tree_refused(impl, monkeypatch, tmp_path):
 
 def test_main_success_no_land_reviews_diff(impl, monkeypatch, tmp_path, capsys):
     _wire_main(impl, monkeypatch)
-    plan = _write_plan(tmp_path / "p.md", class_="AFK")
+    plan = _write_plan(tmp_path / "p.md", kind="AFK")
     monkeypatch.setattr(impl, "resolve_plan_path", lambda ref: plan)
     monkeypatch.setattr(impl, "preflight_worktree", lambda slug, reuse_worktree=False: (0, tmp_path / "wt"))
     landed: list = []
@@ -928,7 +928,7 @@ def test_main_success_no_land_reviews_diff(impl, monkeypatch, tmp_path, capsys):
 
 def test_main_success_with_land_calls_land_and_review(impl, monkeypatch, tmp_path):
     _wire_main(impl, monkeypatch)
-    plan = _write_plan(tmp_path / "p.md", class_="AFK")
+    plan = _write_plan(tmp_path / "p.md", kind="AFK")
     monkeypatch.setattr(impl, "resolve_plan_path", lambda ref: plan)
     target = tmp_path / "wt"
     monkeypatch.setattr(impl, "preflight_worktree", lambda slug, reuse_worktree=False: (0, target))
@@ -943,7 +943,7 @@ def test_main_success_with_land_calls_land_and_review(impl, monkeypatch, tmp_pat
 
 def test_main_failure_tears_down_worktree(impl, monkeypatch, tmp_path):
     _wire_main(impl, monkeypatch)
-    plan = _write_plan(tmp_path / "p.md", class_="AFK")
+    plan = _write_plan(tmp_path / "p.md", kind="AFK")
     monkeypatch.setattr(impl, "resolve_plan_path", lambda ref: plan)
     target = tmp_path / "wt"
     monkeypatch.setattr(impl, "preflight_worktree", lambda slug, reuse_worktree=False: (0, target))
@@ -997,7 +997,7 @@ def _fake_agent(repo):
 def test_implement_one_slice_commits_via_pre_commit_hook(impl, tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     _init_repo(repo)
-    plan = _write_plan(tmp_path / "tiny-slice.md", class_="AFK", body="# Tiny slice\nAdd a feature module.")
+    plan = _write_plan(tmp_path / "tiny-slice.md", kind="AFK", body="# Tiny slice\nAdd a feature module.")
 
     monkeypatch.setenv("MENTAT_SKIP_PREFLIGHT", "1")
     monkeypatch.setenv("HOME", str(tmp_path))

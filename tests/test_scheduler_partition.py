@@ -16,10 +16,10 @@ from pathlib import Path
 import scheduler
 
 
-def _plan(slug: str, class_: str, blocked_by: list[str] | None = None) -> scheduler.Plan:
+def _plan(slug: str, kind: str, blocked_by: list[str] | None = None) -> scheduler.Plan:
     return scheduler.Plan(
         slug=slug,
-        class_=class_,
+        kind=kind,
         blocked_by=blocked_by or [],
         path=Path(f"/tmp/{slug}.md"),
     )

@@ -211,13 +211,13 @@ def test_fan_out_plans_seeds_next_chunk_from_completed_summary(tmp_path: Path, m
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
 
     plan_a_path = tmp_path / "plan-a.md"
-    plan_a_path.write_text("---\nid: plan-a\nclass: AFK\nblocked_by: []\n---\nbody\n")
+    plan_a_path.write_text("---\nid: plan-a\nkind: AFK\nblocked_by: []\n---\nbody\n")
     plan_b_path = tmp_path / "plan-b.md"
-    plan_b_path.write_text("---\nid: plan-b\nclass: AFK\nblocked_by: []\n---\nbody\n")
+    plan_b_path.write_text("---\nid: plan-b\nkind: AFK\nblocked_by: []\n---\nbody\n")
 
     plans = [
-        scheduler.Plan(slug="plan-a", class_="AFK", blocked_by=[], path=plan_a_path),
-        scheduler.Plan(slug="plan-b", class_="AFK", blocked_by=[], path=plan_b_path),
+        scheduler.Plan(slug="plan-a", kind="AFK", blocked_by=[], path=plan_a_path),
+        scheduler.Plan(slug="plan-b", kind="AFK", blocked_by=[], path=plan_b_path),
     ]
 
     spawn_calls: list[dict] = []

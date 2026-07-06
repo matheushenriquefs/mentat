@@ -21,11 +21,11 @@ def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
 
 
-def _make_plan_obj(tmp_path: Path, slug: str, class_: str = "AFK"):
+def _make_plan_obj(tmp_path: Path, slug: str, kind: str = "AFK"):
     routing = load_module("scheduler")
     p = tmp_path / f"{slug}.md"
-    p.write_text(f"---\nid: {slug}\nclass: {class_}\n---\n")
-    return routing.Plan(slug=slug, class_=class_, blocked_by=[], path=p)
+    p.write_text(f"---\nid: {slug}\nkind: {kind}\n---\n")
+    return routing.Plan(slug=slug, kind=kind, blocked_by=[], path=p)
 
 
 # ── S2/S4 fakes (shared) ──────────────────────────────────────────────────────
@@ -188,7 +188,7 @@ def test_fan_out_plans_kills_stalled_chunk_before_wall(monkeypatch, tmp_path):
     with reason 'stalled' while the wall clock still has budget."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="stalled", class_="AFK", blocked_by=[], path=tmp_path / "stalled.md")
+    plan = routing.Plan(slug="stalled", kind="AFK", blocked_by=[], path=tmp_path / "stalled.md")
 
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 30.0)  # wall far away
     monkeypatch.setattr(orch, "_stall_timeout", lambda: 0.05)  # tiny stall window
@@ -209,7 +209,7 @@ def test_fan_out_plans_progress_resets_stall_window(monkeypatch, tmp_path):
     stalled — it runs to its natural completion."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="live", class_="AFK", blocked_by=[], path=tmp_path / "live.md")
+    plan = routing.Plan(slug="live", kind="AFK", blocked_by=[], path=tmp_path / "live.md")
 
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 30.0)
     monkeypatch.setattr(orch, "_stall_timeout", lambda: 0.05)
@@ -356,7 +356,7 @@ def test_supervisor_releases_probe_on_kill(monkeypatch, tmp_path):
     queued chunk short-circuits 'breaker-open' forever."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="p", class_="AFK", blocked_by=[], path=tmp_path / "p.md")
+    plan = routing.Plan(slug="p", kind="AFK", blocked_by=[], path=tmp_path / "p.md")
 
     clk = [100.0]
     b = orch._CircuitBreaker(threshold=1, cooldown_s=0.0, clock=lambda: clk[0])
@@ -380,7 +380,7 @@ def test_supervisor_short_circuits_when_breaker_open(monkeypatch, tmp_path):
     is ejected as a retryable 'breaker-open' transient."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="sc", class_="AFK", blocked_by=[], path=tmp_path / "sc.md")
+    plan = routing.Plan(slug="sc", kind="AFK", blocked_by=[], path=tmp_path / "sc.md")
 
     opened = orch._CircuitBreaker(threshold=1, cooldown_s=1000.0)
     opened.record_failure()  # now open, cooldown far off
@@ -407,7 +407,7 @@ def test_supervisor_records_rc69_as_breaker_failure(monkeypatch, tmp_path):
     """A live spawn returning rc69 feeds the breaker a failure; enough of them open it."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plans = [routing.Plan(slug=f"c{i}", class_="AFK", blocked_by=[], path=tmp_path / f"c{i}.md") for i in range(2)]
+    plans = [routing.Plan(slug=f"c{i}", kind="AFK", blocked_by=[], path=tmp_path / f"c{i}.md") for i in range(2)]
 
     b = orch._CircuitBreaker(threshold=2, cooldown_s=1000.0)
     monkeypatch.setattr(orch, "_make_breaker", lambda: b)
@@ -502,7 +502,7 @@ def test_supervisor_installs_signal_handlers(monkeypatch, tmp_path):
     SIGTERM tears the fleet down) — verified via a spy on _install_signal_handlers."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="s", class_="AFK", blocked_by=[], path=tmp_path / "s.md")
+    plan = routing.Plan(slug="s", kind="AFK", blocked_by=[], path=tmp_path / "s.md")
 
     captured: dict = {}
 
@@ -595,7 +595,7 @@ def test_supervisor_warns_when_load_high_but_still_spawns(monkeypatch, tmp_path,
     (orchestrate.py branch 489->490, line 490)."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="hl", class_="AFK", blocked_by=[], path=tmp_path / "hl.md")
+    plan = routing.Plan(slug="hl", kind="AFK", blocked_by=[], path=tmp_path / "hl.md")
 
     monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 5.0)
@@ -623,7 +623,7 @@ def test_supervisor_signal_handler_tears_down_and_cancels(monkeypatch, tmp_path)
     BaseException branch (orchestrate.py 519-526, 535)."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="sig", class_="AFK", blocked_by=[], path=tmp_path / "sig.md")
+    plan = routing.Plan(slug="sig", kind="AFK", blocked_by=[], path=tmp_path / "sig.md")
 
     teardowns: list = []
     monkeypatch.setattr(orch, "_group_teardown", lambda live: teardowns.append(dict(live)))

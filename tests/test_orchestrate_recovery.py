@@ -19,8 +19,8 @@ def _load(name: str):
     return mod
 
 
-def _plan(orch, slug, class_="AFK"):
-    return orch._scheduler.Plan(slug=slug, class_=class_, blocked_by=[], path=Path(f"/tmp/{slug}.md"))
+def _plan(orch, slug, kind="AFK"):
+    return orch._scheduler.Plan(slug=slug, kind=kind, blocked_by=[], path=Path(f"/tmp/{slug}.md"))
 
 
 # ── _recovery_diff ────────────────────────────────────────────────────────────
@@ -173,8 +173,8 @@ def test_reslice_agent_returns_written_slices(monkeypatch, tmp_path):
     plan_path.write_text("big plan")
 
     def fake_invoke(prompt):
-        (tmp_path / "core-r1.md").write_text("---\nid: core-r1\nclass: AFK\n---\n")
-        (tmp_path / "core-r2.md").write_text("---\nid: core-r2\nclass: AFK\n---\n")
+        (tmp_path / "core-r1.md").write_text("---\nid: core-r1\nkind: AFK\n---\n")
+        (tmp_path / "core-r2.md").write_text("---\nid: core-r2\nkind: AFK\n---\n")
         return "done"
 
     monkeypatch.setattr(orch._recover, "_invoke_claude", fake_invoke)
@@ -192,7 +192,7 @@ def test_recovery_reslice_empty_ejects(monkeypatch):
 def test_recovery_reslice_fans_sub_slices(monkeypatch, tmp_path):
     orch = _load("orchestrate")
     r1 = tmp_path / "core-r1.md"
-    r1.write_text("---\nid: core-r1\nclass: AFK\nblocked_by: []\n---\n")
+    r1.write_text("---\nid: core-r1\nkind: AFK\nblocked_by: []\n---\n")
     monkeypatch.setattr(orch, "_reslice_agent", lambda plan: [r1])
     captured = {}
 
@@ -282,7 +282,7 @@ def test_run_recovery_skipped_hitl_counts_neither(monkeypatch, tmp_path):
     orch = _load("orchestrate")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    ui = _plan(orch, "ui", class_="HITL")
+    ui = _plan(orch, "ui", kind="HITL")
     ok, dead, stalled = orch._run_recovery(
         {"ui"}, plans_by_slug={"ui": ui}, holding="hold", session_id="s1", harness=None, model=None
     )
@@ -322,9 +322,9 @@ def test_run_orchestrate_invokes_recovery_for_worker_died(tmp_path, monkeypatch)
     orch = _load("orchestrate")
     _load("scheduler")
     a = tmp_path / "a.md"
-    a.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
+    a.write_text("---\nid: a\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# a\n")
 
-    plan_obj = orch._scheduler.Plan(slug="a", class_="AFK", blocked_by=[], path=a)
+    plan_obj = orch._scheduler.Plan(slug="a", kind="AFK", blocked_by=[], path=a)
     # rc<0 → worker-died → transient set.
     monkeypatch.setattr(orch, "_fan_out_plans", lambda plans, **kw: [(plan_obj, -1, str(tmp_path), None)])
     monkeypatch.setattr(orch._land_queue, "drain", lambda chunks, **kw: [])
@@ -421,4 +421,4 @@ def test_spawn_implement_in_worktree_omits_harness_and_model(monkeypatch, tmp_pa
 
 
 def _plan_at(orch, slug, path):
-    return orch._scheduler.Plan(slug=slug, class_="AFK", blocked_by=[], path=path)
+    return orch._scheduler.Plan(slug=slug, kind="AFK", blocked_by=[], path=path)

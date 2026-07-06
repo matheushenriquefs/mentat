@@ -18,9 +18,9 @@ def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
 
 
-def _make_plan_file(tmp_path: Path, slug: str, class_: str = "AFK") -> Path:
+def _make_plan_file(tmp_path: Path, slug: str, kind: str = "AFK") -> Path:
     p = tmp_path / f"{slug}.md"
-    p.write_text(f"---\nid: {slug}\nclass: {class_}\n---\n")
+    p.write_text(f"---\nid: {slug}\nkind: {kind}\n---\n")
     return p
 
 
@@ -50,7 +50,7 @@ def test_orchestrate_exits_1_on_any_ejection(tmp_path):
 
     from lib.exits import EX_HITL_REQUIRED
 
-    plan_obj = routing.Plan(slug="plan-b", class_="AFK", blocked_by=[], path=plan)
+    plan_obj = routing.Plan(slug="plan-b", kind="AFK", blocked_by=[], path=plan)
 
     with patch.object(orch, "_fan_out_plans", return_value=[(plan_obj, EX_HITL_REQUIRED)]):
         with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
@@ -83,9 +83,9 @@ def test_orchestrate_accepts_plan_slug_and_path_intermixed(tmp_path, monkeypatch
     monkeypatch.setenv("HOME", str(tmp_path))
     plans_dir = tmp_path / ".agents" / "plans"
     plans_dir.mkdir(parents=True)
-    (plans_dir / "bare-slug.md").write_text("---\nid: bare-slug\nclass: AFK\n---\n")
+    (plans_dir / "bare-slug.md").write_text("---\nid: bare-slug\nkind: AFK\n---\n")
     abs_plan = tmp_path / "abs-plan.md"
-    abs_plan.write_text("---\nid: abs-plan\nclass: AFK\n---\n")
+    abs_plan.write_text("---\nid: abs-plan\nkind: AFK\n---\n")
 
     paths = [orch._utils.resolve_plan_ref(r) for r in ["bare-slug", str(abs_plan)]]
     assert len(paths) == 2
@@ -252,7 +252,7 @@ def test_fan_out_plans_blocks_until_slot_free(monkeypatch, tmp_path):
     monkeypatch.setattr(orch, "_concurrency_cap", lambda: 2)
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 5.0)
 
-    plans = [routing.Plan(slug=f"p{i}", class_="AFK", blocked_by=[], path=tmp_path / f"p{i}.md") for i in range(4)]
+    plans = [routing.Plan(slug=f"p{i}", kind="AFK", blocked_by=[], path=tmp_path / f"p{i}.md") for i in range(4)]
     for i in range(4):
         bind_plan(f"p{i}")
 
@@ -326,7 +326,7 @@ def test_land_all_with_plans_wires_scheduler_callbacks(tmp_path):
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
     bind_plan("a")
-    plan_obj = routing.Plan(slug="a", class_="AFK", blocked_by=[], path=tmp_path / "a.md")
+    plan_obj = routing.Plan(slug="a", kind="AFK", blocked_by=[], path=tmp_path / "a.md")
 
     with (
         patch.object(
@@ -354,8 +354,8 @@ def test_run_orchestrate_prints_drain_eject_reasons(tmp_path, capsys):
     land = _make_plan_file(tmp_path, "p-land", "AFK")
     bind_plan("p-fail")
     bind_plan("p-land")
-    fail_obj = routing.Plan(slug="p-fail", class_="AFK", blocked_by=[], path=fail)
-    land_obj = routing.Plan(slug="p-land", class_="AFK", blocked_by=[], path=land)
+    fail_obj = routing.Plan(slug="p-fail", kind="AFK", blocked_by=[], path=fail)
+    land_obj = routing.Plan(slug="p-land", kind="AFK", blocked_by=[], path=land)
 
     drain_out = [{"slug": "p-land", "status": "eject", "reason": "gate_failed"}]
 
@@ -396,9 +396,9 @@ def test_run_orchestrate_emits_upstream_ejected_for_anchored_cascade(tmp_path):
 
     # Y (auto) — no HITL relation.  Z (HITL, anchored).  X (AFK, blocked_by Y+Z)
     # → anchored via upstream-HITL.  Ejecting Y cascades onto anchored X.
-    y = routing.Plan(slug="y", class_="AFK", blocked_by=[], path=tmp_path / "y.md")
-    z = routing.Plan(slug="z", class_="HITL", blocked_by=[], path=tmp_path / "z.md")
-    x = routing.Plan(slug="x", class_="AFK", blocked_by=["y", "z"], path=tmp_path / "x.md")
+    y = routing.Plan(slug="y", kind="AFK", blocked_by=[], path=tmp_path / "y.md")
+    z = routing.Plan(slug="z", kind="HITL", blocked_by=[], path=tmp_path / "z.md")
+    x = routing.Plan(slug="x", kind="AFK", blocked_by=["y", "z"], path=tmp_path / "x.md")
 
     emitted: list[tuple[str, dict]] = []
 
@@ -465,7 +465,7 @@ def test_main_run_dispatches_to_run_orchestrate(monkeypatch, tmp_path):
 def test_main_fan_out_spawns_each_plan(monkeypatch, tmp_path):
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plan_obj = routing.Plan(slug="fo", class_="AFK", blocked_by=[], path=tmp_path / "fo.md")
+    plan_obj = routing.Plan(slug="fo", kind="AFK", blocked_by=[], path=tmp_path / "fo.md")
 
     monkeypatch.setattr(orch.sys, "argv", ["mentat-orchestrate", "fan-out", "fo"])
     monkeypatch.setattr(orch._utils, "resolve_plan_ref", lambda r: tmp_path / f"{r}.md")

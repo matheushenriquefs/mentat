@@ -28,7 +28,7 @@ def test_worker_died_in_eject_reasons():
 
 
 def _run_partition(orch, routing, tmp_path, rc):
-    plan = routing.Plan(slug="dead-chunk", class_="AFK", blocked_by=[], path=tmp_path / "dead-chunk.md")
+    plan = routing.Plan(slug="dead-chunk", kind="AFK", blocked_by=[], path=tmp_path / "dead-chunk.md")
     emitted = []
     with patch.object(orch, "_emit_event", side_effect=lambda ev, p: emitted.append((ev, p))):
         with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):

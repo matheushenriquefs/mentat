@@ -48,7 +48,7 @@ def test_plan_write_lands_file_and_audit(tmp_path, audit, monkeypatch):
     plans_dir = tmp_path / "plans"
 
     body = tmp_path / "body.md"
-    body.write_text("---\nid: my-plan\nclass: AFK\n---\n# My plan\nDo the thing.\n")
+    body.write_text("---\nid: my-plan\nkind: AFK\n---\n# My plan\nDo the thing.\n")
 
     dest = plan.write_plan("my-plan", body, plans_dir=plans_dir)
     assert dest == plans_dir / "my-plan.md"

@@ -1,6 +1,6 @@
 """E2E: the orchestrate scheduler partitioning + dep-aware landing over a real plan graph.
 
-Drives ``scheduler.partition`` and ``Scheduler`` (topo sort, HITL/AFK class rule,
+Drives ``scheduler.partition`` and ``Scheduler`` (topo sort, HITL/AFK kind rule,
 next_ready gating, cascade ejection, cycle detection) over real ``Plan`` graphs. Pure
 in-process journeys — the actual sequencing logic the orchestrator's land queue leans on.
 """
@@ -23,7 +23,7 @@ def _sched():
 
 
 def _plan(mod, slug: str, cls: str = "AFK", blocked_by: list[str] | None = None):
-    return mod.Plan(slug=slug, class_=cls, blocked_by=blocked_by or [], path=Path(f"/plans/{slug}.md"))
+    return mod.Plan(slug=slug, kind=cls, blocked_by=blocked_by or [], path=Path(f"/plans/{slug}.md"))
 
 
 def test_partition_anchors_hitl_and_its_neighbors():

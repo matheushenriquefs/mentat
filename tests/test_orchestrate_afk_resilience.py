@@ -21,16 +21,16 @@ def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
 
 
-def _make_plan(tmp_path: Path, slug: str, class_: str = "AFK"):
+def _make_plan(tmp_path: Path, slug: str, kind: str = "AFK"):
     p = tmp_path / f"{slug}.md"
-    p.write_text(f"---\nid: {slug}\nclass: {class_}\n---\n")
+    p.write_text(f"---\nid: {slug}\nkind: {kind}\n---\n")
     return p
 
 
-def _make_plan_obj(tmp_path: Path, slug: str, class_: str = "AFK"):
+def _make_plan_obj(tmp_path: Path, slug: str, kind: str = "AFK"):
     routing = load_module("scheduler")
-    path = _make_plan(tmp_path, slug, class_)
-    return routing.Plan(slug=slug, class_=class_, blocked_by=[], path=path)
+    path = _make_plan(tmp_path, slug, kind)
+    return routing.Plan(slug=slug, kind=kind, blocked_by=[], path=path)
 
 
 # ── Slice 5: _SIGNAL_EXIT_BASE constant ──────────────────────────────────────
@@ -231,7 +231,7 @@ def test_supervisor_stops_container_on_timeout(monkeypatch, tmp_path):
     in-container agent (in its own PID namespace) dies."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="hung-c", class_="AFK", blocked_by=[], path=tmp_path / "hung-c.md")
+    plan = routing.Plan(slug="hung-c", kind="AFK", blocked_by=[], path=tmp_path / "hung-c.md")
 
     bind_plan("hung-c")
     down_calls: list[str] = []
@@ -321,7 +321,7 @@ def test_fan_out_plans_kills_hung_child_within_deadline(monkeypatch, tmp_path):
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
 
-    plan = routing.Plan(slug="hung", class_="AFK", blocked_by=[], path=tmp_path / "hung.md")
+    plan = routing.Plan(slug="hung", kind="AFK", blocked_by=[], path=tmp_path / "hung.md")
 
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
     monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
@@ -341,7 +341,7 @@ def test_fan_out_plans_records_rc_for_finish_in_the_gap(monkeypatch, tmp_path):
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
 
-    plan = routing.Plan(slug="gap", class_="AFK", blocked_by=[], path=tmp_path / "gap.md")
+    plan = routing.Plan(slug="gap", kind="AFK", blocked_by=[], path=tmp_path / "gap.md")
     proc = FakeAsyncProc(hang=True)
     proc.returncode = 0  # exited just as the deadline fired
 
@@ -360,7 +360,7 @@ def test_fan_out_plans_harvest_order_matches_submission(monkeypatch, tmp_path):
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
 
-    plans = [routing.Plan(slug=f"p{i}", class_="AFK", blocked_by=[], path=tmp_path / f"p{i}.md") for i in range(3)]
+    plans = [routing.Plan(slug=f"p{i}", kind="AFK", blocked_by=[], path=tmp_path / f"p{i}.md") for i in range(3)]
     procs = [FakeAsyncProc(sleep=0.02, rc=0), FakeAsyncProc(hang=True), FakeAsyncProc(sleep=0.01, rc=0)]
 
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.1)
@@ -380,7 +380,7 @@ def test_fan_out_plans_killed_child_ejects_worker_died(monkeypatch, tmp_path):
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
 
-    plan = routing.Plan(slug="timed-out", class_="AFK", blocked_by=[], path=tmp_path / "p.md")
+    plan = routing.Plan(slug="timed-out", kind="AFK", blocked_by=[], path=tmp_path / "p.md")
     emitted: list[tuple] = []
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
@@ -403,7 +403,7 @@ def testpartition_by_outcome_worker_died_is_in_transient_set(tmp_path):
     set — the engine seam — not silently swallowed."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="td", class_="AFK", blocked_by=[], path=tmp_path / "td.md")
+    plan = routing.Plan(slug="td", kind="AFK", blocked_by=[], path=tmp_path / "td.md")
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda *a, **k: None):
@@ -419,7 +419,7 @@ def testpartition_by_outcome_container_down_is_transient(tmp_path):
     """A container-down chunk (rc69) is transient too."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="cd", class_="AFK", blocked_by=[], path=tmp_path / "cd.md")
+    plan = routing.Plan(slug="cd", kind="AFK", blocked_by=[], path=tmp_path / "cd.md")
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda *a, **k: None):
@@ -434,7 +434,7 @@ def testpartition_by_outcome_implement_failed_stays_terminal(tmp_path):
     """A terminal eject (rc=1 implement-failed) must NOT be in the transient set."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="tf", class_="AFK", blocked_by=[], path=tmp_path / "tf.md")
+    plan = routing.Plan(slug="tf", kind="AFK", blocked_by=[], path=tmp_path / "tf.md")
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
         with patch.object(orch, "_emit_event", lambda *a, **k: None):
@@ -450,7 +450,7 @@ def testpartition_by_outcome_transient_chunks_not_marked_ejected_by_partition(tm
     partition — that is the seam the recovery engine owns."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="wd", class_="AFK", blocked_by=[], path=tmp_path / "wd.md")
+    plan = routing.Plan(slug="wd", kind="AFK", blocked_by=[], path=tmp_path / "wd.md")
     marked: list[str] = []
 
     with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
@@ -472,7 +472,7 @@ def test_run_orchestrate_names_ejected_chunks_on_failure(tmp_path, capsys):
     routing = load_module("scheduler")
 
     plan = _make_plan(tmp_path, "fail-slug", "AFK")
-    plan_obj = routing.Plan(slug="fail-slug", class_="AFK", blocked_by=[], path=plan)
+    plan_obj = routing.Plan(slug="fail-slug", kind="AFK", blocked_by=[], path=plan)
 
     with (
         patch.object(orch, "_fan_out_plans", return_value=[(plan_obj, 1)]),
@@ -620,7 +620,7 @@ def test_fan_out_plans_hung_chunk_frees_slot_for_queued(monkeypatch, tmp_path):
     is killed at its deadline, so the queued chunk still runs to completion."""
     orch = load_module("orchestrate")
     routing = load_module("scheduler")
-    plans = [routing.Plan(slug=f"h{i}", class_="AFK", blocked_by=[], path=tmp_path / f"h{i}.md") for i in range(2)]
+    plans = [routing.Plan(slug=f"h{i}", kind="AFK", blocked_by=[], path=tmp_path / f"h{i}.md") for i in range(2)]
 
     monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
     monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)

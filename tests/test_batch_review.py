@@ -17,7 +17,7 @@ def load_module(name: str):
 def test_run_orchestrate_emits_batch_reviewed(tmp_path):
     orch = load_module("orchestrate")
     plan = tmp_path / "p.md"
-    plan.write_text("---\nid: p\nclass: AFK\nblocked_by: []\n---\n")
+    plan.write_text("---\nid: p\nkind: AFK\nblocked_by: []\n---\n")
 
     emitted: list[str] = []
 

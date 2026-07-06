@@ -23,7 +23,7 @@ used interchangeably; no noun for the whole set of chunks in one run. Gate machi
 - **holding branch** — `branch/<feature>`, no own commits; chunks FF onto it.
 - **land** — FF-merge a chunk's tip onto the holding branch after all gates pass.
 - **eject** — preserve a chunk's worktree for repair on gate-fail or conflict.
-- **plan class** — `AFK` (headless, `--disallowedTools AskUserQuestion`) | `HITL` (interactive).
+- **plan kind** — `AFK` (headless, `--disallowedTools AskUserQuestion`) | `HITL` (interactive).
 
 **Review machinery (expanded for ADR-0003 v2):**
 - **gate** — anything that evaluates a chunk and emits a verdict (umbrella).

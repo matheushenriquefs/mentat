@@ -22,9 +22,9 @@ def _impl():
     return load_script(IMPL_SCRIPTS / "implement.py", "impl_land")
 
 
-def _write_plan(tmp_path: Path, slug: str, class_: str = "AFK") -> Path:
+def _write_plan(tmp_path: Path, slug: str, kind: str = "AFK") -> Path:
     p = tmp_path / f"{slug}.md"
-    p.write_text(f"---\nid: {slug}\nclass: {class_}\nblocked_by: []\n---\n# {slug}\nbody\n")
+    p.write_text(f"---\nid: {slug}\nkind: {kind}\nblocked_by: []\n---\n# {slug}\nbody\n")
     return p
 
 

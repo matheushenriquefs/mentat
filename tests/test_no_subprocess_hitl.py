@@ -24,9 +24,9 @@ def _load(name):
     return mod
 
 
-def _write_plan(tmp_path: Path, slug: str, class_: str) -> Path:
+def _write_plan(tmp_path: Path, slug: str, kind: str) -> Path:
     p = tmp_path / f"{slug}.md"
-    p.write_text(f"---\nid: {slug}\nstatus: ready\nclass: {class_}\nblocked_by: []\n---\n\n# {slug}\n")
+    p.write_text(f"---\nid: {slug}\nstatus: ready\nkind: {kind}\nblocked_by: []\n---\n\n# {slug}\n")
     return p
 
 

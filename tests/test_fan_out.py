@@ -28,7 +28,7 @@ def test_fan_out_spawns_worktree_and_subprocess(tmp_path):
     """spawn() calls _spawn_worktree_subprocess and returns the session id."""
     fan_out = load_module("fan_out")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="my-plan", class_="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
+    plan = routing.Plan(slug="my-plan", kind="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
 
     spawn_calls = []
 
@@ -47,7 +47,7 @@ def test_fan_out_spawns_worktree_and_subprocess(tmp_path):
 def test_fan_out_prints_track_command_immediately(tmp_path):
     fan_out = load_module("fan_out")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="my-plan", class_="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
+    plan = routing.Plan(slug="my-plan", kind="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
 
     fake_session_id = "session-123"
 
@@ -67,7 +67,7 @@ def test_fan_out_prints_track_command_immediately(tmp_path):
 def test_fan_out_emits_chunk_spawned(tmp_path):
     fan_out = load_module("fan_out")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="my-plan", class_="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
+    plan = routing.Plan(slug="my-plan", kind="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
 
     with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=("sess-1", _FakePopen(), tmp_path / "wt")):
         with patch.object(fan_out, "_emit_event") as mock_emit:
@@ -82,7 +82,7 @@ def test_fan_out_stdout_emits_chunk_slugs_newline_delim(tmp_path):
     fan_out = load_module("fan_out")
     routing = load_module("scheduler")
     plans = [
-        routing.Plan(slug=f"plan-{i}", class_="AFK", blocked_by=[], path=tmp_path / f"plan-{i}.md") for i in range(3)
+        routing.Plan(slug=f"plan-{i}", kind="AFK", blocked_by=[], path=tmp_path / f"plan-{i}.md") for i in range(3)
     ]
 
     with patch.object(fan_out, "_spawn_worktree_subprocess", return_value=("sess-x", _FakePopen(), tmp_path / "wt")):
@@ -103,7 +103,7 @@ def test_fan_out_track_suggestion_is_bin_form(tmp_path):
     """spawn_with_proc must print `mentat-session track <id>`, never `python3 ...`."""
     fan_out = load_module("fan_out")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="p", class_="AFK", blocked_by=[], path=tmp_path / "p.md")
+    plan = routing.Plan(slug="p", kind="AFK", blocked_by=[], path=tmp_path / "p.md")
 
     with patch.object(
         fan_out, "_spawn_worktree_subprocess", return_value=("sess-binform", _FakePopen(), tmp_path / "wt")
@@ -128,7 +128,7 @@ def test_spawn_async_emits_prints_and_returns_process(tmp_path, monkeypatch):
     prints the track command, and returns (session_id, Process) (fan_out.py:123-131)."""
     fan_out = load_module("fan_out")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="async-plan", class_="AFK", blocked_by=[], path=tmp_path / "async-plan.md")
+    plan = routing.Plan(slug="async-plan", kind="AFK", blocked_by=[], path=tmp_path / "async-plan.md")
 
     fake_proc = object()
     captured: dict[str, object] = {}
@@ -164,7 +164,7 @@ def test_spawn_worktree_subprocess_wires_harness_model_and_seed(tmp_path, monkey
     """harness/model append CLI flags; seed_summary injects MENTAT_SEED_SUMMARY."""
     fan_out = load_module("fan_out")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="wire", class_="AFK", blocked_by=[], path=tmp_path / "p.md")
+    plan = routing.Plan(slug="wire", kind="AFK", blocked_by=[], path=tmp_path / "p.md")
 
     monkeypatch.setattr(
         fan_out,
@@ -205,7 +205,7 @@ def test_spawn_worktree_subprocess_omits_flags_when_unset(tmp_path, monkeypatch)
     """No harness/model/seed → no flags and no MENTAT_SEED_SUMMARY env key."""
     fan_out = load_module("fan_out")
     routing = load_module("scheduler")
-    plan = routing.Plan(slug="bare", class_="AFK", blocked_by=[], path=tmp_path / "p.md")
+    plan = routing.Plan(slug="bare", kind="AFK", blocked_by=[], path=tmp_path / "p.md")
 
     monkeypatch.setattr(
         fan_out,

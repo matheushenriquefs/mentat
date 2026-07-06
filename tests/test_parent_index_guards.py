@@ -37,9 +37,9 @@ def test_parent_with_siblings_and_blocked_by_exits_65(tmp_path, capsys):
     a_plan = tmp_path / "a.md"
     c_plan = tmp_path / "c.md"
 
-    parent.write_text("---\nid: parent\nstatus: ready\nclass: AFK\nblocked_by: [c]\nsiblings: [a]\n---\n")
-    a_plan.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n")
-    c_plan.write_text("---\nid: c\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n")
+    parent.write_text("---\nid: parent\nstatus: ready\nkind: AFK\nblocked_by: [c]\nsiblings: [a]\n---\n")
+    a_plan.write_text("---\nid: a\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n")
+    c_plan.write_text("---\nid: c\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n")
 
     with pytest.raises(SystemExit) as exc_info:
         orchestrate._load_plans([parent, a_plan, c_plan])
@@ -57,9 +57,9 @@ def test_plan_blocking_on_parent_index_exits_65(tmp_path, capsys):
     a_plan = tmp_path / "a.md"
     c_plan = tmp_path / "c.md"
 
-    parent.write_text("---\nid: parent\nstatus: ready\nclass: AFK\nblocked_by: []\nsiblings: [a]\n---\n")
-    a_plan.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n")
-    c_plan.write_text("---\nid: c\nstatus: ready\nclass: AFK\nblocked_by: [parent]\n---\n")
+    parent.write_text("---\nid: parent\nstatus: ready\nkind: AFK\nblocked_by: []\nsiblings: [a]\n---\n")
+    a_plan.write_text("---\nid: a\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n")
+    c_plan.write_text("---\nid: c\nstatus: ready\nkind: AFK\nblocked_by: [parent]\n---\n")
 
     with pytest.raises(SystemExit) as exc_info:
         orchestrate._load_plans([parent, c_plan])
@@ -75,7 +75,7 @@ def test_missing_sibling_plan_exits_66(tmp_path, capsys):
 
     parent = tmp_path / "parent.md"
 
-    parent.write_text("---\nid: parent\nstatus: ready\nclass: AFK\nblocked_by: []\nsiblings: [missing]\n---\n")
+    parent.write_text("---\nid: parent\nstatus: ready\nkind: AFK\nblocked_by: []\nsiblings: [missing]\n---\n")
 
     with pytest.raises(SystemExit) as exc_info:
         orchestrate._load_plans([parent])

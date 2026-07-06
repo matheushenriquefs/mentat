@@ -28,9 +28,9 @@ def _load(name: str):
 
 
 class _Plan:
-    def __init__(self, slug: str, class_: str = "AFK") -> None:
+    def __init__(self, slug: str, kind: str = "AFK") -> None:
         self.slug = slug
-        self.class_ = class_
+        self.kind = kind
         self.path = Path(f"/tmp/{slug}.md")
 
 
@@ -363,7 +363,7 @@ def test_recover_never_respawns_hitl(recover, monkeypatch, tmp_path):
     prim = _wire(recover, monkeypatch, calls=calls)
     out = recover.recover(
         {"ui"},
-        plans_by_slug={"ui": _Plan("ui", class_="HITL")},
+        plans_by_slug={"ui": _Plan("ui", kind="HITL")},
         holding="hold",
         session_id="s1",
         harness=None,

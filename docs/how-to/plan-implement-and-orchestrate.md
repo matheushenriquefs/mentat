@@ -3,16 +3,16 @@
 Task-oriented. Goal: drive a set of plans where some run unattended (`AFK`) and some
 need a human at a decision point (`HITL`), without one blocking the other.
 
-## How class routing works
+## How kind routing works
 
-Every plan carries a `class:` in its frontmatter:
+Every plan carries a `kind:` in its frontmatter:
 
 - **AFK** — the gate clears unattended. The agent never stops to ask; an ambiguity
   it cannot resolve is an ejection, not a question.
 - **HITL** — the run drives in your calling session so a human can answer at the
   decision points. It is never spawned headless.
 
-Orchestrate routes by class. AFK plans fan out as parallel chunks. A HITL plan is
+Orchestrate routes by kind. AFK plans fan out as parallel chunks. A HITL plan is
 not spawned headless — it is handed to your session to drive directly.
 
 ## 1. Fan out the AFK plans
@@ -56,7 +56,7 @@ git checkout main && git merge --ff-only holding/feature
 
 ## Notes
 
-- Class lives in plan frontmatter and is never overridden at runtime — there is no
-  environment flag that flips a plan's class.
+- Kind lives in plan frontmatter and is never overridden at runtime — there is no
+  environment flag that flips a plan's kind.
 - Landing onto a shared holding branch is what lets AFK and HITL work converge:
   whoever lands next rebases onto the tip the previous one left.

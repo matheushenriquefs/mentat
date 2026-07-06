@@ -52,7 +52,7 @@ DEFAULT_ATTEMPTS = 2
 
 class _PlanLike(Protocol):
     slug: str
-    class_: str
+    kind: str
     path: Path
 
 

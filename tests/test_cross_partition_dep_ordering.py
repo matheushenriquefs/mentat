@@ -31,10 +31,10 @@ def _load(name: str):
     return mod
 
 
-def _plan(slug: str, class_: str = "AFK", blocked_by: list[str] | None = None):
+def _plan(slug: str, kind: str = "AFK", blocked_by: list[str] | None = None):
     import scheduler as _sched
 
-    return _sched.Plan(slug=slug, class_=class_, blocked_by=blocked_by or [], path=Path(f"/tmp/{slug}.md"))
+    return _sched.Plan(slug=slug, kind=kind, blocked_by=blocked_by or [], path=Path(f"/tmp/{slug}.md"))
 
 
 # ── Q1: anchored dep gates auto chunk ─────────────────────────────────────────
@@ -47,7 +47,7 @@ def test_scheduler_blocks_auto_on_anchored_dep() -> None:
     list_ready_slices(["B"]) must return [] until A is mark_landed.
     """
     _load("scheduler")
-    A = _plan("A", class_="HITL")
+    A = _plan("A", kind="HITL")
     B = _plan("B", blocked_by=["A"])
 
     # The fix: Scheduler initialized with all plans (anchored + auto)
@@ -97,9 +97,9 @@ def test_run_orchestrate_passes_all_plans_to_scheduler(tmp_path, monkeypatch) ->
     a_path = tmp_path / "A.md"
     c_path = tmp_path / "C.md"
     d_path = tmp_path / "D.md"
-    a_path.write_text("---\nid: A\nstatus: ready\nclass: HITL\nblocked_by: []\n---\n# A\n")
-    c_path.write_text("---\nid: C\nstatus: ready\nclass: AFK\nblocked_by: [A]\n---\n# C\n")
-    d_path.write_text("---\nid: D\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# D\n")
+    a_path.write_text("---\nid: A\nstatus: ready\nkind: HITL\nblocked_by: []\n---\n# A\n")
+    c_path.write_text("---\nid: C\nstatus: ready\nkind: AFK\nblocked_by: [A]\n---\n# C\n")
+    d_path.write_text("---\nid: D\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# D\n")
 
     for slug in ("A", "C", "D"):
         bind_plan(slug)
@@ -146,8 +146,8 @@ def test_eject_cascade_reaches_anchored_downstream() -> None:
     landing B on top of a dead upstream.
     """
     _load("scheduler")
-    A = _plan("A", class_="AFK")  # auto, upstream
-    B = _plan("B", class_="HITL", blocked_by=["A"])  # anchored, downstream
+    A = _plan("A", kind="AFK")  # auto, upstream
+    B = _plan("B", kind="HITL", blocked_by=["A"])  # anchored, downstream
 
     import scheduler as sched
 
@@ -162,7 +162,7 @@ def test_auto_only_cascade_misses_anchored() -> None:
     """Demonstrate the bug: auto-only Scheduler doesn't cascade to HITL."""
     _load("scheduler")
     # Only A is in the Scheduler (auto-only — the bug)
-    A = _plan("A", class_="AFK")
+    A = _plan("A", kind="AFK")
 
     import scheduler as sched
 

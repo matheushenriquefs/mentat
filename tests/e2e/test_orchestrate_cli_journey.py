@@ -28,17 +28,17 @@ def orch():
     return load_script(ORCH_PY, "orch")
 
 
-def _plan(orch, slug, *, class_="AFK", blocked_by=None, path=None):
+def _plan(orch, slug, *, kind="AFK", blocked_by=None, path=None):
     return orch._scheduler.Plan(
         slug=slug,
-        class_=class_,
+        kind=kind,
         blocked_by=list(blocked_by or []),
         path=path or Path(f"/plans/{slug}.md"),
     )
 
 
-def _write_plan(dir_path, slug, *, class_="AFK", blocked_by=None, siblings=None, body="body"):
-    lines = ["---", f"id: {slug}", f"class: {class_}"]
+def _write_plan(dir_path, slug, *, kind="AFK", blocked_by=None, siblings=None, body="body"):
+    lines = ["---", f"id: {slug}", f"kind: {kind}"]
     if blocked_by is not None:
         lines.append(f"blocked_by: [{', '.join(blocked_by)}]")
     if siblings is not None:
@@ -69,25 +69,25 @@ def test_parse_list_field_strips_brackets_and_quotes(orch):
 
 
 def test_load_plans_plain_plan(orch, tmp_path):
-    p = _write_plan(tmp_path, "solo", class_="AFK", blocked_by=[])
+    p = _write_plan(tmp_path, "solo", kind="AFK", blocked_by=[])
     plans = orch._load_plans([p])
     assert len(plans) == 1
     assert plans[0].slug == "solo"
-    assert plans[0].class_ == "AFK"
+    assert plans[0].kind == "AFK"
     assert plans[0].blocked_by == []
     assert plans[0].path == p
 
 
 def test_load_plans_parent_index_expands_to_siblings(orch, tmp_path):
-    _write_plan(tmp_path, "child-a", class_="AFK", blocked_by=[])
-    _write_plan(tmp_path, "child-b", class_="AFK", blocked_by=[])
+    _write_plan(tmp_path, "child-a", kind="AFK", blocked_by=[])
+    _write_plan(tmp_path, "child-b", kind="AFK", blocked_by=[])
     parent = _write_plan(tmp_path, "parent", siblings=["child-a", "child-b"])
     plans = orch._load_plans([parent])
     assert sorted(p.slug for p in plans) == ["child-a", "child-b"]
 
 
 def test_load_plans_nested_parent_index_is_dataerr(orch, tmp_path):
-    _write_plan(tmp_path, "grandchild", class_="AFK", blocked_by=[])
+    _write_plan(tmp_path, "grandchild", kind="AFK", blocked_by=[])
     _write_plan(tmp_path, "inner", siblings=["grandchild"])
     parent = _write_plan(tmp_path, "outer", siblings=["inner"])
     with pytest.raises(SystemExit) as exc:
@@ -96,7 +96,7 @@ def test_load_plans_nested_parent_index_is_dataerr(orch, tmp_path):
 
 
 def test_load_plans_parent_index_with_blocked_by_is_dataerr(orch, tmp_path):
-    _write_plan(tmp_path, "child", class_="AFK", blocked_by=[])
+    _write_plan(tmp_path, "child", kind="AFK", blocked_by=[])
     parent = _write_plan(tmp_path, "parent", blocked_by=["dep"], siblings=["child"])
     with pytest.raises(SystemExit) as exc:
         orch._load_plans([parent])
@@ -112,16 +112,16 @@ def test_load_plans_missing_sibling_is_noinput(orch, tmp_path):
 
 def test_load_plans_blocked_on_parent_index_is_dataerr(orch, tmp_path):
     # parent index expands to child-a; a separate plan blocks_by the parent slug.
-    _write_plan(tmp_path, "child-a", class_="AFK", blocked_by=[])
+    _write_plan(tmp_path, "child-a", kind="AFK", blocked_by=[])
     parent = _write_plan(tmp_path, "parent", siblings=["child-a"])
-    dependent = _write_plan(tmp_path, "dependent", class_="AFK", blocked_by=["parent"])
+    dependent = _write_plan(tmp_path, "dependent", kind="AFK", blocked_by=["parent"])
     with pytest.raises(SystemExit) as exc:
         orch._load_plans([parent, dependent])
     assert exc.value.code == orch.EX_DATAERR
 
 
 def test_load_plans_unknown_dep_raises(orch, tmp_path, capsys):
-    p = _write_plan(tmp_path, "solo", class_="AFK", blocked_by=["external-thing"])
+    p = _write_plan(tmp_path, "solo", kind="AFK", blocked_by=["external-thing"])
     with pytest.raises(SystemExit) as exc:
         orch._load_plans([p])
     assert exc.value.code == orch.EX_DATAERR
@@ -375,7 +375,7 @@ def test_run_orchestrate_dry_run(orch, monkeypatch, capsys):
     land_calls = []
     events = []
     monkeypatch.setattr(orch, "ensure_session", lambda role, holding: "sess-1")
-    monkeypatch.setattr(orch, "_load_plans", lambda paths: [_plan(orch, "afk-one", class_="AFK")])
+    monkeypatch.setattr(orch, "_load_plans", lambda paths: [_plan(orch, "afk-one", kind="AFK")])
     monkeypatch.setattr(orch, "_land_all", lambda slugs, *, holding: land_calls.append((slugs, holding)) or [])
     monkeypatch.setattr(orch._utils, "emit_event", lambda ev, payload: events.append((ev, payload)))
 
@@ -462,7 +462,7 @@ def test_main_fan_out_spawns_each_plan(orch, monkeypatch):
 
 def test_main_land_queue_prints_json(orch, monkeypatch, tmp_path, capsys):
     existing = tmp_path / "a.md"
-    existing.write_text("---\nid: a\nclass: AFK\n---\nbody\n")
+    existing.write_text("---\nid: a\nkind: AFK\n---\nbody\n")
 
     def _resolve(slug):
         return existing if slug == "a" else tmp_path / "b.md"  # b does not exist

@@ -31,14 +31,14 @@ def test_orchestrate_exit_codes_unchanged(tmp_path, monkeypatch):
     sched_mod = _load("scheduler")
 
     a_path = tmp_path / "a.md"
-    a_path.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
+    a_path.write_text("---\nid: a\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# a\n")
 
     monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)
     monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: None)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
     monkeypatch.setattr(orchestrate, "_emit_event", lambda *a, **k: None)
 
-    plan_obj = sched_mod.Plan(slug="a", class_="AFK", blocked_by=[], path=a_path)
+    plan_obj = sched_mod.Plan(slug="a", kind="AFK", blocked_by=[], path=a_path)
 
     # Ejected path: child exits EX_HITL_REQUIRED → hitl_slugs non-empty → exit 1
     monkeypatch.setattr(

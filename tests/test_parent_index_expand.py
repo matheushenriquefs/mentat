@@ -35,9 +35,9 @@ def test_parent_index_expands_to_siblings(tmp_path):
     a_plan = tmp_path / "a.md"
     b_plan = tmp_path / "b.md"
 
-    parent.write_text("---\nid: parent\nstatus: ready\nclass: AFK\nblocked_by: []\nsiblings: [a, b]\n---\n# Parent\n")
-    a_plan.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# a\n")
-    b_plan.write_text("---\nid: b\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# b\n")
+    parent.write_text("---\nid: parent\nstatus: ready\nkind: AFK\nblocked_by: []\nsiblings: [a, b]\n---\n# Parent\n")
+    a_plan.write_text("---\nid: a\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# a\n")
+    b_plan.write_text("---\nid: b\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# b\n")
 
     plans = orchestrate._load_plans([parent])
     slugs = [p.slug for p in plans]
@@ -52,8 +52,8 @@ def test_parent_not_present_in_result(tmp_path):
     parent = tmp_path / "parent.md"
     a_plan = tmp_path / "a.md"
 
-    parent.write_text("---\nid: parent\nstatus: ready\nclass: AFK\nblocked_by: []\nsiblings: [a]\n---\n")
-    a_plan.write_text("---\nid: a\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n")
+    parent.write_text("---\nid: parent\nstatus: ready\nkind: AFK\nblocked_by: []\nsiblings: [a]\n---\n")
+    a_plan.write_text("---\nid: a\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n")
 
     plans = orchestrate._load_plans([parent])
     slugs = [p.slug for p in plans]
@@ -66,7 +66,7 @@ def test_plan_without_siblings_unchanged(tmp_path):
     orchestrate = _load("orchestrate")
 
     plan = tmp_path / "plain.md"
-    plan.write_text("---\nid: plain\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n")
+    plan.write_text("---\nid: plain\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n")
 
     plans = orchestrate._load_plans([plan])
     assert len(plans) == 1
@@ -80,9 +80,9 @@ def test_nested_parent_index_raises_exit_65(tmp_path, capsys):
     child = tmp_path / "child.md"
     grandchild = tmp_path / "grandchild.md"
 
-    parent.write_text("---\nid: parent\nstatus: ready\nclass: AFK\nblocked_by: []\nsiblings: [child]\n---\n")
-    child.write_text("---\nid: child\nstatus: ready\nclass: AFK\nblocked_by: []\nsiblings: [grandchild]\n---\n")
-    grandchild.write_text("---\nid: grandchild\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n")
+    parent.write_text("---\nid: parent\nstatus: ready\nkind: AFK\nblocked_by: []\nsiblings: [child]\n---\n")
+    child.write_text("---\nid: child\nstatus: ready\nkind: AFK\nblocked_by: []\nsiblings: [grandchild]\n---\n")
+    grandchild.write_text("---\nid: grandchild\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n")
 
     with pytest.raises(SystemExit) as exc_info:
         orchestrate._load_plans([parent])

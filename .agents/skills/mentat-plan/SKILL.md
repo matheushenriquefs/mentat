@@ -90,7 +90,7 @@ The parent index MUST declare its siblings with `siblings:` and MUST have empty 
 ---
 id: mentat-thing
 status: ready
-class: AFK
+kind: AFK
 blocked_by: []          # MUST be empty — parent indexes do not participate in topo sort
 siblings: [mentat-thing-core, mentat-thing-ui]  # MUST list all sibling slugs (no .md suffix)
 created_at: 2026-06-13
@@ -101,8 +101,8 @@ created_at: 2026-06-13
 
 ## Rules
 
-- Plan frontmatter requires `id`, `status`, `class`, `blocked_by`. Optional: `parent`, `supersedes`, `created_at`.
-- `class` is `AFK` or `HITL`; lives in frontmatter, never overridden at runtime.
+- Plan frontmatter requires `id`, `status`, `kind`, `blocked_by`. Optional: `parent`, `supersedes`, `created_at`.
+- `kind` is `AFK` or `HITL`; lives in frontmatter, never overridden at runtime.
 - `blocked_by` lists slugs (not paths). Frontmatter parsing and cycle detection live in `mentat-orchestrate` (exits 65 on either).
 - Slug doubles as the plan's `id` field; filename and `id` should match or orchestrator topo-sort gets confused.
 - One commit per slice (`mentat-implement` contract); no squash. Stdlib-only scripts — frontmatter parsing delegated to `mentat-orchestrate` (no PyYAML).

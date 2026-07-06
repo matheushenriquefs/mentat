@@ -16,9 +16,9 @@ def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
 
 
-def _make_plan_file(tmp_path: Path, slug: str, class_: str = "AFK") -> Path:
+def _make_plan_file(tmp_path: Path, slug: str, kind: str = "AFK") -> Path:
     p = tmp_path / f"{slug}.md"
-    p.write_text(f"---\nid: {slug}\nclass: {class_}\n---\n")
+    p.write_text(f"---\nid: {slug}\nkind: {kind}\n---\n")
     return p
 
 

@@ -61,7 +61,7 @@ def _spawner(tmp_path: Path, behavior: dict[str, tuple[float, int]]):
 
 
 def _plan(scheduler, slug: str):
-    return scheduler.Plan(slug=slug, class_="AFK", blocked_by=[], path=Path(f"/tmp/{slug}.md"))
+    return scheduler.Plan(slug=slug, kind="AFK", blocked_by=[], path=Path(f"/tmp/{slug}.md"))
 
 
 def test_healthy_sibling_not_killed_by_slow_sibling(monkeypatch, tmp_path):

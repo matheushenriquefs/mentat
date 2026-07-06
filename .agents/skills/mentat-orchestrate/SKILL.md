@@ -1,8 +1,6 @@
 ---
 name: mentat-orchestrate
-description: >
-  Fan out multiple plans in parallel, land them serially onto a holding branch.
-  Use when you want to orchestrate a batch of plan slices across worktrees.
+description: Fan out multiple plans in parallel, land them serially onto a holding branch. Use when you want to orchestrate a batch of plan slices across worktrees.
 ---
 
 Hybrid orchestrator: one bin, two stage modules (`fan_out`, `land_queue`), four subcommands. Reads plan frontmatter to partition plans into anchored (HITL) and auto-spawned (AFK) groups. Spawns AFK plans in parallel via `subprocess.Popen` with manual polling; runs HITL plans in the current session. Lands all chunks serially onto the holding branch with gate checks.
@@ -28,7 +26,7 @@ Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the hol
    Parent index must have empty blocked_by (exit 65 otherwise). A sibling file
    not found → exit 66. Nested parent indexes (sibling itself has siblings) →
    exit 65. Plans without siblings: parse unchanged.
-1. Read frontmatter of each plan: id, class, blocked_by.
+1. Read frontmatter of each plan: id, kind, blocked_by.
 2. Topological sort by blocked_by (raise on cycle).
 3. Partition in topo order (via `scheduler.partition`):
    - HITL plans → anchored_here
@@ -104,7 +102,7 @@ Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the hol
 
 - Holding branch must have no own commits; only fast-forward allowed (ADR-0002).
 - Container required per chunk (ADR-0004). Exit 69 if container unavailable.
-- Plan class read from frontmatter only; no env var override.
+- Plan kind read from frontmatter only; no env var override.
 - `--dry-run` prints what would run; does not spawn or land.
 - Session id from `$MENTAT_SESSION` for audit events.
 - `batch-review` is always advisory; ejected counts do not affect its exit code.

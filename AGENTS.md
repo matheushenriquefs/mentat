@@ -4,6 +4,8 @@ Rules for agents working inside Mentat — the orchestration harness.
 
 See [CONTEXT.md](CONTEXT.md) for the full glossary. See [docs/adr/README.md](docs/adr/README.md) for the ADR index. See [README.md](README.md) for the public overview.
 
+Before any task, read [`.agents/rules/`](.agents/rules/) and [docs/STYLE.md](docs/STYLE.md).
+
 > **Mentat is agnostic by design.** Surfaces it touches stay swappable along these axes:
 > - **Multiplexer** — any pane manager, or none.
 > - **Harness** — any agent CLI / IDE assistant; drop a module to add one.

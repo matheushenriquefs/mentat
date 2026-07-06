@@ -15,11 +15,11 @@ def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
 
 
-def make_plan(slug: str, class_: str, blocked_by: list[str] | None = None):
+def make_plan(slug: str, kind: str, blocked_by: list[str] | None = None):
     routing = load_module("scheduler")
     return routing.Plan(
         slug=slug,
-        class_=class_,
+        kind=kind,
         blocked_by=blocked_by or [],
         path=Path(f"/tmp/{slug}.md"),
     )
