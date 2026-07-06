@@ -12,11 +12,11 @@ Tests green ≠ tests worth keeping. Read plan, tests, impl. Judge test **value*
 ## Inputs
 Plan path + test files + impl diff. Optional: advisory `surviving_mutants` list (`file:line`, from `task mutation`). Read-only on tests — don't run, judge. Plan = source of truth. No plan → emit `veto: "tripped: no plan"`.
 
-## non_pytest_gate carve-out (check first)
-Inspect diff paths. If **all** changed files match config-only patterns — `Taskfile.yml`, `Dockerfile`, `docker-compose*.yml`, `.github/workflows/*.yml`, `pyproject.toml`, `package.json`, `*.lock`, `Makefile`, `.env*`, or `*.cfg`/`*.ini`/`*.toml`/`*.yaml`/`*.yml` outside `src/` — emit verdict with `"gate_type": "non_pytest"`. No score, no veto. Gate defers to integration check named in plan (e.g. "task build:test exits 0"):
+## config_only_gate carve-out (check first)
+Inspect diff paths. If **all** changed files match config-only patterns — `Taskfile.yml`, `Dockerfile`, `docker-compose*.yml`, `.github/workflows/*.yml`, `pyproject.toml`, `package.json`, `*.lock`, `Makefile`, `.env*`, or `*.cfg`/`*.ini`/`*.toml`/`*.yaml`/`*.yml` outside `src/` — emit verdict with `"gate_type": "config_only"`. No score, no veto. Gate defers to integration check named in plan (e.g. "task build:test exits 0"):
 
 ```json
-{"reviewer": "mentat-test-reviewer", "gate_type": "non_pytest", "asserts_plan": 0.0, "veto": "clean", "findings": []}
+{"reviewer": "mentat-test-reviewer", "gate_type": "config_only", "asserts_plan": 0.0, "veto": "clean", "findings": []}
 ```
 
 One changed file source (`src/`, `lib/`, `.agents/lib/`, `.agents/skills/`, `*.py`, `*.ts`, `*.js`, `*.rs`) → normal diff, proceed below.

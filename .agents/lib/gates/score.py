@@ -58,10 +58,10 @@ def score_test(raw: dict[str, Any]) -> GateResult:
     string "clean" is safe — falsy values ("", 0, False) and any other value block.
     A malformed verdict is itself a block (fail-loud). `surviving_mutants` on the
     verdict is advisory (ADR-0016) and never affects the decision. A config-only
-    diff the reviewer marks `gate_type: non_pytest` carries no pytest score to
+    diff the reviewer marks `gate_type: config_only` carries no test score to
     judge, so it passes without a threshold check.
     """
-    if raw.get("gate_type") == "non_pytest":
+    if raw.get("gate_type") == "config_only":
         return GateResult("pass", 1.0, "")
     try:
         verdict = ReviewVerdict.from_raw(raw)

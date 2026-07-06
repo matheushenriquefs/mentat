@@ -26,8 +26,8 @@ tests:
       - type: contains
         value: "FAIL"
 
-  # S4.2: config-only diff → non_pytest_gate, no score/veto
-  - description: "handoff4-taskfile-only: non_pytest_gate emitted, no score"
+  # S4.2: config-only diff → config_only_gate, no score/veto
+  - description: "handoff4-taskfile-only: config_only_gate emitted, no score"
     vars:
       plan: "file://fixtures/handoff4-taskfile-only/plan.md"
       diff: "file://fixtures/handoff4-taskfile-only/diff.patch"
@@ -36,7 +36,7 @@ tests:
         value: "file://rubrics/mentat-test-reviewer.md"
         threshold: 0.9
       - type: contains
-        value: "gate_type=non_pytest"
+        value: "gate_type=config_only"
       - type: not-contains
         value: "FAIL"
 

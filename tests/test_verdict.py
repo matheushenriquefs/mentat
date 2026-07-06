@@ -162,8 +162,8 @@ def test_score_test_advisory_mutants_do_not_block():
     assert result.verdict == "pass"
 
 
-def test_score_test_non_pytest_gate_passes_without_score():
+def test_score_test_config_only_gate_passes_without_score():
     from lib.gates import score
 
-    result = score.score_test({"reviewer": "mentat-test-reviewer", "gate_type": "non_pytest"})
+    result = score.score_test({"reviewer": "mentat-test-reviewer", "gate_type": "config_only"})
     assert result.verdict == "pass"
