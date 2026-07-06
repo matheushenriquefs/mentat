@@ -110,4 +110,4 @@ Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the hol
 
 ## Doctor handoff
 
-Non-zero exit (`≥1` chunk ejected, container miss, malformed plan, unhandled exception) → spawn `mentat-session doctor --reason=batch-failed` non-blocking after the batch settles. Doctor failure is swallowed; the batch exit code is authoritative.
+Non-zero exit (`≥1` chunk ejected, container miss, malformed plan, unhandled exception) → spawn `mentat-track doctor --reason=batch-failed` non-blocking after the batch settles. Doctor failure is swallowed; the batch exit code is authoritative.

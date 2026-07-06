@@ -10,7 +10,7 @@ Single source of truth for every path mentat reads or writes.
 │   ├── <agent>-<slug>.jsonl                       # canonical event stream
 │   ├── <agent>-<slug>.stdout                      # raw harness output (opaque)
 │   ├── .stderr/<agent>-<slug>.stderr              # subprocess stderr sidecar
-│   └── diagnosis.md                               # per-session diagnosis (mentat-session doctor output)
+│   └── diagnosis.md                               # per-session diagnosis (mentat-track doctor output)
 └── config.toml                                    # single flat config (user-edited, TOML)
 ```
 
