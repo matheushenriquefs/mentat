@@ -18,7 +18,17 @@ dev = [
     "pyyaml",
     "lefthook",
     "coverage>=7",
+    "mutmut>=3",
 ]
+
+# Mutation testing (ADR-0016) — advisory, run via `task mutation`, never a gate.
+# Test order is pinned (`-p no:randomly`) and per-mutant time is bounded so a run is
+# reproducible; source_paths matches the coverage gate's shipped-runtime surface.
+[tool.mutmut]
+source_paths = [".agents/lib", ".agents/skills"]
+pytest_add_cli_args = ["-p", "no:randomly", "-q"]
+timeout_multiplier = 2.0
+timeout_constant = 5.0
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -39,8 +49,8 @@ source = [".agents/lib", ".agents/skills"]
 
 [tool.coverage.report]
 show_missing = true
-# No `fail_under` here on purpose: the unit gate (100%) and the e2e journey gate
-# (a lower floor) each pass their own `--fail-under` via `task coverage`. A shared
+# No `fail_under` here on purpose: the unit gate (90%, ADR-0014) and the e2e journey
+# gate each pass their own `--fail-under` via `task coverage`. A shared
 # config default would collide with the per-pass override. Entrypoints and the
 # sys.path bootstrap idiom are omit-listed below; everything else must be exercised.
 exclude_also = [
@@ -56,6 +66,12 @@ exclude_also = [
 target-version = "py314"
 line-length = 120
 src = ["tests", ".agents/skills", ".agents/lib", "tasks"]
+# Promptfoo eval fixtures are intentionally-bad sample code (padding, assertion-free
+# tests) that the reviewer eval judges — not project source. Do not lint them.
+# force-exclude honours the exclude even when the pre-commit hook passes the files
+# as explicit paths (lefthook stages changed *.py), not just on a directory walk.
+extend-exclude = ["evals/promptfoo/fixtures"]
+force-exclude = true
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]

@@ -70,3 +70,58 @@ def test_rules_reviewer_is_veto():
 def test_context_reviewer_is_veto():
     prompt = _read_agent("mentat-context-reviewer").lower()
     assert "veto" in prompt, "mentat-context-reviewer must state it is a veto gate (ADR-0003 v5)"
+
+
+# ── CS1 test-reviewer ROI lens (mentat-test-reviewer) ────────────────────────
+
+
+def test_test_reviewer_has_primary_question():
+    """The reviewer must lead with the fail-on-bug ∩ survive-refactor heuristic."""
+    prompt = _read_agent("mentat-test-reviewer").lower()
+    assert "fail if a real bug" in prompt, "test-reviewer must ask the fail-on-bug half of the primary question"
+    assert "refactor" in prompt, "test-reviewer must ask the survive-refactor half of the primary question"
+
+
+def test_test_reviewer_has_priority_ladder():
+    prompt = _read_agent("mentat-test-reviewer").lower()
+    assert "priority ladder" in prompt, "test-reviewer must carry the value priority ladder"
+    assert "state over interaction" in prompt, "ladder must prefer state over interaction (Google)"
+
+
+def test_test_reviewer_has_never_assert_list():
+    prompt = _read_agent("mentat-test-reviewer").lower()
+    assert "never assert" in prompt, "test-reviewer must penalize the never-assert padding list"
+    assert "getter" in prompt, "never-assert list must call out getters"
+
+
+def test_test_reviewer_has_mock_smell_penalty():
+    prompt = _read_agent("mentat-test-reviewer").lower()
+    assert "mock" in prompt, "test-reviewer must carry the mock-smell penalty"
+    assert "don't mock types you don't own" in prompt, "mock-smell must cite the don't-mock-what-you-don't-own rule"
+
+
+def test_test_reviewer_mock_nuance_not_blanket_ban():
+    """Classicist-vs-mockist is a real split: interaction asserts are legit when the contract."""
+    prompt = _read_agent("mentat-test-reviewer").lower()
+    assert "blanket-ban" in prompt or "blanket ban" in prompt, "mock nuance must reject a blanket ban"
+    assert "idempoten" in prompt, "must give the idempotency example where interaction IS the contract"
+
+
+def test_test_reviewer_consumes_mutation_advisory():
+    prompt = _read_agent("mentat-test-reviewer").lower()
+    assert "surviving_mutants" in prompt, "test-reviewer must consume the advisory surviving-mutants list"
+    assert "advisory" in prompt, "mutation input must be framed as advisory, never a gate"
+
+
+def test_test_reviewer_emits_review_verdict_json():
+    prompt = _read_agent("mentat-test-reviewer")
+    assert "ReviewVerdict" in prompt, "test-reviewer output must be a typed ReviewVerdict"
+    low = prompt.lower()
+    assert "json" in low, "output must be JSON parsed without regex"
+    assert "asserts_plan" in prompt, "verdict must carry asserts_plan"
+
+
+def test_test_reviewer_keeps_threshold_and_veto():
+    prompt = _read_agent("mentat-test-reviewer")
+    assert "0.88" in prompt, "asserts-plan threshold 0.88 must be unchanged"
+    assert "veto" in prompt.lower(), "deterministic veto must remain"

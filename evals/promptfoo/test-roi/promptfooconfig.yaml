@@ -1,0 +1,63 @@
+description: "mentat-test-reviewer ROI lens — padding flagged, lean suite passed, assertion-free rejected (CS1)"
+
+# The reviewer prompt is the system message; the plan + tests + impl diff are the
+# user message. The reviewer emits a JSON ReviewVerdict (see rubric).
+prompts:
+  - |
+    Plan:
+    {{plan}}
+
+    Test file:
+    {{tests}}
+
+    Impl diff:
+    {{diff}}
+
+providers:
+  - id: anthropic:messages:claude-haiku-4-5-20251001
+    config:
+      max_tokens: 1024
+      system: "file://../../../.agents/agents/mentat-test-reviewer.md"
+
+defaultTest:
+  assert:
+    - type: is-json
+    - type: llm-rubric
+      value: "file://../rubrics/mentat-test-reviewer-roi.md"
+      threshold: 0.8
+
+tests:
+  # Padding: getter/constant/assertion-free tests → flagged in findings.
+  - description: "padding-flagged: getter + assertion-free tests appear in findings"
+    vars:
+      plan: "file://../fixtures/test-roi/padding/plan.md"
+      tests: "file://../fixtures/test-roi/padding/tests.py"
+      diff: "file://../fixtures/test-roi/padding/diff.patch"
+    assert:
+      - type: contains
+        value: '"findings"'
+      - type: contains-json
+      - type: javascript
+        value: "JSON.parse(output).findings.length > 0"
+
+  # Lean behavior suite: high asserts_plan, clean veto, no findings.
+  - description: "lean-behavior-passed: behavior/edge/error suite scores clean"
+    vars:
+      plan: "file://../fixtures/test-roi/lean-behavior/plan.md"
+      tests: "file://../fixtures/test-roi/lean-behavior/tests.py"
+      diff: "file://../fixtures/test-roi/lean-behavior/diff.patch"
+    assert:
+      - type: contains
+        value: '"clean"'
+      - type: javascript
+        value: "JSON.parse(output).asserts_plan >= 0.88 && JSON.parse(output).findings.length === 0"
+
+  # 100% coverage, zero assertions: rejected — findings non-empty.
+  - description: "assertion-free-rejected: full-coverage no-assert suite is caught"
+    vars:
+      plan: "file://../fixtures/test-roi/assertion-free/plan.md"
+      tests: "file://../fixtures/test-roi/assertion-free/tests.py"
+      diff: "file://../fixtures/test-roi/assertion-free/diff.patch"
+    assert:
+      - type: javascript
+        value: "JSON.parse(output).findings.length > 0"

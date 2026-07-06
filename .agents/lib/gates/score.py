@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from lib.gates.verdict import ReviewVerdict, VerdictError
+
 Verdict = Literal["pass", "block", "advise"]
 
 # ADR-0003 thresholds
@@ -51,13 +53,23 @@ def score_plan(raw: dict[str, Any]) -> GateResult:
 def score_test(raw: dict[str, Any]) -> GateResult:
     """Test faithfulness ≥ TEST_THRESHOLD → pass; deterministic veto overrides.
 
-    Veto is fail-closed: only an absent key or the exact string "clean" is safe.
-    Falsy values ("", 0, False) and any other value block.
+    Parses the reviewer output into a validated `ReviewVerdict` (typed domain
+    model, not regex-scraped). Veto is fail-closed: only an absent key or the exact
+    string "clean" is safe — falsy values ("", 0, False) and any other value block.
+    A malformed verdict is itself a block (fail-loud). `surviving_mutants` on the
+    verdict is advisory (ADR-0016) and never affects the decision. A config-only
+    diff the reviewer marks `gate_type: non_pytest` carries no pytest score to
+    judge, so it passes without a threshold check.
     """
-    veto = raw.get("veto")
-    if veto is not None and veto != "clean":
-        return GateResult("block", 0.0, f"test veto: {veto!r}")
-    return _score_gate(float(raw.get("asserts_plan", 0.0)), TEST_THRESHOLD, "test alignment")
+    if raw.get("gate_type") == "non_pytest":
+        return GateResult("pass", 1.0, "")
+    try:
+        verdict = ReviewVerdict.from_raw(raw)
+    except VerdictError as exc:
+        return GateResult("block", 0.0, f"test verdict invalid: {exc}")
+    if not verdict.veto_clean:
+        return GateResult("block", 0.0, f"test veto: {verdict.veto!r}")
+    return _score_gate(verdict.asserts_plan, TEST_THRESHOLD, "test alignment")
 
 
 def score_bug(raw: dict[str, Any]) -> GateResult:

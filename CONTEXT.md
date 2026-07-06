@@ -55,6 +55,15 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 **must_not_exist veto**
 : A veto triggered when `mentat-test-reviewer` finds the implementation asserts behavior the plan did not ask for (hallucination). Inverted polarity: higher hallucination score = worse. _Avoid_: treating this as a threshold to meet.
 
+**Mutation signal**
+: The advisory surviving-mutant hint from `task mutation` (mutmut), a `file:line` list scoped to changed shipped-source files. A surviving mutant means a test covered the line but asserted nothing the mutation broke. Advisory only — never in the gate or land re-gate path ([ADR-0016](docs/adr/0016-mutation-signal.md)). _Avoid_: "mutation gate", "mutation score threshold" — it gates nothing.
+
+**ReviewVerdict**
+: The typed, validated reviewer output (`.agents/lib/gates/verdict.py`) — a frozen `ReviewVerdict` carrying `asserts_plan`, `veto`, `Finding[]`, and the advisory `surviving_mutants`. The gate parser validates reviewer JSON into it rather than regex-scraping free text; harness-agnostic (any harness that emits the JSON works). _Avoid_: "reviewer text", "scrape the verdict".
+
+**Test ROI**
+: The value lens `mentat-test-reviewer` judges by — would a test fail if a real bug were introduced *and* survive a behavior-preserving refactor. Fails the first half → worthless; the second → brittle. Penalizes assertion-free padding and mock-smell (mocking types you don't own). _Avoid_: equating test value with coverage or test count.
+
 **Compaction threshold**
 : `compaction_threshold_tokens` in `~/.mentat/config.toml`. When a harness run reports token usage ≥ threshold, mentat writes a checkpoint `summary.md{status: succeeded}` so the next spawn can be seeded with prior context (`MENTAT_SEED_SUMMARY`). Vendor-neutral: adapters report `usage_tokens: int | None`; `None` (cursor) bypasses the threshold check. _Avoid_: confusing this with the harness's own compaction — mentat checkpoints at slice/chunk boundaries, independently of any internal harness compaction.
 

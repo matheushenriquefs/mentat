@@ -16,3 +16,9 @@ def _dev_deps() -> list[str]:
 def test_coverage_declared_as_dev_dep() -> None:
     deps = _dev_deps()
     assert any("coverage" in d for d in deps), f"coverage not in dev deps: {deps}"
+
+
+def test_mutmut_declared_as_dev_dep() -> None:
+    """mutmut backs the advisory mutation signal (ADR-0016); dev-layer only (ADR-0008)."""
+    deps = _dev_deps()
+    assert any("mutmut" in d for d in deps), f"mutmut not in dev deps: {deps}"

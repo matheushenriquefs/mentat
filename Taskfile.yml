@@ -12,11 +12,15 @@ tasks:
       - pytest {{.CLI_ARGS}}
 
   coverage:
-    desc: Coverage gate — unit 100% (fast suite) then e2e journey floor (.agents)
+    desc: Coverage gate — unit 90% (fast suite) then e2e journey floor (.agents)
     cmds:
-      # Unit gate: 100% testable-line branch coverage on the fast suite. This is
-      # the coverage authority — every testable line of shipped runtime is here.
-      - python tasks/coverage.py --fail-under=100 {{.CLI_ARGS}} -- -m "not e2e"
+      # Unit gate: 90% testable-line branch coverage on the fast suite. 90% is the
+      # exemplary band (Google): gains past it are logarithmic and the 100% chase
+      # buys a false sense of security plus low-value tests to maintain (ADR-0014).
+      # Behavior tests clear the floor; the advisory mutation signal (ADR-0016)
+      # keeps the covered lines honest. This CLI value is the unit floor — the
+      # per-pass override; pyproject sets no shared default (see pyproject.toml).
+      - python tasks/coverage.py --fail-under=90 {{.CLI_ARGS}} -- -m "not e2e"
       # E2E gate: branch-coverage floor of .agents from real journeys. Journeys
       # drive happy/realistic paths only; Docker-in-Docker (container/compose),
       # real-harness spawn (implement veto/checkpoint), worktree plumbing and the
@@ -31,9 +35,18 @@ tasks:
       # harness. Their pure logic (spawn-gating, write-set serialize, scheduler /
       # land-queue paths, the sqlite projection, storm/budget/backoff math, the
       # decision parser, the track renderers) is journeyed; the residual async /
-      # respawn / DinD shell is unit-tested (the 100% unit gate) but e2e-exempt, so
-      # the floor lands at 91 (achieved 91.5), not the 100 the unit gate holds.
+      # respawn / DinD shell is unit-tested (the 90% unit gate) but e2e-exempt, so
+      # the floor lands at 91 (achieved 91.5), separate from the unit gate's floor.
       - python tasks/coverage.py --source=.agents --fail-under=91 -- -m e2e
+
+  mutation:
+    desc: Advisory mutation signal (ADR-0016) — surviving mutants on changed files. Never a gate.
+    cmds:
+      # Advisory only: never in the gate or land re-gate path. Surviving mutants on
+      # changed lines flag covered-but-asserts-nothing tests; the reviewer consumes
+      # the list as a hint. `--changed` scopes to shipped-source files touched since
+      # the merge-base with main. Pass `--` args through to the runner.
+      - python tasks/mutation.py --changed {{.CLI_ARGS}}
 
   lint:
     desc: Lint with ruff
