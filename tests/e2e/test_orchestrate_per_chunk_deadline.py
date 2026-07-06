@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import TEST_CHUNK_ID, bind_plan, load_script
 
 pytestmark = pytest.mark.e2e
 
@@ -53,7 +53,7 @@ def _spawner(tmp_path: Path, behavior: dict[str, tuple[float, int]]):
             str(child_script),
             str(sleep_s),
             str(code),
-            **{"start_new_" + "ses" + "ion": True},
+            start_new_session=True,
         )
         return f"sess-{plan.slug}", proc, tmp_path / plan.slug
 
@@ -115,6 +115,8 @@ def test_only_overdue_chunk_killed(monkeypatch, tmp_path):
 
     with patch.object(orch._batch, "_worktree_for_slug", side_effect=fake_worktree):
         with patch.object(orch._batch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+            bind_plan("a", TEST_CHUNK_ID)
+            bind_plan("b", TEST_CHUNK_ID)
             chunks, hitl, _transient = orch._batch.partition_by_outcome(results, mark_ejected=lambda _slug: [])
 
     assert not hitl

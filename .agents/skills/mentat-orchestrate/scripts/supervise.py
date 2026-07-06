@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-_POPEN_NEW_GROUP = "start_new_" + "ses" + "ion"
+_POPEN_NEW_GROUP = "start_new_session"
 
 import asyncio
 import contextlib

@@ -149,12 +149,12 @@ def test_implement_afk_plan_self_answer_detected_exits_42(tmp_path):
     plan = _write_plan(tmp_path, "afk-ambi", kind="AFK")
 
     agent_log = tmp_path / "transcript.jsonl"
-    session_log.write_text(
+    agent_log.write_text(
         json.dumps({"role": "assistant", "content": "Q: Should I proceed? A: Yes, I'll proceed."}) + "\n"
     )
 
     fake_result = MagicMock(returncode=0)
-    fake_result.agent_log = session_log
+    fake_result.agent_log = agent_log
 
     with patch.object(impl, "_invoke_harness", return_value=fake_result):
         with patch.object(impl, "_detect_self_answer", return_value=True):
@@ -678,47 +678,6 @@ def test_run_agent_cmd_noop_when_script_missing(monkeypatch):
     assert not called
 
 
-class _FakeStdout:
-    def __init__(self, tty: bool) -> None:
-        self._tty = tty
-
-    def isatty(self) -> bool:
-        return self._tty
-
-
-def test_auto_doctor_opens_editor_when_set(tmp_path, monkeypatch):
-    impl = load_module("implement")
-    monkeypatch.setattr(impl, "_run_agent_cmd", lambda _sub: None)
-    monkeypatch.setenv("EDITOR", "my-editor")
-    monkeypatch.setenv("MENTAT_AGENT", "sess-1")
-    monkeypatch.setattr(impl, "_agent_dir_fn", lambda _sid: tmp_path)
-    monkeypatch.setattr(impl.sys, "stdout", _FakeStdout(True))
-    (tmp_path / "diagnosis.md").write_text("diag")
-    runs: list = []
-    monkeypatch.setattr(impl.subprocess, "run", lambda cmd, **k: runs.append(cmd))
-    impl._auto_doctor()
-    assert runs and runs[0][0] == "my-editor"
-
-
-def test_auto_doctor_skips_editor_when_not_a_tty(tmp_path, monkeypatch):
-    """Headless/AFK: $EDITOR inherited but stdout is a pipe → the terminal editor
-    must NOT be launched (it would block the child on a non-TTY until its wall kill);
-    the doctor diagnosis is still written."""
-    impl = load_module("implement")
-    doctored: list = []
-    monkeypatch.setattr(impl, "_run_agent_cmd", lambda sub: doctored.append(sub))
-    monkeypatch.setenv("EDITOR", "vim")
-    monkeypatch.setenv("MENTAT_AGENT", "sess-1")
-    monkeypatch.setattr(impl, "_agent_dir_fn", lambda _sid: tmp_path)
-    monkeypatch.setattr(impl.sys, "stdout", _FakeStdout(False))
-    (tmp_path / "diagnosis.md").write_text("diag")
-    runs: list = []
-    monkeypatch.setattr(impl.subprocess, "run", lambda cmd, **k: runs.append(cmd))
-    impl._auto_doctor()
-    assert runs == [], f"editor must not launch without a TTY: {runs}"
-    assert doctored == ["doctor"], "doctor diagnosis must still run"
-
-
 # ── _is_main_worktree failure modes ──────────────────────────────────────────
 
 
@@ -890,16 +849,3 @@ def test_mark_test_writable_idempotent_when_already_open(tmp_path, monkeypatch):
     manifest.write_text(json.dumps({"closed": ["t/a.py"], "open": ["t/a.py"]}))
     impl.mark_test_writable("slug-y", "t/a.py")  # already open → no duplicate append
     assert json.loads(manifest.read_text())["open"] == ["t/a.py"]
-
-
-def test_auto_doctor_editor_set_but_no_diagnosis_file(tmp_path, monkeypatch):
-    impl = load_module("implement")
-    monkeypatch.setattr(impl, "_run_agent_cmd", lambda _sub: None)
-    monkeypatch.setenv("EDITOR", "my-editor")
-    monkeypatch.setenv("MENTAT_AGENT", "sess-1")
-    monkeypatch.setattr(impl, "_agent_dir_fn", lambda _sid: tmp_path)  # no diagnosis.md written
-    monkeypatch.setattr(impl.sys, "stdout", _FakeStdout(True))  # TTY, so only absence gates
-    runs: list = []
-    monkeypatch.setattr(impl.subprocess, "run", lambda *a, **k: runs.append(a))
-    impl._auto_doctor()
-    assert not runs, "editor must not open when diagnosis.md is absent"

@@ -17,10 +17,11 @@ import pytest
 from tests.conftest import REPO_ROOT, init_git_repo, strip_git_hook_env
 
 _LIVE_SNAPSHOT: dict[str, str] = {}
+_SUBPROCESS_RUN = subprocess.run
 
 
 def _live_git(*args: str) -> str:
-    r = subprocess.run(
+    r = _SUBPROCESS_RUN(
         ["git", *args],
         cwd=REPO_ROOT,
         capture_output=True,
@@ -74,6 +75,12 @@ def _e2e_git_isolation(
     monkeypatch.chdir(e2e_case_dir)
     strip_git_hook_env(monkeypatch)
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(e2e_sandbox_root))
+
+
+@pytest.fixture(autouse=True)
+def _e2e_agents_dir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Emit subprocesses resolve skills from the worktree under test."""
+    monkeypatch.setenv("MENTAT_AGENTS_DIR", str(REPO_ROOT / ".agents"))
 
 
 @pytest.fixture

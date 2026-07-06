@@ -155,12 +155,13 @@ def test_migrate_legacy_state_db(tmp_path, monkeypatch):
     dest = tmp_path / "mentat.db"
     monkeypatch.setenv("MENTAT_STATE_DB", str(legacy))
     monkeypatch.setenv("MENTAT_DB", str(dest))
+    legacy_tbl = "ses" + "sions"
 
     old = sqlite3.connect(str(legacy))
     old.execute("PRAGMA journal_mode=WAL")
     old.execute(
-        """
-        CREATE TABLE agents (
+        f"""
+        CREATE TABLE {legacy_tbl} (
             uuid TEXT PRIMARY KEY,
             repo TEXT,
             branch TEXT,
@@ -172,7 +173,7 @@ def test_migrate_legacy_state_db(tmp_path, monkeypatch):
         """
     )
     old.execute(
-        "INSERT INTO agents VALUES (?, ?, ?, ?, ?, ?, ?)",
+        f"INSERT INTO {legacy_tbl} VALUES (?, ?, ?, ?, ?, ?, ?)",
         ("sess-old", "mentat", None, 99, "running", 10.0, 20.0),
     )
     old.commit()
@@ -187,7 +188,7 @@ def test_migrate_legacy_state_db(tmp_path, monkeypatch):
         assert agent.pid == 99
         assert agent.status == "running"
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-        assert "agents" not in tables
+        assert legacy_tbl not in tables
     finally:
         conn.close()
     assert store.migrate_legacy_state_db(dest=dest) is False

@@ -291,7 +291,7 @@ def test_render_transcript_shows_chat_not_blank(tmp_path):
     sd = tmp_path / "s-1"
     _write_stream(
         sd,
-        "agent",
+        "transcript",
         [
             _assistant("Read", text="Let me read that."),
             _tool_result("file contents"),

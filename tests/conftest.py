@@ -19,6 +19,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TEST_CHUNK_ID = "b" * 32
 
 
+def install_agents_home(home: Path) -> None:
+    """Symlink worktree ``.agents`` into ``home`` so emit subprocesses resolve."""
+    agents = home / ".agents"
+    if not agents.exists():
+        agents.symlink_to(REPO_ROOT / ".agents", target_is_directory=True)
+    (home / ".mentat").mkdir(exist_ok=True)
+
+
 def git_isolation_env(ceiling: Path) -> dict[str, str]:
     """Git env that blocks upward discovery past ``ceiling``."""
     env = scrub_ambient_git_env()
@@ -147,6 +155,7 @@ def _isolate_git_namespace(
 @pytest.fixture(autouse=True)
 def _isolate_state_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Redirect sqlite stores to throwaway paths for every test."""
+    monkeypatch.setenv("MENTAT_AGENTS_DIR", str(REPO_ROOT / ".agents"))
     monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "state.db"))
     monkeypatch.setenv("MENTAT_DB", str(tmp_path / "mentat.db"))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))

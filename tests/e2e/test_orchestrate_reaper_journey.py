@@ -57,7 +57,7 @@ def _spawner(tmp_path: Path, behavior: dict[str, tuple[float, int]]):
             str(child_script),
             str(sleep_s),
             str(code),
-            **{"start_new_" + "ses" + "ion": True},
+            start_new_session=True,
         )
         return f"sess-{plan.slug}", proc, tmp_path / plan.slug
 

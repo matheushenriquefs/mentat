@@ -388,7 +388,7 @@ def test_run_orchestrate_dry_run(orch, monkeypatch, capsys):
     assert events == [
         (
             "batch_reviewed",
-            {"agent": "sess-1", "summary": "batch review for agent sess-1 — advisory"},
+            {"agent_id": "sess-1", "summary": "batch review for agent sess-1 — advisory"},
         )
     ]
 
@@ -421,7 +421,7 @@ def test_build_parser_land_queue_namespace(orch):
 def test_build_parser_batch_review_namespace(orch):
     args = orch.build_parser().parse_args(["batch-review", "sess"])
     assert args.cmd == "batch-review"
-    assert args.agent == "sess"
+    assert args.agent_id == "sess"
 
 
 def test_build_parser_requires_subcommand(orch):
@@ -488,6 +488,6 @@ def test_main_batch_review_emits_event(orch, monkeypatch):
     assert events == [
         (
             "batch_reviewed",
-            {"agent": "sess-9", "summary": "batch review for agent sess-9 — advisory"},
+            {"agent_id": "sess-9", "summary": "batch review for agent sess-9 — advisory"},
         )
     ]

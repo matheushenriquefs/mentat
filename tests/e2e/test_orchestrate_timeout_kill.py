@@ -1,6 +1,6 @@
 """E2E: timeout kill reaps the whole process group, not just the parent (Bug A).
 
-fan_out spawns the implement child with ``**{"start_new_" + "ses" + "ion": True}`` so the harness
+fan_out spawns the implement child with ``start_new_session=True`` so the harness
 grandchild inherits the child's process group. On a chunk timeout, orchestrate's
 ``_kill_proc_group`` group-kills that pgid with SIGKILL. This test proves the
 grandchild — which ignores SIGTERM and would otherwise orphan and keep running —
@@ -79,7 +79,7 @@ def test_timeout_group_kill_reaps_grandchild(monkeypatch, tmp_path):
             sys.executable,
             str(child_script),
             str(pidfile),
-            **{"start_new_" + "ses" + "ion": True},
+            start_new_session=True,
         )
         return "sess-hung", proc, tmp_path / "worktree"
 

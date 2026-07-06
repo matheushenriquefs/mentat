@@ -321,9 +321,9 @@ def test_read_summary_at_unreadable_none(impl, tmp_path):
 # ── _read_blocked_summary ──────────────────────────────────────────────────────
 
 
-def test_read_blocked_summary_from_session_seam(impl, monkeypatch, tmp_path):
+def test_read_blocked_summary_from_agent_seam(impl, monkeypatch, tmp_path):
     seam = tmp_path / "summary.md"
-    seam.write_text("---\nstatus: blocked\n---\nsession blocker\n")
+    seam.write_text("---\nstatus: blocked\n---\nagent blocker\n")
     monkeypatch.setattr(impl, "_blocked_summary_path", lambda: seam)
     assert impl._read_blocked_summary(tmp_path / "wt") == "agent blocker"
 

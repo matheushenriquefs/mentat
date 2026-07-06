@@ -253,7 +253,7 @@ def test_explicit_slug_overrides_fallback(monkeypatch):
     assert log_mod._agent_slug() == "my-custom-slug"
 
 
-def test_session_fallback_is_opaque_uuid(tmp_path, monkeypatch):
+def test_unkeyed_emit_uses_opaque_uuid(tmp_path, monkeypatch):
     """Unkeyed emit → a real uuid agent log dir, never an orphan-agent-*/pid id."""
     import json as _json
     import re as _re

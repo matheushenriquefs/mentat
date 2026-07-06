@@ -26,7 +26,7 @@ def _load(key: str, path: Path):
     return mod
 
 
-def _load_session():
+def _load_agent():
     return _load("lib.agent", _LIB / "agent.py")
 
 
@@ -47,25 +47,25 @@ def _load_mentat_session_py():
 
 def test_seam_exports_log_root():
     """lib.agent must export log_root()."""
-    agent = _load_session()
+    agent = _load_agent()
     assert callable(getattr(agent, "log_root", None)), "lib.agent missing log_root()"
 
 
 def test_seam_exports_repo_name():
     """lib.agent must export repo_name()."""
-    agent = _load_session()
+    agent = _load_agent()
     assert callable(getattr(agent, "repo_name", None)), "lib.agent missing repo_name()"
 
 
 def test_seam_exports_agent_dir():
     """lib.agent must export agent_dir(sid)."""
-    agent = _load_session()
+    agent = _load_agent()
     assert callable(getattr(agent, "agent_dir", None)), "lib.agent missing agent_dir()"
 
 
 def test_seam_exports_summary_file():
     """lib.agent must export summary_file(sid)."""
-    agent = _load_session()
+    agent = _load_agent()
     assert callable(getattr(agent, "summary_file", None)), "lib.agent missing summary_file()"
 
 
@@ -79,7 +79,7 @@ def test_agent_dir_uses_env_vars(tmp_path, monkeypatch):
     # Force reimport so env is picked up at call time
     if "lib.agent" in sys.modules:
         del sys.modules["lib.agent"]
-    agent = _load_session()
+    agent = _load_agent()
     result = agent.agent_dir("implement-myplan-1234")
     assert result == tmp_path / "myrepo" / "implement-myplan-1234"
 
@@ -89,7 +89,7 @@ def test_summary_file_under_agent_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
     if "lib.agent" in sys.modules:
         del sys.modules["lib.agent"]
-    agent = _load_session()
+    agent = _load_agent()
     sid = "implement-myplan-1234"
     assert agent.summary_file(sid) == agent.agent_dir(sid) / "summary.md"
 
@@ -120,7 +120,7 @@ def test_repo_name_stable_from_worktree(tmp_path, monkeypatch):
     )
     monkeypatch.chdir(worktree)
     sys.modules.pop("lib.agent", None)
-    agent = _load_session()
+    agent = _load_agent()
     assert agent.repo_name() == "myrepo"
 
 
@@ -134,7 +134,7 @@ def test_repo_name_stable_from_subdir(tmp_path, monkeypatch):
     nested.mkdir(parents=True)
     monkeypatch.chdir(nested)
     sys.modules.pop("lib.agent", None)
-    agent = _load_session()
+    agent = _load_agent()
     assert agent.repo_name() == "myrepo"
 
 
@@ -143,7 +143,7 @@ def test_repo_name_env_wins(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "frozen")
     monkeypatch.chdir(tmp_path)
     sys.modules.pop("lib.agent", None)
-    agent = _load_session()
+    agent = _load_agent()
     assert agent.repo_name() == "frozen"
 
 
@@ -154,7 +154,7 @@ def test_repo_name_falls_back_to_unknown_outside_git(tmp_path, monkeypatch):
     outside.mkdir()
     monkeypatch.chdir(outside)
     sys.modules.pop("lib.agent", None)
-    agent = _load_session()
+    agent = _load_agent()
     assert agent.repo_name() == "unknown"
 
 
@@ -168,7 +168,7 @@ def test_repo_name_falls_back_when_git_binary_missing(tmp_path, monkeypatch):
     outside.mkdir()
     monkeypatch.chdir(outside)
     sys.modules.pop("lib.agent", None)
-    agent = _load_session()
+    agent = _load_agent()
 
     def raise_oserror(*a, **k):
         raise OSError("no git")
@@ -184,7 +184,7 @@ def test_repo_name_falls_back_when_common_dir_empty(tmp_path, monkeypatch):
     outside.mkdir()
     monkeypatch.chdir(outside)
     sys.modules.pop("lib.agent", None)
-    agent = _load_session()
+    agent = _load_agent()
 
     class _Result:
         returncode = 0
@@ -218,7 +218,7 @@ def test_all_callers_resolve_same_dir(tmp_path, monkeypatch):
     for key in ["lib.agent", "mentat_orchestrate.spawn", "mentat_log.log", "mentat_session.agent"]:
         sys.modules.pop(key, None)
 
-    agent_mod = _load_session()
+    agent_mod = _load_agent()
     expected = agent_mod.agent_dir(sid)
 
     # fan_out._log_dir_for
@@ -239,7 +239,7 @@ def test_agent_dir_slash_is_flattened(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
     sys.modules.pop("lib.agent", None)
-    agent = _load_session()
+    agent = _load_agent()
     result = agent.agent_dir("orchestrate-branch/guidelines-revamp-81212")
     assert result.parent == tmp_path / "myrepo"
     assert "/" not in result.name
@@ -259,7 +259,7 @@ def test_implement_logs_path_matches_seam(tmp_path, monkeypatch):
     for key in ["lib.agent", "mentat_implement.implement"]:
         sys.modules.pop(key, None)
 
-    agent_mod = _load_session()
+    agent_mod = _load_agent()
     expected = agent_mod.agent_dir(sid)
 
     impl = _load("mentat_implement.implement", _SKILLS / "mentat-implement/scripts/implement.py")

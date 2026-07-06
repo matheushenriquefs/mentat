@@ -44,8 +44,9 @@ def test_paths_mentat_dir_fields():
     assert paths.MENTAT_WORKTREES_DIR == paths.MENTAT_DIR / "worktrees"
 
 
-def test_paths_agents_dir_home_based():
-    """AGENTS_DIR is now home-dir based, not file-relative (ADR-0008 revised)."""
+def test_paths_agents_dir_home_based(monkeypatch):
+    """AGENTS_DIR is home-dir based when MENTAT_AGENTS_DIR is unset (ADR-0008 revised)."""
+    monkeypatch.delenv("MENTAT_AGENTS_DIR", raising=False)
     paths = _import_paths()
 
     assert isinstance(paths.AGENTS_DIR, Path)
@@ -57,6 +58,12 @@ def test_paths_agents_dir_home_based():
 
     assert isinstance(paths.PLANS_DIR, Path)
     assert paths.PLANS_DIR == paths.AGENTS_DIR / "plans"
+
+
+def test_paths_agents_dir_honors_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("MENTAT_AGENTS_DIR", str(tmp_path / "custom-agents"))
+    paths = _import_paths()
+    assert paths.AGENTS_DIR == tmp_path / "custom-agents"
 
 
 def test_paths_derived_fields_structure():

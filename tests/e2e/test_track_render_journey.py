@@ -99,7 +99,7 @@ def test_transcript_and_audit_renderers(tmp_path):
     sd = tmp_path / "sess"
     _write(
         sd,
-        "agent",
+        "transcript",
         [
             _assistant("Read", text="hello world"),
             _user_result("done"),
@@ -288,7 +288,7 @@ def test_registry_frame_navigate_and_kill(tmp_path, monkeypatch, capsys):
 
     # A agent with no worktree in its audit → kill is a no-op.
     sd2 = repo_dir / "s2"
-    _write(sd2, "agent", [_audit("chunk_started", slug="s2")])
+    _write(sd2, "transcript", [_audit("chunk_started", slug="s2")])
     calls.clear()
     m._kill(sd2)
     assert calls == []
