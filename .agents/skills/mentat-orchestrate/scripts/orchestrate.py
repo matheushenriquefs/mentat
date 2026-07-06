@@ -22,10 +22,11 @@ if str(_AGENTS_ROOT) not in sys.path:
 from lib import backoff as _backoff  # noqa: E402
 from lib import devcontainer as _devcontainer  # noqa: E402
 from lib import git as _git  # noqa: E402
+from lib import plans as _plans_lib  # noqa: E402
 from lib import worktrees as _worktrees  # noqa: E402
 from lib.events import HITL_IN_SESSION, EjectReason, ejected_payload, spawned_payload  # noqa: E402
 from lib.events import bind as _bind  # noqa: E402
-from lib.exits import EX_DATAERR, EX_HITL_REQUIRED, EX_NOINPUT, EX_UNAVAILABLE  # noqa: E402
+from lib.exits import EX_CONFIG, EX_DATAERR, EX_HITL_REQUIRED, EX_NOINPUT, EX_UNAVAILABLE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 from lib.session import ensure_session  # noqa: E402
 from lib.session import session_dir as _session_dir
@@ -153,11 +154,14 @@ def _load_plans(paths: list[Path], *, _expanding: bool = False) -> list[_schedul
                     print(f"cannot block on parent index: {dep}", file=sys.stderr)
                     raise SystemExit(EX_DATAERR)
                 if dep not in known_slugs:
+                    if _plans_lib.resolve_plan_ref(dep).exists():
+                        continue
                     print(
-                        f"warning: blocked_by '{dep}' in '{plan.slug}' not in batch"
-                        " — treated as already-landed external dep",
+                        f"unresolved blocked_by '{dep}' in '{plan.slug}' — "
+                        "must name an in-batch plan or an on-disk plan file",
                         file=sys.stderr,
                     )
+                    raise SystemExit(EX_DATAERR)
 
     return plans
 
@@ -789,14 +793,14 @@ def _land_all(
         holding=holding,
         on_landed=sched.mark_landed,
         on_ejected=sched.mark_ejected,
-        next_ready=sched.next_ready,
+        list_ready_slices=sched.list_ready_slices,
     )
 
 
 def _spawn_ready(pending: list[_scheduler.Plan], *, known_slugs: set[str], resolved: set[str]) -> list[_scheduler.Plan]:
     """Auto plans whose declared deps are all resolved — the next spawn wave.
 
-    Mirrors ``scheduler.next_ready``'s readiness rule (NNFI: an ejected upstream
+    Mirrors ``scheduler.list_ready_slices``'s readiness rule (NNFI: an ejected upstream
     counts as resolved, an unknown/external dep is treated as already-landed) but
     returns EVERY spawnable plan so the coordinator fans a whole wave out at once.
     Gating SPAWN — not just land — keeps a chunk with an un-landed ``blocked_by``
@@ -872,7 +876,7 @@ def _run_batch(
             holding=holding,
             on_landed=_on_landed,
             on_ejected=_on_ejected,
-            next_ready=sched.next_ready,
+            list_ready_slices=sched.list_ready_slices,
         )
         drain_results.extend(wave_results)
         for plan in wave:
@@ -956,7 +960,13 @@ def _recovery_respawn(
     # mentat-container up dirties .devcontainer/ in every worktree; discard so the
     # rebase does not refuse on unstaged changes (mirrors land_queue._rebase_chunk).
     _git.discard_path(worktree, ".devcontainer/")
-    _git.rebase_ff_only(worktree, holding)
+    _tip, err = _git.rebase_ff_only(worktree, holding)
+    if err is not None:
+        _emit_event(
+            "chunk.ejected",
+            ejected_payload(plan.slug, EjectReason.REBASE_CONFLICTED, str(worktree)),
+        )
+        return [{"slug": plan.slug, "status": "eject", "reason": EjectReason.REBASE_CONFLICTED}]
     seed_summary = str((seed or {}).get("seed_summary", "")) or None
     rc = _spawn_implement_in_worktree(
         plan.path,
@@ -1018,6 +1028,24 @@ def _recovery_backoff(attempt: int, *, sleep: Callable[[float], None] | None = N
     (sleep or time.sleep)(_backoff.full_jitter(attempt))
 
 
+def _classify_recovery_results(results: list[object]) -> str:
+    """Classify a recovery respawn/reslice land-queue verdict list.
+
+    Returns ``landed`` when any chunk succeeded, ``stalled`` when the queue
+    stalled with pending deps, ``failed`` on explicit ejects, else ``empty``.
+    """
+    if not results:
+        return "empty"
+    statuses = {r.get("status") for r in results if isinstance(r, dict)}
+    if "success" in statuses:
+        return "landed"
+    if "stalled" in statuses:
+        return "stalled"
+    if statuses & {"eject", "failed"}:
+        return "failed"
+    return "inconclusive"
+
+
 def _run_recovery(
     transient: set[str],
     *,
@@ -1026,13 +1054,11 @@ def _run_recovery(
     session_id: str,
     harness: str | None,
     model: str | None,
-) -> tuple[set[str], set[str]]:
-    """Run the JIT recovery pass over transient AFK ejects. Returns (recovered_ok, dead_lettered).
+) -> tuple[set[str], set[str], set[str]]:
+    """Run the JIT recovery pass over transient AFK ejects.
 
-    Delegates the decide/apply loop to ``recover.recover`` with the real spawn / land /
-    re-plan primitives bound in. ``recovered_ok`` are slugs a retry/reslice landed;
-    ``dead_lettered`` are slugs escalated to HITL (abandon / cap breach) — both feed the
-    batch exit code."""
+    Returns ``(recovered_ok, dead_lettered, recovery_stalled)``.
+    """
 
     def _dead_letter(plan: _scheduler.Plan, rationale: str) -> None:
         _emit_event(
@@ -1069,16 +1095,26 @@ def _run_recovery(
 
     recovered_ok: set[str] = set()
     dead_lettered: set[str] = set()
+    recovery_stalled: set[str] = set()
     for outcome in outcomes:
         slug = str(outcome.get("slug", ""))
         kind = outcome.get("recovery")
         if kind in (_recover.RETRY, _recover.RESLICE):
             results = outcome.get("results") or []
-            if any(isinstance(r, dict) and r.get("status") == "success" for r in results):
+            verdict = _classify_recovery_results(results)
+            if verdict == "landed":
                 recovered_ok.add(slug)
+            elif verdict == "stalled":
+                recovery_stalled.add(slug)
+            elif verdict in ("failed", "inconclusive", "empty"):
+                print(
+                    f"mentat-orchestrate: recovery {kind} for {slug} did not land "
+                    f"(verdict={verdict})",
+                    file=sys.stderr,
+                )
         elif kind in (_recover.ABANDON, "dead-lettered"):
             dead_lettered.add(slug)
-    return recovered_ok, dead_lettered
+    return recovered_ok, dead_lettered, recovery_stalled
 
 
 def run_orchestrate(
@@ -1091,6 +1127,11 @@ def run_orchestrate(
 ) -> int:
     session_id = ensure_session("orchestrate", holding)
     print(f"mentat-orchestrate: track this run with `mentat-session track {session_id}`", file=sys.stderr)
+    try:
+        _git.require_commit_identity()
+    except _git.GitError as e:
+        print(f"mentat-orchestrate: {e}", file=sys.stderr)
+        return EX_CONFIG
     plans = _load_plans(plan_paths)
     anchored, auto = _scheduler.partition(plans)
     _run_chunk_slugs.clear()
@@ -1122,7 +1163,7 @@ def run_orchestrate(
 
         # Build Scheduler from ALL plans (anchored + auto) so cross-partition
         # blocked_by edges are tracked.  auto chunks are the only spawn candidates
-        # (they never appear in `next_ready` as anchored slugs), so anchored plans
+        # (they never appear in `list_ready_slices` as anchored slugs), so anchored plans
         # act as "known but not-yet-landed" deps that gate auto dependents correctly.
         # mark_ejected then cascades across the full plan graph, including HITL
         # downstream — fixing the silent cascade miss when an auto upstream dies.
@@ -1145,7 +1186,7 @@ def run_orchestrate(
         # transient-ejected AFK chunks — serially, spaced by backoff, so a recovering
         # fleet never re-storms the box. A recovered_ok slug no longer counts against
         # the batch; a dead-lettered slug escalates to HITL (never a silent eject).
-        recovered_ok, dead_lettered = _run_recovery(
+        recovered_ok, dead_lettered, recovery_stalled = _run_recovery(
             transient,
             plans_by_slug={p.slug: p for p in (anchored + auto)},
             holding=holding,
@@ -1154,6 +1195,8 @@ def run_orchestrate(
             model=model,
         )
         hitl_slugs.update(dead_lettered)
+        for slug in recovery_stalled:
+            print(f"mentat-orchestrate: recovery stalled — chunk {slug} still pending land", file=sys.stderr)
         stalled = [r for r in drain_results if r.get("status") == "stalled"]
         if stalled:
             pending = stalled[0].get("pending", [])

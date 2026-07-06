@@ -30,6 +30,36 @@ def repo_root(cwd: Path | None = None) -> Path | None:
     return Path(r.stdout.strip())
 
 
+def git_config_value(key: str, *, cwd: Path | None = None) -> str | None:
+    """Return a git config value for key, or None when unset or empty."""
+    r = _run(["config", key], cwd=cwd)
+    val = r.stdout.strip()
+    return val if r.returncode == 0 and val else None
+
+
+def host_commit_identity(*, cwd: Path | None = None) -> dict[str, str]:
+    """user.name/user.email from the repo's main worktree — empty dict when unset."""
+    root = repo_root(cwd) or (cwd or Path.cwd())
+    out: dict[str, str] = {}
+    name = git_config_value("user.name", cwd=root)
+    email = git_config_value("user.email", cwd=root)
+    if name:
+        out["user.name"] = name
+    if email:
+        out["user.email"] = email
+    return out
+
+
+def require_commit_identity(*, cwd: Path | None = None) -> tuple[str, str]:
+    """Both user.name and user.email must be set — raises GitError otherwise."""
+    ident = host_commit_identity(cwd=cwd)
+    name = ident.get("user.name")
+    email = ident.get("user.email")
+    if not name or not email:
+        raise GitError("git user.name and user.email must be set in the main worktree")
+    return name, email
+
+
 def worktree_list(cwd: Path | None = None) -> list[dict[str, str]]:
     """Parse ``git worktree list --porcelain`` into one dict per worktree.
 
@@ -162,7 +192,13 @@ def rebase_ff_only(cwd: Path, onto: str) -> tuple[str | None, str | None]:
         _run(["rebase", "--abort"], cwd=cwd)
         return None, r.stderr.strip()
     sha_r = _run(["rev-parse", "HEAD"], cwd=cwd)
-    return sha_r.stdout.strip(), None
+    if sha_r.returncode != 0:
+        msg = sha_r.stderr.strip() or "rev-parse HEAD failed after rebase"
+        return None, msg
+    sha = sha_r.stdout.strip()
+    if not sha:
+        return None, "rev-parse HEAD returned empty tip after rebase"
+    return sha, None
 
 
 def ff_merge(cwd: Path, holding: str) -> str | None:

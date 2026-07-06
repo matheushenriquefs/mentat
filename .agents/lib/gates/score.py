@@ -73,7 +73,7 @@ def score_bug(raw: dict[str, Any]) -> GateResult:
 
 def score_smell(raw: dict[str, Any]) -> GateResult:
     """Smell review is advisory only — never blocks, never vetoes."""
-    return _score_gate(float(raw.get("score", 1.0)), SMELL_THRESHOLD, "smell score", advisory=True)
+    return _score_gate(float(raw.get("score", 0.0)), SMELL_THRESHOLD, "smell score", advisory=True)
 
 
 def score_rules(raw: dict[str, Any]) -> GateResult:
@@ -109,6 +109,24 @@ def aggregate(results: list[GateResult]) -> GateResult:
 # new scorer to veto so preflight_veto_reviewers auto-extends the check.
 VETO_KEYWORDS: frozenset[str] = frozenset({"plan", "test", "bug", "rules", "context"})
 
+REVIEWER_KEYWORDS: frozenset[str] = VETO_KEYWORDS | frozenset({"smell"})
+
+
+def reviewer_keyword(name: str) -> str | None:
+    """Return the routing keyword embedded in a reviewer name, or None if unknown."""
+    lowered = name.lower()
+    for kw in REVIEWER_KEYWORDS:
+        if kw in lowered:
+            return kw
+    return None
+
+
+def validate_reviewer_name(name: str) -> GateResult | None:
+    """Fail loud at ingest when a reviewer name does not map to the registry."""
+    if reviewer_keyword(name) is None:
+        return GateResult("block", 0.0, f"unknown reviewer {name!r}")
+    return None
+
 
 def missing_veto_reviewers(agents_dir: Path) -> list[str]:
     """Return names of veto reviewers not registered as .md files in agents_dir.
@@ -127,7 +145,10 @@ def missing_veto_reviewers(agents_dir: Path) -> list[str]:
 def score_from_file(path: Path) -> GateResult:
     """Load subagent JSON output file and route to the correct scorer."""
     raw = json.loads(path.read_text(encoding="utf-8"))
-    reviewer = raw.get("reviewer", path.stem)
+    reviewer = str(raw.get("reviewer", path.stem))
+    unknown = validate_reviewer_name(reviewer)
+    if unknown is not None:
+        return unknown
     if "plan" in reviewer:
         return score_plan(raw)
     if "test" in reviewer:
@@ -140,4 +161,4 @@ def score_from_file(path: Path) -> GateResult:
         return score_rules(raw)
     if "context" in reviewer:
         return score_context(raw)
-    return GateResult("pass", 1.0, f"unknown reviewer {reviewer!r}")
+    return GateResult("block", 0.0, f"unrouted reviewer {reviewer!r}")

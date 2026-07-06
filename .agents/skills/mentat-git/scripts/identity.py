@@ -13,17 +13,12 @@ from lib.config import read_config  # noqa: E402, F401
 
 
 def container_id_for_cwd() -> str | None:
-    """Return container ID for the current chunk-keyed worktree, or None."""
+    """Return container ID for the current worktree, or None."""
     from lib import devcontainer
-    from lib.chunk import chunk_slug_from_worktree
-    from lib.git import repo_root
 
     wt = Path.cwd()
-    root = repo_root(wt)
-    if root is None:
-        return None
-    try:
-        cs = chunk_slug_from_worktree(wt, root)
-    except ValueError:
-        return None
-    return devcontainer.container_id_for_slug(cs)
+    parts = wt.resolve().parts
+    for i, part in enumerate(parts):
+        if part == "worktrees" and i + 2 < len(parts):
+            return devcontainer.container_id_for_slug(f"{parts[i + 1]}/{parts[i + 2]}")
+    return devcontainer.container_id_for_slug(wt.name)

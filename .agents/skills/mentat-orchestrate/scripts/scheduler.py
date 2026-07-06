@@ -169,10 +169,10 @@ def _has_upstream_hitl(slug: str, plans_by_slug: dict[str, Plan]) -> bool:
 
 
 class Scheduler:
-    """Tracks landing state of a plan set; yields next chunk whose deps are met.
+    """Tracks landing state of a plan set; yields ready slices whose deps are met.
 
-    `next_ready(candidates)` walks the candidate slugs in order and returns the
-    first one whose `blocked_by` is wholly satisfied (every upstream is in
+    `list_ready_slices(candidates)` walks the candidate slugs in order and returns
+    every slug whose `blocked_by` is wholly satisfied (every upstream is in
     `landed`). An unknown slug — chunk has no loaded plan — is treated as
     immediately ready, so ad-hoc/external chunks keep flowing without
     blocking on missing plans.
@@ -181,7 +181,7 @@ class Scheduler:
     additive: once a slug enters either set, it stays put. Ejection cascade
     walks the reverse-dep graph and pushes only *anchored* downstream slugs
     into `ejected` (NNFI); auto downstream stay pending and, because an ejected
-    dep counts as resolved in `next_ready`, are re-evaluated against the new
+    dep counts as resolved in `list_ready_slices`, are re-evaluated against the new
     holding tip rather than blind-ejected.
     """
 
@@ -190,13 +190,15 @@ class Scheduler:
         self._landed: set[str] = set()
         self._ejected: set[str] = set()
 
-    def next_ready(self, candidates: list[str]) -> str | None:
+    def list_ready_slices(self, candidates: list[str]) -> list[str]:
+        ready: list[str] = []
         for slug in candidates:
             if slug in self._landed or slug in self._ejected:
                 continue
             plan = self._plans.get(slug)
             if plan is None:
-                return slug
+                ready.append(slug)
+                continue
             deps = set(plan.blocked_by) & self._plans.keys()
             # NNFI (Zuul): an *ejected* upstream is treated as resolved, not
             # blocking. A declared-downstream auto chunk is re-evaluated against
@@ -205,8 +207,8 @@ class Scheduler:
             # merit if it genuinely can't (rebase-conflicted / gate-failed).
             if deps - self._landed - self._ejected:
                 continue
-            return slug
-        return None
+            ready.append(slug)
+        return ready
 
     def mark_landed(self, slug: str) -> None:
         self._landed.add(slug)

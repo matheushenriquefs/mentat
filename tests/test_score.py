@@ -283,5 +283,5 @@ def test_score_from_file_routes_unknown_reviewer(tmp_path: Path):
     p = tmp_path / "unknown-reviewer.json"
     p.write_text(json.dumps({"reviewer": "mentat-unknown-reviewer"}))
     result = score.score_from_file(p)
-    assert result.verdict == "pass"
-    assert "unknown" in result.reason
+    assert result.verdict == "block"
+    assert "unknown reviewer" in result.reason

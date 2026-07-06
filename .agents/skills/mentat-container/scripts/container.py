@@ -245,6 +245,28 @@ def _ensure_safe_directory(ws: str, cid: str) -> None:
         )
 
 
+def _propagate_git_identity(ws: str, cid: str, repo_root: Path | None) -> None:
+    """Mirror main-worktree user.name/user.email into the container at bring-up."""
+    from lib.git import host_commit_identity
+
+    ident = host_commit_identity(cwd=repo_root) if repo_root is not None else {}
+    for key in ("user.name", "user.email"):
+        val = ident.get(key)
+        if not val:
+            continue
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            subprocess.run(
+                [_docker(), "exec", "-u", "vscode", "--workdir", ws, cid, "git", "config", "--global", key, val],
+                capture_output=True,
+                timeout=30,
+            )
+
+
+def _inside_devcontainer(wt: Path) -> bool:
+    parts = wt.resolve().parts
+    return len(parts) >= 3 and parts[1] == "workspaces"
+
+
 def cmd_up(wt: Path) -> int:
     chunk_slug = _chunk_slug_for_wt(wt)
     if _host_runtime():
@@ -255,6 +277,7 @@ def cmd_up(wt: Path) -> int:
 
     if cid:
         _ensure_safe_directory(ws, cid)
+        _propagate_git_identity(ws, cid, _main_repo_root_for_wt(wt))
         return 0
 
     # created/paused/restarting/dead states must not be silently skipped to cold-start.
@@ -305,6 +328,7 @@ def cmd_up(wt: Path) -> int:
             )
             return EX_FAILURE
         _ensure_safe_directory(ws, cid2)
+        _propagate_git_identity(ws, cid2, _main_repo_root_for_wt(wt))
         return 0
 
     # Cold start — external override config; tracked devcontainer.json stays pristine.
@@ -370,6 +394,7 @@ def cmd_up(wt: Path) -> int:
     final_cid = utils.container_id_for(chunk_slug)
     if final_cid:
         _ensure_safe_directory(ws, final_cid)
+        _propagate_git_identity(ws, final_cid, repo_root)
     return 0
 
 
@@ -378,6 +403,8 @@ def cmd_run(wt: Path, command: str) -> int:
     if _host_runtime():
         _warn_host_runtime_once(chunk_slug)
         return _run_on_host(command, wt)
+    if _inside_devcontainer(wt):
+        return subprocess.run(["bash", "-lc", command], cwd=str(wt.resolve())).returncode
     cid = utils.container_id_for(chunk_slug)
     if cid is utils.DAEMON_DOWN:
         print(

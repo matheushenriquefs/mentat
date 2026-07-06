@@ -29,5 +29,5 @@ def parse_frontmatter(plan_path: Path) -> dict[str, str]:
 
 def run_gates(chunk_path: Path | None) -> tuple[str, str]:
     if chunk_path is None:
-        return ("pass", "")
+        return ("block", "gate: no chunk path")
     return _gate_engine.evaluate(chunk_path)

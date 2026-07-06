@@ -128,7 +128,7 @@ def test_recovery_respawn_lands_on_success(monkeypatch, tmp_path):
     bind_plan("core")
     monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path)
     monkeypatch.setattr(orch._git, "discard_path", lambda *a, **k: None)
-    monkeypatch.setattr(orch._git, "rebase_ff_only", lambda *a, **k: (None, None))
+    monkeypatch.setattr(orch._git, "rebase_ff_only", lambda *a, **k: ("abc123", None))
     monkeypatch.setattr(orch, "_spawn_implement_in_worktree", lambda *a, **k: 0)
     monkeypatch.setattr(orch._land_queue, "drain", lambda chunks, *, holding: [{"slug": "core", "status": "success"}])
     out = orch._recovery_respawn(
@@ -137,11 +137,25 @@ def test_recovery_respawn_lands_on_success(monkeypatch, tmp_path):
     assert out == [{"slug": "core", "status": "success"}]
 
 
+def test_recovery_respawn_ejects_on_rebase_conflict(monkeypatch, tmp_path):
+    orch = _load("orchestrate")
+    monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path)
+    monkeypatch.setattr(orch._git, "discard_path", lambda *a, **k: None)
+    monkeypatch.setattr(orch._git, "rebase_ff_only", lambda *a, **k: (None, "conflict"))
+    emitted = []
+    monkeypatch.setattr(orch, "_emit_event", lambda ev, p: emitted.append((ev, p)))
+    out = orch._recovery_respawn(
+        _plan(orch, "core"), 1, holding="hold", harness=None, model=None, session_id="s1", seed={"seed_summary": "note"}
+    )
+    assert out[0]["status"] == "eject" and out[0]["reason"] == "rebase-conflicted"
+    assert any(ev == "chunk.ejected" for ev, _ in emitted)
+
+
 def test_recovery_respawn_ejects_on_implement_failure(monkeypatch, tmp_path):
     orch = _load("orchestrate")
     monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path)
     monkeypatch.setattr(orch._git, "discard_path", lambda *a, **k: None)
-    monkeypatch.setattr(orch._git, "rebase_ff_only", lambda *a, **k: (None, None))
+    monkeypatch.setattr(orch._git, "rebase_ff_only", lambda *a, **k: ("abc123", None))
     monkeypatch.setattr(orch, "_spawn_implement_in_worktree", lambda *a, **k: 1)
     monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
     out = orch._recovery_respawn(
@@ -253,13 +267,14 @@ def test_run_recovery_retry_marks_recovered(monkeypatch, tmp_path):
         lambda p, a, c, *, holding, session_id: {"slug": p.slug, "worktree": "w"},
     )
     monkeypatch.setattr(orch._recover, "decide", lambda ctx: {"action": "retry", "rationale": "env"})
+    monkeypatch.setattr(orch._recover, "_emit_event", lambda *a, **k: None)
     monkeypatch.setattr(orch, "_recovery_respawn", lambda p, a, ctx=None, **k: [{"slug": p.slug, "status": "success"}])
     monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
     plan = _plan(orch, "core")
-    ok, dead = orch._run_recovery(
+    ok, dead, stalled = orch._run_recovery(
         {"core"}, plans_by_slug={"core": plan}, holding="hold", session_id="s1", harness=None, model=None
     )
-    assert ok == {"core"} and dead == set()
+    assert ok == {"core"} and dead == set() and stalled == set()
 
 
 def test_run_recovery_skipped_hitl_counts_neither(monkeypatch, tmp_path):
@@ -267,10 +282,36 @@ def test_run_recovery_skipped_hitl_counts_neither(monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "repo")
     ui = _plan(orch, "ui", class_="HITL")
-    ok, dead = orch._run_recovery(
+    ok, dead, stalled = orch._run_recovery(
         {"ui"}, plans_by_slug={"ui": ui}, holding="hold", session_id="s1", harness=None, model=None
     )
-    assert ok == set() and dead == set()  # HITL is skipped, neither recovered nor dead-lettered
+    assert ok == set() and dead == set() and stalled == set()  # HITL is skipped, neither recovered nor dead-lettered
+
+
+def test_run_recovery_stalled_is_reported(monkeypatch, tmp_path):
+    orch = _load("orchestrate")
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path)
+    monkeypatch.setattr(orch, "_teardown_ejected", lambda s: None)
+    monkeypatch.setattr(
+        orch,
+        "make_recovery_seed_for_plan",
+        lambda p, a, c, *, holding, session_id: {"slug": p.slug, "worktree": "w"},
+    )
+    monkeypatch.setattr(orch._recover, "decide", lambda ctx: {"action": "retry", "rationale": "env"})
+    monkeypatch.setattr(orch._recover, "_emit_event", lambda *a, **k: None)
+    monkeypatch.setattr(
+        orch,
+        "_recovery_respawn",
+        lambda p, a, ctx=None, **k: [{"slug": p.slug, "status": "stalled", "pending": [p.slug]}],
+    )
+    monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
+    plan = _plan(orch, "core")
+    ok, dead, stalled = orch._run_recovery(
+        {"core"}, plans_by_slug={"core": plan}, holding="hold", session_id="s1", harness=None, model=None
+    )
+    assert ok == set() and dead == set() and stalled == {"core"}
 
 
 def test_run_orchestrate_invokes_recovery_for_worker_died(tmp_path, monkeypatch):
@@ -296,8 +337,10 @@ def test_run_orchestrate_invokes_recovery_for_worker_died(tmp_path, monkeypatch)
 
     def fake_recovery(transient, **kw):
         captured["transient"] = set(transient)
-        return set(), set()
+        return set(), set(), set()
 
+    monkeypatch.setattr(orch, "ensure_session", lambda *a, **k: "orch-test")
+    monkeypatch.setattr(orch._git, "require_commit_identity", lambda **kw: ("T", "t@t"))
     monkeypatch.setattr(orch, "_run_recovery", fake_recovery)
     orch.run_orchestrate("holding", [a], harness=None, model=None, dry_run=False)
     assert captured["transient"] == {"a"}
@@ -316,7 +359,7 @@ def test_run_recovery_abandon_dead_letters(monkeypatch, tmp_path):
     emitted = []
     monkeypatch.setattr(orch, "_emit_event", lambda ev, p: emitted.append((ev, p)))
     plan = _plan(orch, "core")
-    ok, dead = orch._run_recovery(
+    ok, dead, stalled = orch._run_recovery(
         {"core"}, plans_by_slug={"core": plan}, holding="hold", session_id="s1", harness=None, model=None
     )
     assert ok == set() and dead == {"core"}
@@ -337,17 +380,18 @@ def test_run_recovery_retry_without_success_not_marked_recovered(monkeypatch, tm
         lambda p, a, c, *, holding, session_id: {"slug": p.slug, "worktree": "w"},
     )
     monkeypatch.setattr(orch._recover, "decide", lambda ctx: {"action": "retry", "rationale": "env"})
+    monkeypatch.setattr(orch._recover, "_emit_event", lambda *a, **k: None)
     monkeypatch.setattr(
         orch, "_recovery_respawn", lambda p, a, ctx=None, **k: [{"slug": p.slug, "status": "eject", "reason": "gate-failed"}]
     )
     monkeypatch.setattr(orch, "_emit_event", lambda *a, **k: None)
     plan = _plan(orch, "core")
 
-    ok, dead = orch._run_recovery(
+    ok, dead, stalled = orch._run_recovery(
         {"core"}, plans_by_slug={"core": plan}, holding="hold", session_id="s1", harness=None, model=None
     )
 
-    assert ok == set() and dead == set()
+    assert ok == set() and dead == set() and stalled == set()
 
 
 def test_spawn_implement_in_worktree_omits_harness_and_model(monkeypatch, tmp_path):

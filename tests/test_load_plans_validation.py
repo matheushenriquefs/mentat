@@ -25,23 +25,33 @@ def _make_plan(tmp_path: Path, slug: str, class_: str = "AFK", blocked_by: list[
     return p
 
 
-def test_load_plans_warns_on_out_of_batch_blocked_by_ref(tmp_path: Path, capsys) -> None:
-    """Out-of-batch blocked_by slug warns but loads — LQ1 treats it as external dep."""
+def test_load_plans_exits_65_on_unresolved_blocked_by(tmp_path: Path) -> None:
+    """Out-of-batch blocked_by with no on-disk plan exits 65."""
     orch = load_module("orchestrate")
     plan_a = _make_plan(tmp_path, "plan-a", blocked_by=["prior-batch-slug"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        orch._load_plans([plan_a])
+
+    assert exc_info.value.code == 65
+
+
+def test_load_plans_allows_on_disk_external_blocked_by(tmp_path: Path) -> None:
+    """blocked_by may name a plan file that exists on disk outside the batch."""
+    orch = load_module("orchestrate")
+    external = tmp_path / "external-plan.md"
+    external.write_text("---\nid: external-plan\nclass: AFK\n---\n")
+    plan_a = _make_plan(tmp_path, "plan-a", blocked_by=[str(external)])
 
     plans = orch._load_plans([plan_a])
 
     assert len(plans) == 1
     assert plans[0].slug == "plan-a"
-    err = capsys.readouterr().err
-    assert "prior-batch-slug" in err, f"warning must name the unknown slug; stderr={err!r}"
 
 
 def test_load_plans_exits_65_on_parent_index_blocked_by(tmp_path: Path) -> None:
     """Blocking on a parent-index slug still exits 65 — always invalid."""
     orch = load_module("orchestrate")
-    # Write parent as a parent-index (with siblings list).
     _make_plan(tmp_path, "sib")
     parent = tmp_path / "parent-idx.md"
     parent.write_text("---\nid: parent-idx\nclass: AFK\nblocked_by: []\nsiblings: [sib]\n---\n")
@@ -77,7 +87,9 @@ def test_load_plans_does_not_exit_on_empty_blocked_by(tmp_path: Path) -> None:
     assert plans[0].slug == "standalone"
 
 
-def test_run_gates_returns_pass_for_none_path() -> None:
-    """plans.run_gates(None) short-circuits to ('pass', '') without invoking the engine."""
+def test_run_gates_returns_block_for_none_path() -> None:
+    """plans.run_gates(None) must not false-green a missing chunk path."""
     plans_mod = load_module("plans")
-    assert plans_mod.run_gates(None) == ("pass", "")
+    verdict, msg = plans_mod.run_gates(None)
+    assert verdict == "block"
+    assert "no chunk path" in msg

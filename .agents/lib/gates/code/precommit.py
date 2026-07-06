@@ -146,8 +146,10 @@ def _check(path: Path, cls: str) -> tuple[list[str], list[str]]:
 
 def run(chunk_path: Path | None) -> tuple[str, str]:
     """Return (verdict, message). verdict in {'pass', 'block', 'advise'}."""
-    if chunk_path is None or not chunk_path.exists():
-        return ("pass", "")
+    if chunk_path is None:
+        return ("block", "precommit gate: no chunk path")
+    if not chunk_path.exists():
+        return ("block", f"precommit gate: chunk path missing: {chunk_path}")
 
     root = chunk_path if chunk_path.is_dir() else chunk_path.parent
     blocks: list[str] = []
@@ -162,7 +164,7 @@ def run(chunk_path: Path | None) -> tuple[str, str]:
             blocks.extend(new_blocks)
             advisories.extend(new_advisories)
         except OSError as e:
-            advisories.append(f"{path}: read error: {e}")
+            blocks.append(f"{path}: read error: {e}")
 
     if blocks:
         return ("block", "\n".join(blocks))

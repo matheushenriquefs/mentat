@@ -12,25 +12,25 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib import devcontainer  # noqa: E402
 from lib.exits import EX_UNAVAILABLE, EX_USAGE  # noqa: E402
+from lib.git import host_commit_identity  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
 
 utils = load_sibling(__file__, "identity")
 
 
-def _host_identity() -> list[str]:
-    """`git -c user.*` args carrying the host's commit identity into the container.
+def _workspace_in_container(wt: Path) -> str:
+    parts = wt.resolve().parts
+    for i, part in enumerate(parts):
+        if part == "worktrees" and i + 2 < len(parts):
+            return f"/workspaces/{parts[i + 1]}/{parts[i + 2]}"
+    return f"/workspaces/{wt.name}"
 
-    The container is exec'd as the OS user `vscode` (file ownership matches
-    remoteUser per the devcontainers spec), but the commit must be authored as the
-    operator's real git identity — not `vscode`. Mirror the host's configured
-    user.name/user.email; omit either if unset (container config then applies).
-    """
+
+def _host_identity() -> list[str]:
+    """`git -c user.*` args carrying the host's commit identity into the container."""
     args: list[str] = []
-    for key in ("user.name", "user.email"):
-        r = subprocess.run(["git", "config", key], capture_output=True, text=True)
-        val = r.stdout.strip()
-        if r.returncode == 0 and val:
-            args.extend(["-c", f"{key}={val}"])
+    for key, val in host_commit_identity().items():
+        args.extend(["-c", f"{key}={val}"])
     return args
 
 
@@ -62,8 +62,14 @@ def cmd_commit(git_args: list[str]) -> int:
             file=sys.stderr,
         )
         return EX_USAGE
-    ws = f"/workspaces/{Path(wt_result.stdout.strip()).name}"
-    slug = Path.cwd().name
+    wt_path = Path(wt_result.stdout.strip())
+    ws = _workspace_in_container(wt_path)
+    parts = wt_path.resolve().parts
+    slug = wt_path.name
+    for i, part in enumerate(parts):
+        if part == "worktrees" and i + 2 < len(parts):
+            slug = f"{parts[i + 1]}/{parts[i + 2]}"
+            break
     # `safe.directory=*`: bind-mounted workspace is owned by host UID; git-as-vscode
     # would otherwise refuse with "dubious ownership".
     result = devcontainer.exec(

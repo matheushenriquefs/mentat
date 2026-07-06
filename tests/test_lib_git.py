@@ -109,3 +109,56 @@ def test_worktree_for_chunk_raises_on_miss(monkeypatch) -> None:
 
     with pytest.raises(git_lib.GitError):
         git_lib.worktree_for_chunk("missing", "slug")
+
+
+# ── rebase_ff_only ────────────────────────────────────────────────────────────
+
+
+def test_rebase_ff_only_rejects_empty_sha_after_success(monkeypatch, tmp_path: Path) -> None:
+    def fake_run(cmd, *, cwd=None):
+        if cmd[:2] == ["rebase", "main"]:
+            return _cp(0, "")
+        if cmd == ["rev-parse", "HEAD"]:
+            return _cp(0, "   \n")
+        return _cp(0, "")
+
+    monkeypatch.setattr(git_lib, "_run", fake_run)
+    sha, err = git_lib.rebase_ff_only(tmp_path, "main")
+    assert sha is None
+    assert err == "rev-parse HEAD returned empty tip after rebase"
+
+
+def test_rebase_ff_only_rejects_rev_parse_failure(monkeypatch, tmp_path: Path) -> None:
+    def fake_run(cmd, *, cwd=None):
+        if cmd[:2] == ["rebase", "main"]:
+            return _cp(0, "")
+        if cmd == ["rev-parse", "HEAD"]:
+            r = _cp(1, "")
+            r.stderr = "fatal: ambiguous argument 'HEAD'"
+            return r
+        return _cp(0, "")
+
+    monkeypatch.setattr(git_lib, "_run", fake_run)
+    sha, err = git_lib.rebase_ff_only(tmp_path, "main")
+    assert sha is None
+    assert "ambiguous argument" in (err or "")
+
+
+# ── commit identity ───────────────────────────────────────────────────────────
+
+
+def test_host_commit_identity_reads_config(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    init_git_repo(repo)
+    ident = git_lib.host_commit_identity(cwd=repo)
+    assert ident == {"user.name": "T", "user.email": "t@t"}
+
+
+def test_require_commit_identity_raises_when_unset(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_git_repo(repo)
+    monkeypatch.setattr(git_lib, "host_commit_identity", lambda **kw: {})
+    with pytest.raises(git_lib.GitError, match="user.name and user.email"):
+        git_lib.require_commit_identity(cwd=repo)
+

@@ -24,7 +24,9 @@ def test_precommit_pass_on_empty_chunk(tmp_path):
 
 def test_precommit_pass_on_none(tmp_path):
     pre = _load_precommit()
-    assert pre.run(None) == ("pass", "")
+    verdict, msg = pre.run(None)
+    assert verdict == "block"
+    assert "no chunk path" in msg
 
 
 def test_precommit_adr_missing_section_blocks(tmp_path):
@@ -238,14 +240,14 @@ def test_precommit_check_unknown_class_returns_empty(tmp_path):
     assert advisories == []
 
 
-def test_precommit_read_error_becomes_advisory(tmp_path):
+def test_precommit_read_error_becomes_block(tmp_path):
     pre = _load_precommit()
     agents = tmp_path / "agents"
     agents.mkdir()
     (agents / "mentat-x.md").write_text("---\nname: x\n---\nbody\n")
     with patch.object(pre, "_check", side_effect=OSError("boom")):
         verdict, msg = pre.run(tmp_path)
-    assert verdict == "advise"
+    assert verdict == "block"
     assert "read error" in msg
 
 

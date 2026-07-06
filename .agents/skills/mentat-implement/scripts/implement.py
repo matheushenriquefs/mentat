@@ -468,10 +468,6 @@ def preflight_veto_reviewers(harness: str, *, reuse_worktree: bool = False) -> t
     return (1, missing) if missing else (0, [])
 
 
-def _run_gates(chunk_path: Path | None) -> tuple[str, str]:
-    return ("pass", "")
-
-
 def _strip_frontmatter(text: str) -> str:
     """Strip YAML frontmatter (---...---) from plan body.
 
@@ -576,19 +572,6 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
             ejected_payload(
                 slug,
                 EjectReason.IMPLEMENT_FAILED,
-                str(plan_path.parent),
-                logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
-            ),
-        )
-        return 1
-
-    verdict, message = _run_gates(None)
-    if verdict == "block":
-        _emit_event(
-            "chunk.ejected",
-            ejected_payload(
-                slug,
-                EjectReason.GATE_FAILED,
                 str(plan_path.parent),
                 logs_path=str(_session_dir_fn(os.environ.get("MENTAT_SESSION", "manual"))),
             ),

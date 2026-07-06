@@ -234,18 +234,18 @@ def drain(
     holding: str,
     on_landed: Callable[[str], None] | None = None,
     on_ejected: Callable[[str], list[str]] | None = None,
-    next_ready: Callable[[list[str]], str | None] | None = None,
+    list_ready_slices: Callable[[list[str]], list[str]] | None = None,
     speculative: bool | None = None,
 ) -> list[dict[str, object]]:
     """Land all chunks serially.
 
-    Without `next_ready`: iterate chunks in input order (no-dep path). When the
+    Without `list_ready_slices`: iterate chunks in input order (no-dep path). When the
     `speculative_land` config flag is on (or `speculative=True` is forced), this
     independent batch is gated in parallel and FF-merged (see
     `_drain_speculative`); serial stays the safe fallback.
 
-    With `next_ready`: pull the next chunk whose plan deps are wholly landed
-    via `next_ready(candidates)`. Land it, call on_landed / on_ejected,
+    With `list_ready_slices`: pull the next chunk whose plan deps are wholly landed
+    via `list_ready_slices(candidates)[0]`. Land it, call on_landed / on_ejected,
     repeat until pending empty or no chunk ready (stalled verdict). Speculation
     never applies here — a live dep graph forbids the "assume 1..N-1 land"
     optimism.
@@ -253,7 +253,7 @@ def drain(
     _on_landed = on_landed or (lambda _: None)
     _on_ejected = on_ejected or (lambda _: [])
 
-    if next_ready is None:
+    if list_ready_slices is None:
         if speculative is None:
             speculative = _speculative_land_enabled()
         if speculative and chunks:
@@ -265,8 +265,8 @@ def drain(
     results: list[dict[str, object]] = []
 
     while pending:
-        ready = next_ready(pending)
-        if ready is None:
+        ready_list = list_ready_slices(pending)
+        if not ready_list:
             stalled_pending = list(pending)
             for slug in stalled_pending:
                 _teardown_container(by_slug[slug])
@@ -278,6 +278,7 @@ def drain(
                 }
             )
             return results
+        ready = ready_list[0]
         verdict = land(by_slug[ready], holding=holding)
         results.append(verdict)
         _teardown_container(by_slug[ready])

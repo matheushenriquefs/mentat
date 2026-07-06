@@ -301,8 +301,8 @@ def test_drain_cascade_skips_downstream_not_in_pending():
     def fake_land(chunk, *, holding):
         return {"slug": chunk.slug, "status": "eject", "reason": "gate-failed"}
 
-    def fake_next_ready(pending):
-        return pending[0] if pending else None
+    def fake_list_ready_slices(pending):
+        return [pending[0]] if pending else []
 
     # Cascade names "b" (in pending) and a phantom slug that was never pending.
     def fake_on_ejected(slug):
@@ -317,7 +317,7 @@ def test_drain_cascade_skips_downstream_not_in_pending():
             [a, b],
             holding="main",
             on_ejected=fake_on_ejected,
-            next_ready=fake_next_ready,
+            list_ready_slices=fake_list_ready_slices,
         )
 
     slugs = [r.get("slug") for r in results]

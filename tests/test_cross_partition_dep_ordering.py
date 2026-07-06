@@ -3,7 +3,7 @@
 Q1: An AFK chunk that depends on an anchored/HITL plan must NOT be treated
     as immediately ready.  The Scheduler must gate it until the HITL plan
     lands.  Previously, Scheduler(auto_only) dropped the anchored dep from
-    the known set, so next_ready returned the AFK chunk before the HITL
+    the known set, so list_ready_slices returned the AFK chunk before the HITL
     upstream had landed.
 
 Q2: Ejecting an AFK plan must cascade to HITL/anchored downstream plans.
@@ -18,7 +18,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from tests.conftest import patch_orchestrate_worktree
+from tests.conftest import bind_plan, patch_orchestrate_worktree
 
 ORCH_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
 
@@ -44,7 +44,7 @@ def test_scheduler_blocks_auto_on_anchored_dep() -> None:
     """Auto chunk B(blocked_by=[A]) must wait for HITL A to land.
 
     When Scheduler receives ALL plans (anchored + auto), A is in self._plans.
-    next_ready(["B"]) must return None until A is mark_landed.
+    list_ready_slices(["B"]) must return [] until A is mark_landed.
     """
     _load("scheduler")
     A = _plan("A", class_="HITL")
@@ -55,9 +55,9 @@ def test_scheduler_blocks_auto_on_anchored_dep() -> None:
 
     s = sched.Scheduler([A, B])
 
-    assert s.next_ready(["B"]) is None, "B must be blocked by un-landed HITL A"
+    assert s.list_ready_slices(["B"]) == [], "B must be blocked by un-landed HITL A"
     s.mark_landed("A")
-    assert s.next_ready(["B"]) == "B", "B must be ready once A lands"
+    assert s.list_ready_slices(["B"]) == ["B"], "B must be ready once A lands"
 
 
 def test_auto_only_scheduler_incorrectly_treats_anchored_dep_as_ready() -> None:
@@ -71,7 +71,7 @@ def test_auto_only_scheduler_incorrectly_treats_anchored_dep_as_ready() -> None:
     bug_sched = sched.Scheduler([B])  # auto-only — A not known
 
     # BUG: A is not in self._plans → dep dropped → B immediately ready
-    assert bug_sched.next_ready(["B"]) == "B", (
+    assert bug_sched.list_ready_slices(["B"]) == ["B"], (
         "Baseline: auto-only Scheduler incorrectly returns B as ready — "
         "this test documents the bug (expected to pass to show it exists)"
     )
@@ -84,7 +84,7 @@ def test_run_orchestrate_passes_all_plans_to_scheduler(tmp_path, monkeypatch) ->
     """Scheduler in run_orchestrate must include anchored plans.
 
     With only auto plans in the Scheduler, a cross-partition blocked_by dep
-    (auto chunk depending on an anchored slug) is invisible to next_ready.
+    (auto chunk depending on an anchored slug) is invisible to list_ready_slices.
     The Scheduler passed to land_queue.drain must know about ALL plans so
     cross-partition deps gate correctly.
     """
@@ -101,33 +101,38 @@ def test_run_orchestrate_passes_all_plans_to_scheduler(tmp_path, monkeypatch) ->
     c_path.write_text("---\nid: C\nstatus: ready\nclass: AFK\nblocked_by: [A]\n---\n# C\n")
     d_path.write_text("---\nid: D\nstatus: ready\nclass: AFK\nblocked_by: []\n---\n# D\n")
 
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [(p, 0) for p in plans])
+    for slug in ("A", "C", "D"):
+        bind_plan(slug)
+
+    monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [(p, 0, str(tmp_path), None) for p in plans])
 
     captured: dict = {}
 
-    def fake_drain(chunks, *, holding, on_landed=None, on_ejected=None, next_ready=None, **kw):
-        captured["next_ready"] = next_ready
+    def fake_drain(chunks, *, holding, on_landed=None, on_ejected=None, list_ready_slices=None, **kw):
+        captured["list_ready_slices"] = list_ready_slices
         return [{"slug": c.slug, "status": "success", "tip": "abc"} for c in chunks]
 
     monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
+    monkeypatch.setattr(orchestrate, "ensure_session", lambda *a, **k: "orch-test")
+    monkeypatch.setattr(orchestrate._git, "require_commit_identity", lambda **kw: ("T", "t@t"))
 
     with patch_orchestrate_worktree(orchestrate, tmp_path):
         orchestrate.run_orchestrate("holding", [a_path, c_path, d_path], harness=None, model=None, dry_run=False)
 
-    nr = captured.get("next_ready")
-    assert callable(nr), "next_ready must be passed"
+    nr = captured.get("list_ready_slices")
+    assert callable(nr), "list_ready_slices must be passed"
 
     # D is auto, A is anchored. Scheduler must know about A so that if D
     # had a dep on A, it would block. We verify by checking A is in the
     # Scheduler's internal plans (via the closure).
-    # The concrete assertion: next_ready(["D"]) == "D" (no dep, ready).
+    # The concrete assertion: list_ready_slices(["D"]) == ["D"] (no dep, ready).
     # If A were a dep of D, it must gate. We expose this by confirming the
-    # Scheduler returned by next_ready can correctly block on the anchored slug.
+    # Scheduler returned by list_ready_slices can correctly block on the anchored slug.
     # Direct check: build a situation where A is unknown vs known.
-    # With the fix, next_ready wraps a Scheduler that includes ALL plans.
+    # With the fix, list_ready_slices wraps a Scheduler that includes ALL plans.
     # We can probe by checking D is immediately ready (no deps).
-    assert nr(["D"]) == "D"
+    assert nr(["D"]) == ["D"]
 
 
 # ── Q2: eject cascade reaches anchored plans ──────────────────────────────────
