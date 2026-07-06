@@ -21,7 +21,7 @@ folded here.
 - `mentat-orchestrate run [--harness=<n>] [--model=<s>] [--dry-run] <holding> <plan-ref>+`
 - `mentat-orchestrate fan-out <plan-ref>+` — debug: spawn N plans headless; stdout = chunk slugs
 - `mentat-orchestrate land-queue <holding-branch>` — debug: stdin = slugs; stdout = verdict JSONL
-- `mentat-orchestrate batch-review <session>` — debug: re-run batch review
+- `mentat-orchestrate batch-review <agent-id>` — debug: re-run batch review
 
 Stage modules under `scripts/`: `fan_out.py`, `land_queue.py`, `batch_review.py`.
 
@@ -32,7 +32,7 @@ Read each plan's `kind: AFK|HITL` frontmatter. Topological sort by `blocked_by`.
 - `AFK` plans with no HITL anywhere in the dep chain → auto-spawned headless.
 - `AFK` plans with a downstream HITL → anchored (HITL must complete first).
 - `AFK` plans with an upstream HITL → anchored (caller must drive the
-  upstream HITL in-session before the downstream AFK can spawn — its
+  upstream HITL in-agent before the downstream AFK can spawn — its
   worktree can't safely auto-spawn against the pre-batch base).
 
 The walks live in `scheduler.py` (`_has_downstream_hitl`, `_has_upstream_hitl`).

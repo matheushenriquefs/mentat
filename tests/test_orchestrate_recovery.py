@@ -75,7 +75,7 @@ def test_make_recovery_seed_distills(monkeypatch, tmp_path):
         "make_recovery_seed",
         lambda **kw: {"slug": kw["slug"], "progress_note": "distilled", "seed_summary": "distilled"},
     )
-    ctx = orch._batch.make_recovery_seed_for_plan(_plan(orch, "core"), 1, 2, holding="hold", session_id="s1")
+    ctx = orch._batch.make_recovery_seed_for_plan(_plan(orch, "core"), 1, 2, holding="hold", agent_id="s1")
     assert ctx["progress_note"] == "distilled"
     assert ctx["seed_summary"] == "distilled"
 
@@ -87,7 +87,7 @@ def test_make_recovery_seed_falls_back_to_diff(monkeypatch, tmp_path):
     monkeypatch.setattr(orch._batch, "_worktree_for_slug", lambda s: wt)
     monkeypatch.setattr(orch._batch, "_recovery_diff", lambda w, h: "the-diff")
     monkeypatch.setattr(orch._batch._recover, "distill_progress_note", lambda **kw: kw["diff"])
-    ctx = orch._batch.make_recovery_seed_for_plan(_plan(orch, "core"), 1, 2, holding="hold", session_id="s1")
+    ctx = orch._batch.make_recovery_seed_for_plan(_plan(orch, "core"), 1, 2, holding="hold", agent_id="s1")
     assert ctx["progress_note"] == "the-diff"
 
 
@@ -102,7 +102,7 @@ def test_spawn_implement_in_worktree_reuses_worktree(monkeypatch, tmp_path):
         def wait(self):
             return 0
 
-    def fake_popen(cmd, *, cwd=None, env=None, start_new_session=None):
+    def fake_popen(cmd, *, cwd=None, env=None, **kwargs):
         captured["cmd"] = cmd
         captured["cwd"] = cwd
         captured["env"] = env
@@ -134,7 +134,7 @@ def test_recovery_respawn_lands_on_success(monkeypatch, tmp_path):
         orch._batch._land_queue, "drain", lambda chunks, *, holding: [{"slug": "core", "status": "success"}]
     )
     out = orch._batch._recovery_respawn(
-        _plan(orch, "core"), 1, holding="hold", harness=None, model=None, session_id="s1", seed={"seed_summary": "note"}
+        _plan(orch, "core"), 1, holding="hold", harness=None, model=None, agent_id="s1", seed={"seed_summary": "note"}
     )
     assert out == [{"slug": "core", "status": "success"}]
 
@@ -147,7 +147,7 @@ def test_recovery_respawn_ejects_on_rebase_conflict(monkeypatch, tmp_path):
     emitted = []
     monkeypatch.setattr(orch._batch, "_emit_event", lambda ev, p: emitted.append((ev, p)))
     out = orch._batch._recovery_respawn(
-        _plan(orch, "core"), 1, holding="hold", harness=None, model=None, session_id="s1", seed={"seed_summary": "note"}
+        _plan(orch, "core"), 1, holding="hold", harness=None, model=None, agent_id="s1", seed={"seed_summary": "note"}
     )
     assert out[0]["status"] == "eject" and out[0]["reason"] == "rebase_conflicted"
     assert any(ev == "chunk_ejected" for ev, _ in emitted)
@@ -161,7 +161,7 @@ def test_recovery_respawn_ejects_on_implement_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(orch._batch, "_spawn_implement_in_worktree", lambda *a, **k: 1)
     monkeypatch.setattr(orch._batch, "_emit_event", lambda *a, **k: None)
     out = orch._batch._recovery_respawn(
-        _plan(orch, "core"), 1, holding="hold", harness=None, model=None, session_id="s1", seed={"seed_summary": "note"}
+        _plan(orch, "core"), 1, holding="hold", harness=None, model=None, agent_id="s1", seed={"seed_summary": "note"}
     )
     assert out[0]["status"] == "eject" and out[0]["reason"] == "implement_failed"
 
@@ -243,7 +243,7 @@ def test_recovery_pass_spaces_respawns_with_jittered_sleep(monkeypatch, tmp_path
         {"a", "b"},
         plans_by_slug=plans,
         holding="hold",
-        session_id="s1",
+        agent_id="s1",
         harness=None,
         is_afk=lambda s: True,
         context_builder=lambda p, a, c: {"slug": p.slug, "worktree": "w"},
@@ -270,7 +270,7 @@ def test_run_recovery_retry_marks_recovered(monkeypatch, tmp_path):
     monkeypatch.setattr(
         orch._batch,
         "make_recovery_seed_for_plan",
-        lambda p, a, c, *, holding, session_id: {"slug": p.slug, "worktree": "w"},
+        lambda p, a, c, *, holding, agent_id: {"slug": p.slug, "worktree": "w"},
     )
     monkeypatch.setattr(orch._batch._recover, "decide", lambda ctx: {"action": "retry", "rationale": "env"})
     monkeypatch.setattr(orch._batch._recover, "_emit_event", lambda *a, **k: None)
@@ -284,7 +284,7 @@ def test_run_recovery_retry_marks_recovered(monkeypatch, tmp_path):
         {"core"},
         plans_by_slug={"core": plan},
         holding="hold",
-        session_id="s1",
+        agent_id="s1",
         harness=None,
         model=None,
         load_plans=orch._load_plans,
@@ -301,7 +301,7 @@ def test_run_recovery_skipped_hitl_counts_neither(monkeypatch, tmp_path):
         {"ui"},
         plans_by_slug={"ui": ui},
         holding="hold",
-        session_id="s1",
+        agent_id="s1",
         harness=None,
         model=None,
         load_plans=orch._load_plans,
@@ -318,7 +318,7 @@ def test_run_recovery_stalled_is_reported(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         orch._batch,
         "make_recovery_seed_for_plan",
-        lambda p, a, c, *, holding, session_id: {"slug": p.slug, "worktree": "w"},
+        lambda p, a, c, *, holding, agent_id: {"slug": p.slug, "worktree": "w"},
     )
     monkeypatch.setattr(orch._batch._recover, "decide", lambda ctx: {"action": "retry", "rationale": "env"})
     monkeypatch.setattr(
@@ -334,7 +334,7 @@ def test_run_recovery_stalled_is_reported(monkeypatch, tmp_path, capsys):
         {"core"},
         plans_by_slug={"core": plan},
         holding="hold",
-        session_id="s1",
+        agent_id="s1",
         harness=None,
         model=None,
         load_plans=orch._load_plans,
@@ -383,7 +383,7 @@ def test_run_recovery_abandon_dead_letters(monkeypatch, tmp_path):
     monkeypatch.setattr(orch._batch, "_worktree_for_slug", lambda s: tmp_path)
     monkeypatch.setattr(orch._batch, "_teardown_ejected", lambda s: None)
     monkeypatch.setattr(
-        orch._batch, "make_recovery_seed_for_plan", lambda p, a, c, *, holding, session_id: {"slug": p.slug}
+        orch._batch, "make_recovery_seed_for_plan", lambda p, a, c, *, holding, agent_id: {"slug": p.slug}
     )
     monkeypatch.setattr(orch._batch._recover, "decide", lambda ctx: {"action": "abandon", "rationale": "no"})
     emitted = []
@@ -393,7 +393,7 @@ def test_run_recovery_abandon_dead_letters(monkeypatch, tmp_path):
         {"core"},
         plans_by_slug={"core": plan},
         holding="hold",
-        session_id="s1",
+        agent_id="s1",
         harness=None,
         model=None,
         load_plans=orch._load_plans,
@@ -413,7 +413,7 @@ def test_run_recovery_retry_without_success_not_marked_recovered(monkeypatch, tm
     monkeypatch.setattr(
         orch._batch,
         "make_recovery_seed_for_plan",
-        lambda p, a, c, *, holding, session_id: {"slug": p.slug, "worktree": "w"},
+        lambda p, a, c, *, holding, agent_id: {"slug": p.slug, "worktree": "w"},
     )
     monkeypatch.setattr(orch._batch._recover, "decide", lambda ctx: {"action": "retry", "rationale": "env"})
     monkeypatch.setattr(orch._batch._recover, "_emit_event", lambda *a, **k: None)
@@ -429,7 +429,7 @@ def test_run_recovery_retry_without_success_not_marked_recovered(monkeypatch, tm
         {"core"},
         plans_by_slug={"core": plan},
         holding="hold",
-        session_id="s1",
+        agent_id="s1",
         harness=None,
         model=None,
         load_plans=orch._load_plans,
@@ -448,7 +448,7 @@ def test_spawn_implement_in_worktree_omits_harness_and_model(monkeypatch, tmp_pa
         def wait(self):
             return 0
 
-    def fake_popen(cmd, *, cwd=None, env=None, start_new_session=None):
+    def fake_popen(cmd, *, cwd=None, env=None, **kwargs):
         captured["cmd"] = cmd
         return _P()
 

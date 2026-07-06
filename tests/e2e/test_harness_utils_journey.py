@@ -1,10 +1,10 @@
-"""E2E: mentat-implement's harness helpers over real config + session logs.
+"""E2E: mentat-implement's harness helpers over real config + agent logs.
 
 Drives ``.agents/skills/mentat-implement/scripts/harness_utils.py`` end to end:
 ``default_harness`` resolves through the REAL layered ``lib.config.read_config``
 (a real ``~/.mentat/config.toml`` on tmp_path, resolved via a redirected
 ``Path.home`` and a non-repo cwd so no repo layer applies), and
-``detect_self_answer`` scans REAL NDJSON session-log files through the real
+``detect_self_answer`` scans REAL NDJSON agent-log files through the real
 ``lib.harness_stream`` wire-shape parser. No mocking of the module under test.
 
 The script does a ``sys.path`` bootstrap and ``from lib import ...`` at import
@@ -73,13 +73,13 @@ def test_detect_self_answer_false_for_missing_path(harness_utils, tmp_path: Path
 
 
 def test_detect_self_answer_true_on_ask_user_question_row(harness_utils, tmp_path: Path):
-    log = tmp_path / "session.ndjson"
+    log = tmp_path / "agent.ndjson"
     log.write_text('{"type":"assistant","message":{"content":[{"type":"tool_use","name":"AskUserQuestion"}]}}\n')
     assert harness_utils.detect_self_answer(log) is True
 
 
 def test_detect_self_answer_false_when_no_ask_and_malformed_line_skipped(harness_utils, tmp_path: Path):
-    log = tmp_path / "session.ndjson"
+    log = tmp_path / "agent.ndjson"
     log.write_text(
         '{"type":"assistant","message":{"content":['
         '{"type":"tool_use","name":"Bash"}]}}\n'

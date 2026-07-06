@@ -49,7 +49,7 @@ Each of these terms is defined precisely in the [glossary](../../CONTEXT.md).
 ## Single agent or a whole batch
 
 Mentat scales down as cleanly as it scales out. One plan can run start-to-finish in
-a single session — implement, gate, land — without any fan-out at all. The same
+a single agent — implement, gate, land — without any fan-out at all. The same
 primitives drive both: the land queue with one chunk in it behaves exactly like the
 land queue with ten.
 

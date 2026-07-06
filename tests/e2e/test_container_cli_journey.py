@@ -793,7 +793,7 @@ def test_doctor_section_mentat_state_ok_with_logs_and_repo(cc, monkeypatch, tmp_
     assert w == []
     out = capsys.readouterr().out
     assert "present" in out
-    assert "1 sessions" in out
+    assert "1 agents" in out
     assert "config (repo)" in out
 
 

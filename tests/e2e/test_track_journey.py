@@ -1,12 +1,12 @@
 """E2E: the track journey over a real ~/.mentat/logs tree (guards the motivating bug).
 
-The "couldn't track sessions" regression was a reader invoked outside the writer's
+The "couldn't track agents" regression was a reader invoked outside the writer's
 cwd scanning an empty log dir and showing nothing. ``track`` now reads the fixed-path
 sqlite projection instead of a cwd-relative dir scan, so that failure mode can't recur.
-This is its real-subprocess twin: project a live + two terminal sessions into the db,
+This is its real-subprocess twin: project a live + two terminal agents into the db,
 seed the same tree on disk for ``list`` (still a dir scan), run the actual
 ``mentat-track`` CLI non-interactively (``track --all`` and ``list``), and assert
-every seeded session surfaces. If the tracker ever stops finding sessions again, this
+every seeded agent surfaces. If the tracker ever stops finding agents again, this
 test goes red.
 """
 
@@ -32,7 +32,7 @@ from lib import store  # noqa: E402
 
 SESSION_PY = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-track/scripts/track.py"
 
-# Statuses are pulled from each session's newest jsonl tail (sessions.derive_status):
+# Statuses are pulled from each agent's newest jsonl tail (agents.derive_status):
 # a terminal audit event → idle, a non-terminal tail that is fresh → working, the
 # same tail gone stale (no activity past STALE_SECS=300) → "?".
 _STALE_AGE = 600  # seconds older than STALE_SECS so the live tail reads as crashed
@@ -46,14 +46,14 @@ def _write_jsonl(path: Path, rows: list[dict], *, age: float = 0.0) -> None:
 
 
 def _seed_tree(log_root: Path, repo: str) -> Path:
-    """A repo log dir holding one working, one idle, and one stale session."""
+    """A repo log dir holding one working, one idle, and one stale agent."""
     repo_dir = log_root / repo
     repo_dir.mkdir(parents=True)
 
     # working: a fresh harness stream row (no `event` key), non-terminal tail.
     (repo_dir / "live-sess").mkdir()
     _write_jsonl(
-        repo_dir / "live-sess" / "session.jsonl",
+        repo_dir / "live-sess" / "transcript.jsonl",
         [{"type": "assistant", "message": {"content": [{"type": "text", "text": "thinking"}]}}],
     )
 
@@ -67,7 +67,7 @@ def _seed_tree(log_root: Path, repo: str) -> Path:
     # stale: a non-terminal tail backdated past STALE_SECS reads as crashed ("?").
     (repo_dir / "stale-sess").mkdir()
     _write_jsonl(
-        repo_dir / "stale-sess" / "session.jsonl",
+        repo_dir / "stale-sess" / "transcript.jsonl",
         [{"type": "assistant", "message": {"content": [{"type": "text", "text": "mid-flight"}]}}],
         age=_STALE_AGE,
     )
@@ -109,10 +109,10 @@ def test_track_all_lists_every_seeded_session(tmp_path, monkeypatch):
 
     out = _run(["track", "--all"], log_root, repo)
 
-    for session, status in (("live-sess", "working"), ("done-sess", "idle"), ("failed-sess", "idle")):
-        line = next((ln for ln in out.splitlines() if session in ln), None)
-        assert line is not None, f"{session} missing from track --all output:\n{out}"
-        assert status in line, f"{session} wrong status (want {status!r}):\n{line!r}"
+    for agent, status in (("live-sess", "working"), ("done-sess", "idle"), ("failed-sess", "idle")):
+        line = next((ln for ln in out.splitlines() if agent in ln), None)
+        assert line is not None, f"{agent} missing from track --all output:\n{out}"
+        assert status in line, f"{agent} wrong status (want {status!r}):\n{line!r}"
 
 
 def test_list_lists_every_seeded_session(tmp_path, monkeypatch):
@@ -141,21 +141,21 @@ def test_list_lists_every_seeded_session(tmp_path, monkeypatch):
         sd = log_root / repo / agent_id
         sd.mkdir(parents=True, exist_ok=True)
         if agent_id == "live-sess":
-            (sd / "session.jsonl").write_text(
+            (sd / "transcript.jsonl").write_text(
                 json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "thinking"}]}}) + "\n"
             )
         if agent_id == "stale-sess":
             old = time.time() - _STALE_AGE
             os.utime(sd, (old, old))
-            (sd / "session.jsonl").write_text(
+            (sd / "transcript.jsonl").write_text(
                 json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "mid-flight"}]}})
                 + "\n"
             )
-            os.utime(sd / "session.jsonl", (old, old))
+            os.utime(sd / "transcript.jsonl", (old, old))
 
     out = _run(["list"], log_root, repo)
 
-    for session, status in (("live-sess", "working"), ("idle-sess", "idle"), ("stale-sess", "?")):
-        line = next((ln for ln in out.splitlines() if session in ln), None)
-        assert line is not None, f"{session} missing from list output:\n{out}"
-        assert status in line, f"{session} wrong status (want {status!r}):\n{line!r}"
+    for agent, status in (("live-sess", "working"), ("idle-sess", "idle"), ("stale-sess", "?")):
+        line = next((ln for ln in out.splitlines() if agent in ln), None)
+        assert line is not None, f"{agent} missing from list output:\n{out}"
+        assert status in line, f"{agent} wrong status (want {status!r}):\n{line!r}"

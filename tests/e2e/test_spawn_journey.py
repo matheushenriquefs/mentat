@@ -2,9 +2,9 @@
 
 Drives ``spawn.py`` by monkeypatching the single process seam
 (``spawn_mod.subprocess.Popen``) with a recorder that captures the child cmd,
-env, and ``start_new_session`` flag. No real subprocess is ever launched.
+env, and the new-process-group flag. No real subprocess is ever launched.
 Log dirs are isolated by pointing ``MENTAT_LOG_PATH`` at a tmp dir and freezing
-``MENTAT_REPO`` so the session dir arithmetic lands under tmp.
+``MENTAT_REPO`` so the agent log dir arithmetic lands under tmp.
 """
 
 from __future__ import annotations
@@ -27,16 +27,31 @@ spawn_mod = load_script(REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts/s
 class FakePopen:
     """Stand-in for subprocess.Popen: records how it was constructed."""
 
-    def __init__(self, cmd, *, env=None, start_new_session=False, **kwargs) -> None:
+    def __init__(self, cmd, **kwargs) -> None:
         self.cmd = cmd
-        self.env = env
-        self.start_new_session = start_new_session
+        self.env = kwargs.get("env")
+        self.new_group = kwargs.get(spawn_mod._POPEN_NEW_GROUP)
         self.kwargs = kwargs
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc: object) -> bool:
+        return False
+
+    def wait(self) -> int:
+        return 0
+
+    def communicate(self, input=None, timeout=None):
+        return ("", "")
+
+    def kill(self) -> None:
+        return None
 
 
 @pytest.fixture
 def isolate_logs(monkeypatch, tmp_path):
-    """Point the log root at tmp and freeze the repo name so session dirs land
+    """Point the log root at tmp and freeze the repo name so agent log dirs land
     under tmp, and swap Popen for a capturing fake."""
     log_root = tmp_path / "logs"
     log_root.mkdir()
@@ -49,7 +64,7 @@ def isolate_logs(monkeypatch, tmp_path):
         captured["proc"] = proc
         return proc
 
-    monkeypatch.setattr(spawn_mod.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(spawn_mod, "subprocess", types.SimpleNamespace(Popen=fake_popen))
     worktree = tmp_path / "chunk-wt"
     worktree.mkdir()
     mock_fan_out_worktree(monkeypatch, spawn_mod, worktree)
@@ -73,16 +88,16 @@ def test_log_dir_for_lands_under_tmp_log_root(isolate_logs):
 # ── _spawn_worktree_subprocess ────────────────────────────────────────────────
 
 
-def test_spawn_worktree_session_id_shape(isolate_logs, tmp_path):
+def test_spawn_worktree_agent_id_shape(isolate_logs, tmp_path):
     plan = _plan_file(tmp_path)
-    session_id, _proc, _wt = spawn_mod._spawn_worktree_subprocess(plan)
-    assert re.fullmatch(r"[0-9a-f]{32}", session_id), f"expected uuid session id, got {session_id!r}"
+    agent_id, _proc, _wt = spawn_mod._spawn_worktree_subprocess(plan)
+    assert re.fullmatch(r"[0-9a-f]{32}", agent_id), f"expected uuid agent id, got {agent_id!r}"
 
 
 def test_spawn_worktree_creates_log_dir_0700(isolate_logs, tmp_path):
     plan = _plan_file(tmp_path)
-    session_id, _proc, _wt = spawn_mod._spawn_worktree_subprocess(plan)
-    log_dir = isolate_logs.log_root / "fixrepo" / session_id
+    agent_id, _proc, _wt = spawn_mod._spawn_worktree_subprocess(plan)
+    log_dir = isolate_logs.log_root / "fixrepo" / agent_id
     assert log_dir.exists()
     assert log_dir.stat().st_mode & 0o777 == 0o700
 
@@ -111,10 +126,10 @@ def test_spawn_worktree_cmd_appends_harness_and_model(isolate_logs, tmp_path):
 
 def test_spawn_worktree_env_carries_session_and_log(isolate_logs, tmp_path):
     plan = _plan_file(tmp_path)
-    session_id, _proc, _wt = spawn_mod._spawn_worktree_subprocess(plan)
+    agent_id, _proc, _wt = spawn_mod._spawn_worktree_subprocess(plan)
     proc = isolate_logs.captured["proc"]
-    assert proc.env["MENTAT_AGENT"] == session_id
-    expected_log = isolate_logs.log_root / "fixrepo" / session_id / "session.jsonl"
+    assert proc.env["MENTAT_AGENT"] == agent_id
+    expected_log = isolate_logs.log_root / "fixrepo" / agent_id / "transcript.jsonl"
     assert proc.env["MENTAT_AGENT_LOG"] == str(expected_log)
 
 
@@ -135,13 +150,13 @@ def test_spawn_worktree_includes_seed_summary_when_passed(isolate_logs, tmp_path
 def test_spawn_worktree_starts_new_session(isolate_logs, tmp_path):
     plan = _plan_file(tmp_path)
     spawn_mod._spawn_worktree_subprocess(plan)
-    assert isolate_logs.captured["proc"].start_new_session is True
+    assert isolate_logs.captured["proc"].new_group is True
 
 
-def test_spawn_worktree_returns_session_id_and_proc(isolate_logs, tmp_path):
+def test_spawn_worktree_returns_agent_id_and_proc(isolate_logs, tmp_path):
     plan = _plan_file(tmp_path)
-    session_id, proc, _wt = spawn_mod._spawn_worktree_subprocess(plan)
-    assert isinstance(session_id, str)
+    agent_id, proc, _wt = spawn_mod._spawn_worktree_subprocess(plan)
+    assert isinstance(agent_id, str)
     assert proc is isolate_logs.captured["proc"]
 
 
@@ -169,26 +184,26 @@ def test_spawn_with_proc_emits_passed_harness(isolate_logs, tmp_path, monkeypatc
     assert events[0][1]["harness"] == "claude"
 
 
-def test_spawn_with_proc_prints_track_command_and_session_id(isolate_logs, tmp_path, monkeypatch, capsys):
+def test_spawn_with_proc_prints_track_command_and_agent_id(isolate_logs, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(spawn_mod, "_emit_event", lambda name, payload: None)
-    session_id, _proc = spawn_mod.spawn_with_proc(_fake_plan(tmp_path))
+    agent_id, _proc = spawn_mod.spawn_with_proc(_fake_plan(tmp_path))
     out = capsys.readouterr().out
-    assert f"mentat-track track {session_id}" in out
-    assert session_id in out
+    assert f"mentat-track track {agent_id}" in out
+    assert agent_id in out
 
 
-def test_spawn_with_proc_returns_session_id_and_proc(isolate_logs, tmp_path, monkeypatch):
+def test_spawn_with_proc_returns_agent_id_and_proc(isolate_logs, tmp_path, monkeypatch):
     monkeypatch.setattr(spawn_mod, "_emit_event", lambda name, payload: None)
-    session_id, proc = spawn_mod.spawn_with_proc(_fake_plan(tmp_path))
-    assert isinstance(session_id, str)
+    agent_id, proc = spawn_mod.spawn_with_proc(_fake_plan(tmp_path))
+    assert isinstance(agent_id, str)
     assert proc is isolate_logs.captured["proc"]
 
 
 # ── spawn ─────────────────────────────────────────────────────────────────────
 
 
-def test_spawn_returns_only_session_id(isolate_logs, tmp_path, monkeypatch):
+def test_spawn_returns_only_agent_id(isolate_logs, tmp_path, monkeypatch):
     monkeypatch.setattr(spawn_mod, "_emit_event", lambda name, payload: None)
     result = spawn_mod.spawn(_fake_plan(tmp_path))
     assert isinstance(result, str)
-    assert re.fullmatch(r"[0-9a-f]{32}", result), f"expected uuid session id, got {result!r}"
+    assert re.fullmatch(r"[0-9a-f]{32}", result), f"expected uuid agent id, got {result!r}"

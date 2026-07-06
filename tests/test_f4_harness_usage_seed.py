@@ -1,4 +1,4 @@
-"""F4: fresh-session-over-compact spike — usage reporting + seeded spawn.
+"""F4: fresh-agent-over-compact spike — usage reporting + seeded spawn.
 
 Red tracers:
 - Result.usage_tokens attribute exists on both adapters (int | None)
@@ -70,12 +70,12 @@ def test_cursor_invoke_accepts_seed_summary() -> None:
 
 
 def test_claude_code_parses_usage_from_stream_json(tmp_path: Path) -> None:
-    """F4 tracer: after a run with session_log, usage_tokens is populated from the log."""
+    """F4 tracer: after a run with agent_log, usage_tokens is populated from the log."""
     import os
 
     cc = load_module("claude_code")
 
-    log = tmp_path / "session.jsonl"
+    log = tmp_path / "transcript.jsonl"
     result_event = {
         "type": "result",
         "result": "done",
@@ -89,7 +89,7 @@ def test_claude_code_parses_usage_from_stream_json(tmp_path: Path) -> None:
     log_line = (json.dumps(result_event) + "\n").encode()
 
     def fake_run(cmd, **kwargs):
-        # adapter opens session_log with "wb" and passes fh as stdout;
+        # adapter opens agent_log with "wb" and passes fh as stdout;
         # write the fake event so _parse_usage can read it after the run
         fh = kwargs.get("stdout")
         if fh is not None:

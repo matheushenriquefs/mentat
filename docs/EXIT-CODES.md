@@ -35,7 +35,7 @@ pick a convention, document it, move on.
 `EX_SOFTWARE (70)` is reserved for unhandled Python exceptions only.
 
 **Code 42:** Fabricated sentinel, not in sysexits. AFK plans exit 42 when
-the interactive user-prompt tool is invoked mid-session (any harness adapter —
+the interactive user-prompt tool is invoked mid-agent (any harness adapter —
 Claude Code's `AskUserQuestion`, Cursor's equivalent, etc.). Distinct from
 0/1/signal codes.
 

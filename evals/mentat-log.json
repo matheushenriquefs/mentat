@@ -27,7 +27,7 @@
       "type": "functional"
     },
     {
-      "id": "prune-old-sessions",
+      "id": "prune-old-agents",
       "description": "prune removes dirs older than cutoff",
       "type": "functional"
     }
@@ -35,7 +35,7 @@
   "eval_queries": [
     "emit a chunk_started event for path /tmp/test.md",
     "validate the log file at /tmp/test.jsonl",
-    "query session s1 for gate_evaluated events",
-    "prune sessions older than 2026-01-01"
+    "query agent s1 for gate_evaluated events",
+    "prune agents older than 2026-01-01"
   ]
 }

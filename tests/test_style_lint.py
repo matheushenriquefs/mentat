@@ -56,7 +56,7 @@ CLEAN_FULL = textwrap.dedent("""\
 
     # mentat-implement
 
-    Atomic single-plan executor. One job: execute one plan in the calling session.
+    Atomic single-plan executor. One job: execute one plan in the calling agent.
 
     ## Phase 1 — Preflight
 
@@ -73,7 +73,7 @@ CLEAN_FULL = textwrap.dedent("""\
     3. Run the gate. Any veto → fix, re-commit.
     4. Commit the slice via `/mentat-commit`.
 
-    If AFK class and ambiguity detected in session JSONL → emit `chunk_ejected`, exit 42.
+    If AFK class and ambiguity detected in agent JSONL → emit `chunk_ejected`, exit 42.
 
     ## Phase 3 — Gate
 
@@ -115,7 +115,7 @@ CLEAN_FULL = textwrap.dedent("""\
     - AFK class: no interactive prompts; ambiguity is ejection, not a question.
     - Harness selection from `~/.mentat/config.toml`; `--harness` flag overrides.
     - Plan class read from frontmatter only; no env var override.
-    - Session id from `$MENTAT_AGENT` (`<epoch>-<pid>` format).
+    - Agent id from `$MENTAT_AGENT` (`<epoch>-<pid>` format).
     - Log dir created mode 0o700 on first write.
     - All emit calls route through `/mentat-log emit`; no skill writes JSONL directly.
 

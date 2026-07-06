@@ -2,7 +2,7 @@
 
 Drives the actual ``tasks.py`` CLI through its real ``main(argv)`` dispatch across the
 whole vertical: create → list → claim → refresh → done, plus release and wontfix. The
-create/claim/done paths emit through the real ``mentat-log`` subprocess (session state
+create/claim/done paths emit through the real ``mentat-log`` subprocess (agent state
 pointed at tmp, HOME left real so the emitter resolves), so the audit trail is written for
 real. Asserts on-disk frontmatter transitions, the claim lockfile lifecycle, and the
 emitted task.* audit rows. In-process so the tasks dispatch is measured.
@@ -59,8 +59,8 @@ def _fm(path: Path) -> dict[str, str]:
     return fm
 
 
-def _emitted_events(session_id: str) -> list[str]:
-    return event_kinds(session_id)
+def _emitted_events(agent_id: str) -> list[str]:
+    return event_kinds(agent_id)
 
 
 def test_tasks_create_claim_refresh_done_lifecycle(store, capsys):

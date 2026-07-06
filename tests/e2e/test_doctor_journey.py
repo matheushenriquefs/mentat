@@ -1,6 +1,6 @@
-"""E2E: ``mentat-track doctor`` over a real seeded session.
+"""E2E: ``mentat-track doctor`` over a real seeded agent.
 
-Seed a session whose canonical store ends in a clean ``chunk_landed``,
+Seed a agent whose canonical store ends in a clean ``chunk_landed``,
 then run the actual ``mentat-track doctor`` CLI non-interactively.
 """
 
@@ -22,11 +22,11 @@ SESSION_PY = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-track/
 def test_doctor_reports_a_clean_landing(tmp_path):
     repo = "doctorrepo"
     log_root = tmp_path / "logs"
-    session_id = "orchestrate-main-1"
+    agent_id = "orchestrate-main-1"
     seed_agent_events(
         tmp_path,
         repo,
-        session_id,
+        agent_id,
         [
             {"ts": "2026-06-30T00:00:00Z", "event": "chunk_started", "payload": {"path": "tiny.md"}},
             {
@@ -41,7 +41,7 @@ def test_doctor_reports_a_clean_landing(tmp_path):
             },
         ],
     )
-    sd = log_root / repo / session_id
+    sd = log_root / repo / agent_id
     sd.mkdir(parents=True, exist_ok=True)
 
     env = subprocess_env(
@@ -50,7 +50,7 @@ def test_doctor_reports_a_clean_landing(tmp_path):
         MENTAT_DB=str(tmp_path / "mentat.db"),
     )
     proc = subprocess.run(
-        [sys.executable, str(SESSION_PY), "doctor", session_id],
+        [sys.executable, str(SESSION_PY), "doctor", agent_id],
         env=env,
         stdin=subprocess.DEVNULL,
         capture_output=True,

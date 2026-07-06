@@ -2,7 +2,7 @@
 
 The id is an opaque ``uuid7`` — repo/branch/pid are recorded as *fields*, never
 encoded into the id, so a ``/``-branch can't nest a dir, a reused pid can't
-collide, and no ``orphan-session-`` fallback is reachable. One helper mints it;
+collide, and no ``orphan-agent-`` fallback is reachable. One helper mints it;
 ``ensure_agent`` exports ``MENTAT_AGENT`` + ``MENTAT_AGENT_LOG`` (and the
 ``MENTAT_AGENT_{ROLE,SLUG,PID,BRANCH}`` fields) before any harness spawn.
 """
@@ -43,7 +43,7 @@ def test_make_agent_id_is_unique_per_call() -> None:
 
 
 def test_make_agent_id_slash_slug_stays_flat(tmp_path, monkeypatch) -> None:
-    """A '/'-bearing slug (branch) never nests the session dir — the id is a uuid."""
+    """A '/'-bearing slug (branch) never nests the agent log dir — the id is a uuid."""
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "demo")
     sid = agent_mod.make_agent_id("implement", "feat/x")
@@ -73,7 +73,7 @@ def test_ensure_agent_exports_env(monkeypatch, tmp_path) -> None:
 
 
 def test_emit_without_session_env_mints_uuid_not_orphan(monkeypatch, tmp_path) -> None:
-    """A raw emit with MENTAT_AGENT unset lands in a real uuid dir — never orphan-session-*."""
+    """A raw emit with MENTAT_AGENT unset lands in a real uuid dir — never orphan-agent-*."""
     log_mod = _load_log()
     monkeypatch.delenv("MENTAT_AGENT", raising=False)
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
@@ -88,11 +88,11 @@ def test_emit_without_session_env_mints_uuid_not_orphan(monkeypatch, tmp_path) -
     assert log_mod.cmd_emit(args) == 0
 
     repo_dir = tmp_path / "demo"
-    session_dirs = [d for d in repo_dir.iterdir() if d.is_dir()]
-    assert len(session_dirs) == 1
-    name = session_dirs[0].name
-    assert not name.startswith("orphan-session-"), f"orphan fallback reached: {name!r}"
-    assert UUID_HEX.match(name), f"expected uuid session dir, got {name!r}"
+    agent_dirs = [d for d in repo_dir.iterdir() if d.is_dir()]
+    assert len(agent_dirs) == 1
+    name = agent_dirs[0].name
+    assert not name.startswith("orphan-agent-"), f"orphan fallback reached: {name!r}"
+    assert UUID_HEX.match(name), f"expected uuid agent log dir, got {name!r}"
 
 
 def test_ensure_agent_records_branch_when_resolvable(monkeypatch, tmp_path) -> None:
@@ -176,11 +176,11 @@ def test_ensure_agent_preserves_existing(monkeypatch, tmp_path) -> None:
     assert agent_mod.ensure_agent("implement", "p") == "orchestrate-batch-9"
 
 
-# ── source contract: no legacy formats survive at any session-minting site ──
+# ── source contract: no legacy formats survive at any agent-minting site ──
 
-# Pure session-minting sites. orchestrate.py is covered by the shared-minter
+# Pure agent-minting sites. orchestrate.py is covered by the shared-minter
 # check below; its residual `mentat-manual-` is a worktree-prune name filter
-# (re-keyed to path in S3), not a session-minting literal.
+# (re-keyed to path in S3), not a agent-minting literal.
 _MINT_SITES = [
     "mentat-log/scripts/log.py",
     "mentat-orchestrate/scripts/spawn.py",
@@ -188,7 +188,7 @@ _MINT_SITES = [
 ]
 _FORBIDDEN = {
     "mentat-manual- literal": re.compile(r"mentat-manual-"),
-    "auto- session literal": re.compile(r"""["']auto-"""),
+    "auto- agent literal": re.compile(r"""["']auto-"""),
     "<epoch> segment": re.compile(r"timestamp\(\)"),
 }
 
@@ -197,7 +197,7 @@ _FORBIDDEN = {
 def test_no_legacy_session_literals(rel: str) -> None:
     text = (SKILLS / rel).read_text()
     bad = [name for name, rx in _FORBIDDEN.items() if rx.search(text)]
-    assert bad == [], f"{rel} still carries legacy session formats: {bad}"
+    assert bad == [], f"{rel} still carries legacy agent formats: {bad}"
 
 
 @pytest.mark.parametrize(

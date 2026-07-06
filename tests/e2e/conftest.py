@@ -1,6 +1,6 @@
 """E2E pytest isolation: ephemeral git sandboxes only.
 
-Real-git journeys run under a session-scoped temp tree. ``tmp_path`` is
+Real-git journeys run under a agent-scoped temp tree. ``tmp_path`` is
 redirected into that tree so subprocess git never discovers or mutates the live
 checkout (including linked worktrees sharing the bind-mounted ``.git``).
 """
@@ -30,9 +30,9 @@ def _live_git(*args: str) -> str:
     return r.stdout.strip()
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def _e2e_live_repo_guard() -> None:
-    """Fail the e2e session if any test mutates the real checkout."""
+    """Fail the e2e agent if any test mutates the real checkout."""
     try:
         _LIVE_SNAPSHOT["head"] = _live_git("rev-parse", "HEAD")
         _LIVE_SNAPSHOT["branch"] = _live_git("branch", "--show-current")
@@ -46,7 +46,7 @@ def _e2e_live_repo_guard() -> None:
     assert _live_git("worktree", "list", "--porcelain") == _LIVE_SNAPSHOT["wt_list"], "e2e mutated live worktree list"
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def e2e_sandbox_root() -> Path:
     root = Path(tempfile.mkdtemp(prefix="mentat-e2e-"))
     yield root

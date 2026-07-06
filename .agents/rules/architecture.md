@@ -25,7 +25,7 @@ and runs gates, `score.py` aggregates reviewer verdicts, `code/precommit.py` and
 `models.py` or a `handlers.py`.
 
 The two surfaces follow the same rule. `.agents/lib/` holds one module per concept
-(`session.py`, `worktrees.py`, `events.py`, `config.py`), each owning the data and
+(`agent.py`, `worktrees.py`, `events.py`, `config.py`), each owning the data and
 the logic for that concept together. `.agents/skills/*/scripts/` holds the
 entry-point logic for one skill, named for the skill's job.
 

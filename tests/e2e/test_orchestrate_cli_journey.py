@@ -421,7 +421,7 @@ def test_build_parser_land_queue_namespace(orch):
 def test_build_parser_batch_review_namespace(orch):
     args = orch.build_parser().parse_args(["batch-review", "sess"])
     assert args.cmd == "batch-review"
-    assert args.session == "sess"
+    assert args.agent == "sess"
 
 
 def test_build_parser_requires_subcommand(orch):

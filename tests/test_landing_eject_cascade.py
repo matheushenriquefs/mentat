@@ -10,7 +10,7 @@ ejected. The land queue re-evaluates each against the new holding tip:
 
 The blind cascade survives only for *anchored* downstream — plans the land
 queue never re-tests (HITL, or AFK anchored via a HITL relation). They run
-in-session, so a dead upstream must still block them.
+in-agent, so a dead upstream must still block them.
 
 ADR-0007: no new event names — chunk_ejected / chunk_landed / chunk_teardown.
 """

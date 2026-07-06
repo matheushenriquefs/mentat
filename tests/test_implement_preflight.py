@@ -177,7 +177,7 @@ def test_main_invokes_preflight_then_chdir(main_repo, tmp_path, monkeypatch):
 
 def test_in_shared_main_tree_true_in_main(main_repo):
     """In the main worktree of a real repo (no skip), running there is unsafe —
-    a branch switch flips HEAD for every concurrent session sharing the tree."""
+    a branch switch flips HEAD for every concurrent agent sharing the tree."""
     impl = _load()
     assert impl._in_shared_main_tree() is True
 

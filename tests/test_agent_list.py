@@ -55,52 +55,52 @@ def _ev(event: str, epoch: float, **payload) -> dict:
 
 
 def test_derive_status_terminal_is_idle():
-    sessions = load_module("registry")
-    assert sessions.derive_status(_ev("chunk_landed", 0, slug="x", sha="a", holding="h"), 9999.0) == "idle"
-    assert sessions.derive_status(_ev("agent_stopped", 0, reason="ok"), 9999.0) == "idle"
+    agents = load_module("registry")
+    assert agents.derive_status(_ev("chunk_landed", 0, slug="x", sha="a", holding="h"), 9999.0) == "idle"
+    assert agents.derive_status(_ev("agent_stopped", 0, reason="ok"), 9999.0) == "idle"
 
 
 def test_derive_status_nonterminal_fresh_is_working():
-    sessions = load_module("registry")
+    agents = load_module("registry")
     assert (
-        sessions.derive_status(_ev("gate_evaluated", 0, gate="g", verdict="pass", severity="", message=""), 1.0)
+        agents.derive_status(_ev("gate_evaluated", 0, gate="g", verdict="pass", severity="", message=""), 1.0)
         == "working"
     )
 
 
 def test_derive_status_nonterminal_stale_is_crashed():
-    sessions = load_module("registry")
-    age = sessions.STALE_SECS + 60
-    assert sessions.derive_status(_ev("chunk_started", 0, slug="x", plan="p", harness="h", worktree="w"), age) == "?"
+    agents = load_module("registry")
+    age = agents.STALE_SECS + 60
+    assert agents.derive_status(_ev("chunk_started", 0, slug="x", plan="p", harness="h", worktree="w"), age) == "?"
 
 
 def test_derive_status_hitl_eject_is_waiting():
-    sessions = load_module("registry")
+    agents = load_module("registry")
     row = _ev("chunk_ejected", 0, slug="x", reason="hitl_required", where="impl")
-    assert sessions.derive_status(row, sessions.STALE_SECS + 999) == "waiting"
+    assert agents.derive_status(row, agents.STALE_SECS + 999) == "waiting"
 
 
 def test_derive_status_waiting_stream_askuserquestion():
-    sessions = load_module("registry")
+    agents = load_module("registry")
     stream_row = {
         "type": "assistant",
         "message": {"content": [{"type": "tool_use", "name": "AskUserQuestion"}]},
     }
-    assert sessions.derive_status(stream_row, 1.0) == "waiting"
+    assert agents.derive_status(stream_row, 1.0) == "waiting"
 
 
 def test_derive_status_empty_is_crashed_when_stale():
-    sessions = load_module("registry")
-    assert sessions.derive_status(None, sessions.STALE_SECS + 1) == "?"
+    agents = load_module("registry")
+    assert agents.derive_status(None, agents.STALE_SECS + 1) == "?"
 
 
-# ── list_sessions (registry scan + attention ordering) ────────────────────────
+# ── list_agents (registry scan + attention ordering) ────────────────────────
 
 
-def test_list_sessions_full_rank_order(tmp_path, monkeypatch):
+def test_list_agents_full_rank_order(tmp_path, monkeypatch):
     """All four ranks present and fully ordered waiting < idle < ? < working."""
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("registry")
+    agents = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     now = 1_000_000.0
     _write_log(
@@ -116,7 +116,7 @@ def test_list_sessions_full_rank_order(tmp_path, monkeypatch):
     _write_log(
         tmp_path,
         "s-crashed",
-        [_ev("gate_evaluated", now - (sessions.STALE_SECS + 500), gate="g", verdict="p", severity="", message="")],
+        [_ev("gate_evaluated", now - (agents.STALE_SECS + 500), gate="g", verdict="p", severity="", message="")],
     )
     _write_log(
         tmp_path,
@@ -124,15 +124,15 @@ def test_list_sessions_full_rank_order(tmp_path, monkeypatch):
         [_ev("gate_evaluated", now - 5, gate="g", verdict="p", severity="", message="")],
     )
 
-    rows = sessions.list_agents(repo_dir, now=now)
+    rows = agents.list_agents(repo_dir, now=now)
     assert [r["status"] for r in rows] == ["waiting", "idle", "?", "working"]
     assert [r["agent"] for r in rows] == ["s-waiting", "s-idle", "s-crashed", "s-working"]
 
 
-def test_list_sessions_age_tiebreak_within_rank(tmp_path, monkeypatch):
-    """Within one rank, the fresher (smaller age) session sorts first."""
+def test_list_agents_age_tiebreak_within_rank(tmp_path, monkeypatch):
+    """Within one rank, the fresher (smaller age) agent sorts first."""
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("registry")
+    agents = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     now = 1_000_000.0
     _write_log(
@@ -145,51 +145,51 @@ def test_list_sessions_age_tiebreak_within_rank(tmp_path, monkeypatch):
         "s-new",
         [_ev("gate_evaluated", now - 5, gate="g", verdict="p", severity="", message="")],
     )
-    rows = sessions.list_agents(repo_dir, now=now)
+    rows = agents.list_agents(repo_dir, now=now)
     assert [r["agent"] for r in rows] == ["s-new", "s-old"]
 
 
-def test_list_sessions_survives_vanished_file(tmp_path, monkeypatch):
+def test_list_agents_survives_vanished_file(tmp_path, monkeypatch):
     """Store-backed registry scan must not raise when log dirs are present."""
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("registry")
+    agents = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     _write_log(
         tmp_path,
         "s-1",
         [_ev("gate_evaluated", 1_000_000.0, gate="g", verdict="p", severity="", message="")],
     )
-    rows = sessions.list_agents(repo_dir, now=1_000_000.0)
+    rows = agents.list_agents(repo_dir, now=1_000_000.0)
     assert isinstance(rows, list)
 
 
-def test_list_sessions_killed_shows_crashed(tmp_path, monkeypatch):
+def test_list_agents_killed_shows_crashed(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("registry")
+    agents = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     now = 9_999_999_999.0
     _write_log(
         tmp_path,
         "implement-dead-9",
-        [_ev("chunk_started", now - (sessions.STALE_SECS + 60), slug="d", plan="p", harness="h", worktree="w")],
+        [_ev("chunk_started", now - (agents.STALE_SECS + 60), slug="d", plan="p", harness="h", worktree="w")],
     )
-    rows = sessions.list_agents(repo_dir, now=now, active_only=False)
+    rows = agents.list_agents(repo_dir, now=now, active_only=False)
     assert len(rows) == 1
     assert rows[0]["status"] == "?"
     assert rows[0]["agent"] == "implement-dead-9"
 
 
-def test_list_sessions_empty_repo(tmp_path, monkeypatch):
+def test_list_agents_empty_repo(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("registry")
+    agents = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     repo_dir.mkdir(parents=True)
-    assert sessions.list_agents(repo_dir, now=1.0) == []
+    assert agents.list_agents(repo_dir, now=1.0) == []
 
 
-def test_list_sessions_records_mtime_and_last_event(tmp_path, monkeypatch):
+def test_list_agents_records_mtime_and_last_event(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("registry")
+    agents = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     event_ts = 1_234_500.0
     _write_log(
@@ -197,7 +197,7 @@ def test_list_sessions_records_mtime_and_last_event(tmp_path, monkeypatch):
         "implement-a-1",
         [_ev("gate_evaluated", event_ts, gate="g", verdict="p", severity="", message="")],
     )
-    rows = sessions.list_agents(repo_dir, now=1_234_600.0)
+    rows = agents.list_agents(repo_dir, now=1_234_600.0)
     assert rows[0]["last_event"] == "gate_evaluated"
     assert rows[0]["mtime"] == event_ts
     assert rows[0]["age"] == 100.0
@@ -208,7 +208,7 @@ def test_list_sessions_records_mtime_and_last_event(tmp_path, monkeypatch):
 
 def test_cmd_list_renders_table(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    session = load_module("track")
+    agent = load_module("track")
     _write_log(
         tmp_path,
         "implement-a-1",
@@ -217,7 +217,7 @@ def test_cmd_list_renders_table(tmp_path, monkeypatch):
     env = {"MENTAT_LOG_PATH": str(tmp_path / "logs"), "MENTAT_REPO": "myrepo"}
     buf = io.StringIO()
     with patch.dict(os.environ, env, clear=False), redirect_stdout(buf):
-        rc = session.cmd_list()
+        rc = agent.cmd_list()
     out = buf.getvalue()
     assert rc == 0
     assert "implement-a-1" in out
@@ -226,12 +226,12 @@ def test_cmd_list_renders_table(tmp_path, monkeypatch):
 
 def test_cmd_list_no_sessions(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    session = load_module("track")
+    agent = load_module("track")
     (tmp_path / "logs" / "myrepo").mkdir(parents=True)
     env = {"MENTAT_LOG_PATH": str(tmp_path / "logs"), "MENTAT_REPO": "myrepo"}
     buf = io.StringIO()
     with patch.dict(os.environ, env, clear=False), redirect_stdout(buf):
-        rc = session.cmd_list()
+        rc = agent.cmd_list()
     assert rc == 0
     assert "no agents" in buf.getvalue().lower()
 
@@ -239,13 +239,13 @@ def test_cmd_list_no_sessions(tmp_path, monkeypatch):
 # ── V6: active_only filter + --all flag ──────────────────────────────────────
 
 
-def test_list_sessions_active_only_drops_old_idle(tmp_path, monkeypatch):
+def test_list_agents_active_only_drops_old_idle(tmp_path, monkeypatch):
     """active_only=True keeps working/waiting + recent idle, drops old idle + old crashed."""
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("registry")
+    agents = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     now = 1_000_000.0
-    recency = sessions._RECENCY_SECS
+    recency = agents._RECENCY_SECS
 
     _write_log(
         tmp_path,
@@ -273,7 +273,7 @@ def test_list_sessions_active_only_drops_old_idle(tmp_path, monkeypatch):
         [
             _ev(
                 "gate_evaluated",
-                now - (sessions.STALE_SECS + recency + 9999),
+                now - (agents.STALE_SECS + recency + 9999),
                 gate="g",
                 verdict="p",
                 severity="",
@@ -282,7 +282,7 @@ def test_list_sessions_active_only_drops_old_idle(tmp_path, monkeypatch):
         ],
     )
 
-    rows_active = sessions.list_agents(repo_dir, now=now, active_only=True)
+    rows_active = agents.list_agents(repo_dir, now=now, active_only=True)
     names_active = {r["agent"] for r in rows_active}
     assert "s-working" in names_active
     assert "s-waiting" in names_active
@@ -290,16 +290,16 @@ def test_list_sessions_active_only_drops_old_idle(tmp_path, monkeypatch):
     assert "s-idle-old" not in names_active
     assert "s-crashed-old" not in names_active
 
-    rows_all = sessions.list_agents(repo_dir, now=now, active_only=False)
+    rows_all = agents.list_agents(repo_dir, now=now, active_only=False)
     assert len(rows_all) == 5
 
 
 def test_cmd_list_all_flag(tmp_path, monkeypatch):
-    """cmd_list(all_sessions=True) shows old sessions; False hides them."""
+    """cmd_list(all_agents=True) shows old agents; False hides them."""
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    session = load_module("track")
-    sessions = load_module("registry")
-    recency = sessions._RECENCY_SECS
+    agent = load_module("track")
+    agents = load_module("registry")
+    recency = agents._RECENCY_SECS
     now = 1_000_000.0
     env = {"MENTAT_LOG_PATH": str(tmp_path / "logs"), "MENTAT_REPO": "myrepo"}
 
@@ -313,22 +313,22 @@ def test_cmd_list_all_flag(tmp_path, monkeypatch):
     buf_all = io.StringIO()
     with patch.dict(os.environ, env, clear=False):
         with redirect_stdout(buf_active):
-            session.cmd_list(all_sessions=False)
+            agent.cmd_list(all_agents=False)
         with redirect_stdout(buf_all):
-            session.cmd_list(all_sessions=True)
+            agent.cmd_list(all_agents=True)
     assert "s-old-idle" not in buf_active.getvalue()
     assert "s-old-idle" in buf_all.getvalue()
 
 
 def test_build_parser_list_has_all_flag():
-    session = load_module("track")
-    p = session.build_parser()
+    agent = load_module("track")
+    p = agent.build_parser()
     args = p.parse_args(["list", "--all"])
-    assert args.all_sessions is True
+    assert args.all_agents is True
 
 
 def test_build_parser_track_has_all_flag():
-    session = load_module("track")
-    p = session.build_parser()
+    agent = load_module("track")
+    p = agent.build_parser()
     args = p.parse_args(["track", "--all"])
-    assert args.all_sessions is True
+    assert args.all_agents is True

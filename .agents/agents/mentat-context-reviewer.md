@@ -47,7 +47,7 @@ Classes:
 - `internal-numbering` — grill/slice/round/sprint numbers embedded in prose.
 - `parent-doc-ref` — "see parent §", "from doc above", "per G3-S1 above".
 - `version-history` — "from shell port", "bins-v2 design", "as of v0.1.0".
-- `phase-residue` — "B4 design", "B6 design", "in earlier design session".
+- `phase-residue` — "B4 design", "B6 design", "in earlier design agent".
 - `unresolved-pointer` — ref to file/section that may not exist for reader.
 
 ## Scoring

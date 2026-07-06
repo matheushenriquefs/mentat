@@ -141,7 +141,7 @@ def test_attempt_count_replays_recovery_spawns(monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
 
-    assert m.attempt_count("no-session", "core") == 0
+    assert m.attempt_count("no-agent", "core") == 0
 
     seed_agent_events(
         tmp_path,
@@ -210,7 +210,7 @@ def _run(m, transient, plans, *, monkeypatch, tmp_path, is_afk=None, decide=None
     kwargs = dict(
         plans_by_slug=plans,
         holding="hold",
-        session_id="s1",
+        agent_id="s1",
         harness=None,
         is_afk=is_afk or (lambda s: True),
         decide=decide or (lambda ctx: {"action": "retry", "rationale": "env"}),

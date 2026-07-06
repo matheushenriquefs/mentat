@@ -1,15 +1,15 @@
 {
-  "skill_name": "mentat-session",
-  "description": "Inspect and diagnose mentat orchestration sessions",
+  "skill_name": "mentat-track",
+  "description": "Inspect and diagnose mentat orchestration agents",
   "evals": [
-    {"id": "track-latest", "description": "track streams latest session events", "type": "functional"},
+    {"id": "track-latest", "description": "track streams latest agent events", "type": "functional"},
     {"id": "doctor-verdict-landed", "description": "doctor produces Verdict section for chunk_landed", "type": "functional"},
     {"id": "doctor-verdict-ejected", "description": "doctor maps ejected reason to Suspect text", "type": "functional"},
     {"id": "diagnose-doctor-first", "description": "diagnose invokes doctor before loop", "type": "functional"}
   ],
   "eval_queries": [
-    "stream live events for the latest session",
-    "produce verdict markdown for session sess-1",
-    "diagnose the latest session"
+    "stream live events for the latest agent",
+    "produce verdict markdown for agent sess-1",
+    "diagnose the latest agent"
   ]
 }

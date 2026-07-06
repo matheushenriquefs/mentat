@@ -4,7 +4,7 @@ An AFK agent has no human to ask (AskUserQuestion stays disallowed so it cannot
 hang on a prompt). When it hits a decision the plan does not resolve it writes
 the blocker to `<worktree>/summary.md` with frontmatter `status: blocked` and
 stops, rather than guessing. implement reads it, ejects `hitl-required`,
-promotes the body to the session log dir, preserves the worktree, and exits 42.
+promotes the body to the agent log dir, preserves the worktree, and exits 42.
 Orchestrate maps a child exit 42 the same way: not landed, worktree preserved,
 visible, downstream cascaded. doctor/report surface the blocker.
 
@@ -259,8 +259,8 @@ def test_ensure_agent_freezes_mentat_repo(tmp_path, monkeypatch):
 # ── doctor / report surface the blocker ───────────────────────────────────────
 
 
-def _write_audit(tmp_path: Path, session_id: str, rows: list[dict]) -> Path:
-    return seed_agent_events(tmp_path, "testrepo", session_id, rows, harness="mentat-implement")
+def _write_audit(tmp_path: Path, agent_id: str, rows: list[dict]) -> Path:
+    return seed_agent_events(tmp_path, "testrepo", agent_id, rows, harness="mentat-implement")
 
 
 def test_doctor_verdict_names_hitl_blocker(tmp_path):
@@ -301,12 +301,12 @@ def test_report_summary_names_hitl_blocker(tmp_path):
     assert "pick a queue" in summary
 
 
-# ── F1: marker lives in session log dir, not worktree ─────────────────────────
+# ── F1: marker lives in agent log dir, not worktree ─────────────────────────
 
 
 def test_read_blocked_summary_reads_from_session_log_dir(tmp_path, monkeypatch):
     """F1 tracer: _read_blocked_summary must find the marker at
-    ~/.mentat/logs/<repo>/<session>/summary.md (the seam), not in the worktree."""
+    ~/.mentat/logs/<repo>/<agent>/summary.md (the seam), not in the worktree."""
     impl = _impl()
     sid = "implement-f1test-9999"
     repo = "myrepo"
@@ -326,10 +326,10 @@ def test_read_blocked_summary_reads_from_session_log_dir(tmp_path, monkeypatch):
 
 def test_afk_ambiguity_prompt_directs_to_session_log_dir(tmp_path):
     """F1 tracer: the AFK prompt must direct the agent to write summary.md in
-    the session log dir (via MENTAT_AGENT_LOG), not the worktree root."""
+    the agent log dir (via MENTAT_AGENT_LOG), not the worktree root."""
     impl = _impl()
     contract = impl._AFK_AMBIGUITY_CONTRACT
-    # Must mention the session env var so the agent can resolve the log dir
-    assert "MENTAT_AGENT_LOG" in contract or "session log" in contract.lower(), (
-        "_AFK_AMBIGUITY_CONTRACT must direct to session log dir, not worktree"
+    # Must mention the agent env var so the agent can resolve the log dir
+    assert "MENTAT_AGENT_LOG" in contract or "agent log" in contract.lower(), (
+        "_AFK_AMBIGUITY_CONTRACT must direct to agent log dir, not worktree"
     )

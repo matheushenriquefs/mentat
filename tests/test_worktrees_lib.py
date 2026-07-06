@@ -1,7 +1,7 @@
 """S3 — shared worktree lifecycle lib: identity-by-path prune + teardown.
 
 A mentat worktree is one living under ``<repo>/.mentat/worktrees/`` — identity
-is PATH, never a session-id name prefix. The S1 rename obsoletes every
+is PATH, never a agent-id name prefix. The S1 rename obsoletes every
 ``startswith("mentat-"/"auto-"/"mentat-manual-")`` heuristic; preserve-vs-remove
 is dirty-vs-clean (git status), not a name guess.
 """

@@ -93,7 +93,7 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 
 **"tool" — Mentat-internal vs. target-repo.** A "tool" inside Mentat means a MCP/skill resource (bash, grep, agent). A "tool" in the target repo means its linter/test runner/formatter. Context usually disambiguates; when unclear, say "harness tool" vs. "project tool".
 
-**"agent" — the LLM unit vs. the `agents/` directory.** In prose, **agent** = one harness run audited in the canonical store (`agent_started` … `agent_reaped`). The **supervisor** is the orchestrate session that schedules slices and fans out chunks. The `agents/` directory holds *prompt files* that define agent personas — not the live runs. Use "agent definition" for the file; "agent" for the live run.
+**"agent" — the LLM unit vs. the `agents/` directory.** In prose, **agent** = one harness run audited in the canonical store (`agent_started` … `agent_reaped`). The **supervisor** is the orchestrate agent that schedules slices and fans out chunks. The `agents/` directory holds *prompt files* that define agent personas — not the live runs. Use "agent definition" for the file; "agent" for the live run.
 
 **"Mentat" — system vs. Dune character.** In code and docs, "Mentat" (capitalized) is the harness. The Dune origin is context for the name; it does not appear in technical prose.
 
@@ -110,8 +110,8 @@ ships; a change that adds framework weight is refused.
 
 Deliberate refusals. A change adding any of these is closed as out of scope.
 
-- **No UI.** Command-line only. Graphical diff-review and session-steering belong to
-  desktop session managers, not Mentat.
+- **No UI.** Command-line only. Graphical diff-review and agent-steering belong to
+  desktop agent managers, not Mentat.
 - **No multi-machine.** Single-host concurrency, tuned by the `concurrency` config
   key. Higher counts raise rebase-collision odds at land time.
 - **No cloud.** No hosted agents, no platform, no daemon.
@@ -148,7 +148,7 @@ Present-tense facts, not promises of future work.
 | [0010](docs/adr/0010-readonly-test-mount.md) | Read-only test mount | OCP `<plan>.tests.json` manifest + container bind-mount with `readonly` flag. |
 | [0011](docs/adr/0011-compose-aware-container.md) | Compose-aware container | Sidecar detection + dev-service layering; host opt-out forfeits isolation. |
 | [0012](docs/adr/0012-code-rules-layer.md) | Code-rules layer | `.agents/rules/` code conventions, enforced by `mentat-rules-reviewer` (veto). |
-| [0013](docs/adr/0013-session-continuity-over-compaction.md) | Session continuity | Checkpoint at slice boundary, write agent summary, spawn fresh seeded agent — harness-agnostic. "Session" here means the harness's own conversation, not the `Agent` entity. |
+| [0013](docs/adr/0013-agent-continuity-over-compaction.md) | Agent continuity | Checkpoint at slice boundary, write agent summary, spawn fresh seeded agent — harness-agnostic. "Agent" here means the harness's own conversation, not the `Agent` entity. |
 | [0014](docs/adr/0014-coverage-gate.md) | Coverage gate | Unit 90% testable-line floor (amended down from 100% — Goodhart trap, see ADR-0016) + e2e journey floor 45%, both blocking. |
 | [0015](docs/adr/0015-auto-recovery.md) | Model-driven auto-recovery | JIT retry/reslice/abandon over transient ejects; storm/budget/attempt caps. Superseded by ADR-0007 v7 (SQLite canonical store) for its audit substrate. |
 | [0016](docs/adr/0016-mutation-signal.md) | Mutation signal | Advisory surviving-mutant hint (`task mutation`, mutmut) scoped to changed shipped-source files. Never a gate. |

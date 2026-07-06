@@ -2,7 +2,7 @@
 
 Mirrors the slice-1 orchestrate doctrine one layer down: when kind==HITL,
 emit chunk_started{harness:"hitl-in-agent"} and return control to the
-calling Claude session — never invoke the harness adapter, which would
+calling Claude agent — never invoke the harness adapter, which would
 shell `claude --headless` and lose AskUserQuestion.
 """
 
@@ -58,7 +58,7 @@ def test_afk_still_invokes_harness(tmp_path, monkeypatch):
 
     class _R:
         returncode = 0
-        session_log = None
+        agent_log = None
 
     def fake_invoke_harness(harness, prompt, *, afk, model=None):
         invoke_calls.append((harness, afk))

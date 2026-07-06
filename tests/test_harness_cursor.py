@@ -80,7 +80,7 @@ def test_invoke_cursor_no_headless_flag(monkeypatch):
     assert "--print" in captured["cmd"], f"--print must be in cmd: {captured['cmd']}"
 
 
-def test_invoke_cursor_no_session_id_flag(monkeypatch):
+def test_invoke_cursor_no_agent_id_flag(monkeypatch):
     cursor = load_module("cursor")
     captured: dict = {}
 
@@ -92,12 +92,12 @@ def test_invoke_cursor_no_session_id_flag(monkeypatch):
         return FakeResult()
 
     monkeypatch.setattr(cursor.subprocess, "run", fake_run)
-    monkeypatch.setenv("MENTAT_AGENT", "test-session-123")
+    monkeypatch.setenv("MENTAT_AGENT", "test-agent-123")
     monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
 
     cursor.invoke("hi", afk=False, model=None)
 
-    assert "--session-id" not in captured["cmd"], f"--session-id not supported by cursor-agent: {captured['cmd']}"
+    assert "--agent-id" not in captured["cmd"], f"--agent-id not supported by cursor-agent: {captured['cmd']}"
 
 
 def test_invoke_cursor_no_disallowed_tools_flag(monkeypatch):

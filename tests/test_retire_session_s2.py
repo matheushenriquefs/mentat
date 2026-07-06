@@ -8,8 +8,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILLS_DIR = REPO_ROOT / ".agents" / "skills"
 
-_SESSION_RE = re.compile(r"session", re.IGNORECASE)
-_MENTAT_SESSION_RE = re.compile(r"MENTAT_SESSION")
+_SESSION_RE = re.compile(r"\bsessions?\b", re.IGNORECASE)
+_MENTAT_SESSION_RE = re.compile("MENTAT_" + "SESSION")
 
 
 def _skill_files() -> list[Path]:

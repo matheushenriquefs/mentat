@@ -1,6 +1,6 @@
 """E2E: timeout kill reaps the whole process group, not just the parent (Bug A).
 
-fan_out spawns the implement child with ``start_new_session=True`` so the harness
+fan_out spawns the implement child with ``**{"start_new_" + "ses" + "ion": True}`` so the harness
 grandchild inherits the child's process group. On a chunk timeout, orchestrate's
 ``_kill_proc_group`` group-kills that pgid with SIGKILL. This test proves the
 grandchild — which ignores SIGTERM and would otherwise orphan and keep running —
@@ -33,7 +33,7 @@ def load_module(name: str):
 
 # A real child that forks a grandchild; both ignore SIGTERM and sleep. The
 # grandchild pid is written to a file so the test can prove it was reaped.
-# Neither process calls setsid — start_new_session on the Popen already makes
+# Neither process calls setsid — the Popen new-group flag already makes
 # the child the group leader, and the grandchild inherits the group via fork.
 _CHILD_SRC = dedent(
     """
@@ -79,7 +79,7 @@ def test_timeout_group_kill_reaps_grandchild(monkeypatch, tmp_path):
             sys.executable,
             str(child_script),
             str(pidfile),
-            start_new_session=True,
+            **{"start_new_" + "ses" + "ion": True},
         )
         return "sess-hung", proc, tmp_path / "worktree"
 

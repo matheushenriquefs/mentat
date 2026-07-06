@@ -59,7 +59,7 @@ def test_routing_hitl_plus_independent_afk_partitions_correctly():
 
 
 def test_routing_afk_blocking_hitl_anchors_afk():
-    """AFK that a HITL plan depends on must anchor (same session)."""
+    """AFK that a HITL plan depends on must anchor (same agent)."""
     routing = load_module("scheduler")
     afk = make_plan("afk", "AFK")
     hitl = make_plan("hitl", "HITL", blocked_by=["afk"])

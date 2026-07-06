@@ -182,8 +182,8 @@ def seed_agent_events(
     from lib import store
 
     log_path = tmp_path / "logs"
-    session_dir = log_path / repo / agent_id
-    session_dir.mkdir(parents=True, exist_ok=True)
+    agent_dir = log_path / repo / agent_id
+    agent_dir.mkdir(parents=True, exist_ok=True)
     conn = store.connect()
     agents = store.AgentDAO(conn)
     if agents.get_by_id(agent_id) is None:
@@ -214,7 +214,7 @@ def seed_agent_events(
             ts=ev.get("ts"),
         )
     conn.close()
-    return session_dir
+    return agent_dir
 
 
 @pytest.fixture
@@ -281,7 +281,7 @@ def patch_orchestrate_worktree(orch, root: Path):
 
 
 def async_spawner(procs, worktree: Path):
-    """Return spawn_async fake yielding (session_id, proc, worktree) per plan."""
+    """Return spawn_async fake yielding (agent_id, proc, worktree) per plan."""
     it = iter(procs)
 
     async def spawn_async(plan, *, harness=None, model=None, seed_summary=None):

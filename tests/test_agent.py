@@ -19,16 +19,16 @@ def load_module(name: str):
 
 def _write_log(
     tmp_path: Path,
-    session_id: str,
+    agent_id: str,
     harness: str,
     events: list[dict],
     *,
     repo: str = "testrepo",
 ) -> Path:
-    return seed_agent_events(tmp_path, repo, session_id, events, harness=harness)
+    return seed_agent_events(tmp_path, repo, agent_id, events, harness=harness)
 
 
-def test_latest_session_excludes_manual(tmp_path, monkeypatch):
+def test_latest_agent_excludes_manual(tmp_path, monkeypatch):
     load_module("registry")
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
     repo_dir = tmp_path / "logs" / "myrepo"
@@ -45,13 +45,13 @@ def test_latest_session_excludes_manual(tmp_path, monkeypatch):
             }
         ],
     )
-    session = load_module("registry").latest_agent(repo_dir)
-    assert session == "sess-1"
+    agent = load_module("registry").latest_agent(repo_dir)
+    assert agent == "sess-1"
 
 
 def test_verdict_for_chunk_landed(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "sess-1",
         "mentat-orchestrate",
@@ -63,13 +63,13 @@ def test_verdict_for_chunk_landed(tmp_path):
             },
         ],
     )
-    verdict = diag_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(agent_dir)
     assert "landed" in verdict.lower() or "success" in verdict.lower()
 
 
 def test_verdict_for_chunk_ejected_implement_failed(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "sess-1",
         "mentat-implement",
@@ -81,13 +81,13 @@ def test_verdict_for_chunk_ejected_implement_failed(tmp_path):
             },
         ],
     )
-    verdict = diag_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(agent_dir)
     assert "implement_failed" in verdict or "TDD" in verdict or "gate" in verdict.lower()
 
 
 def test_verdict_for_chunk_ejected_hitl_required(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "sess-1",
         "mentat-implement",
@@ -99,7 +99,7 @@ def test_verdict_for_chunk_ejected_hitl_required(tmp_path):
             },
         ],
     )
-    verdict = diag_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(agent_dir)
     assert "hitl" in verdict.lower() or "ambiguity" in verdict.lower() or "self-answered" in verdict.lower()
 
 
@@ -107,7 +107,7 @@ def test_verdict_for_worker_died_names_slug_and_reason(tmp_path):
     """A worker-died eject must attribute the dead chunk by slug + reason, never
     fall through to an "Unknown reason" suspect (S5)."""
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "sess-1",
         "mentat-orchestrate",
@@ -119,7 +119,7 @@ def test_verdict_for_worker_died_names_slug_and_reason(tmp_path):
             },
         ],
     )
-    verdict = diag_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(agent_dir)
     assert "worker_died" in verdict
     assert "dead-chunk" in verdict
     assert "Unknown reason" not in verdict
@@ -127,11 +127,11 @@ def test_verdict_for_worker_died_names_slug_and_reason(tmp_path):
 
 
 def test_verdict_worker_died_not_masked_by_later_land(tmp_path):
-    """Batch session, two chunks: one lands, another's worker died earlier. The
+    """Batch agent, two chunks: one lands, another's worker died earlier. The
     reversed-by-ts scan must not report 'chunk_landed / Suspect: None' and bury
     the dead worker — the eject is the story doctor exists to tell (S5)."""
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "sess-1",
         "mentat-orchestrate",
@@ -153,14 +153,14 @@ def test_verdict_worker_died_not_masked_by_later_land(tmp_path):
             },
         ],
     )
-    verdict = diag_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(agent_dir)
     assert "Reason: chunk_landed" not in verdict
     assert "Suspect: None" not in verdict
     assert "worker_died" in verdict
     assert "dead-chunk" in verdict
 
 
-def test_doctor_writes_diagnosis_in_session_dir(tmp_path, monkeypatch):
+def test_doctor_writes_diagnosis_in_agent_dir(tmp_path, monkeypatch):
     agent_mod = load_module("track")
     monkeypatch.setenv("MENTAT_REPO", "testrepo")
     _write_log(
@@ -187,7 +187,7 @@ def test_doctor_writes_diagnosis_in_session_dir(tmp_path, monkeypatch):
 
 def test_summary_for_chunk_landed(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "sess-1",
         "mentat-orchestrate",
@@ -199,14 +199,14 @@ def test_summary_for_chunk_landed(tmp_path):
             },
         ],
     )
-    summary = diag_mod.build_summary(session_dir)
+    summary = diag_mod.build_summary(agent_dir)
     assert "my-chunk" in summary
     assert "abc123" in summary
 
 
 def test_summary_for_chunk_ejected_carries_failure(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "sess-1",
         "mentat-implement",
@@ -218,13 +218,13 @@ def test_summary_for_chunk_ejected_carries_failure(tmp_path):
             },
         ],
     )
-    summary = diag_mod.build_summary(session_dir)
+    summary = diag_mod.build_summary(agent_dir)
     assert "gate_failed" in summary
 
 
 def test_write_summary_writes_summary_md(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "sess-1",
         "mentat-implement",
@@ -236,8 +236,8 @@ def test_write_summary_writes_summary_md(tmp_path):
             },
         ],
     )
-    out = diag_mod.write_summary(session_dir)
-    assert out == session_dir / "summary.md"
+    out = diag_mod.write_summary(agent_dir)
+    assert out == agent_dir / "summary.md"
     assert out.exists()
     assert "deadbee" in out.read_text()
 
@@ -290,7 +290,7 @@ def test_report_shows_failure_for_ejected(tmp_path, monkeypatch):
 
 def test_expected_vs_actual_derived(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "sess-1",
         "mentat-implement",
@@ -302,13 +302,13 @@ def test_expected_vs_actual_derived(tmp_path):
             },
         ],
     )
-    verdict = diag_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(agent_dir)
     assert "<where>" not in verdict
 
 
 def test_regression_marks_unknown_when_no_prior_landed(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "sess-1",
         "mentat-implement",
@@ -320,14 +320,14 @@ def test_regression_marks_unknown_when_no_prior_landed(tmp_path):
             },
         ],
     )
-    verdict = diag_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(agent_dir)
     assert "unknown" in verdict.lower()
 
 
 def test_diagnose_calls_doctor_first(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = tmp_path / "sess-1"
-    session_dir.mkdir(parents=True)
+    agent_dir = tmp_path / "sess-1"
+    agent_dir.mkdir(parents=True)
 
     verdict_calls: list[Path] = []
 
@@ -337,15 +337,15 @@ def test_diagnose_calls_doctor_first(tmp_path):
 
     with patch.object(diag_mod, "build_verdict", side_effect=fake_verdict):
         with patch.object(diag_mod, "_run_diagnose_loop", return_value=None):
-            diag_mod.run_diagnose(session_dir)
+            diag_mod.run_diagnose(agent_dir)
 
-    assert verdict_calls == [session_dir]
+    assert verdict_calls == [agent_dir]
 
 
 def test_diagnose_feeds_doctor_output_into_loop(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = tmp_path / "sess-1"
-    session_dir.mkdir(parents=True)
+    agent_dir = tmp_path / "sess-1"
+    agent_dir.mkdir(parents=True)
 
     loop_inputs: list[str] = []
 
@@ -354,12 +354,12 @@ def test_diagnose_feeds_doctor_output_into_loop(tmp_path):
 
     with patch.object(diag_mod, "build_verdict", return_value="## Verdict\n- Reason: ejected\n"):
         with patch.object(diag_mod, "_run_diagnose_loop", side_effect=fake_loop):
-            diag_mod.run_diagnose(session_dir)
+            diag_mod.run_diagnose(agent_dir)
 
     assert loop_inputs == ["## Verdict\n- Reason: ejected\n"]
 
 
-# ── session.py dispatcher branches ───────────────────────────────────────────
+# ── agent.py dispatcher branches ───────────────────────────────────────────
 
 
 def _make_session_env(tmp_path: Path, monkeypatch) -> tuple:
@@ -372,7 +372,7 @@ def _make_session_env(tmp_path: Path, monkeypatch) -> tuple:
     return agent_mod, log_root
 
 
-def test_cmd_track_no_session_id_calls_navigate(tmp_path, monkeypatch):
+def test_cmd_track_no_agent_id_calls_navigate(tmp_path, monkeypatch):
     agent_mod, log_root = _make_session_env(tmp_path, monkeypatch)
     (log_root / "testrepo").mkdir()
     navigate_calls: list = []
@@ -384,7 +384,7 @@ def test_cmd_track_no_session_id_calls_navigate(tmp_path, monkeypatch):
 
 def test_cmd_track_session_not_found_returns_1(tmp_path, monkeypatch):
     agent_mod, _ = _make_session_env(tmp_path, monkeypatch)
-    rc = agent_mod.cmd_track("nonexistent-session-xyz")
+    rc = agent_mod.cmd_track("nonexistent-agent-xyz")
     assert rc == 1
 
 
@@ -392,8 +392,8 @@ def test_cmd_track_session_found_calls_view_agent(tmp_path, monkeypatch):
     agent_mod, log_root = _make_session_env(tmp_path, monkeypatch)
     from lib import store
 
-    session_dir = log_root / "testrepo" / "sess-abc"
-    session_dir.mkdir(parents=True)
+    agent_dir = log_root / "testrepo" / "sess-abc"
+    agent_dir.mkdir(parents=True)
     store.record_emit(
         {"MENTAT_AGENT": "sess-abc", "MENTAT_AGENT_PID": "1", "MENTAT_HARNESS": "cursor"},
         "chunk_started",
@@ -422,7 +422,7 @@ def test_resolve_agent_dir_not_found_returns_1(tmp_path, monkeypatch):
 
 def test_cmd_doctor_invalid_session_returns_1(tmp_path, monkeypatch):
     agent_mod, _ = _make_session_env(tmp_path, monkeypatch)
-    rc = agent_mod.cmd_doctor("no-such-session")
+    rc = agent_mod.cmd_doctor("no-such-agent")
     assert rc == 1
 
 
@@ -450,20 +450,20 @@ def test_cmd_doctor_valid_session_writes_diagnosis(tmp_path, monkeypatch):
 
 def test_cmd_report_invalid_session_returns_1(tmp_path, monkeypatch):
     agent_mod, _ = _make_session_env(tmp_path, monkeypatch)
-    rc = agent_mod.cmd_report("no-such-session")
+    rc = agent_mod.cmd_report("no-such-agent")
     assert rc == 1
 
 
 def test_cmd_diagnose_invalid_session_returns_1(tmp_path, monkeypatch):
     agent_mod, _ = _make_session_env(tmp_path, monkeypatch)
-    rc = agent_mod.cmd_diagnose("no-such-session")
+    rc = agent_mod.cmd_diagnose("no-such-agent")
     assert rc == 1
 
 
 def test_cmd_diagnose_valid_session_calls_run_diagnose(tmp_path, monkeypatch):
     agent_mod, log_root = _make_session_env(tmp_path, monkeypatch)
-    session_dir = log_root / "testrepo" / "sess-diag"
-    session_dir.mkdir(parents=True)
+    agent_dir = log_root / "testrepo" / "sess-diag"
+    agent_dir.mkdir(parents=True)
     calls: list = []
     with patch.object(agent_mod._diagnose, "run_diagnose", side_effect=lambda sd: calls.append(sd)):
         rc = agent_mod.cmd_diagnose("sess-diag")
@@ -502,7 +502,7 @@ def test_main_dispatches_list(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "testrepo")
     (tmp_path / "logs" / "testrepo").mkdir(parents=True)
-    monkeypatch.setattr("sys.argv", ["session.py", "list"])
+    monkeypatch.setattr("sys.argv", ["agent.py", "list"])
     import pytest as _pytest
 
     with _pytest.raises(SystemExit) as exc:
@@ -515,7 +515,7 @@ def test_main_dispatches_track_no_session(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "testrepo")
     (tmp_path / "logs" / "testrepo").mkdir(parents=True)
-    monkeypatch.setattr("sys.argv", ["session.py", "track"])
+    monkeypatch.setattr("sys.argv", ["agent.py", "track"])
     import pytest as _pytest
 
     with patch.object(agent_mod._panes, "navigate", return_value=0):
@@ -529,29 +529,29 @@ def test_main_dispatches_track_no_session(tmp_path, monkeypatch):
 
 def test_verdict_empty_events_is_all_unknown(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = tmp_path / "empty"
-    session_dir.mkdir()
-    verdict = diag_mod.build_verdict(session_dir)
+    agent_dir = tmp_path / "empty"
+    agent_dir.mkdir()
+    verdict = diag_mod.build_verdict(agent_dir)
     assert "Reason: unknown" in verdict
     assert "Is regression: unknown" in verdict
 
 
 def test_verdict_events_without_terminal_reports_no_terminal(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "no-terminal",
         "mentat-implement",
         [{"ts": "2026-01-01T00:00:00+00:00", "event": "chunk_started", "payload": {"path": "/p.md"}}],
     )
-    verdict = diag_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(agent_dir)
     assert "No terminal event found." in verdict
     assert "Reason: unknown" in verdict
 
 
 def test_verdict_hitl_blocker_appended_to_suspect(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "hitl",
         "mentat-implement",
@@ -563,25 +563,25 @@ def test_verdict_hitl_blocker_appended_to_suspect(tmp_path):
             }
         ],
     )
-    verdict = diag_mod.build_verdict(session_dir)
+    verdict = diag_mod.build_verdict(agent_dir)
     assert "Blocker: need a decision" in verdict
 
 
 def test_summary_no_terminal_says_completed_in_session(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "insession",
         "mentat-implement",
         [{"ts": "2026-01-01T00:00:00+00:00", "event": "chunk_started", "payload": {"slug": "c"}}],
     )
-    summary = diag_mod.build_summary(session_dir)
+    summary = diag_mod.build_summary(agent_dir)
     assert "not yet landed" in summary
 
 
 def test_summary_hitl_blocker_appended(tmp_path):
     diag_mod = load_module("diagnose")
-    session_dir = _write_log(
+    agent_dir = _write_log(
         tmp_path,
         "hitl-sum",
         "mentat-implement",
@@ -593,11 +593,11 @@ def test_summary_hitl_blocker_appended(tmp_path):
             }
         ],
     )
-    summary = diag_mod.build_summary(session_dir)
+    summary = diag_mod.build_summary(agent_dir)
     assert "Blocker: blocked here" in summary
 
 
-# ── sessions: row-parse robustness (non-dict JSON skipped) ───────────────────
+# ── agents: row-parse robustness (non-dict JSON skipped) ───────────────────
 
 
 def test_iter_rows_from_text_skips_non_dict_and_garbage():
@@ -607,7 +607,7 @@ def test_iter_rows_from_text_skips_non_dict_and_garbage():
     assert rows == [{"a": 1}, {"b": 2}]
 
 
-def test_list_sessions_empty_when_repo_dir_missing(tmp_path):
+def test_list_agents_empty_when_repo_dir_missing(tmp_path):
     load_module("registry")
     assert load_module("registry").list_agents(tmp_path / "nope") == []
 
@@ -618,7 +618,7 @@ def test_status_from_signals_waiting_on_ask_user_question():
     assert load_module("registry")._status_from_signals(None, waiting, 1.0) == "waiting"
 
 
-def test_session_worktree_ignores_non_dict_and_non_str_payload(tmp_path):
+def test_agent_worktree_ignores_non_dict_and_non_str_payload(tmp_path):
     load_module("registry")
     sd = tmp_path / "s-wt"
     sd.mkdir()
@@ -627,10 +627,10 @@ def test_session_worktree_ignores_non_dict_and_non_str_payload(tmp_path):
         {"ts": "2", "event": "chunk_started", "payload": {"worktree": 123}},
     ]
     (sd / "audit.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
-    assert load_module("registry").session_worktree(sd) is None
+    assert load_module("registry").agent_worktree(sd) is None
 
 
-def test_build_record_none_for_vanished_session_dir(tmp_path):
+def test_build_record_none_for_vanished_agent_dir(tmp_path):
     """A dir removed mid-scan has no mtime → _build_record returns None, never raises."""
     load_module("registry")
     assert load_module("registry")._build_record(tmp_path / "gone", clock=0.0, stale_secs=300) is None

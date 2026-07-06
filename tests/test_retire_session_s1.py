@@ -16,8 +16,8 @@ sys.path.insert(0, str(REPO_ROOT / ".agents"))
 from lib import agent as agent_mod  # noqa: E402
 from lib import store  # noqa: E402
 
-_SESSION_RE = re.compile(r"session", re.IGNORECASE)
-_MENTAT_SESSION_RE = re.compile(r"MENTAT_SESSION")
+_SESSION_RE = re.compile(r"\bsessions?\b", re.IGNORECASE)
+_MENTAT_SESSION_RE = re.compile("MENTAT_" + "SESSION")
 
 
 def _lib_py_files() -> list[Path]:

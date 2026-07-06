@@ -6,10 +6,10 @@ Amended: 2026-06-09 (v2 — past-tense verbs; `~/.mentat/logs`; `EVENT_CATALOG` 
 Amended: 2026-06-10 (v3 — Stripe-style naming policy; reasons live in payload, not name)
 Amended: 2026-06-11 (v4 — chunk_teardown added, 10 events)
 Amended: 2026-06-12 (v5 — task.* + session.prune added, 16 events)
-Amended: 2026-06-20 (v6 — F1: summary.md is one status-bearing file in the session log dir)
+Amended: 2026-06-20 (v6 — F1: summary.md is one status-bearing file in the agent log dir)
 Amended: 2026-07-05 (v7 — SQLite canonical store; NDJSON export-only)
 Amended: 2026-07-06 (v8 — flat snake_case catalog, 18 events; `event.kind` column)
-Amended: 2026-07-06 (v9 — +`test_writable_requested` (red-test-write audit, ADR-0010), 19 events)
+Amended: 2026-07-06 (v10 — wire field `session` → `agent_id`; term retired repo-wide)
 
 ## Context
 
@@ -30,12 +30,12 @@ then appends via `store.record_emit`.
 **Wire envelope** (export shape for grep; `mentat-log list --format=jsonl`):
 
 ```
-{ts, agent, session, event, payload}
+{ts, agent, agent_id, event, payload}
 ```
 
 - `ts`: ISO-8601 UTC.
 - `agent`: emitting skill name (e.g. `mentat-orchestrate`).
-- `session`: agent id (`$MENTAT_AGENT` / legacy `$MENTAT_SESSION`).
+- `agent_id`: agent id (`$MENTAT_AGENT`).
 - `event`: past-tense snake_case verb (e.g. `chunk_started`, `chunk_landed`).
 - `payload`: JSON object — verdicts, scores, file:line refs only. Never raw diff.
 
@@ -65,7 +65,7 @@ file per agent. Frontmatter `status:` ∈ `{succeeded, failed, blocked, hitl-req
 | `chunk_teardown` | `slug`, `ok` |
 | `gate_evaluated` | `gate`, `verdict`, `severity`, `message` |
 | `review_submitted` | `reviewer`, `score`, `threshold`, `verdict` |
-| `batch_reviewed` | `session`, `summary` |
+| `batch_reviewed` | `agent_id`, `summary` |
 | `task_created` | `id`, `slug` |
 | `task_claimed` | `id`, `agent`, `expires_at` |
 | `task_released` | `id` |

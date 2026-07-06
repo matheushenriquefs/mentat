@@ -166,7 +166,7 @@ def testpartition_by_outcome_rc_69_reason_is_worker_died(tmp_path):
 
 def testpartition_by_outcome_timeout_kill_payload_is_self_describing(tmp_path):
     """A timeout-killed chunk (rc<0) → payload timed_out:true + logs_path at its
-    own session dir."""
+    own agent log dir."""
     orch = load_module("orchestrate")
     plan = _make_plan_obj(tmp_path, "slug-t")
     emitted: list[tuple] = []

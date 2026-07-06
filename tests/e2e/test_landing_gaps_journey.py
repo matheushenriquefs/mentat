@@ -65,15 +65,15 @@ def _configure_env(monkeypatch, tmp_path: Path, main_repo: Path) -> str:
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    session = "orchestrate-holding-gaps"
-    monkeypatch.setenv("MENTAT_AGENT", session)
-    monkeypatch.setenv("MENTAT_AGENT", session)
+    agent = "orchestrate-holding-gaps"
+    monkeypatch.setenv("MENTAT_AGENT", agent)
+    monkeypatch.setenv("MENTAT_AGENT", agent)
     monkeypatch.chdir(main_repo)
-    return session
+    return agent
 
 
-def _events(session_id: str, name: str) -> list[dict]:
-    return events_by_kind(session_id, name)
+def _events(agent_id: str, name: str) -> list[dict]:
+    return events_by_kind(agent_id, name)
 
 
 # ── _run_gates: the un-patched delegation to the plans util (line 37) ─────────
@@ -105,16 +105,16 @@ def test_teardown_container_fires_real_teardown_event(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    session = "orchestrate-teardown-gaps"
-    monkeypatch.setenv("MENTAT_AGENT", session)
-    monkeypatch.setenv("MENTAT_AGENT", session)
+    agent = "orchestrate-teardown-gaps"
+    monkeypatch.setenv("MENTAT_AGENT", agent)
+    monkeypatch.setenv("MENTAT_AGENT", agent)
 
     from lib import devcontainer
 
     with _patch_attr(devcontainer, "down", lambda slug: True):
         lq._teardown_container(lq.Chunk(slug="dead-slug", worktree=tmp_path / "wt", chunk_id=TEST_CHUNK_ID))
 
-    rows = _events(session, "chunk_teardown")
+    rows = _events(agent, "chunk_teardown")
     assert any(r["payload"]["slug"] == "dead-slug" and r["payload"]["ok"] is True for r in rows), rows
 
 
@@ -124,7 +124,7 @@ def test_teardown_container_fires_real_teardown_event(tmp_path, monkeypatch):
 def test_land_ejects_not_ff_when_ff_merge_reports_not_ff(tmp_path, monkeypatch):
     lq = load_script(SCRIPTS / "landing.py", "e2e_lq_gaps_notff")
     main_repo, wts = _setup(tmp_path, ["moved"])
-    session = _configure_env(monkeypatch, tmp_path, main_repo)
+    agent = _configure_env(monkeypatch, tmp_path, main_repo)
 
     with (
         _patch_attr(lq, "_run_gates", lambda chunk: ("pass", "")),
@@ -135,7 +135,7 @@ def test_land_ejects_not_ff_when_ff_merge_reports_not_ff(tmp_path, monkeypatch):
 
     assert verdict["status"] == "eject"
     assert verdict["reason"] == lq.NOT_FF
-    ejects = _events(session, "chunk_ejected")
+    ejects = _events(agent, "chunk_ejected")
     assert {e["payload"]["reason"] for e in ejects} == {lq.NOT_FF}
 
 
@@ -163,7 +163,7 @@ def test_land_ejects_git_error_when_ff_merge_reports_other_error(tmp_path, monke
 def test_drain_cascade_skips_downstream_not_in_pending(tmp_path, monkeypatch):
     lq = load_script(SCRIPTS / "landing.py", "e2e_lq_gaps_cascade")
     main_repo, wts = _setup(tmp_path, ["root", "child"])
-    session = _configure_env(monkeypatch, tmp_path, main_repo)
+    agent = _configure_env(monkeypatch, tmp_path, main_repo)
 
     chunks = [lq.Chunk("root", wts["root"]), lq.Chunk("child", wts["child"])]
 
@@ -186,5 +186,5 @@ def test_drain_cascade_skips_downstream_not_in_pending(tmp_path, monkeypatch):
     assert by_slug["child"]["reason"] == lq.UPSTREAM_EJECTED
     assert "ghost" not in by_slug, "a cascaded slug not in pending yields no result row"
     # And no chunk_ejected audit row was written for the phantom either.
-    ejected_slugs = {e["payload"]["slug"] for e in _events(session, "chunk_ejected")}
+    ejected_slugs = {e["payload"]["slug"] for e in _events(agent, "chunk_ejected")}
     assert "ghost" not in ejected_slugs

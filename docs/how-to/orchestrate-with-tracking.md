@@ -11,7 +11,7 @@ real time.
 
 At startup the run prints a track command for the whole run, and each fanned-out
 chunk prints its own track command as it spawns. Copy one and run it in a second
-session.
+agent.
 
 ## 2. Track the run
 
@@ -19,7 +19,7 @@ session.
 /mentat-track track
 ```
 
-With no session argument, `track` opens the live navigator over every session in the
+With no agent argument, `track` opens the live navigator over every agent in the
 current repository — one row per chunk, with status and last event. From there:
 
 - `j` / `k` — move between chunks.
@@ -27,10 +27,10 @@ current repository — one row per chunk, with status and last event. From there
 - `x` — tear down the focused chunk's worktree.
 - `q` — quit.
 
-To follow one chunk directly, pass its session id:
+To follow one chunk directly, pass its agent id:
 
 ```
-/mentat-track track <session-id>
+/mentat-track track <agent-id>
 ```
 
 See [tracking a run](./tracking-a-run.md) for the full view reference.

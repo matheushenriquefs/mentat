@@ -1,5 +1,5 @@
 """TUI fixes for `mentat-track track` (the multi-AFK navigator): focus/cursor
-pinning to session identity (flicker A), the flicker-free repaint engine
+pinning to agent identity (flicker A), the flicker-free repaint engine
 (flicker B), transcript scrollback, honest empty states, and transcript-by-role
 coloring. Pure surface only — the raw-tty/select poll loop stays the untested I/O
 shell. Gate-run home (testpaths = ["tests"])."""
@@ -25,11 +25,11 @@ render = load_module("render")
 registry = load_module("registry")
 
 
-def _rec(session: str, status: str = "working", age: float = 0.0, last_event: str | None = None) -> dict:
-    return {"agent": session, "status": status, "mtime": 0.0, "age": age, "last_event": last_event}
+def _rec(agent: str, status: str = "working", age: float = 0.0, last_event: str | None = None) -> dict:
+    return {"agent": agent, "status": status, "mtime": 0.0, "age": age, "last_event": last_event}
 
 
-# ── Slice 1: focus + list cursor pinned to session identity (flicker A) ───────
+# ── Slice 1: focus + list cursor pinned to agent identity (flicker A) ───────
 
 
 def test_resolve_focus_index_follows_pinned_across_resort():
@@ -137,11 +137,11 @@ def test_restore_sequence_shows_cursor_and_exits_alt_screen():
 # ── Slice 3: scrollback in the focused transcript ─────────────────────────────
 
 
-def _write_stream(session_dir: Path, name: str, rows: list[dict]) -> None:
+def _write_stream(agent_dir: Path, name: str, rows: list[dict]) -> None:
     import json
 
-    session_dir.mkdir(parents=True, exist_ok=True)
-    (session_dir / f"{name}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    (agent_dir / f"{name}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
 
 
 def _assistant(text: str) -> dict:

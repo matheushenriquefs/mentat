@@ -19,7 +19,7 @@ Two capabilities proved on both adapters:
 **1. Usage reporting.**
 - `claude-code`: `--output-format stream-json` emits a `{"type": "result", "usage": {...}}` event
   as the last line. `claude_code._parse_usage()` reads `input_tokens + output_tokens` from the
-  captured session log. Confirmed: `Result.usage_tokens` is an `int` after a streamed run.
+  captured agent log. Confirmed: `Result.usage_tokens` is an `int` after a streamed run.
 - `cursor-agent`: no CLI usage-reporting equivalent found. `cursor.Result.usage_tokens` returns
   `None`. Mentat's cumulative-count fallback (count slices completed) handles this case.
 

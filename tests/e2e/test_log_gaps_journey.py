@@ -20,11 +20,11 @@ def _log():
     return load_script(LOG_PY, "e2e_log_gaps")
 
 
-def _log_env(monkeypatch, log_root: Path, repo: str, session: str) -> None:
+def _log_env(monkeypatch, log_root: Path, repo: str, agent: str) -> None:
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", repo)
-    monkeypatch.setenv("MENTAT_AGENT", session)
-    monkeypatch.setenv("MENTAT_AGENT", session)
+    monkeypatch.setenv("MENTAT_AGENT", agent)
+    monkeypatch.setenv("MENTAT_AGENT", agent)
 
 
 def test_validate_row_flags_missing_top_level_fields():
@@ -44,8 +44,8 @@ def test_validate_row_flags_non_object_payload():
 def test_emit_valid_eject_reason_is_written(tmp_path, monkeypatch):
     log = _log()
     log_root = tmp_path / "logs"
-    repo, session = "logrepo", "orchestrate-eject-ok"
-    _log_env(monkeypatch, log_root, repo, session)
+    repo, agent = "logrepo", "orchestrate-eject-ok"
+    _log_env(monkeypatch, log_root, repo, agent)
 
     args = argparse.Namespace(
         agent="mentat-orchestrate",
@@ -54,7 +54,7 @@ def test_emit_valid_eject_reason_is_written(tmp_path, monkeypatch):
     )
     assert log.cmd_emit(args) == 0
 
-    rows = agent_events(session)
+    rows = agent_events(agent)
     assert rows[0]["event"] == "chunk_ejected"
     assert rows[0]["payload"]["reason"] == "gate_failed"
 
@@ -77,14 +77,14 @@ def test_validate_skips_blank_lines(tmp_path, monkeypatch):
 def test_query_skips_blanks_garbage_and_filters_by_agent(tmp_path, monkeypatch, capsys):
     log = _log()
     log_root = tmp_path / "logs"
-    repo, session = "qrepo", "orchestrate-query-gaps"
-    _log_env(monkeypatch, log_root, repo, session)
-    (log_root / repo / session).mkdir(parents=True)
+    repo, agent = "qrepo", "orchestrate-query-gaps"
+    _log_env(monkeypatch, log_root, repo, agent)
+    (log_root / repo / agent).mkdir(parents=True)
 
     seed_agent_events(
         tmp_path,
         repo,
-        session,
+        agent,
         [
             {
                 "ts": "t1",
@@ -110,7 +110,7 @@ def test_query_skips_blanks_garbage_and_filters_by_agent(tmp_path, monkeypatch, 
     (log_root / repo / "other-agent").mkdir(parents=True, exist_ok=True)
 
     capsys.readouterr()
-    rc = log.cmd_list(argparse.Namespace(agent_id=session, event=None, agent="keep", format="jsonl"))
+    rc = log.cmd_list(argparse.Namespace(agent_id=agent, event=None, agent="keep", format="jsonl"))
     assert rc == 0
     out_rows = [json.loads(ln) for ln in capsys.readouterr().out.splitlines() if ln.strip()]
     assert [r["agent"] for r in out_rows] == ["keep"]
@@ -131,8 +131,8 @@ def test_prune_skips_non_dirs_and_keeps_recent_sessions(tmp_path, monkeypatch, c
     capsys.readouterr()
     rc = log.cmd_prune(argparse.Namespace(before="2000-01-01"))
     assert rc == 0
-    assert "pruned 0 session" in capsys.readouterr().out
-    assert fresh.exists(), "a session newer than the cutoff is retained"
+    assert "pruned 0 agent" in capsys.readouterr().out
+    assert fresh.exists(), "a agent newer than the cutoff is retained"
 
 
 def test_main_dispatches_prune_over_argv(tmp_path, monkeypatch, capsys):

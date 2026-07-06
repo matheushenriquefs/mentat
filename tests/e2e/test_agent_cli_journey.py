@@ -2,8 +2,8 @@
 
 Loads the real skill script ``.agents/skills/mentat-track/scripts/track.py``
 via ``load_script`` (which runs its sys.path bootstrap + ``from lib.agent ...``
-+ ``load_sibling`` of sessions/doctor/track/diagnose at import). Targets the CLI
-seams that the report/registry journeys don't exercise: ``_session_dir`` path
++ ``load_sibling`` of agents/doctor/track/diagnose at import). Targets the CLI
+seams that the report/registry journeys don't exercise: ``_agent_dir`` path
 arithmetic, ``build_parser`` subcommand/namespace shape (including the required
 subparser), ``main``'s dispatch table (each lambda + arg threading) via patched
 ``cmd_*`` recorders over a monkeypatched ``sys.argv``, and ``cmd_diagnose``'s
@@ -28,7 +28,7 @@ TRACK_CLI_PY = REPO_ROOT / ".agents/skills/mentat-track/scripts/track.py"
 track_cli = load_script(TRACK_CLI_PY, "track_cli")
 
 
-# ── _session_dir ─────────────────────────────────────────────────────────────
+# ── _agent_dir ─────────────────────────────────────────────────────────────
 
 
 def test_agent_dir_composes_log_root_repo_and_id(monkeypatch, tmp_path):
@@ -44,46 +44,46 @@ def test_agent_dir_composes_log_root_repo_and_id(monkeypatch, tmp_path):
 def test_build_parser_list_defaults_all_false():
     ns = track_cli.build_parser().parse_args(["list"])
     assert ns.cmd == "list"
-    assert ns.all_sessions is False
+    assert ns.all_agents is False
 
 
 def test_build_parser_list_all_flag_sets_all_true():
     ns = track_cli.build_parser().parse_args(["list", "--all"])
-    assert ns.all_sessions is True
+    assert ns.all_agents is True
 
 
 def test_build_parser_track_captures_session_positional():
     ns = track_cli.build_parser().parse_args(["track", "sess-1"])
     assert ns.cmd == "track"
-    assert ns.session == "sess-1"
+    assert ns.agent == "sess-1"
 
 
 def test_build_parser_track_session_defaults_none():
     ns = track_cli.build_parser().parse_args(["track"])
-    assert ns.session is None
+    assert ns.agent is None
 
 
 def test_build_parser_track_all_flag_sets_all_true():
     ns = track_cli.build_parser().parse_args(["track", "--all"])
-    assert ns.all_sessions is True
+    assert ns.all_agents is True
 
 
 def test_build_parser_doctor_captures_session():
     ns = track_cli.build_parser().parse_args(["doctor", "s"])
     assert ns.cmd == "doctor"
-    assert ns.session == "s"
+    assert ns.agent == "s"
 
 
 def test_build_parser_report_captures_session():
     ns = track_cli.build_parser().parse_args(["report", "s"])
     assert ns.cmd == "report"
-    assert ns.session == "s"
+    assert ns.agent == "s"
 
 
 def test_build_parser_diagnose_captures_session():
     ns = track_cli.build_parser().parse_args(["diagnose", "s"])
     assert ns.cmd == "diagnose"
-    assert ns.session == "s"
+    assert ns.agent == "s"
 
 
 def test_build_parser_requires_a_subcommand():
@@ -96,7 +96,7 @@ def test_build_parser_requires_a_subcommand():
 
 def test_main_dispatches_list_and_exits_with_its_code(monkeypatch):
     monkeypatch.setattr(track_cli, "cmd_list", lambda _all: 7)
-    monkeypatch.setattr(sys, "argv", ["session", "list"])
+    monkeypatch.setattr(sys, "argv", ["agent", "list"])
     with pytest.raises(SystemExit) as exc:
         track_cli.main()
     assert exc.value.code == 7
@@ -105,12 +105,12 @@ def test_main_dispatches_list_and_exits_with_its_code(monkeypatch):
 def test_main_dispatches_track_and_threads_session_and_all(monkeypatch):
     captured = {}
 
-    def _fake_track(session, all_sessions=False):
-        captured["args"] = (session, all_sessions)
+    def _fake_track(agent, all_agents=False):
+        captured["args"] = (agent, all_agents)
         return 3
 
     monkeypatch.setattr(track_cli, "cmd_track", _fake_track)
-    monkeypatch.setattr(sys, "argv", ["session", "track", "abc", "--all"])
+    monkeypatch.setattr(sys, "argv", ["agent", "track", "abc", "--all"])
     with pytest.raises(SystemExit) as exc:
         track_cli.main()
     assert exc.value.code == 3
@@ -119,7 +119,7 @@ def test_main_dispatches_track_and_threads_session_and_all(monkeypatch):
 
 def test_main_dispatches_doctor_and_exits_with_its_code(monkeypatch):
     monkeypatch.setattr(track_cli, "cmd_doctor", lambda _s: 5)
-    monkeypatch.setattr(sys, "argv", ["session", "doctor", "s"])
+    monkeypatch.setattr(sys, "argv", ["agent", "doctor", "s"])
     with pytest.raises(SystemExit) as exc:
         track_cli.main()
     assert exc.value.code == 5
@@ -127,7 +127,7 @@ def test_main_dispatches_doctor_and_exits_with_its_code(monkeypatch):
 
 def test_main_dispatches_report_and_exits_with_its_code(monkeypatch):
     monkeypatch.setattr(track_cli, "cmd_report", lambda _s: 4)
-    monkeypatch.setattr(sys, "argv", ["session", "report", "s"])
+    monkeypatch.setattr(sys, "argv", ["agent", "report", "s"])
     with pytest.raises(SystemExit) as exc:
         track_cli.main()
     assert exc.value.code == 4
@@ -135,7 +135,7 @@ def test_main_dispatches_report_and_exits_with_its_code(monkeypatch):
 
 def test_main_dispatches_diagnose_and_exits_with_its_code(monkeypatch):
     monkeypatch.setattr(track_cli, "cmd_diagnose", lambda _s: 6)
-    monkeypatch.setattr(sys, "argv", ["session", "diagnose", "s"])
+    monkeypatch.setattr(sys, "argv", ["agent", "diagnose", "s"])
     with pytest.raises(SystemExit) as exc:
         track_cli.main()
     assert exc.value.code == 6
@@ -145,7 +145,7 @@ def test_main_dispatches_diagnose_and_exits_with_its_code(monkeypatch):
 
 
 def test_cmd_diagnose_runs_diagnose_on_resolved_dir(monkeypatch, tmp_path):
-    sd = tmp_path / "session-dir"
+    sd = tmp_path / "agent-dir"
     sd.mkdir()
     monkeypatch.setattr(track_cli._agent, "_resolve_agent", lambda _s: sd)
 

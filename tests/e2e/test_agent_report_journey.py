@@ -1,11 +1,11 @@
-"""E2E: mentat-track report / doctor / diagnose / list over real seeded sessions.
+"""E2E: mentat-track report / doctor / diagnose / list over real seeded agents.
 
-Drives the actual ``session.py`` command layer in-process over real audit trees under a
+Drives the actual ``agent.py`` command layer in-process over real audit trees under a
 temp log root: ``report`` (success-side summary for landed + ejected outcomes and the
-latest-session fallback), ``doctor`` (verdict), ``diagnose`` (doctor-first context dump),
+latest-agent fallback), ``doctor`` (verdict), ``diagnose`` (doctor-first context dump),
 and the ``list`` registry in both default active-only and ``--all`` views. Asserts the
-persisted summary.md / diagnosis.md and the printed rows. In-process so the session +
-sessions + doctor + diagnose modules are measured.
+persisted summary.md / diagnosis.md and the printed rows. In-process so the agent +
+agents + doctor + diagnose modules are measured.
 """
 
 from __future__ import annotations
@@ -120,14 +120,14 @@ def test_report_summarizes_an_ejected_session(repo_log, tmp_path, capsys):
     assert "Ejected" in out and "gate_failed" in out and "diagnose output" in out
 
 
-def test_report_defaults_to_latest_session(repo_log, tmp_path, capsys):
+def test_report_defaults_to_latest_agent(repo_log, tmp_path, capsys):
     log_root, repo = repo_log
     s = _session()
     _seed_session(tmp_path, log_root, repo, "orchestrate-main-old", _LANDED, age=600)
     _seed_session(tmp_path, log_root, repo, "orchestrate-main-new", _EJECTED)
 
     assert s.cmd_report(None) == 0
-    assert "Ejected" in capsys.readouterr().out, "bare report must resolve the newest session"
+    assert "Ejected" in capsys.readouterr().out, "bare report must resolve the newest agent"
 
 
 def test_doctor_writes_verdict(repo_log, tmp_path, capsys):
@@ -202,12 +202,12 @@ def test_list_active_only_hides_old_idle(repo_log, tmp_path, capsys, monkeypatch
     _seed_session(tmp_path, log_root, repo, "recent-idle", _LANDED)
     _seed_session(tmp_path, log_root, repo, "ancient-idle", _LANDED, age=90000)
 
-    assert s.cmd_list(all_sessions=False) == 0
+    assert s.cmd_list(all_agents=False) == 0
     out = capsys.readouterr().out
     assert "recent-idle" in out
-    assert "ancient-idle" not in out, "default active-only view hides day-old idle sessions"
+    assert "ancient-idle" not in out, "default active-only view hides day-old idle agents"
 
-    assert s.cmd_list(all_sessions=True) == 0
+    assert s.cmd_list(all_agents=True) == 0
     out = capsys.readouterr().out
     assert "recent-idle" in out and "ancient-idle" in out, "--all shows the full history"
 
@@ -215,7 +215,7 @@ def test_list_active_only_hides_old_idle(repo_log, tmp_path, capsys, monkeypatch
 def test_list_empty_repo_reports_none(repo_log, capsys):
     _, _ = repo_log
     s = _session()
-    assert s.cmd_list(all_sessions=False) == 0
+    assert s.cmd_list(all_agents=False) == 0
     assert "no agents" in capsys.readouterr().out
 
 
@@ -229,7 +229,7 @@ def test_report_missing_session_errors(repo_log, capsys):
 def test_doctor_no_sessions_errors(repo_log, capsys):
     _, _ = repo_log
     s = _session()
-    # Empty repo dir → latest_session None → error path.
+    # Empty repo dir → latest_agent None → error path.
     assert s.cmd_doctor(None) == 1
     assert "no agents found" in capsys.readouterr().err
 
@@ -239,14 +239,14 @@ def test_track_single_session_view(repo_log, capsys, tmp_path, monkeypatch):
     s = _session()
     sd = _seed_session(tmp_path, log_root, repo, "orchestrate-main-5", _LANDED, status="running")
     # A harness stream so the transcript renderer produces real content.
-    (sd / "session.jsonl").write_text(
+    (sd / "transcript.jsonl").write_text(
         json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "working on it"}]}})
         + "\n"
         + json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {}}]}})
         + "\n"
     )
 
-    # A named track target renders the one-session transcript view (non-tty one-shot path).
+    # A named track target renders the one-agent transcript view (non-tty one-shot path).
     assert s.cmd_track("orchestrate-main-5") == 0
     assert "working on it" in capsys.readouterr().out
 
@@ -268,7 +268,7 @@ def test_track_navigator_oneshot_lists_registry(repo_log, capsys, monkeypatch, t
         (log_root / repo / agent_id).mkdir(parents=True)
 
     # cmd_track(None) → navigate(); stdin is not a tty → one-shot registry list print.
-    assert s.cmd_track(None, all_sessions=True) == 0
+    assert s.cmd_track(None, all_agents=True) == 0
     out = capsys.readouterr().out
     assert "orchestrate-main-6" in out
     assert "orchestrate-main-7" in out
@@ -278,7 +278,7 @@ def test_track_render_helpers_over_real_streams(repo_log, tmp_path):
     log_root, repo = repo_log
     track = load_script(RENDER_PY, "e2e_render")
     sd = _seed_session(tmp_path, log_root, repo, "orchestrate-main-8", _EJECTED)
-    (sd / "session.jsonl").write_text(
+    (sd / "transcript.jsonl").write_text(
         json.dumps(
             {
                 "type": "assistant",

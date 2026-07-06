@@ -24,7 +24,7 @@ def fixture_batch(tmp_path: Path):
     """Create a tiny fixture batch: one AFK plan + one HITL plan."""
     plans_dir = tmp_path / "plans"
     plans_dir.mkdir()
-    log_dir = tmp_path / "logs" / "fixture-repo" / "smoke-session"
+    log_dir = tmp_path / "logs" / "fixture-repo" / "smoke-agent"
     log_dir.mkdir(parents=True)
 
     afk_plan = plans_dir / "afk-slice.md"
@@ -88,7 +88,7 @@ def test_smoke_doctor_produces_clean_verdict(fixture_batch, tmp_path):
     seed_agent_events(
         tmp_path,
         "fixture-repo",
-        "smoke-session",
+        "smoke-agent",
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
@@ -98,9 +98,9 @@ def test_smoke_doctor_produces_clean_verdict(fixture_batch, tmp_path):
         ],
         harness="mentat-orchestrate",
     )
-    session_dir = fixture_batch["log_dir"]
+    agent_dir = fixture_batch["log_dir"]
 
-    verdict = diagnose.build_verdict(session_dir)
+    verdict = diagnose.build_verdict(agent_dir)
     assert "chunk_landed" in verdict or "landed" in verdict.lower()
     assert "## Verdict" in verdict
     assert "## Regression" in verdict

@@ -139,7 +139,7 @@ def test_release_emits_task_released(task_file: Path) -> None:
     mock_spawn.assert_called_once_with("mentat-tasks", "task_released", {"id": "T001"})
 
 
-# ── LT2: session routing tests ───────────────────────────────────────────────
+# ── LT2: agent routing tests ───────────────────────────────────────────────
 
 
 def test_cmd_create_sets_session_when_unset(td: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -153,9 +153,9 @@ def test_cmd_create_sets_session_when_unset(td: Path, monkeypatch: pytest.Monkey
     t = _reload("tasks")
     with patch("lib.events._spawn"):
         t.main(["create", "test-task"])
-    session = os.environ.get("MENTAT_AGENT")
-    assert session is not None, "MENTAT_AGENT not set; ensure_agent not called"
-    assert re.fullmatch(r"[0-9a-f]{32}", session), f"expected uuid session, got {session!r}"
+    agent = os.environ.get("MENTAT_AGENT")
+    assert agent is not None, "MENTAT_AGENT not set; ensure_agent not called"
+    assert re.fullmatch(r"[0-9a-f]{32}", agent), f"expected uuid agent, got {agent!r}"
 
 
 def test_cmd_create_inherits_parent_session_unchanged(td: Path, monkeypatch: pytest.MonkeyPatch) -> None:

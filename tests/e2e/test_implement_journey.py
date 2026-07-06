@@ -38,8 +38,8 @@ def impl():
     return load_script(IMPL_PY, "impl")
 
 
-def _fake_result(*, returncode=0, usage_tokens=None, session_log=None):
-    return SimpleNamespace(returncode=returncode, usage_tokens=usage_tokens, session_log=session_log)
+def _fake_result(*, returncode=0, usage_tokens=None, agent_log=None):
+    return SimpleNamespace(returncode=returncode, usage_tokens=usage_tokens, agent_log=agent_log)
 
 
 def _write_plan(path: Path, *, kind="AFK", body="body") -> Path:
@@ -58,7 +58,7 @@ def _recorder(monkeypatch, obj, name):
 # ── _logs_path ──────────────────────────────────────────────────────────────
 
 
-def test_logs_path_lands_under_session_dir(impl, monkeypatch, tmp_path):
+def test_logs_path_lands_under_agent_dir(impl, monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_AGENT", "implement-x-1")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "repo")
@@ -325,7 +325,7 @@ def test_read_blocked_summary_from_session_seam(impl, monkeypatch, tmp_path):
     seam = tmp_path / "summary.md"
     seam.write_text("---\nstatus: blocked\n---\nsession blocker\n")
     monkeypatch.setattr(impl, "_blocked_summary_path", lambda: seam)
-    assert impl._read_blocked_summary(tmp_path / "wt") == "session blocker"
+    assert impl._read_blocked_summary(tmp_path / "wt") == "agent blocker"
 
 
 def test_read_blocked_summary_worktree_fallback(impl, monkeypatch, tmp_path):
@@ -376,14 +376,14 @@ def test_promote_blocked_summary_oserror_surfaces(impl, monkeypatch):
 
 
 def test_detect_self_answer_none_log_false(impl):
-    assert impl._detect_self_answer(_fake_result(session_log=None)) is False
+    assert impl._detect_self_answer(_fake_result(agent_log=None)) is False
 
 
 def test_detect_self_answer_delegates(impl, monkeypatch):
     monkeypatch.setattr(impl._utils, "detect_self_answer", lambda p: True)
-    assert impl._detect_self_answer(_fake_result(session_log="/x")) is True
+    assert impl._detect_self_answer(_fake_result(agent_log="/x")) is True
     monkeypatch.setattr(impl._utils, "detect_self_answer", lambda p: False)
-    assert impl._detect_self_answer(_fake_result(session_log="/x")) is False
+    assert impl._detect_self_answer(_fake_result(agent_log="/x")) is False
 
 
 # ── run_plan ───────────────────────────────────────────────────────────────────
@@ -504,24 +504,24 @@ def test_run_and_doctor_ok_hitl_no_summary_no_doctor(impl, monkeypatch, tmp_path
     assert doctored == []
 
 
-# ── _run_session_cmd ───────────────────────────────────────────────────────────
+# ── _run_agent_cmd ───────────────────────────────────────────────────────────
 
 
-def test_run_session_cmd_missing_script_no_spawn(impl, monkeypatch, tmp_path):
+def test_run_agent_cmd_missing_script_no_spawn(impl, monkeypatch, tmp_path):
     monkeypatch.setattr(impl, "_AGENT_SCRIPT", tmp_path / "nope.py")
     with _recorder(monkeypatch, impl.subprocess, "run") as ran:
-        impl._run_session_cmd("doctor")
+        impl._run_agent_cmd("doctor")
     assert ran == []
 
 
-def test_run_session_cmd_present_appends_session_id(impl, monkeypatch, tmp_path):
-    script = tmp_path / "session.py"
+def test_run_agent_cmd_present_appends_agent_id(impl, monkeypatch, tmp_path):
+    script = tmp_path / "agent.py"
     script.write_text("# stub\n")
     monkeypatch.setattr(impl, "_AGENT_SCRIPT", script)
     monkeypatch.setenv("MENTAT_AGENT", "sess-9")
     captured: list = []
     monkeypatch.setattr(impl.subprocess, "run", lambda cmd, **k: captured.append(cmd))
-    impl._run_session_cmd("report")
+    impl._run_agent_cmd("report")
     assert captured[0][-2:] == ["report", "sess-9"]
 
 
@@ -531,7 +531,7 @@ def test_run_session_cmd_present_appends_session_id(impl, monkeypatch, tmp_path)
 def test_auto_doctor_no_editor_just_doctors(impl, monkeypatch):
     monkeypatch.delenv("EDITOR", raising=False)
     seen: list = []
-    monkeypatch.setattr(impl, "_run_session_cmd", lambda sub: seen.append(sub))
+    monkeypatch.setattr(impl, "_run_agent_cmd", lambda sub: seen.append(sub))
     with _recorder(monkeypatch, impl.subprocess, "run") as ran:
         impl._auto_doctor()
     assert seen == ["doctor"]
@@ -540,7 +540,7 @@ def test_auto_doctor_no_editor_just_doctors(impl, monkeypatch):
 
 def test_auto_summary_runs_report(impl, monkeypatch):
     seen: list = []
-    monkeypatch.setattr(impl, "_run_session_cmd", lambda sub: seen.append(sub))
+    monkeypatch.setattr(impl, "_run_agent_cmd", lambda sub: seen.append(sub))
     impl._auto_summary()
     assert seen == ["report"]
 
@@ -972,7 +972,7 @@ def _fake_agent(repo):
         (repo / "feature.py").write_text("def feature():\n    return 42\n")
         _git(["add", "feature.py"], cwd=repo)
         _git(["commit", "-m", "feat(core): add feature module"], cwd=repo)
-        return SimpleNamespace(returncode=0, usage_tokens=None, session_log=None)
+        return SimpleNamespace(returncode=0, usage_tokens=None, agent_log=None)
 
     return invoke
 

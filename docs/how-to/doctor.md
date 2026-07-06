@@ -30,7 +30,7 @@ An ejected or failed chunk stands out by its status.
 ## 2. Read the diagnosis
 
 ```
-/mentat-track doctor <session-id>
+/mentat-track doctor <agent-id>
 ```
 
 With no id, doctor falls back to the most recent agent in the repository. It prints
@@ -41,7 +41,7 @@ the verdict to stdout.
 For a guided loop that runs doctor first and walks the evidence:
 
 ```
-/mentat-track diagnose <session-id>
+/mentat-track diagnose <agent-id>
 ```
 
 ## 4. Act on the verdict

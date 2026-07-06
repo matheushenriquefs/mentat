@@ -174,22 +174,22 @@ def test_prune_drops_old_dirs(tmp_path):
     import time
 
     repo_dir = tmp_path / "repo1"
-    old_session = repo_dir / "old-session"
-    new_session = repo_dir / "new-session"
+    old_session = repo_dir / "old-agent"
+    new_session = repo_dir / "new-agent"
     old_session.mkdir(parents=True)
     new_session.mkdir(parents=True)
     # Set old_session mtime to 10 days ago
     old_time = time.time() - 10 * 86400
     os.utime(old_session, (old_time, old_time))
     env = {"MENTAT_LOG_PATH": str(tmp_path), "MENTAT_REPO": "repo1"}
-    # Prune sessions older than 5 days
+    # Prune agents older than 5 days
     import datetime
 
     cutoff = (datetime.date.today() - datetime.timedelta(days=5)).isoformat()
     result = run_log(["prune", "--before", cutoff], env=env)
     assert result.returncode == 0, result.stderr
-    assert not old_session.exists(), "old session not pruned"
-    assert new_session.exists(), "new session wrongly pruned"
+    assert not old_session.exists(), "old agent not pruned"
+    assert new_session.exists(), "new agent wrongly pruned"
 
 
 def test_event_catalog_matches_parent_plan():
@@ -254,7 +254,7 @@ def test_explicit_slug_overrides_fallback(monkeypatch):
 
 
 def test_session_fallback_is_opaque_uuid(tmp_path, monkeypatch):
-    """Unkeyed emit → a real uuid session dir, never an orphan-session-*/pid id."""
+    """Unkeyed emit → a real uuid agent log dir, never an orphan-agent-*/pid id."""
     import json as _json
     import re as _re
 
@@ -271,11 +271,11 @@ def test_session_fallback_is_opaque_uuid(tmp_path, monkeypatch):
     log_mod.cmd_emit(args)
 
     repo_dir = tmp_path / "test-repo"
-    session_dirs = [d for d in repo_dir.iterdir() if d.is_dir()]
-    assert len(session_dirs) == 1
-    name = session_dirs[0].name
-    assert not name.startswith("orphan-session-"), f"orphan fallback reached: {name!r}"
-    assert _re.fullmatch(r"[0-9a-f]{32}", name), f"expected uuid session dir, got {name!r}"
+    agent_dirs = [d for d in repo_dir.iterdir() if d.is_dir()]
+    assert len(agent_dirs) == 1
+    name = agent_dirs[0].name
+    assert not name.startswith("orphan-agent-"), f"orphan fallback reached: {name!r}"
+    assert _re.fullmatch(r"[0-9a-f]{32}", name), f"expected uuid agent log dir, got {name!r}"
 
 
 def test_emit_chunk_teardown_accepted(tmp_path, monkeypatch):
@@ -565,10 +565,10 @@ def _make_list_args(
     return ns
 
 
-def test_query_session_dir_not_found_returns_rc1(tmp_path, monkeypatch):
+def test_query_agent_dir_not_found_returns_rc1(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
     monkeypatch.setenv("MENTAT_REPO", "r")
-    assert log_mod.cmd_list(_make_list_args("nonexistent-session")) == 1
+    assert log_mod.cmd_list(_make_list_args("nonexistent-agent")) == 1
 
 
 def test_query_no_filter_returns_all_events(tmp_path, monkeypatch):

@@ -25,7 +25,7 @@ def load_module(name: str):
 
 
 def test_fan_out_spawns_worktree_and_subprocess(tmp_path):
-    """spawn() calls _spawn_worktree_subprocess and returns the session id."""
+    """spawn() calls _spawn_worktree_subprocess and returns the agent id."""
     spawn = load_module("spawn")
     routing = load_module("scheduler")
     plan = routing.Plan(slug="my-plan", kind="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
@@ -38,10 +38,10 @@ def test_fan_out_spawns_worktree_and_subprocess(tmp_path):
 
     with patch.object(spawn, "_spawn_worktree_subprocess", side_effect=fake_spawn):
         with patch.object(spawn, "_emit_event"):
-            session_id = spawn.spawn(plan)
+            agent_id = spawn.spawn(plan)
 
     assert spawn_calls, "worktree subprocess was not called"
-    assert session_id == "sess-abc"
+    assert agent_id == "sess-abc"
 
 
 def test_fan_out_prints_track_command_immediately(tmp_path):
@@ -49,19 +49,19 @@ def test_fan_out_prints_track_command_immediately(tmp_path):
     routing = load_module("scheduler")
     plan = routing.Plan(slug="my-plan", kind="AFK", blocked_by=[], path=tmp_path / "my-plan.md")
 
-    fake_session_id = "session-123"
+    fake_agent_id = "agent-123"
 
     with patch.object(
-        spawn, "_spawn_worktree_subprocess", return_value=(fake_session_id, _FakePopen(), tmp_path / "wt")
+        spawn, "_spawn_worktree_subprocess", return_value=(fake_agent_id, _FakePopen(), tmp_path / "wt")
     ):
         buf = io.StringIO()
         with redirect_stdout(buf):
-            session_id = spawn.spawn(plan)
+            agent_id = spawn.spawn(plan)
         output = buf.getvalue()
 
     # track command printed immediately
-    assert "track" in output.lower() or "session" in output.lower()
-    assert fake_session_id in output or session_id in output
+    assert "track" in output.lower() or "agent" in output.lower()
+    assert fake_agent_id in output or agent_id in output
 
 
 def test_fan_out_emits_chunk_spawned(tmp_path):
@@ -116,7 +116,7 @@ def test_fan_out_track_suggestion_is_bin_form(tmp_path):
 
     assert "python3" not in output, f"bin form must not contain python3: {output!r}"
     assert "mentat-track track" in output, f"must use bin form; got: {output!r}"
-    assert "sess-binform" in output, f"session id missing from track output: {output!r}"
+    assert "sess-binform" in output, f"agent id missing from track output: {output!r}"
 
 
 # ── spawn_async: asyncio supervisor spawn path ──────────────────────────────
@@ -124,8 +124,8 @@ def test_fan_out_track_suggestion_is_bin_form(tmp_path):
 
 def test_spawn_async_emits_prints_and_returns_process(tmp_path, monkeypatch):
     """spawn_async builds the child via _build_spawn_cmd, launches it with
-    asyncio.create_subprocess_exec (start_new_session=True), emits chunk_started,
-    prints the track command, and returns (session_id, Process) (spawn.py:123-131)."""
+    asyncio.create_subprocess_exec with new process group, emits chunk_started,
+    prints the track command, and returns (agent_id, Process) (spawn.py:123-131)."""
     spawn = load_module("spawn")
     routing = load_module("scheduler")
     plan = routing.Plan(slug="async-plan", kind="AFK", blocked_by=[], path=tmp_path / "async-plan.md")

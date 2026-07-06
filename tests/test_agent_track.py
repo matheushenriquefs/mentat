@@ -114,30 +114,30 @@ def test_section_rule_wraps_label():
 # ── registry.agent_stream_tools — registry stream tail ──────────────────────
 
 
-def _write_stream(session_dir: Path, name: str, rows: list[dict]) -> Path:
-    session_dir.mkdir(parents=True, exist_ok=True)
-    f = session_dir / f"{name}.jsonl"
+def _write_stream(agent_dir: Path, name: str, rows: list[dict]) -> Path:
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    f = agent_dir / f"{name}.jsonl"
     with f.open("w") as fh:
         for r in rows:
             fh.write(json.dumps(r) + "\n")
     return f
 
 
-def test_session_stream_tools_returns_tool_names_in_order(tmp_path):
+def test_agent_stream_tools_returns_tool_names_in_order(tmp_path):
     load_module("registry")
     sd = tmp_path / "s-1"
     _write_stream(sd, "transcript", [_assistant("Read"), {"type": "user"}, _assistant("Edit", "Bash")])
     assert registry.agent_stream_tools(sd) == ["Read", "Edit", "Bash"]
 
 
-def test_session_stream_tools_tails_last_n(tmp_path):
+def test_agent_stream_tools_tails_last_n(tmp_path):
     load_module("registry")
     sd = tmp_path / "s-1"
     _write_stream(sd, "transcript", [_assistant(f"T{i}") for i in range(10)])
     assert registry.agent_stream_tools(sd, limit=3) == ["T7", "T8", "T9"]
 
 
-def test_session_stream_tools_ignores_audit_rows(tmp_path):
+def test_agent_stream_tools_ignores_audit_rows(tmp_path):
     """Audit rows (event key, no assistant tool_use) contribute nothing."""
     load_module("registry")
     sd = tmp_path / "s-1"
@@ -146,7 +146,7 @@ def test_session_stream_tools_ignores_audit_rows(tmp_path):
     assert registry.agent_stream_tools(sd) == ["Read"]
 
 
-def test_session_stream_tools_empty_when_absent(tmp_path):
+def test_agent_stream_tools_empty_when_absent(tmp_path):
     load_module("registry")
     assert registry.agent_stream_tools(tmp_path / "nope") == []
 
@@ -154,13 +154,13 @@ def test_session_stream_tools_empty_when_absent(tmp_path):
 # ── registry.agent_worktree — kill-bind target lookup ───────────────────────
 
 
-def test_session_worktree_from_spawn_event(tmp_path):
+def test_agent_worktree_from_spawn_event(tmp_path):
     load_module("registry")
     sd = _seed_spawn(tmp_path, "s-1", "/wt/x")
     assert registry.agent_worktree(sd) == "/wt/x"
 
 
-def test_session_worktree_none_when_no_spawn(tmp_path):
+def test_agent_worktree_none_when_no_spawn(tmp_path):
     load_module("registry")
     sd = tmp_path / "s-1"
     sd.mkdir(parents=True)
@@ -204,8 +204,8 @@ def test_handle_key_unknown_is_noop():
 # ── track — list + preview renderers (pure) ───────────────────────────────────
 
 
-def _rec(session: str, status: str, last_event: str | None = None) -> dict:
-    return {"agent": session, "status": status, "mtime": 0.0, "age": 0.0, "last_event": last_event}
+def _rec(agent: str, status: str, last_event: str | None = None) -> dict:
+    return {"agent": agent, "status": status, "mtime": 0.0, "age": 0.0, "last_event": last_event}
 
 
 def test_render_list_marks_selection_and_status():
@@ -286,12 +286,12 @@ def test_tool_result_empty_for_non_user():
 
 
 def test_render_transcript_shows_chat_not_blank(tmp_path):
-    """session.jsonl with only harness rows renders chat text, not '[] {}'."""
+    """transcript.jsonl with only harness rows renders chat text, not '[] {}'."""
     load_module("track")
     sd = tmp_path / "s-1"
     _write_stream(
         sd,
-        "session",
+        "agent",
         [
             _assistant("Read", text="Let me read that."),
             _tool_result("file contents"),
@@ -417,7 +417,7 @@ def test_render_list_never_exceeds_viewport_height():
 
 
 def test_render_list_cursor_on_screen_small_terminal():
-    """24-row terminal budget (list_viewport=5), >5 sessions → selected row in output."""
+    """24-row terminal budget (list_viewport=5), >5 agents → selected row in output."""
     load_module("track")
     records = [_rec(f"s-{i:02d}", "working") for i in range(10)]
     lines = panes.render_list(records, selected=7, viewport_height=5)
@@ -495,7 +495,7 @@ def test_color_for_event_ejected_suffix():
 
 def test_render_transcript_lines_empty_session_shows_placeholder(tmp_path):
     load_module("track")
-    sd = tmp_path / "empty-session"
+    sd = tmp_path / "empty-agent"
     sd.mkdir()
     lines = render.render_transcript_lines(sd)
     assert any("no transcript yet" in ln for ln in lines)
@@ -642,14 +642,14 @@ def test_registry_pairs_records_with_dirs(tmp_path, monkeypatch):
     (logs / "repo" / "implement-a-1").mkdir(parents=True)
     repo_dir = logs / "repo"
     entries = panes._registry(repo_dir, active_only=False)
-    assert entries, "expected the seeded session in the registry"
+    assert entries, "expected the seeded agent in the registry"
     rec, sd = entries[0]
     assert rec["agent"] == "implement-a-1"
     assert sd == repo_dir / "implement-a-1"
 
 
 def test_registry_reads_sqlite_lists_live_and_idle(tmp_path, monkeypatch):
-    """track/registry reads the canonical store — live sessions list without recency window."""
+    """track/registry reads the canonical store — live agents list without recency window."""
     load_module("track")
     from lib import store
 
@@ -744,10 +744,10 @@ def test_frame_builds_list_view_with_repo_and_hint(tmp_path, monkeypatch):
 
 
 def test_frame_empty_entries_has_no_preview():
-    """The list frame with no sessions still renders the header (0 session(s)), no preview."""
+    """The list frame with no agents still renders the header (0 agent(s)), no preview."""
     load_module("track")
     body = "\n".join(panes._frame([], 0, "repo", rows=24))
-    assert "0 session(s)" in body
+    assert "0 agent(s)" in body
 
 
 def test_transcript_content_continues_after_tool_row(tmp_path):

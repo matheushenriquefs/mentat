@@ -37,7 +37,7 @@ if a slice is wrong.
 
 ## 2. Implement and land
 
-Run the plan start to finish in one session:
+Run the plan start to finish in one agent:
 
 ```
 /mentat-implement run --land --holding holding/hello-mentat hello-mentat
@@ -60,7 +60,7 @@ point instead of landing unattended.
 
 ## 3. Watch it run
 
-In a second harness session, watch progress live:
+In a second harness agent, watch progress live:
 
 ```
 /mentat-track track

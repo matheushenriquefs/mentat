@@ -2,7 +2,7 @@
 
 ``main()`` runs through real argv dispatch: ``write`` copies a body file into the plans
 dir and emits real chunk_started/agent_stopped audit rows through the mentat-log
-subprocess; ``resolve-slug`` canonicalizes both a bare slug and an explicit path. Session
+subprocess; ``resolve-slug`` canonicalizes both a bare slug and an explicit path. Agent
 state points at tmp so the audit trail is real; HOME stays real so the emitter resolves.
 In-process so the plan dispatch is measured.
 """
@@ -30,8 +30,8 @@ def audit(tmp_path, monkeypatch):
     return log_root
 
 
-def _plan_events(session_id: str) -> list[str]:
-    return event_kinds(session_id)
+def _plan_events(agent_id: str) -> list[str]:
+    return event_kinds(agent_id)
 
 
 def _run_main(plan, argv: list[str], monkeypatch) -> int:

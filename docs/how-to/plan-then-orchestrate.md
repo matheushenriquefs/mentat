@@ -3,7 +3,7 @@
 Task-oriented. Goal: fan several slices out as parallel chunks and land them back
 serially onto one holding branch.
 
-For a single plan in one session, see [plan-then-implement](./plan-then-implement.md).
+For a single plan in one agent, see [plan-then-implement](./plan-then-implement.md).
 
 ## 1. Write the plans
 

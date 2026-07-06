@@ -14,7 +14,7 @@ The core property: **parallel-out, serial-in.** Implementation parallelism ampli
 
 ## Parallel fan-out, serial land
 
-Slices run as chunks: one worktree + one devcontainer + one branch off `main`, each running its own coding agent session. The orchestrator spawns chunks concurrently (default 3; tunable via `~/.mentat/config.toml` `concurrency` key). Once all gates clear inside a chunk, it queues for landing.
+Slices run as chunks: one worktree + one devcontainer + one branch off `main`, each running its own coding agent agent. The orchestrator spawns chunks concurrently (default 3; tunable via `~/.mentat/config.toml` `concurrency` key). Once all gates clear inside a chunk, it queues for landing.
 
 Landing is single-threaded by construction: one ref can't move concurrently, and serial landing lets sibling divergence resolve by rebasing onto the tip the previous chunk left. See [ADR-0004](./adr/0004-parallel-orchestration.md).
 

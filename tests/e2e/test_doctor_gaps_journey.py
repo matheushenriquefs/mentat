@@ -1,4 +1,4 @@
-"""E2E gap-closer: diagnose branches no other session test reaches.
+"""E2E gap-closer: diagnose branches no other agent test reaches.
 
 Drives ``diagnose.build_verdict`` / ``build_summary`` over seeded canonical
 store rows shaped for branches the report/registry tests miss.
@@ -22,13 +22,13 @@ def _diagnose():
     return load_script(DIAGNOSE_PY, "e2e_diagnose_gaps")
 
 
-def _session_dir(tmp_path: Path, agent_id: str) -> Path:
+def _agent_dir(tmp_path: Path, agent_id: str) -> Path:
     return tmp_path / "logs" / "repo" / agent_id
 
 
 def test_build_verdict_no_terminal_event_reports_unknown(tmp_path):
     d = _diagnose()
-    agent_id = "session"
+    agent_id = "agent"
     seed_agent_events(
         tmp_path,
         "repo",
@@ -46,14 +46,14 @@ def test_build_verdict_no_terminal_event_reports_unknown(tmp_path):
             },
         ],
     )
-    out = d.build_verdict(_session_dir(tmp_path, agent_id))
+    out = d.build_verdict(_agent_dir(tmp_path, agent_id))
     assert "- Reason: implement_failed" in out
     assert "chunk_ejected @ 2026-06-29T00:00:01Z" in out
 
 
 def test_build_summary_no_terminal_reports_in_session_completion(tmp_path):
     d = _diagnose()
-    agent_id = "session"
+    agent_id = "agent"
     seed_agent_events(
         tmp_path,
         "repo",
@@ -71,7 +71,7 @@ def test_build_summary_no_terminal_reports_in_session_completion(tmp_path):
             },
         ],
     )
-    out = d.build_summary(_session_dir(tmp_path, agent_id))
+    out = d.build_summary(_agent_dir(tmp_path, agent_id))
     assert "not yet landed" in out
     assert "- Plan: s1.md" in out
     assert "- Events recorded: 2" in out
@@ -79,7 +79,7 @@ def test_build_summary_no_terminal_reports_in_session_completion(tmp_path):
 
 def test_build_summary_hitl_eject_appends_operator_blocker(tmp_path):
     d = _diagnose()
-    agent_id = "session"
+    agent_id = "agent"
     reason = d.HITL_REQUIRED
     seed_agent_events(
         tmp_path,
@@ -98,7 +98,7 @@ def test_build_summary_hitl_eject_appends_operator_blocker(tmp_path):
             },
         ],
     )
-    out = d.build_summary(_session_dir(tmp_path, agent_id))
+    out = d.build_summary(_agent_dir(tmp_path, agent_id))
     assert "Ejected `s1`" in out
     assert "Blocker: need a schema decision" in out
     assert "diagnosis.md" not in out, "the HITL blocker arm replaces the diagnosis pointer"

@@ -4,8 +4,8 @@ Flow:
 1. orchestrate.run_orchestrate on a HITL plan → emits
    chunk_started{harness:"hitl-in-agent"}; returns without invoking
    the harness.
-2. Caller (this test stands in for the calling Claude session) commits
-   work on the slug worktree (simulating the in-session /mentat-implement
+2. Caller (this test stands in for the calling Claude agent) commits
+   work on the slug worktree (simulating the in-agent /mentat-implement
    drive) then invokes land_queue.drain.
 3. land_queue rebases + gates + FF-merges, emitting chunk_landed;
    holding FF-advances to the chunk tip.

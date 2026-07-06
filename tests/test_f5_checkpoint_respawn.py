@@ -64,7 +64,7 @@ def test_invoke_harness_passes_seed_summary_from_env(tmp_path: Path) -> None:
     class FakeAdapter:
         def invoke(self, prompt, *, afk, model, seed_summary=None):
             captured.append({"seed_summary": seed_summary})
-            return MagicMock(returncode=0, usage_tokens=None, session_log=None)
+            return MagicMock(returncode=0, usage_tokens=None, agent_log=None)
 
     fake_mod = FakeAdapter()
 
@@ -73,12 +73,12 @@ def test_invoke_harness_passes_seed_summary_from_env(tmp_path: Path) -> None:
 
     with (
         patch.object(impl, "_load_mod", fake_load),
-        patch.dict("os.environ", {"MENTAT_SEED_SUMMARY": "prior session context"}),
+        patch.dict("os.environ", {"MENTAT_SEED_SUMMARY": "prior agent context"}),
     ):
         impl._invoke_harness("claude-code", "do it", afk=False, model=None)
 
     assert captured, "_invoke_harness did not call adapter"
-    assert captured[0]["seed_summary"] == "prior session context", (
+    assert captured[0]["seed_summary"] == "prior agent context", (
         f"seed_summary not forwarded: {captured[0]['seed_summary']!r}"
     )
 
@@ -91,7 +91,7 @@ def test_checkpoint_if_needed_writes_summary_when_threshold_crossed(
 ) -> None:
     """F5 tracer: threshold crossed → summary.md written with status: succeeded."""
     impl = _impl()
-    monkeypatch.setenv("MENTAT_AGENT", "test-session-f5")
+    monkeypatch.setenv("MENTAT_AGENT", "test-agent-f5")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
 
@@ -102,7 +102,7 @@ def test_checkpoint_if_needed_writes_summary_when_threshold_crossed(
 
     from lib.agent import summary_file
 
-    path = summary_file("test-session-f5")
+    path = summary_file("test-agent-f5")
     assert path.exists(), "summary.md not written after threshold crossed"
     text = path.read_text()
     assert "status: succeeded" in text or "status:succeeded" in text.replace(" ", ""), (
@@ -113,7 +113,7 @@ def test_checkpoint_if_needed_writes_summary_when_threshold_crossed(
 def test_checkpoint_if_needed_noop_below_threshold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """F5 tracer: usage below threshold → no summary written."""
     impl = _impl()
-    monkeypatch.setenv("MENTAT_AGENT", "test-session-f5-below")
+    monkeypatch.setenv("MENTAT_AGENT", "test-agent-f5-below")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
 
@@ -124,7 +124,7 @@ def test_checkpoint_if_needed_noop_below_threshold(tmp_path: Path, monkeypatch: 
 
     from lib.agent import summary_file
 
-    path = summary_file("test-session-f5-below")
+    path = summary_file("test-agent-f5-below")
     assert not path.exists(), "summary.md written when below threshold — should be noop"
 
 
@@ -240,11 +240,11 @@ def test_fan_out_plans_seeds_next_chunk_from_completed_summary(tmp_path: Path, m
     async def fake_spawn_async(plan, *, harness=None, model=None, seed_summary=None):
         session_counter[0] += 1
         sid = f"implement-{plan.slug}-{session_counter[0]}"
-        spawn_calls.append({"slug": plan.slug, "seed_summary": seed_summary, "session_id": sid})
+        spawn_calls.append({"slug": plan.slug, "seed_summary": seed_summary, "agent_id": sid})
         return sid, FakeProc(), tmp_path / "wt" / plan.slug
 
-    # Write a summary file for plan-a's session after plan-a "completes"
-    # We must know the session_id ahead of time to pre-write the file — use the first sid
+    # Write a summary file for plan-a's agent after plan-a "completes"
+    # We must know the agent_id ahead of time to pre-write the file — use the first sid
     first_sid = "implement-plan-a-1"
     from lib.agent import summary_file
 

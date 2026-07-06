@@ -55,7 +55,7 @@ read on demand):
 - **0010** read-only test mount — OCP manifest + container bind-mount.
 - **0011** compose-aware container — sidecar detection, dev-service layering (default), host opt-out (ADR-0004 forfeit).
 - **0012** code-rules layer — `.agents/rules/` reviewed against changed files, veto gate.
-- **0013** session continuity over compaction — resume from summary, no early wrap-up.
+- **0013** agent continuity over compaction — resume from summary, no early wrap-up.
 - **0014** coverage gate — unit 90% testable-line + e2e journey floor, blocking `task coverage`.
 - **0015** model-driven auto-recovery — JIT respawn of AFK chunks, supervisor + watchdog/breaker guards.
 - **0016** mutation signal — advisory only, never a gate; test-ROI heuristic.

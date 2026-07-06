@@ -42,7 +42,7 @@ Test layout mirrors source: `test_spawn.py`, `test_landing.py`, `test_supervise.
 | `runtime.py` | Host-vs-container runtime select, env scrub | extracted from `container.py` |
 | `doctor.py` | `cmd_doctor` sections | extracted from `container.py` |
 
-### Track skill (`mentat-session/` → `mentat-track/`)
+### Track skill (`mentat-track/` → `mentat-track/`)
 
 | Submodule | Responsibility | Source today |
 |---|---|---|
@@ -52,9 +52,9 @@ Test layout mirrors source: `test_spawn.py`, `test_landing.py`, `test_supervise.
 | `panes.py` | Pane layout, viewport | extracted from `track.py` |
 | `agent.py` | Id mint (`make_agent_id`), agent resolution | `session.py` + `sessions.py` |
 
-Entity rename during split: `view_session`→`view_agent`, `SessionRecord`→`Agent`,
+Entity rename during split: `view_agent`→`view_agent`, `SessionRecord`→`Agent`,
 `SessionStatus`→`AgentStatus = Literal[...]`, `_resolve_session`→`_resolve_agent`.
-Skill dir `mentat-session/` → `mentat-track/`; install symlinks and evals follow.
+Skill dir `mentat-track/` → `mentat-track/`; install symlinks and evals follow.
 
 ### Shared lib moves
 
@@ -76,7 +76,7 @@ Skill dir `mentat-session/` → `mentat-track/`; install symlinks and evals foll
 | `harness_stream.py` | `lib/harness/schema.py` |
 | `harness_utils.py` | `harness/utils.py` |
 | install `render.py` | `report.py` |
-| skill `mentat-session/` | `mentat-track/` |
+| skill `mentat-track/` | `mentat-track/` |
 
 Function-level renames are owned by their feature plans and are **not** duplicated
 here: `mentat-log query`→`list` (drift-guardrail), `next_ready`→`list_ready_slices`
@@ -108,7 +108,7 @@ Held-state resources become `<Thing>Service`: `ContainerService`, `GitService`,
 
 - Public CLI paths unchanged; importers update to new module names.
 - `test_orchestrate.py` and `test_implement.py` monoliths split to mirror modules.
-- `mentat-session` skill name retires; docs, install symlinks, and evals reference
+- `mentat-track` skill name retires; docs, install symlinks, and evals reference
   `mentat-track` only.
 - `lib/support/` groups pure helpers (`backoff`, `paths`, `frontmatter`); core subsystems (`git`, `events`, `store`)
   stay top-level `lib/` modules.

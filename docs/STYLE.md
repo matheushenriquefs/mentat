@@ -60,7 +60,7 @@ Used for: `mentat-researcher`, reviewers, all files in `.agents/agents/`.
 | Path pattern | Voice class | LOC budget |
 |---|---|---|
 | `.agents/skills/mentat-install/SKILL.md` | Thin Skill | ≤40 |
-| `.agents/skills/mentat-{prd,tasks,implement,orchestrate,container,log,session,git,plan,skill}/SKILL.md` | Full Skill | 75–120 |
+| `.agents/skills/mentat-{prd,tasks,implement,orchestrate,container,log,agent,git,plan,skill}/SKILL.md` | Full Skill | 75–120 |
 | `.agents/agents/mentat-*-reviewer.md` | Agent | 60–100 |
 | `.agents/agents/mentat-researcher.md` | Agent | 60–100 |
 | `docs/*.md` | Diátaxis (free) | n/a |

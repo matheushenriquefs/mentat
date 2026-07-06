@@ -4,7 +4,7 @@
 ``# pragma: no cover`` I/O shells; everything they drive — the transcript/audit
 renderers, the keypress reducer, the scroll/window math, the focus-index pin, the
 list/preview/focus frame builders, and the sqlite-backed registry + kill bind —
-is pure and exercised here against real on-disk session dirs. Non-tty stdin (the
+is pure and exercised here against real on-disk agent log dirs. Non-tty stdin (the
 pytest default) also drives the one-shot fallbacks of ``view_agent`` /
 ``navigate``.
 """
@@ -70,9 +70,9 @@ def _audit(event: str, **payload) -> dict:
     return {"ts": "2026-07-01T12:00:00+00:00", "event": event, "payload": payload}
 
 
-def _write(session_dir: Path, name: str, rows: list[dict]) -> None:
-    session_dir.mkdir(parents=True, exist_ok=True)
-    (session_dir / f"{name}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+def _write(agent_dir: Path, name: str, rows: list[dict]) -> None:
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    (agent_dir / f"{name}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
 
 
 # ── pure reducers: toggle / empty-hint / color ────────────────────────────────
@@ -85,7 +85,7 @@ def test_toggle_and_empty_hint_and_color():
 
     assert "last lifecycle: chunk_landed" in m.empty_hint(m._VIEW_AUDIT, "chunk_landed")
     assert "no audit events yet" in m.empty_hint(m._VIEW_AUDIT, None)
-    assert "audit-only session" in m.empty_hint(m._VIEW_TRANSCRIPT, None)
+    assert "audit-only agent" in m.empty_hint(m._VIEW_TRANSCRIPT, None)
 
     assert m._color_for_event("chunk_landed") == m._COLORS["landed"]
     assert m._color_for_event("nothing.matches") == ""
@@ -99,7 +99,7 @@ def test_transcript_and_audit_renderers(tmp_path):
     sd = tmp_path / "sess"
     _write(
         sd,
-        "session",
+        "agent",
         [
             _assistant("Read", text="hello world"),
             _user_result("done"),
@@ -286,9 +286,9 @@ def test_registry_frame_navigate_and_kill(tmp_path, monkeypatch, capsys):
     m._kill(sd)
     assert calls and "/tmp/wt-s1" in calls[0]
 
-    # A session with no worktree in its audit → kill is a no-op.
+    # A agent with no worktree in its audit → kill is a no-op.
     sd2 = repo_dir / "s2"
-    _write(sd2, "session", [_audit("chunk_started", slug="s2")])
+    _write(sd2, "agent", [_audit("chunk_started", slug="s2")])
     calls.clear()
     m._kill(sd2)
     assert calls == []

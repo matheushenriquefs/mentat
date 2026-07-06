@@ -23,14 +23,14 @@ SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestra
 @pytest.fixture
 def audit_env(tmp_path, monkeypatch):
     log_root = tmp_path / "logs"
-    session = "orchestrate-holding-1"
+    agent = "orchestrate-holding-1"
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", "orchrepo")
-    monkeypatch.setenv("MENTAT_AGENT", session)
-    monkeypatch.setenv("MENTAT_AGENT", session)
+    monkeypatch.setenv("MENTAT_AGENT", agent)
+    monkeypatch.setenv("MENTAT_AGENT", agent)
     monkeypatch.delenv("MENTAT_AGENT_LOG", raising=False)
     monkeypatch.chdir(tmp_path)
-    return session
+    return agent
 
 
 def _orch():
@@ -49,8 +49,8 @@ def _plan(plans_dir: Path, slug: str, *, cls: str = "AFK", blocked_by: str = "",
     return p
 
 
-def _batch_reviews(session_id: str) -> list[dict]:
-    return events_by_kind(session_id, "batch_reviewed")
+def _batch_reviews(agent_id: str) -> list[dict]:
+    return events_by_kind(agent_id, "batch_reviewed")
 
 
 def test_dry_run_previews_partition(tmp_path, audit_env, capsys):

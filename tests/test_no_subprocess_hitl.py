@@ -1,7 +1,7 @@
 """orchestrate must not subprocess-run implement.py for HITL plans.
 
 Instead it emits chunk_started{harness:"hitl-in-agent"} per HITL plan and
-returns control to the calling session. Anchored slugs are NOT landed in the
+returns control to the calling agent. Anchored slugs are NOT landed in the
 same orchestrate invocation.
 """
 

@@ -1,7 +1,7 @@
 """Regression: `run_orchestrate` must pass plan-slug-keyed chunks to `land_queue.drain`.
 
 `_fan_out_plans` returns `(plan, returncode)` pairs keyed by `plan.slug` from
-frontmatter. If slugs are swapped for session_ids, `Scheduler._plans.get(session_id)`
+frontmatter. If slugs are swapped for agent_ids, `Scheduler._plans.get(agent_id)`
 returns None, the unknown-slug fallback in `list_ready_slices` fires for every chunk, and
 dep gating + eject cascade silently no-op on the prod `run` path.
 
@@ -81,8 +81,8 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
     assert isinstance(chunks, list)
     chunk_slugs = [c.slug for c in chunks]
     assert chunk_slugs == ["a", "b"], f"land queue must receive plan slugs, got {chunk_slugs}"
-    # Negative guard: no session_id should leak through.
-    assert not any(s.startswith("auto-") for s in chunk_slugs), f"session_ids leaked into land queue: {chunk_slugs}"
+    # Negative guard: no agent_id should leak through.
+    assert not any(s.startswith("auto-") for s in chunk_slugs), f"agent_ids leaked into land queue: {chunk_slugs}"
 
     # Callbacks must be callables wrapping a Scheduler with the right plans.
     assert callable(captured.get("list_ready_slices")), "list_ready_slices callback must be passed"
@@ -91,7 +91,7 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
 
 
 def test_run_orchestrate_independent_afks_keep_plan_slug_identity(tmp_path, monkeypatch):
-    """Two independent AFKs — chunks still arrive with plan slugs, not session_ids."""
+    """Two independent AFKs — chunks still arrive with plan slugs, not agent_ids."""
     orchestrate = _load("orchestrate")
     _load("landing")
     _load("scheduler")

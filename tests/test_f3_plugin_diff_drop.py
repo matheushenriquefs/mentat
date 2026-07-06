@@ -1,8 +1,8 @@
-"""F3: UX suggestions — session-track hint at start, diff-review hint at end.
+"""F3: UX suggestions — agent-track hint at start, diff-review hint at end.
 
 Red tracers:
-- implement.py source contains session-track and diff-review suggestions
-- orchestrate.py source contains session-track suggestion at start
+- implement.py source contains agent-track and diff-review suggestions
+- orchestrate.py source contains agent-track suggestion at start
 """
 
 from __future__ import annotations

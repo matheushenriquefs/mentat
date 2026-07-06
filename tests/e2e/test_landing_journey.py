@@ -66,21 +66,21 @@ def _configure_env(monkeypatch, tmp_path: Path, main_repo: Path) -> str:
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", "repo")
-    session = "orchestrate-holding-1"
-    monkeypatch.setenv("MENTAT_AGENT", session)
-    monkeypatch.setenv("MENTAT_AGENT", session)
+    agent = "orchestrate-holding-1"
+    monkeypatch.setenv("MENTAT_AGENT", agent)
+    monkeypatch.setenv("MENTAT_AGENT", agent)
     monkeypatch.chdir(main_repo)
-    return session
+    return agent
 
 
-def _events(session_id: str, name: str) -> list[dict]:
-    return events_by_kind(session_id, name)
+def _events(agent_id: str, name: str) -> list[dict]:
+    return events_by_kind(agent_id, name)
 
 
 def test_drain_lands_clean_and_ejects_blocked(tmp_path, monkeypatch):
     lq = load_script(SCRIPTS / "landing.py", "e2e_lq")
     main_repo, wts = _setup(tmp_path, ["good", "bad"])
-    session = _configure_env(monkeypatch, tmp_path, main_repo)
+    agent = _configure_env(monkeypatch, tmp_path, main_repo)
 
     before = int(_git(["rev-list", "--count", "refs/heads/holding"], cwd=main_repo))
 
@@ -106,14 +106,14 @@ def test_drain_lands_clean_and_ejects_blocked(tmp_path, monkeypatch):
     assert "bad.txt" not in tree, "a blocked chunk must not land"
 
     # Real audit rows: one landing, one ejection.
-    assert {e["payload"]["slug"] for e in _events(session, "chunk_landed")} == {"good"}
-    assert {e["payload"]["slug"] for e in _events(session, "chunk_ejected")} == {"bad"}
+    assert {e["payload"]["slug"] for e in _events(agent, "chunk_landed")} == {"good"}
+    assert {e["payload"]["slug"] for e in _events(agent, "chunk_ejected")} == {"bad"}
 
 
 def test_drain_cascades_ejection_to_dependents(tmp_path, monkeypatch):
     lq = load_script(SCRIPTS / "landing.py", "e2e_lq_cascade")
     main_repo, wts = _setup(tmp_path, ["root", "child"])
-    session = _configure_env(monkeypatch, tmp_path, main_repo)
+    agent = _configure_env(monkeypatch, tmp_path, main_repo)
 
     chunks = [lq.Chunk("root", wts["root"]), lq.Chunk("child", wts["child"])]
 
@@ -142,7 +142,7 @@ def test_drain_cascades_ejection_to_dependents(tmp_path, monkeypatch):
     # holding never advanced — nothing landed.
     assert int(_git(["rev-list", "--count", "refs/heads/holding"], cwd=main_repo)) == 1
 
-    ejects = {e["payload"]["slug"]: e["payload"] for e in _events(session, "chunk_ejected")}
+    ejects = {e["payload"]["slug"]: e["payload"] for e in _events(agent, "chunk_ejected")}
     assert ejects["root"]["reason"] == lq.GATE_FAILED
     assert ejects["child"]["reason"] == lq.UPSTREAM_EJECTED
     assert ejects["child"]["upstream"] == "root"

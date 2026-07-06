@@ -25,11 +25,11 @@ def _write_log(path: Path, rows: list[dict]) -> None:
 
 def test_detect_self_answer_streamjson_positive(tmp_path):
     utils = _load("harness_utils")
-    log = tmp_path / "session.jsonl"
+    log = tmp_path / "transcript.jsonl"
     _write_log(
         log,
         [
-            {"type": "system", "subtype": "init", "session_id": "x"},
+            {"type": "system", "subtype": "init", "agent_id": "x"},
             {
                 "type": "assistant",
                 "message": {
@@ -50,7 +50,7 @@ def test_detect_self_answer_streamjson_positive(tmp_path):
 
 def test_detect_self_answer_streamjson_negative(tmp_path):
     utils = _load("harness_utils")
-    log = tmp_path / "session.jsonl"
+    log = tmp_path / "transcript.jsonl"
     _write_log(
         log,
         [
@@ -76,7 +76,7 @@ def test_detect_self_answer_missing_log_returns_false(tmp_path):
 
 def test_detect_self_answer_malformed_rows_ignored(tmp_path):
     utils = _load("harness_utils")
-    log = tmp_path / "session.jsonl"
+    log = tmp_path / "transcript.jsonl"
     log.write_text('not json\n{}\n{"type":"junk"}\n')
     assert utils.detect_self_answer(log) is False
 
@@ -89,7 +89,7 @@ def test_detect_self_answer_falsy_path_returns_false():
 
 def test_detect_self_answer_skips_blank_lines(tmp_path):
     utils = _load("harness_utils")
-    log = tmp_path / "session.jsonl"
+    log = tmp_path / "transcript.jsonl"
     log.write_text('\n\n{"type":"system"}\n\n')
     assert utils.detect_self_answer(log) is False
 

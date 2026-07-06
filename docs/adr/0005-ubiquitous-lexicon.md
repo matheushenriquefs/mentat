@@ -18,7 +18,7 @@ used interchangeably; no noun for the whole set of chunks in one run. Gate machi
 - **chunk** — the *running execution* of one slice: worktree + container + branch.
 - **batch** — the full set of chunks in one `mentat-orchestrate run`.
 - **supervisor** — the orchestrate session that schedules slices, fans out chunks, and runs the land queue.
-- **agent** — one harness run (implement child or in-session HITL driver); audited via `agent_started` / `agent_stopped` / `agent_reaped`.
+- **agent** — one harness run (implement child or in-agent HITL driver); audited via `agent_started` / `agent_stopped` / `agent_reaped`.
 - **slug** — chunk's unique id; worktree dirname; `mentat_slug` container label.
 - **holding branch** — `branch/<feature>`, no own commits; chunks FF onto it.
 - **land** — FF-merge a chunk's tip onto the holding branch after all gates pass.

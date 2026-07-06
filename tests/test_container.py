@@ -1527,7 +1527,7 @@ def test_doctor_harness_and_state_present(tmp_path, monkeypatch):
     (claude / "skills" / "diagnose").mkdir()
     (claude / "skills" / "diagnose" / "SKILL.md").write_text("x\n")
     (claude / "plugins" / "marketplaces" / "caveman").mkdir(parents=True)
-    # mentat state: ~/.mentat present with logs dir holding a session
+    # mentat state: ~/.mentat present with logs dir holding a agent
     mentat = home / ".mentat"
     (mentat / "logs" / "sess1").mkdir(parents=True)
 
@@ -1554,7 +1554,7 @@ def test_doctor_harness_and_state_present(tmp_path, monkeypatch):
     assert "mentat-* subagents linked" in output
     assert "cursor" in output
     assert "present" in output  # companions present
-    assert "1 sessions" in output
+    assert "1 agents" in output
     assert "1 ro-mounted, 1 open" in output  # tests manifest parsed
 
 

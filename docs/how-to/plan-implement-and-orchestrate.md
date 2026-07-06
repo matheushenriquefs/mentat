@@ -9,11 +9,11 @@ Every plan carries a `kind:` in its frontmatter:
 
 - **AFK** — the gate clears unattended. The agent never stops to ask; an ambiguity
   it cannot resolve is an ejection, not a question.
-- **HITL** — the run drives in your calling session so a human can answer at the
+- **HITL** — the run drives in your calling agent so a human can answer at the
   decision points. It is never spawned headless.
 
 Orchestrate routes by kind. AFK plans fan out as parallel chunks. A HITL plan is
-not spawned headless — it is handed to your session to drive directly.
+not spawned headless — it is handed to your agent to drive directly.
 
 ## 1. Fan out the AFK plans
 
@@ -26,16 +26,16 @@ Run orchestrate over the AFK plans against a holding branch:
 These land through the serial merge queue as usual. See
 [plan-then-orchestrate](./plan-then-orchestrate.md).
 
-## 2. Drive the HITL plan in session
+## 2. Drive the HITL plan in agent
 
-Run the HITL plan with `mentat-implement` in your interactive session, landing onto
+Run the HITL plan with `mentat-implement` in your interactive agent, landing onto
 the same holding branch so it joins the rest:
 
 ```
 /mentat-implement run --land --holding holding/feature hitl-plan-c
 ```
 
-Because the plan is `HITL`, the run stays in your session and stops at each decision
+Because the plan is `HITL`, the run stays in your agent and stops at each decision
 point for your answer instead of guessing.
 
 ## 3. Handle a wedge from an AFK chunk
@@ -47,7 +47,7 @@ its worktree. Resume it as a HITL run once you have made the call — see
 
 ## 4. Review and merge
 
-Once both the fanned-out chunks and the in-session plan have landed:
+Once both the fanned-out chunks and the in-agent plan have landed:
 
 ```
 /mentat-git diff main..holding/feature

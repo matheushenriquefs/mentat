@@ -96,4 +96,4 @@ def test_attempt_count_replays_recovery_spawns(tmp_path, monkeypatch):
         ],
     )
     assert store.attempt_count("s1", "core") == 2
-    assert store.attempt_count("no-session", "core") == 0
+    assert store.attempt_count("no-agent", "core") == 0

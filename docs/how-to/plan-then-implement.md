@@ -1,6 +1,6 @@
 # Plan, then implement a single plan
 
-Task-oriented. Goal: take one plan from written to landed in a single session, with
+Task-oriented. Goal: take one plan from written to landed in a single agent, with
 no fan-out. This is the self-contained loop — useful for a focused change or when
 you want to stay in the loop the whole way.
 
@@ -40,7 +40,7 @@ What the run does, in order:
 
 - **Gate failure** → the run exits non-zero, the worktree is preserved, and
   `mentat-track doctor` is spawned to print a diagnosis. See [doctor](./doctor.md).
-- **A HITL slice** → the run hands control back to your session at the decision
+- **A HITL slice** → the run hands control back to your agent at the decision
   point rather than guessing. See [hitl-handoff](./hitl-handoff.md).
 
 ## 4. Review and merge
@@ -54,5 +54,5 @@ git checkout main && git merge --ff-only holding/add-csv-export
 
 - One plan slug per `mentat-implement` run. Passing more than one is refused — use
   [orchestrate](./plan-then-orchestrate.md) for multiple plans.
-- The run prints `mentat-track track <session>` at the start so you can watch it
-  from another session. See [tracking a run](./tracking-a-run.md).
+- The run prints `mentat-track track <agent>` at the start so you can watch it
+  from another agent. See [tracking a run](./tracking-a-run.md).

@@ -107,8 +107,8 @@ def test_implement_single_hitl_plan_hands_off_to_caller(tmp_path):
 
     The harness shells `claude --headless` which loses AskUserQuestion.
     implement.py emits chunk_started{harness:"hitl-in-agent"} and returns 0,
-    handing control back to the calling Claude session which drives the TDD
-    loop in-session.
+    handing control back to the calling Claude agent which drives the TDD
+    loop in-agent.
     """
     impl = load_module("implement")
     plan = _write_plan(tmp_path, "hitl-plan", kind="HITL")
@@ -148,13 +148,13 @@ def test_implement_afk_plan_self_answer_detected_exits_42(tmp_path):
     impl = load_module("implement")
     plan = _write_plan(tmp_path, "afk-ambi", kind="AFK")
 
-    session_log = tmp_path / "session.jsonl"
+    agent_log = tmp_path / "transcript.jsonl"
     session_log.write_text(
         json.dumps({"role": "assistant", "content": "Q: Should I proceed? A: Yes, I'll proceed."}) + "\n"
     )
 
     fake_result = MagicMock(returncode=0)
-    fake_result.session_log = session_log
+    fake_result.agent_log = session_log
 
     with patch.object(impl, "_invoke_harness", return_value=fake_result):
         with patch.object(impl, "_detect_self_answer", return_value=True):
@@ -185,7 +185,7 @@ def test_implement_emits_chunk_ejected_with_hitl_reason(tmp_path):
     assert "hitl_required" in str(ejected_payload)
 
 
-# ── AFK success (in-session gates deferred to land per ADR-0004) ───────────────
+# ── AFK success (in-agent gates deferred to land per ADR-0004) ───────────────
 
 
 def test_implement_afk_harness_success_exits_0(tmp_path):
@@ -377,7 +377,7 @@ def test_implement_no_summary_on_failure(tmp_path):
 
 
 def test_implement_no_summary_on_hitl_handoff(tmp_path):
-    """S8 drift fix: a HITL plan returns 0 by handing off to the calling session
+    """S8 drift fix: a HITL plan returns 0 by handing off to the calling agent
     (nothing implemented yet) — no premature 'completed' success summary. Summary
     is for AFK runs that actually executed the plan to completion."""
     impl = load_module("implement")
@@ -393,10 +393,10 @@ def test_implement_no_summary_on_hitl_handoff(tmp_path):
 
 
 def test_auto_summary_invokes_session_report(tmp_path, monkeypatch):
-    """S8: _auto_summary shells `session.py report [<id>]` to write summary.md
-    (mirrors _auto_doctor's session.py doctor call)."""
+    """S8: _auto_summary shells `agent.py report [<id>]` to write summary.md
+    (mirrors _auto_doctor's agent.py doctor call)."""
     impl = load_module("implement")
-    fake_script = tmp_path / "session.py"
+    fake_script = tmp_path / "agent.py"
     fake_script.write_text("")
     monkeypatch.setattr(impl, "_AGENT_SCRIPT", fake_script)
     monkeypatch.setenv("MENTAT_AGENT", "implement-foo-99")
@@ -429,7 +429,7 @@ def test_promote_blocked_summary_readable_as_blocked(tmp_path):
     _read_summary_at recognizes the file on re-read (self-answer path: the agent
     never wrote summary.md, executor promotes the fallback body)."""
     impl = load_module("implement")
-    summary_path = tmp_path / "session" / "summary.md"
+    summary_path = tmp_path / "agent" / "summary.md"
     summary_path.parent.mkdir()
 
     with patch.object(impl, "_blocked_summary_path", return_value=summary_path):
@@ -442,10 +442,10 @@ def test_promote_blocked_summary_readable_as_blocked(tmp_path):
 
 def test_auto_doctor_fires_when_session_unset(tmp_path, monkeypatch):
     """S2: the MENTAT_AGENT-unset early-return is gone — doctor always fires on
-    death. Previously an unset session silently skipped doctor, the root cause of
-    silently-killed standalone AFK sessions going undiagnosed."""
+    death. Previously an unset agent silently skipped doctor, the root cause of
+    silently-killed standalone AFK agents going undiagnosed."""
     impl = load_module("implement")
-    fake_script = tmp_path / "session.py"
+    fake_script = tmp_path / "agent.py"
     fake_script.write_text("")
     monkeypatch.setattr(impl, "_AGENT_SCRIPT", fake_script)
     monkeypatch.delenv("MENTAT_AGENT", raising=False)
@@ -456,14 +456,14 @@ def test_auto_doctor_fires_when_session_unset(tmp_path, monkeypatch):
 
     mock_run.assert_called_once()
     cmd = mock_run.call_args.args[0]
-    # session.py's cmd_doctor falls back to latest_session when no arg is given.
+    # agent.py's cmd_doctor falls back to latest_agent when no arg is given.
     assert cmd[:3] == ["python3", str(fake_script), "doctor"]
 
 
-def test_auto_doctor_passes_session_id_when_set(tmp_path, monkeypatch):
-    """When the session id is set, it is passed through to the doctor."""
+def test_auto_doctor_passes_agent_id_when_set(tmp_path, monkeypatch):
+    """When the agent id is set, it is passed through to the doctor."""
     impl = load_module("implement")
-    fake_script = tmp_path / "session.py"
+    fake_script = tmp_path / "agent.py"
     fake_script.write_text("")
     monkeypatch.setattr(impl, "_AGENT_SCRIPT", fake_script)
     monkeypatch.setenv("MENTAT_AGENT", "implement-foo-99")
@@ -497,19 +497,19 @@ def test_implement_chunk_ejected_includes_logs_path(tmp_path, monkeypatch):
 
 
 def test_implement_logs_path_dir_holds_jsonl_and_diagnosis(tmp_path, monkeypatch):
-    """logs_path in chunk_ejected payloads points to the session dir (JSONL + diagnosis.md)."""
+    """logs_path in chunk_ejected payloads points to the agent log dir (JSONL + diagnosis.md)."""
     impl = load_module("implement")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
     monkeypatch.setenv("MENTAT_AGENT", "sess-002")
 
-    session_dir = tmp_path / "logs" / "myrepo" / "sess-002"
-    session_dir.mkdir(parents=True)
-    (session_dir / "mentat-implement-impl.jsonl").write_text('{"event": "chunk_started"}\n')
-    (session_dir / "diagnosis.md").write_text("## Verdict\n- Reason: test\n")
+    agent_dir = tmp_path / "logs" / "myrepo" / "sess-002"
+    agent_dir.mkdir(parents=True)
+    (agent_dir / "mentat-implement-impl.jsonl").write_text('{"event": "chunk_started"}\n')
+    (agent_dir / "diagnosis.md").write_text("## Verdict\n- Reason: test\n")
 
     logs_dir = impl._agent_dir_fn(impl.os.environ.get("MENTAT_AGENT", "manual"))
-    assert logs_dir == session_dir
+    assert logs_dir == agent_dir
     assert any(logs_dir.glob("*.jsonl"))
     assert (logs_dir / "diagnosis.md").exists()
 
@@ -548,7 +548,7 @@ def test_afk_prompt_contains_commit_contract(tmp_path, monkeypatch):
 
     class FakeResult:
         returncode = 0
-        session_log = None
+        agent_log = None
 
     def fake_invoke_harness(harness, prompt, *, afk, model=None):
         captured["prompt"] = prompt
@@ -671,7 +671,7 @@ def test_repo_root_from_worktree_falls_back_on_git_error(tmp_path, monkeypatch):
 
 def test_run_agent_cmd_noop_when_script_missing(monkeypatch):
     impl = load_module("implement")
-    monkeypatch.setattr(impl, "_AGENT_SCRIPT", Path("/nonexistent/session.py"))
+    monkeypatch.setattr(impl, "_AGENT_SCRIPT", Path("/nonexistent/agent.py"))
     called: list = []
     monkeypatch.setattr(impl.subprocess, "run", lambda *a, **k: called.append(a))
     impl._run_agent_cmd("doctor")

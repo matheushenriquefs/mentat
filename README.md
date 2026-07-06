@@ -20,7 +20,7 @@
 
 ## Why Mentat
 
-Long-running coding agents drift. Context compacts, hooks collide with sandboxed runs, and one wrong commit can poison the rest of a session. Sequential loops squander wall-clock time on work that does not need to be serial — but naive parallel fan-out produces merge conflicts, half-finished chunks, and review burden that scales linearly with the agent count.
+Long-running coding agents drift. Context compacts, hooks collide with sandboxed runs, and one wrong commit can poison the rest of a agent. Sequential loops squander wall-clock time on work that does not need to be serial — but naive parallel fan-out produces merge conflicts, half-finished chunks, and review burden that scales linearly with the agent count.
 
 Mentat structures the work instead. Plans are split into vertical slices that can be implemented independently. Slices run in parallel, each in its own worktree and devcontainer so pre-commit hooks and project tooling stay isolated. A serial merge queue rebases and re-gates each chunk before it joins the holding branch, so failures eject one chunk at a time without blocking the rest.
 
@@ -31,7 +31,7 @@ a quality veto *before* work merges rather than review comments after, one consi
 audit trail across whichever agent CLI you run, and you work on local hardware you
 trust with a devcontainer.
 
-Reach for something else when you want a graphical diff-review and session-steering
+Reach for something else when you want a graphical diff-review and agent-steering
 interface, cloud-hosted agents on VMs, pull-request-comment review without merge
 gating, or you cannot run a container engine. See
 [why-mentat](./docs/explanation/why-mentat.md) for the full positioning.

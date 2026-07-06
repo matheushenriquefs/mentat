@@ -160,7 +160,7 @@ def test_migrate_legacy_state_db(tmp_path, monkeypatch):
     old.execute("PRAGMA journal_mode=WAL")
     old.execute(
         """
-        CREATE TABLE sessions (
+        CREATE TABLE agents (
             uuid TEXT PRIMARY KEY,
             repo TEXT,
             branch TEXT,
@@ -172,7 +172,7 @@ def test_migrate_legacy_state_db(tmp_path, monkeypatch):
         """
     )
     old.execute(
-        "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO agents VALUES (?, ?, ?, ?, ?, ?, ?)",
         ("sess-old", "mentat", None, 99, "running", 10.0, 20.0),
     )
     old.commit()
@@ -187,7 +187,7 @@ def test_migrate_legacy_state_db(tmp_path, monkeypatch):
         assert agent.pid == 99
         assert agent.status == "running"
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-        assert "sessions" not in tables
+        assert "agents" not in tables
     finally:
         conn.close()
     assert store.migrate_legacy_state_db(dest=dest) is False

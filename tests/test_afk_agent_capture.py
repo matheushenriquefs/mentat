@@ -1,7 +1,7 @@
-"""AFK fan-out generates session_id, creates log dir 0o700, exports
+"""AFK fan-out generates agent_id, creates log dir 0o700, exports
 MENTAT_AGENT + MENTAT_AGENT_LOG to the child. Adapter invokes claude with
---session-id + --output-format stream-json, redirects stdout into the log
-file, and populates Result.session_log.
+--agent-id + --output-format stream-json, redirects stdout into the log
+file, and populates Result.agent_log.
 """
 
 from __future__ import annotations
@@ -59,24 +59,24 @@ def test_fan_out_creates_log_dir_and_exports_env(tmp_path, monkeypatch):
 
     monkeypatch.setattr(fan_out.subprocess, "Popen", fake_popen)
 
-    session_id, proc, _wt = fan_out._spawn_worktree_subprocess(plan)
+    agent_id, proc, _wt = fan_out._spawn_worktree_subprocess(plan)
 
     import re
 
-    assert re.fullmatch(r"[0-9a-f]{32}", session_id), f"expected uuid session id, got {session_id!r}"
-    expected_dir = tmp_path / "logs" / "fake-repo" / session_id
+    assert re.fullmatch(r"[0-9a-f]{32}", agent_id), f"expected uuid agent id, got {agent_id!r}"
+    expected_dir = tmp_path / "logs" / "fake-repo" / agent_id
     assert expected_dir.is_dir(), f"log dir not created: {expected_dir}"
     mode = stat.S_IMODE(expected_dir.stat().st_mode)
     assert mode == 0o700, f"log dir mode {oct(mode)} != 0o700"
 
-    assert captured_env.get("MENTAT_AGENT") == session_id
-    assert captured_env.get("MENTAT_AGENT_LOG") == str(expected_dir / "session.jsonl")
+    assert captured_env.get("MENTAT_AGENT") == agent_id
+    assert captured_env.get("MENTAT_AGENT_LOG") == str(expected_dir / "transcript.jsonl")
 
 
-def test_claude_code_adapter_passes_session_id_and_stream_json(tmp_path, monkeypatch):
+def test_claude_code_adapter_passes_agent_id_and_stream_json(tmp_path, monkeypatch):
     adapter = _load(IMPL_SCRIPTS / "harness" / "claude_code.py", "claude_code_adapter")
 
-    log_path = tmp_path / "session.jsonl"
+    log_path = tmp_path / "transcript.jsonl"
     monkeypatch.setenv("MENTAT_AGENT", "auto-test-123")
     monkeypatch.setenv("MENTAT_AGENT_LOG", str(log_path))
 
@@ -102,12 +102,12 @@ def test_claude_code_adapter_passes_session_id_and_stream_json(tmp_path, monkeyp
     assert "--output-format" in cmd
     assert cmd[cmd.index("--output-format") + 1] == "stream-json"
     assert "--verbose" in cmd, f"--verbose required by claude when --output-format stream-json: {cmd}"
-    assert "--session-id" not in cmd, f"--session-id must not be in cmd (not a UUID): {cmd}"
+    assert "--agent-id" not in cmd, f"--agent-id must not be in cmd (not a UUID): {cmd}"
 
     stdout = captured["stdout"]
     assert hasattr(stdout, "write"), f"stdout not a file handle: {stdout!r}"
 
-    assert result.session_log == log_path, f"session_log mismatch: {result.session_log}"
+    assert result.agent_log == log_path, f"agent_log mismatch: {result.agent_log}"
     assert log_path.exists()
 
 
@@ -123,4 +123,4 @@ def test_adapter_session_log_none_when_env_unset(tmp_path, monkeypatch):
 
     monkeypatch.setattr(adapter.subprocess, "run", lambda cmd, **kw: _R())
     result = adapter.invoke("hello", afk=False, model=None)
-    assert result.session_log is None
+    assert result.agent_log is None

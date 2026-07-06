@@ -1,5 +1,5 @@
-"""run_orchestrate prunes stale labeled containers at session start and stale
-worktrees at session end with dirty-check.
+"""run_orchestrate prunes stale labeled containers at agent start and stale
+worktrees at agent end with dirty-check.
 """
 
 from __future__ import annotations

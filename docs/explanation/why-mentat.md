@@ -8,7 +8,7 @@ elevator pitch and how the pieces connect, see [what-is-mentat.md](./what-is-men
 
 A coding agent left to run a long task drifts. Context fills and compacts, so the
 agent loses the thread of its own earlier reasoning. Project hooks collide with
-sandboxed runs. One bad commit poisons everything that follows in the same session.
+sandboxed runs. One bad commit poisons everything that follows in the same agent.
 
 The obvious fix — run many agents in parallel to reclaim wall-clock time — trades
 one problem for a worse one. Naive fan-out produces merge conflicts between agents
@@ -67,8 +67,8 @@ sense of when to look.
 
 ## When not to use Mentat
 
-- You want a graphical interface for reviewing diffs and steering sessions — reach
-  for a desktop session manager built for that.
+- You want a graphical interface for reviewing diffs and steering agents — reach
+  for a desktop agent manager built for that.
 - You want agents running on cloud VMs rather than your own machine.
 - You want pull-request-comment review without gating the merge.
 - You cannot run a container engine. The devcontainer dependency is mandatory and
