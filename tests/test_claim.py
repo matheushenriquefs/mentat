@@ -126,7 +126,7 @@ def test_claim_emits_task_claimed(task_file: Path) -> None:
     fm, _ = frontmatter.parse(task_file.read_text())
     expires = fm["claim_expires_at"]
     mock_spawn.assert_called_once_with(
-        "mentat-tasks", "task.claimed", {"id": "T001", "agent": "agent-a", "expires_at": expires}
+        "mentat-tasks", "task_claimed", {"id": "T001", "agent": "agent-a", "expires_at": expires}
     )
 
 
@@ -136,7 +136,7 @@ def test_release_emits_task_released(task_file: Path) -> None:
         t.main(["claim", str(task_file), "agent-a", "600"])
     with patch("lib.events._spawn") as mock_spawn:
         t.main(["release", str(task_file)])
-    mock_spawn.assert_called_once_with("mentat-tasks", "task.released", {"id": "T001"})
+    mock_spawn.assert_called_once_with("mentat-tasks", "task_released", {"id": "T001"})
 
 
 # ── LT2: session routing tests ───────────────────────────────────────────────

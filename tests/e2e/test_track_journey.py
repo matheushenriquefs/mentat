@@ -61,7 +61,7 @@ def _seed_tree(log_root: Path, repo: str) -> Path:
     (repo_dir / "idle-sess").mkdir()
     _write_jsonl(
         repo_dir / "idle-sess" / "events.jsonl",
-        [{"ts": "2026-06-30T00:00:00Z", "event": "plan.succeeded", "payload": {}}],
+        [{"ts": "2026-06-30T00:00:00Z", "event": "agent_stopped", "payload": {}}],
     )
 
     # stale: a non-terminal tail backdated past STALE_SECS reads as crashed ("?").
@@ -98,7 +98,11 @@ def test_track_all_lists_every_seeded_session(tmp_path, monkeypatch):
     db = tmp_path / "mentat.db"
     monkeypatch.setenv("MENTAT_DB", str(db))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
-    for uuid, event in (("live-sess", "chunk.spawned"), ("done-sess", "chunk.landed"), ("failed-sess", "plan.failed")):
+    for uuid, event in (
+        ("live-sess", "chunk_started"),
+        ("done-sess", "chunk_landed"),
+        ("failed-sess", "chunk_ejected"),
+    ):
         env = {"MENTAT_AGENT": uuid, "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
         store.record_emit(env, event, {"slug": "x"})
         (log_root / repo / uuid).mkdir(parents=True)
@@ -120,9 +124,9 @@ def test_list_lists_every_seeded_session(tmp_path, monkeypatch):
 
     stale_ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - _STALE_AGE))
     for agent_id, event, status, ts in (
-        ("live-sess", "chunk.spawned", "running", None),
-        ("idle-sess", "plan.succeeded", "stopped", None),
-        ("stale-sess", "chunk.spawned", "running", stale_ts),
+        ("live-sess", "chunk_started", "running", None),
+        ("idle-sess", "agent_stopped", "stopped", None),
+        ("stale-sess", "chunk_started", "running", stale_ts),
     ):
         row = {"event": event, "payload": {"path": "p", "slug": "x"}}
         if ts:

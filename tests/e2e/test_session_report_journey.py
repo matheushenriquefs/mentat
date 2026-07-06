@@ -74,12 +74,12 @@ def _seed_session(
 _LANDED = [
     {
         "ts": "2026-06-30T00:00:00Z",
-        "event": "chunk.spawned",
+        "event": "chunk_started",
         "payload": {"slug": "s1", "plan": "s1.md", "harness": "claude-code", "worktree": "/tmp/wt"},
     },
     {
         "ts": "2026-06-30T00:00:02Z",
-        "event": "chunk.landed",
+        "event": "chunk_landed",
         "payload": {"slug": "s1", "sha": "deadbeef", "holding": "main"},
     },
 ]
@@ -87,12 +87,12 @@ _LANDED = [
 _EJECTED = [
     {
         "ts": "2026-06-30T00:00:00Z",
-        "event": "chunk.spawned",
+        "event": "chunk_started",
         "payload": {"slug": "s2", "plan": "s2.md", "harness": "claude-code", "worktree": "/tmp/wt2"},
     },
     {
         "ts": "2026-06-30T00:00:03Z",
-        "event": "chunk.ejected",
+        "event": "chunk_ejected",
         "payload": {"slug": "s2", "reason": "gate_failed", "where": "land"},
     },
 ]
@@ -136,7 +136,7 @@ def test_doctor_writes_verdict(repo_log, tmp_path, capsys):
     _seed_session(tmp_path, log_root, repo, "orchestrate-main-3", _LANDED)
 
     assert s.cmd_doctor("orchestrate-main-3") == 0
-    assert "chunk.landed" in capsys.readouterr().out
+    assert "chunk_landed" in capsys.readouterr().out
 
 
 def test_doctor_verdict_hitl_eject_cites_blocker(repo_log, tmp_path, capsys):
@@ -148,10 +148,14 @@ def test_doctor_verdict_hitl_eject_cites_blocker(repo_log, tmp_path, capsys):
         repo,
         "orchestrate-main-hitl",
         [
-            {"ts": "2026-06-30T00:00:00Z", "event": "plan.started", "payload": {"path": "tiny.md"}},
+            {
+                "ts": "2026-06-30T00:00:00Z",
+                "event": "chunk_started",
+                "payload": {"slug": "tiny", "plan": "tiny.md", "harness": "hitl-in-session", "worktree": "/wt"},
+            },
             {
                 "ts": "2026-06-30T00:00:01Z",
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "payload": {
                     "slug": "tiny",
                     "reason": "hitl_required",
@@ -166,7 +170,7 @@ def test_doctor_verdict_hitl_eject_cites_blocker(repo_log, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "hitl_required" in out
     assert "needs a design call" in out, "the HITL blocker text must surface in the verdict"
-    # plan.started (no spawn) supplies the Expected line.
+    # chunk_started (no spawn) supplies the Expected line.
     assert "tiny.md" in out
 
 
@@ -255,7 +259,7 @@ def test_track_navigator_oneshot_lists_registry(repo_log, capsys, monkeypatch, t
     log_root, repo = repo_log
     s = _session()
     monkeypatch.setenv("MENTAT_DB", str(tmp_path / "mentat.db"))
-    for agent_id, event in (("orchestrate-main-6", "chunk.spawned"), ("orchestrate-main-7", "chunk.ejected")):
+    for agent_id, event in (("orchestrate-main-6", "chunk_started"), ("orchestrate-main-7", "chunk_ejected")):
         store.record_emit(
             {"MENTAT_AGENT": agent_id, "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"},
             event,
@@ -296,8 +300,8 @@ def test_track_render_helpers_over_real_streams(repo_log, tmp_path):
     assert any("AskUserQuestion" in ln for ln in transcript)
 
     audit = track.render_audit_lines(sd)
-    assert any("chunk.ejected" in ln for ln in audit)
+    assert any("chunk_ejected" in ln for ln in audit)
 
     # Empty-state + toggle pure helpers.
     assert track.toggle_view(track._VIEW_TRANSCRIPT) == track._VIEW_AUDIT
-    assert "last lifecycle" in track.empty_hint(track._VIEW_AUDIT, "chunk.landed")
+    assert "last lifecycle" in track.empty_hint(track._VIEW_AUDIT, "chunk_landed")

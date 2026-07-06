@@ -136,7 +136,7 @@ def test_session_stream_tools_ignores_audit_rows(tmp_path):
     """Audit rows (event key, no assistant tool_use) contribute nothing."""
     sessions = load_module("sessions")
     sd = tmp_path / "s-1"
-    _write_stream(sd, "mentat-implement", [{"ts": "t", "event": "chunk.spawned", "payload": {}}])
+    _write_stream(sd, "mentat-implement", [{"ts": "t", "event": "chunk_started", "payload": {}}])
     _write_stream(sd, "session", [_assistant("Read")])
     assert sessions.session_stream_tools(sd) == ["Read"]
 
@@ -159,7 +159,7 @@ def test_session_worktree_none_when_no_spawn(tmp_path):
     sessions = load_module("sessions")
     sd = tmp_path / "s-1"
     sd.mkdir(parents=True)
-    (sd / "a.jsonl").write_text(json.dumps({"ts": "t", "event": "gate.evaluated", "payload": {}}) + "\n")
+    (sd / "a.jsonl").write_text(json.dumps({"ts": "t", "event": "gate_evaluated", "payload": {}}) + "\n")
     assert sessions.session_worktree(sd) is None
 
 
@@ -205,7 +205,7 @@ def _rec(session: str, status: str, last_event: str | None = None) -> dict:
 
 def test_render_list_marks_selection_and_status():
     track = load_module("track")
-    records = [_rec("s-a", "waiting", "chunk.ejected"), _rec("s-b", "working")]
+    records = [_rec("s-a", "waiting", "chunk_ejected"), _rec("s-b", "working")]
     lines = track.render_list(records, selected=1)
     assert len(lines) == 2
     assert "s-a" in lines[0] and "s-b" in lines[1]
@@ -239,7 +239,7 @@ def test_render_focus_shows_session_rule_and_tools(tmp_path):
     track = load_module("track")
     sd = tmp_path / "s-a"
     _write_stream(sd, "session", [_assistant("Read", "Bash")])
-    rec = _rec("s-a", "working", "chunk.spawned")
+    rec = _rec("s-a", "working", "chunk_started")
     lines = track.render_focus(rec, sd)
     body = "\n".join(lines)
     assert tui.section_rule("s-a — working") in body  # focused header rule
@@ -305,11 +305,11 @@ def test_render_audit_shows_events(tmp_path):
     sd = tmp_path / "s-audit"
     sd.mkdir()
     (sd / "mentat-impl.jsonl").write_text(
-        json.dumps({"ts": "2026-01-01T00:00:00+00:00", "event": "chunk.spawned", "payload": {"slug": "x"}}) + "\n"
+        json.dumps({"ts": "2026-01-01T00:00:00+00:00", "event": "chunk_started", "payload": {"slug": "x"}}) + "\n"
     )
     lines = track.render_audit_lines(sd)
     body = "\n".join(lines)
-    assert "chunk.spawned" in body
+    assert "chunk_started" in body
 
 
 def test_toggle_view_flips():
@@ -345,11 +345,11 @@ def test_render_focus_audit_shows_events(tmp_path):
     track = load_module("track")
     sd = tmp_path / "s-1"
     sd.mkdir(parents=True, exist_ok=True)
-    (sd / "mentat-impl.jsonl").write_text(json.dumps({"ts": "t", "event": "chunk.spawned", "payload": {}}) + "\n")
+    (sd / "mentat-impl.jsonl").write_text(json.dumps({"ts": "t", "event": "chunk_started", "payload": {}}) + "\n")
     rec = _rec("s-1", "working")
     lines = track.render_focus(rec, sd, "audit")
     body = "\n".join(lines)
-    assert "chunk.spawned" in body
+    assert "chunk_started" in body
 
 
 # ── S2: stream() dead-code removal ───────────────────────────────────────────
@@ -469,7 +469,7 @@ def test_read_key_over_pty():
 
 def test_color_for_event_known_suffix_returns_nonempty():
     track = load_module("track")
-    color = track._color_for_event("plan.started")
+    color = track._color_for_event("agent_stopped")
     assert color != ""
     assert color.startswith("\033[")
 
@@ -481,7 +481,7 @@ def test_color_for_event_unknown_suffix_returns_empty():
 
 def test_color_for_event_ejected_suffix():
     track = load_module("track")
-    color = track._color_for_event("chunk.ejected")
+    color = track._color_for_event("chunk_ejected")
     assert color != ""
 
 
@@ -501,7 +501,7 @@ def test_render_transcript_lines_audit_only_shows_placeholder(tmp_path):
     track = load_module("track")
     sd = tmp_path / "audit-only"
     sd.mkdir()
-    (sd / "impl.jsonl").write_text(json.dumps({"ts": "t", "event": "chunk.spawned", "payload": {"slug": "x"}}) + "\n")
+    (sd / "impl.jsonl").write_text(json.dumps({"ts": "t", "event": "chunk_started", "payload": {"slug": "x"}}) + "\n")
     lines = track.render_transcript_lines(sd)
     assert any("no transcript yet" in ln for ln in lines)
 
@@ -633,7 +633,7 @@ def test_registry_pairs_records_with_dirs(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_DB", str(db))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(logs))
     env = {"MENTAT_AGENT": "implement-a-1", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
-    store.record_emit(env, "chunk.spawned", {"slug": "x"})
+    store.record_emit(env, "chunk_started", {"slug": "x"})
     (logs / "repo" / "implement-a-1").mkdir(parents=True)
     repo_dir = logs / "repo"
     entries = track._registry(repo_dir, active_only=False)
@@ -654,8 +654,8 @@ def test_registry_reads_sqlite_lists_live_and_idle(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(logs))
     live_env = {"MENTAT_AGENT": "live", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
     idle_env = {"MENTAT_AGENT": "idle", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
-    store.record_emit(live_env, "chunk.spawned", {"slug": "a"})
-    store.record_emit(idle_env, "gate.evaluated", {"gate": "x", "verdict": "pass", "severity": "low", "message": "ok"})
+    store.record_emit(live_env, "chunk_started", {"slug": "a"})
+    store.record_emit(idle_env, "gate_evaluated", {"gate": "x", "verdict": "pass", "severity": "low", "message": "ok"})
     (logs / "repo" / "live").mkdir(parents=True)
     (logs / "repo" / "idle").mkdir(parents=True)
     repo_dir = logs / "repo"
@@ -680,7 +680,7 @@ def _seed_spawn(tmp_path: Path, agent_id: str, worktree: str) -> Path:
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.spawned",
+                "event": "chunk_started",
                 "payload": {"slug": "x", "plan": "p", "harness": "h", "worktree": worktree},
             }
         ],
@@ -727,7 +727,7 @@ def test_frame_builds_list_view_with_repo_and_hint(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_DB", str(db))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(logs))
     env = {"MENTAT_AGENT": "implement-a-1", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
-    store.record_emit(env, "chunk.spawned", {"slug": "x"})
+    store.record_emit(env, "chunk_started", {"slug": "x"})
     repo_dir = logs / "repo"
     (repo_dir / "implement-a-1").mkdir(parents=True)
     _write_stream(repo_dir / "implement-a-1", "session", [_assistant("Read", "Grep")])
@@ -800,7 +800,7 @@ def test_navigate_non_tty_prints_list_and_returns_zero(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_DB", str(db))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(logs))
     env = {"MENTAT_AGENT": "implement-x-1", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
-    store.record_emit(env, "chunk.spawned", {"slug": "x"})
+    store.record_emit(env, "chunk_started", {"slug": "x"})
     repo_dir = logs / "repo"
     (repo_dir / "implement-x-1").mkdir(parents=True)
     _write_stream(repo_dir / "implement-x-1", "session", [_assistant("Read", text="hi")])

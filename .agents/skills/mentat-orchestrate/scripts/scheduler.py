@@ -17,8 +17,17 @@ Partition rule (topological order):
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import NamedTuple
+
+_AGENTS_ROOT = Path(__file__).resolve().parents[3]
+if str(_AGENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_AGENTS_ROOT))
+
+from lib.events import bind  # noqa: E402
+
+_emit = bind("mentat-orchestrate")
 
 
 class Plan(NamedTuple):
@@ -189,14 +198,28 @@ class Scheduler:
         self._plans: dict[str, Plan] = {p.slug: p for p in plans}
         self._landed: set[str] = set()
         self._ejected: set[str] = set()
+        self._emitted_scheduled: set[str] = set()
+        self._emitted_blocked: set[str] = set()
+        self._emitted_skipped: set[str] = set()
 
     def list_ready_slices(self, candidates: list[str]) -> list[str]:
         ready: list[str] = []
         for slug in candidates:
-            if slug in self._landed or slug in self._ejected:
+            if slug in self._landed:
+                if slug not in self._emitted_skipped:
+                    _emit("slice_skipped", {"slug": slug, "reason": "landed"})
+                    self._emitted_skipped.add(slug)
+                continue
+            if slug in self._ejected:
+                if slug not in self._emitted_skipped:
+                    _emit("slice_skipped", {"slug": slug, "reason": "ejected"})
+                    self._emitted_skipped.add(slug)
                 continue
             plan = self._plans.get(slug)
             if plan is None:
+                if slug not in self._emitted_scheduled:
+                    _emit("slice_scheduled", {"slug": slug})
+                    self._emitted_scheduled.add(slug)
                 ready.append(slug)
                 continue
             deps = set(plan.blocked_by) & self._plans.keys()
@@ -205,8 +228,15 @@ class Scheduler:
             # the new holding tip rather than blind-cascaded — it lands if it
             # builds without the ejected change, and only ejects on its own
             # merit if it genuinely can't (rebase_conflicted / gate_failed).
-            if deps - self._landed - self._ejected:
+            pending_deps = sorted(deps - self._landed - self._ejected)
+            if pending_deps:
+                if slug not in self._emitted_blocked:
+                    _emit("slice_blocked", {"slug": slug, "blocked_by": pending_deps})
+                    self._emitted_blocked.add(slug)
                 continue
+            if slug not in self._emitted_scheduled:
+                _emit("slice_scheduled", {"slug": slug})
+                self._emitted_scheduled.add(slug)
             ready.append(slug)
         return ready
 

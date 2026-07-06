@@ -12,7 +12,7 @@ The blind cascade survives only for *anchored* downstream — plans the land
 queue never re-tests (HITL, or AFK anchored via a HITL relation). They run
 in-session, so a dead upstream must still block them.
 
-ADR-0007: no new event names — chunk.ejected / chunk.landed / chunk.teardown.
+ADR-0007: no new event names — chunk_ejected / chunk_landed / chunk_teardown.
 """
 
 from __future__ import annotations
@@ -108,7 +108,7 @@ def test_soft_downstream_retested_and_lands(tmp_path, monkeypatch) -> None:
     statuses = {r.get("slug"): r.get("status") for r in results if r.get("slug")}
     assert statuses == {"a": "eject", "b": "success", "c": "success"}
 
-    ejections = [p for e, p in emitted if e == "chunk.ejected"]
+    ejections = [p for e, p in emitted if e == "chunk_ejected"]
     assert [p["slug"] for p in ejections] == ["a"], f"only a ejects; got {ejections}"
     assert ejections[0]["reason"] == "gate_failed"
 
@@ -135,7 +135,7 @@ def test_hard_downstream_cannot_build_ejects_on_merit(tmp_path, monkeypatch) -> 
     assert statuses == {"a": "eject", "b": "eject", "c": "eject"}
 
     # Honest reasons from the re-test surface the real failure, not a synthetic tag.
-    reasons = {p["slug"]: p["reason"] for e, p in emitted if e == "chunk.ejected"}
+    reasons = {p["slug"]: p["reason"] for e, p in emitted if e == "chunk_ejected"}
     assert reasons == {"a": "gate_failed", "b": "gate_failed", "c": "gate_failed"}
 
 
@@ -163,7 +163,7 @@ def test_hard_downstream_rebase_conflict_ejects(tmp_path, monkeypatch) -> None:
 
     assert "b" in rebase_calls, "b must be re-tested (rebased), not blind-ejected"
     assert ff_calls == [], "b's conflicted rebase blocks the land"
-    reasons = {p["slug"]: p["reason"] for e, p in emitted if e == "chunk.ejected"}
+    reasons = {p["slug"]: p["reason"] for e, p in emitted if e == "chunk_ejected"}
     assert reasons == {"a": "gate_failed", "b": "rebase_conflicted"}
 
 
@@ -182,7 +182,7 @@ def test_sibling_eject_does_not_cascade(tmp_path, monkeypatch) -> None:
     _drain(chunks, sched)
 
     assert "b" in ff_calls, "sibling b must land"
-    b_eject = [p for e, p in emitted if e == "chunk.ejected" and p.get("slug") == "b"]
+    b_eject = [p for e, p in emitted if e == "chunk_ejected" and p.get("slug") == "b"]
     assert b_eject == [], f"sibling b must not be ejected; got {b_eject}"
 
 
@@ -198,7 +198,7 @@ def test_event_envelope_unchanged(tmp_path, monkeypatch) -> None:
     _drain(chunks, sched)
 
     event_names = {e for e, _ in emitted}
-    assert event_names <= {"chunk.ejected", "chunk.landed", "chunk.teardown"}, f"unexpected events; got {event_names}"
+    assert event_names <= {"chunk_ejected", "chunk_landed", "chunk_teardown"}, f"unexpected events; got {event_names}"
 
 
 # ── scheduler-level: cascade targets anchored downstream, spares auto ─────────

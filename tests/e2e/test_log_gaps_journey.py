@@ -36,7 +36,7 @@ def test_validate_row_flags_missing_top_level_fields():
 
 def test_validate_row_flags_non_object_payload():
     log = _log()
-    row = {"ts": "t", "agent": "a", "session": "s", "event": "plan.started", "payload": ["not", "an", "object"]}
+    row = {"ts": "t", "agent": "a", "session": "s", "event": "chunk_started", "payload": ["not", "an", "object"]}
     errs = log._validate_row(row)
     assert errs == ["payload must be object"]
 
@@ -49,13 +49,13 @@ def test_emit_valid_eject_reason_is_written(tmp_path, monkeypatch):
 
     args = argparse.Namespace(
         agent="mentat-orchestrate",
-        event="chunk.ejected",
+        event="chunk_ejected",
         payload=json.dumps({"slug": "s", "reason": "gate_failed", "where": "land"}),
     )
     assert log.cmd_emit(args) == 0
 
     rows = agent_events(session)
-    assert rows[0]["event"] == "chunk.ejected"
+    assert rows[0]["event"] == "chunk_ejected"
     assert rows[0]["payload"]["reason"] == "gate_failed"
 
 
@@ -63,7 +63,13 @@ def test_validate_skips_blank_lines(tmp_path, monkeypatch):
     log = _log()
     _log_env(monkeypatch, tmp_path / "logs", "r", "s")
     good = tmp_path / "good.jsonl"
-    row = {"ts": "t", "agent": "a", "session": "s", "event": "plan.started", "payload": {"path": "p.md"}}
+    row = {
+        "ts": "t",
+        "agent": "a",
+        "session": "s",
+        "event": "chunk_started",
+        "payload": {"slug": "x", "plan": "p.md", "harness": "default", "worktree": "/wt"},
+    }
     good.write_text("\n" + json.dumps(row) + "\n\n")
     assert log.cmd_validate(argparse.Namespace(file=str(good))) == 0
 
@@ -79,14 +85,26 @@ def test_query_skips_blanks_garbage_and_filters_by_agent(tmp_path, monkeypatch, 
         tmp_path,
         repo,
         session,
-        [{"ts": "t1", "event": "plan.started", "payload": {"path": "a"}}],
+        [
+            {
+                "ts": "t1",
+                "event": "chunk_started",
+                "payload": {"slug": "a", "plan": "a.md", "harness": "default", "worktree": "/wt"},
+            }
+        ],
         harness="keep",
     )
     seed_agent_events(
         tmp_path,
         repo,
         "other-agent",
-        [{"ts": "t2", "event": "plan.started", "payload": {"path": "b"}}],
+        [
+            {
+                "ts": "t2",
+                "event": "chunk_started",
+                "payload": {"slug": "b", "plan": "b.md", "harness": "default", "worktree": "/wt"},
+            }
+        ],
         harness="other",
     )
     (log_root / repo / "other-agent").mkdir(parents=True, exist_ok=True)

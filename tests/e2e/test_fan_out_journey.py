@@ -158,7 +158,7 @@ def test_spawn_with_proc_emits_chunk_spawned_default_harness(isolate_logs, tmp_p
     events: list[tuple[str, dict]] = []
     monkeypatch.setattr(fan_out, "_emit_event", lambda name, payload: events.append((name, payload)))
     fan_out.spawn_with_proc(_fake_plan(tmp_path))
-    assert events[0][0] == "chunk.spawned"
+    assert events[0][0] == "chunk_started"
     assert events[0][1]["harness"] == "default"
 
 

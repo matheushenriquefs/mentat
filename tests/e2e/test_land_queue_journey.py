@@ -5,7 +5,7 @@ Real git throughout: a holding branch and per-chunk worktrees each with one real
 non-hermetic seams are stubbed — the gate verdict (so one chunk deterministically blocks)
 and the docker teardown. Asserts a clean chunk lands and advances holding, a blocked
 chunk is ejected without touching holding, and a dependency-ordered drain cascades the
-ejection to downstream chunks. Real chunk.landed / chunk.ejected audit rows throughout.
+ejection to downstream chunks. Real chunk_landed / chunk_ejected audit rows throughout.
 """
 
 from __future__ import annotations
@@ -106,8 +106,8 @@ def test_drain_lands_clean_and_ejects_blocked(tmp_path, monkeypatch):
     assert "bad.txt" not in tree, "a blocked chunk must not land"
 
     # Real audit rows: one landing, one ejection.
-    assert {e["payload"]["slug"] for e in _events(session, "chunk.landed")} == {"good"}
-    assert {e["payload"]["slug"] for e in _events(session, "chunk.ejected")} == {"bad"}
+    assert {e["payload"]["slug"] for e in _events(session, "chunk_landed")} == {"good"}
+    assert {e["payload"]["slug"] for e in _events(session, "chunk_ejected")} == {"bad"}
 
 
 def test_drain_cascades_ejection_to_dependents(tmp_path, monkeypatch):
@@ -142,7 +142,7 @@ def test_drain_cascades_ejection_to_dependents(tmp_path, monkeypatch):
     # holding never advanced — nothing landed.
     assert int(_git(["rev-list", "--count", "refs/heads/holding"], cwd=main_repo)) == 1
 
-    ejects = {e["payload"]["slug"]: e["payload"] for e in _events(session, "chunk.ejected")}
+    ejects = {e["payload"]["slug"]: e["payload"] for e in _events(session, "chunk_ejected")}
     assert ejects["root"]["reason"] == lq.GATE_FAILED
     assert ejects["child"]["reason"] == lq.UPSTREAM_EJECTED
     assert ejects["child"]["upstream"] == "root"

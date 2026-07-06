@@ -424,7 +424,7 @@ def test_run_orchestrate_emits_upstream_ejected_for_anchored_cascade(tmp_path):
         )
 
     assert rc == 1
-    upstream = [p for ev, p in emitted if ev == "chunk.ejected" and p.get("reason") == "upstream_ejected"]
+    upstream = [p for ev, p in emitted if ev == "chunk_ejected" and p.get("reason") == "upstream_ejected"]
     assert any(p["slug"] == "x" for p in upstream), f"anchored victim x not emitted: {emitted}"
 
 
@@ -545,5 +545,5 @@ def test_main_batch_review_emits_event(monkeypatch):
     with patch.object(orch._utils, "emit_event", side_effect=lambda ev, p: events.append((ev, p))):
         orch.main()
 
-    assert events and events[0][0] == "batch.reviewed"
+    assert events and events[0][0] == "batch_reviewed"
     assert events[0][1]["session"] == "sess-xyz"

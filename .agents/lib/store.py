@@ -113,7 +113,7 @@ def make_slice_id(plan_slug: str, key: str) -> str:
 
 
 def wire_kind(event: str) -> str:
-    """Map ADR-0007 dotted event names to underscore catalog keys."""
+    """Normalize emit-boundary event names to sqlite ``event.kind`` keys."""
     return event.replace(".", "_")
 
 
@@ -519,10 +519,9 @@ def migrate_legacy_state_db(*, dest: Path | None = None) -> bool:
 
 
 _AGENT_TERMINAL_EVENTS: dict[str, AgentStatus] = {
-    "plan.succeeded": "stopped",
-    "plan.failed": "stopped",
-    "chunk.landed": "stopped",
-    "chunk.ejected": "stopped",
+    "chunk_landed": "stopped",
+    "chunk_ejected": "stopped",
+    "agent_stopped": "stopped",
 }
 
 
@@ -572,15 +571,15 @@ def record_emit(env: dict[str, str], event: str, payload: dict[str, object]) -> 
         conn.close()
 
 
-_CHUNK_TERMINAL_KINDS = frozenset({"chunk_landed", "chunk_ejected", "plan_succeeded", "plan_failed"})
-_TERMINAL_DISPLAY = frozenset({"chunk.landed", "plan.succeeded", "plan.failed", "chunk.teardown", "batch.reviewed"})
+_CHUNK_TERMINAL_KINDS = frozenset({"chunk_landed", "chunk_ejected", "agent_stopped"})
+_TERMINAL_DISPLAY = frozenset({"chunk_landed", "chunk_teardown", "batch_reviewed", "agent_stopped"})
 _RECENCY_SECS = 86400
 _STALE_SECS = 300
 _STATUS_RANK = {"waiting": 0, "idle": 1, "?": 2, "working": 3, "reaped": 99}
 
 
 def display_kind(kind: str) -> str:
-    return kind.replace("_", ".")
+    return kind
 
 
 def reconcile_liveness() -> None:
@@ -608,9 +607,9 @@ def _track_status(agent: Agent, events: list[Event]) -> str:
     if events:
         last_kind = display_kind(events[-1].kind)
         payload = events[-1].payload
-        if last_kind == "chunk.ejected" and payload.get("reason") == HITL_REQUIRED:
+        if last_kind == "chunk_ejected" and payload.get("reason") == HITL_REQUIRED:
             return "waiting"
-        if last_kind in _TERMINAL_DISPLAY or last_kind == "chunk.ejected":
+        if last_kind in _TERMINAL_DISPLAY or last_kind == "chunk_ejected":
             return "idle"
     if agent.status in ("pending", "running"):
         return "working"
@@ -710,7 +709,7 @@ def attempt_count(agent_id: str, slug: str) -> int:
     """Prior recovery respawns for ``slug``, replayed from the canonical store."""
     count = 0
     for row in list_events(agent_id):
-        if row.get("event") != "chunk.spawned":
+        if row.get("event") != "chunk_started":
             continue
         payload = row.get("payload")
         if not isinstance(payload, dict):

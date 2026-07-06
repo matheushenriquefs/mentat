@@ -22,27 +22,30 @@ from lib.session import make_agent_id as _make_agent_id
 from lib.session import repo_name as _repo
 
 EVENT_CATALOG: dict[str, list[str]] = {
-    "plan.started": ["path"],
-    "plan.succeeded": ["path"],
-    "plan.failed": ["path", "reason"],
-    "chunk.spawned": ["slug", "plan", "harness", "worktree"],
-    "chunk.landed": ["slug", "sha", "holding"],
-    "chunk.ejected": ["slug", "reason", "where"],
-    "gate.evaluated": ["gate", "verdict", "severity", "message"],
-    "review.submitted": ["reviewer", "score", "threshold", "verdict"],
-    "batch.reviewed": ["session", "summary"],
-    "chunk.teardown": ["slug", "ok"],
-    "task.created": ["id", "slug"],
-    "task.claimed": ["id", "agent", "expires_at"],
-    "task.released": ["id"],
-    "task.done": ["id"],
-    "task.wontfix": ["id"],
-    "session.prune": ["reclaimed_bytes"],
+    "slice_scheduled": ["slug"],
+    "slice_blocked": ["slug", "blocked_by"],
+    "slice_skipped": ["slug", "reason"],
+    "agent_started": ["harness"],
+    "agent_stopped": ["reason"],
+    "agent_reaped": ["reclaimed_bytes"],
+    "chunk_started": ["slug", "plan", "harness", "worktree"],
+    "chunk_landed": ["slug", "sha", "holding"],
+    "chunk_ejected": ["slug", "reason", "where"],
+    "chunk_teardown": ["slug", "ok"],
+    "gate_evaluated": ["gate", "verdict", "severity", "message"],
+    "review_submitted": ["reviewer", "score", "threshold", "verdict"],
+    "batch_reviewed": ["session", "summary"],
+    "task_created": ["id", "slug"],
+    "task_claimed": ["id", "agent", "expires_at"],
+    "task_released": ["id"],
+    "task_resolved": ["id"],
+    "task_canceled": ["id"],
 }
 
 EVENT_OPTIONAL_FIELDS: dict[str, list[str]] = {
-    "chunk.ejected": ["logs_path", "preflight_exit", "upstream", "summary", "killed_by", "timed_out"],
-    "chunk.spawned": ["trigger", "attempt"],
+    "chunk_ejected": ["logs_path", "preflight_exit", "upstream", "summary", "killed_by", "timed_out"],
+    "chunk_started": ["trigger", "attempt"],
+    "agent_reaped": ["containers_removed", "worktrees_removed", "worktrees_gc"],
 }
 
 
@@ -134,7 +137,7 @@ def cmd_emit(args: argparse.Namespace) -> int:
         _reject(base, repo, session, agent, slug, event, f"missing-required:{','.join(missing)}")
         return 1
 
-    if event == "chunk.ejected":
+    if event == "chunk_ejected":
         reason = payload.get("reason", "")
         if reason not in _EJECT_REASONS:
             _reject(base, repo, session, agent, slug, event, f"invalid-reason:{reason!r}")

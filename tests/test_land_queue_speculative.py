@@ -114,7 +114,7 @@ def test_speculative_emits_landed_for_each_chunk():
     ):
         lq.drain(chunks, holding="main", speculative=True)
 
-    landed = [c.args[1]["slug"] for c in mock_emit.call_args_list if c.args[0] == "chunk.landed"]
+    landed = [c.args[1]["slug"] for c in mock_emit.call_args_list if c.args[0] == "chunk_landed"]
     assert sorted(landed) == ["a", "b"]
 
 

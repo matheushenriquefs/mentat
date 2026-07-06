@@ -58,7 +58,7 @@ def _teardown_container(chunk: Chunk) -> None:
 
     label_val = _chunk_label(chunk)
     ok = devcontainer.down(label_val)
-    _emit_event("chunk.teardown", {"slug": chunk.slug, "chunk": label_val, "ok": ok})
+    _emit_event("chunk_teardown", {"slug": chunk.slug, "chunk": label_val, "ok": ok})
 
 
 def _rebase_chunk(chunk: Chunk, holding: str) -> tuple[str | None, str | None]:
@@ -113,7 +113,7 @@ def land(chunk: Chunk, *, holding: str) -> dict[str, object]:
     tip, err = _rebase_chunk(chunk, holding)
     if err:
         _emit_event(
-            "chunk.ejected",
+            "chunk_ejected",
             ejected_payload(chunk.slug, REBASE_CONFLICTED, str(chunk.worktree)),
         )
         return {
@@ -127,7 +127,7 @@ def land(chunk: Chunk, *, holding: str) -> dict[str, object]:
     verdict, message = _run_gates(chunk)
     if verdict == "block":
         _emit_event(
-            "chunk.ejected",
+            "chunk_ejected",
             ejected_payload(chunk.slug, GATE_FAILED, str(chunk.worktree)),
         )
         return {
@@ -142,7 +142,7 @@ def land(chunk: Chunk, *, holding: str) -> dict[str, object]:
     if ff_err is not None:
         reason = NOT_FF if ff_err == "not_ff" else GIT_ERROR
         _emit_event(
-            "chunk.ejected",
+            "chunk_ejected",
             ejected_payload(chunk.slug, reason, str(chunk.worktree)),
         )
         return {
@@ -153,7 +153,7 @@ def land(chunk: Chunk, *, holding: str) -> dict[str, object]:
         }
 
     _emit_event(
-        "chunk.landed",
+        "chunk_landed",
         {
             "slug": chunk.slug,
             "sha": tip or "",
@@ -228,7 +228,7 @@ def _drain_speculative(chunks: list[Chunk], *, holding: str) -> list[dict[str, o
             results.extend(_drain_serial(chunks[i:], holding=holding))
             return results
         _emit_event(
-            "chunk.landed",
+            "chunk_landed",
             {"slug": chunk.slug, "sha": tip or "", "holding": holding},
         )
         results.append({"slug": chunk.slug, "status": "success", "tip": tip})
@@ -297,7 +297,7 @@ def drain(
 
         # Eject cascade: every chunk that transitively depends on `ready`
         # is preemptively ejected — no rebase, no gate, payload-only
-        # extension to chunk.ejected (ADR-0007).
+        # extension to chunk_ejected (ADR-0007).
         cascaded = _on_ejected(ready)
         for downstream in cascaded:
             if downstream not in pending:
@@ -305,7 +305,7 @@ def drain(
             chunk = by_slug.get(downstream)
             where = str(chunk.worktree) if chunk else ""
             _emit_event(
-                "chunk.ejected",
+                "chunk_ejected",
                 ejected_payload(downstream, UPSTREAM_EJECTED, where, upstream=ready),
             )
             results.append(

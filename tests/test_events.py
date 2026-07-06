@@ -95,7 +95,7 @@ def test_emit_failure_prints_to_stderr_nonblocking(capsys):
 
 
 def test_terminal_emit_failure_raises():
-    """chunk.landed / chunk.ejected rejected by log → caller gets RuntimeError, not silent None."""
+    """chunk_landed / chunk_ejected rejected by log → caller gets RuntimeError, not silent None."""
     import subprocess
 
     events = _import_events()
@@ -107,7 +107,7 @@ def test_terminal_emit_failure_raises():
         import pytest
 
         with pytest.raises(RuntimeError, match="terminal emit"):
-            emit("chunk.landed", {"slug": "x"})
+            emit("chunk_landed", {"slug": "x", "sha": "a", "holding": "main"})
 
 
 def test_non_terminal_emit_failure_is_best_effort(capsys):
@@ -120,7 +120,7 @@ def test_non_terminal_emit_failure_is_best_effort(capsys):
         mock_run.return_value.returncode = 1
         mock_run.return_value.stderr = "oops\n"
         emit = events.bind("mentat-orchestrate")
-        result = emit("chunk.spawned", {"slug": "x"})
+        result = emit("chunk_started", {"slug": "x", "plan": "p", "harness": "h", "worktree": "w"})
 
     assert result is None
     captured = capsys.readouterr()

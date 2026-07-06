@@ -4,9 +4,9 @@
   "evals": [
     {
       "id": "emit-plan-started",
-      "description": "Emit a plan.started event and verify JSONL row written",
+      "description": "Emit a chunk_started event and verify JSONL row written",
       "type": "functional",
-      "command": "python3 .agents/skills/mentat-log/scripts/log.py emit mentat-plan plan.started '{\"path\":\"/tmp/test.md\"}'",
+      "command": "python3 .agents/skills/mentat-log/scripts/log.py emit mentat-plan chunk_started '{\"path\":\"/tmp/test.md\"}'",
       "expected_exit": 0
     },
     {
@@ -33,9 +33,9 @@
     }
   ],
   "eval_queries": [
-    "emit a plan.started event for path /tmp/test.md",
+    "emit a chunk_started event for path /tmp/test.md",
     "validate the log file at /tmp/test.jsonl",
-    "query session s1 for gate.evaluated events",
+    "query session s1 for gate_evaluated events",
     "prune sessions older than 2026-01-01"
   ]
 }

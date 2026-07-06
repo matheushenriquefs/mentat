@@ -93,9 +93,7 @@ def _detect_default_branch(repo_root: Path) -> str:
     if r.returncode == 0 and r.stdout.strip():
         return r.stdout.strip()
 
-    raise _git_lib.GitError(
-        "cannot detect default branch: no origin/HEAD, HEAD, or init.defaultBranch"
-    )
+    raise _git_lib.GitError("cannot detect default branch: no origin/HEAD, HEAD, or init.defaultBranch")
 
 
 def _list_worktrees(main_root: Path) -> list[dict[str, str]]:

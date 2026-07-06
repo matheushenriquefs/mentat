@@ -404,7 +404,7 @@ def test_run_plan_hitl_emits_spawned_returns_zero(impl, monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     assert impl.run_plan(plan) == 0
     assert invoked == []  # no harness spawn on HITL
-    assert events[0][0] == "chunk.spawned"
+    assert events[0][0] == "chunk_started"
     assert events[0][1]["harness"] == impl.HITL_IN_SESSION
 
 
@@ -427,7 +427,7 @@ def test_run_plan_afk_wedge_via_blocked_summary(impl, monkeypatch, tmp_path):
     plan = _write_plan(tmp_path / "afk.md", class_="AFK")
     monkeypatch.chdir(tmp_path)
     assert impl.run_plan(plan) == impl.EX_HITL_REQUIRED
-    ejected = [p for ev, p in events if ev == "chunk.ejected"]
+    ejected = [p for ev, p in events if ev == "chunk_ejected"]
     assert ejected and ejected[0]["reason"] == impl.HITL_REQUIRED
     assert ejected[0]["summary"] == "blocker text"
 
@@ -441,7 +441,7 @@ def test_run_plan_afk_self_answer(impl, monkeypatch, tmp_path):
     plan = _write_plan(tmp_path / "afk.md", class_="AFK")
     monkeypatch.chdir(tmp_path)
     assert impl.run_plan(plan) == impl.EX_HITL_REQUIRED
-    reasons = [p["reason"] for ev, p in events if ev == "chunk.ejected"]
+    reasons = [p["reason"] for ev, p in events if ev == "chunk_ejected"]
     assert impl.HITL_REQUIRED in reasons
 
 
@@ -453,7 +453,7 @@ def test_run_plan_afk_nonzero_return_is_implement_failed(impl, monkeypatch, tmp_
     plan = _write_plan(tmp_path / "afk.md", class_="AFK")
     monkeypatch.chdir(tmp_path)
     assert impl.run_plan(plan) == 1
-    reasons = [p["reason"] for ev, p in events if ev == "chunk.ejected"]
+    reasons = [p["reason"] for ev, p in events if ev == "chunk_ejected"]
     assert reasons == [impl.IMPLEMENT_FAILED]
 
 
@@ -893,7 +893,7 @@ def test_main_preflight_worktree_fail_emits_and_exits(impl, monkeypatch, tmp_pat
     with pytest.raises(SystemExit) as exc:
         impl.main()
     assert exc.value.code == 65
-    reasons = [p["reason"] for ev, p in events if ev == "chunk.ejected"]
+    reasons = [p["reason"] for ev, p in events if ev == "chunk_ejected"]
     assert reasons == [impl.PREFLIGHT_WORKTREE_FAILED]
 
 
@@ -907,7 +907,7 @@ def test_main_main_tree_refused(impl, monkeypatch, tmp_path):
     with pytest.raises(SystemExit) as exc:
         impl.main()
     assert exc.value.code == impl.EX_USAGE
-    reasons = [p["reason"] for ev, p in events if ev == "chunk.ejected"]
+    reasons = [p["reason"] for ev, p in events if ev == "chunk_ejected"]
     assert reasons == [impl.MAIN_TREE_REFUSED]
 
 

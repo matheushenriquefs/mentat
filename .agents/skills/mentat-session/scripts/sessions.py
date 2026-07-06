@@ -26,8 +26,8 @@ from lib import harness_stream  # noqa: E402
 from lib.events import HITL_REQUIRED  # noqa: E402
 
 # Terminal audit events — a session whose newest tail is one of these is done, not crashed.
-TERMINAL_EVENTS = frozenset({"chunk.landed", "plan.succeeded", "plan.failed", "chunk.teardown", "batch.reviewed"})
-# chunk.ejected is terminal too, but a hitl_required eject needs an operator → waiting.
+TERMINAL_EVENTS = frozenset({"chunk_landed", "chunk_teardown", "batch_reviewed", "agent_stopped"})
+# chunk_ejected is terminal too, but a hitl_required eject needs an operator → waiting.
 _WAITING_EJECT_REASONS = frozenset({HITL_REQUIRED})
 
 # No activity for this long with a non-terminal tail = the session crashed silently.
@@ -146,7 +146,7 @@ def derive_status(row: dict[str, object] | None, age_secs: float | None, *, stal
     is_stale = age_secs is None or age_secs > stale_secs
     if row is not None:
         event = row.get("event")
-        if event == "chunk.ejected":
+        if event == "chunk_ejected":
             payload = row.get("payload")
             reason = cast("dict[str, object]", payload).get("reason") if isinstance(payload, dict) else None
             return "waiting" if reason in _WAITING_EJECT_REASONS else "idle"
@@ -171,7 +171,7 @@ def _status_from_signals(
     AskUserQuestion in newest_tail means waiting. Freshness decides working vs ?
     as fallback.
     """
-    if audit is not None and (audit.get("event") in TERMINAL_EVENTS or audit.get("event") == "chunk.ejected"):
+    if audit is not None and (audit.get("event") in TERMINAL_EVENTS or audit.get("event") == "chunk_ejected"):
         return derive_status(audit, age_secs, stale_secs=stale_secs)
     if newest_tail is not None and _is_waiting_stream(newest_tail):
         return "waiting"
@@ -287,14 +287,14 @@ def session_stream_tools(session_dir: Path, *, limit: int = 20) -> list[str]:
 
 
 def session_worktree(session_dir: Path) -> str | None:
-    """The worktree path this session was spawned into (from its `chunk.spawned` audit), or None.
+    """The worktree path this session was spawned into (from its `chunk_started` audit), or None.
 
     The kill bind needs the worktree to tear down; the session log dir is not the
     worktree. Returns the `worktree` field of the latest spawn event by ts.
     """
     worktree: str | None = None
     for ev in all_events(session_dir):
-        if ev.get("event") == "chunk.spawned":
+        if ev.get("event") == "chunk_started":
             payload = ev.get("payload")
             if isinstance(payload, dict):
                 wt = cast("dict[str, object]", payload).get("worktree")

@@ -119,5 +119,5 @@ def test_only_overdue_chunk_killed(monkeypatch, tmp_path):
 
     assert not hitl
     assert [c.slug for c in chunks] == ["b"], "B must be the only landable chunk"
-    a_ejects = [p for ev, p in emitted if ev == "chunk.ejected" and p["slug"] == "a"]
+    a_ejects = [p for ev, p in emitted if ev == "chunk_ejected" and p["slug"] == "a"]
     assert a_ejects and a_ejects[0]["reason"] == "worker_died"

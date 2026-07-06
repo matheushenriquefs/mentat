@@ -57,11 +57,11 @@ def test_toggle_and_empty_hint_and_color():
     assert m.toggle_view(m._VIEW_TRANSCRIPT) == m._VIEW_AUDIT
     assert m.toggle_view(m._VIEW_AUDIT) == m._VIEW_TRANSCRIPT
 
-    assert "last lifecycle: chunk.landed" in m.empty_hint(m._VIEW_AUDIT, "chunk.landed")
+    assert "last lifecycle: chunk_landed" in m.empty_hint(m._VIEW_AUDIT, "chunk_landed")
     assert "no audit events yet" in m.empty_hint(m._VIEW_AUDIT, None)
     assert "audit-only session" in m.empty_hint(m._VIEW_TRANSCRIPT, None)
 
-    assert m._color_for_event("chunk.landed") == m._COLORS["landed"]
+    assert m._color_for_event("chunk_landed") == m._COLORS["landed"]
     assert m._color_for_event("nothing.matches") == ""
 
 
@@ -78,8 +78,8 @@ def test_transcript_and_audit_renderers(tmp_path):
             _assistant("Read", text="hello world"),
             _user_result("done"),
             _assistant("AskUserQuestion"),  # operator-attention tool → yellow branch
-            _audit("chunk.spawned", slug="a"),
-            _audit("chunk.landed", slug="a", sha="abc"),
+            _audit("chunk_started", slug="a"),
+            _audit("chunk_landed", slug="a", sha="abc"),
         ],
     )
 
@@ -89,8 +89,8 @@ def test_transcript_and_audit_renderers(tmp_path):
     assert any("done" in line for line in transcript)
 
     audit = m.render_audit_lines(sd)
-    assert any("chunk.spawned" in line for line in audit)
-    assert any("chunk.landed" in line for line in audit)
+    assert any("chunk_started" in line for line in audit)
+    assert any("chunk_landed" in line for line in audit)
 
     # limit tails to the last N.
     assert len(m._audit_content(sd, limit=1)) == 1
@@ -167,7 +167,7 @@ def test_handle_key_all_actions():
 
 
 def _records(n: int) -> list[dict]:
-    return [{"session": f"s{i}", "status": "running", "last_event": "chunk.spawned", "age": 1.0 * i} for i in range(n)]
+    return [{"session": f"s{i}", "status": "running", "last_event": "chunk_started", "age": 1.0 * i} for i in range(n)]
 
 
 def test_render_list_selection_viewport_and_affordance():
@@ -192,13 +192,13 @@ def test_render_preview_and_focus_and_frame(tmp_path):
     assert any("Read" in line for line in m.render_preview(["Read", "Edit"]))
 
     sd = tmp_path / "sess"
-    _write(sd, "session", [_assistant("Read", text="body"), _audit("chunk.landed", slug="a")])
+    _write(sd, "session", [_assistant("Read", text="body"), _audit("chunk_landed", slug="a")])
     rec = {"session": "sess", "status": "running"}
 
     focus_t = m.render_focus(rec, sd, m._VIEW_TRANSCRIPT)
     assert any("body" in line for line in focus_t)
     focus_a = m.render_focus(rec, sd, m._VIEW_AUDIT)
-    assert any("chunk.landed" in line for line in focus_a)
+    assert any("chunk_landed" in line for line in focus_a)
 
     # _focus_frame surfaces the ↑/↓ affordances when scrolled into a tall history.
     tall = [f"line {i}" for i in range(30)]
@@ -234,7 +234,7 @@ def test_registry_frame_navigate_and_kill(tmp_path, monkeypatch, capsys):
     env = {"MENTAT_AGENT": "s1", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
     from lib import store
 
-    store.record_emit(env, "chunk.spawned", {"slug": "x", "worktree": "/tmp/wt-s1"})
+    store.record_emit(env, "chunk_started", {"slug": "x", "worktree": "/tmp/wt-s1"})
     (repo_dir / "s1").mkdir()
 
     entries = m._registry(repo_dir)
@@ -254,7 +254,7 @@ def test_registry_frame_navigate_and_kill(tmp_path, monkeypatch, capsys):
 
     # _kill reads the worktree from the spawn audit and shells out to git (stubbed).
     sd = repo_dir / "s1"
-    _write(sd, "session", [_audit("chunk.spawned", slug="s1", worktree="/tmp/wt-s1")])
+    _write(sd, "session", [_audit("chunk_started", slug="s1", worktree="/tmp/wt-s1")])
     calls: list = []
     monkeypatch.setattr(m.subprocess, "run", lambda cmd, **kw: calls.append(cmd))
     m._kill(sd)
@@ -262,7 +262,7 @@ def test_registry_frame_navigate_and_kill(tmp_path, monkeypatch, capsys):
 
     # A session with no worktree in its audit → kill is a no-op.
     sd2 = repo_dir / "s2"
-    _write(sd2, "session", [_audit("chunk.spawned", slug="s2")])
+    _write(sd2, "session", [_audit("chunk_started", slug="s2")])
     calls.clear()
     m._kill(sd2)
     assert calls == []

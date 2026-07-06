@@ -25,9 +25,9 @@ def test_record_emit_and_list_track_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", repo)
 
     for agent_id, event, status in (
-        ("live", "chunk.spawned", "running"),
-        ("idle", "chunk.landed", "stopped"),
-        ("done", "plan.failed", "stopped"),
+        ("live", "chunk_started", "running"),
+        ("idle", "chunk_landed", "stopped"),
+        ("done", "chunk_ejected", "stopped"),
     ):
         seed_agent_events(
             tmp_path,
@@ -54,7 +54,7 @@ def test_list_track_marks_stale_running_as_crashed(tmp_path, monkeypatch):
     repo = "r"
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
     monkeypatch.setenv("MENTAT_REPO", repo)
-    seed_agent_events(tmp_path, repo, "stale", [{"event": "chunk.spawned", "payload": {"slug": "x"}}])
+    seed_agent_events(tmp_path, repo, "stale", [{"event": "chunk_started", "payload": {"slug": "x"}}])
     sd = log_root / repo / "stale"
     sd.mkdir(parents=True, exist_ok=True)
     ancient = time.time() - 600
@@ -65,7 +65,7 @@ def test_list_track_marks_stale_running_as_crashed(tmp_path, monkeypatch):
         assert row is not None
         store.AgentDAO(conn).update_status(row.id, status="running", ended_at=None)
         store.EventDAO(conn).append(
-            kind="chunk_spawned",
+            kind="chunk_started",
             payload={"slug": "x"},
             agent_id="stale",
             ts=store.iso_now(now=ancient),
@@ -88,11 +88,11 @@ def test_attempt_count_replays_recovery_spawns(tmp_path, monkeypatch):
         "repo",
         "s1",
         [
-            {"event": "chunk.spawned", "payload": {"slug": "core", "trigger": "recovery"}},
-            {"event": "chunk.spawned", "payload": {"slug": "core", "trigger": "recovery"}},
-            {"event": "chunk.spawned", "payload": {"slug": "core"}},
-            {"event": "chunk.landed", "payload": {"slug": "core", "trigger": "recovery"}},
-            {"event": "chunk.spawned", "payload": {"slug": "other", "trigger": "recovery"}},
+            {"event": "chunk_started", "payload": {"slug": "core", "trigger": "recovery"}},
+            {"event": "chunk_started", "payload": {"slug": "core", "trigger": "recovery"}},
+            {"event": "chunk_started", "payload": {"slug": "core"}},
+            {"event": "chunk_landed", "payload": {"slug": "core", "trigger": "recovery"}},
+            {"event": "chunk_started", "payload": {"slug": "other", "trigger": "recovery"}},
         ],
     )
     assert store.attempt_count("s1", "core") == 2

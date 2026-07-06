@@ -60,7 +60,7 @@ CLEAN_FULL = textwrap.dedent("""\
 
     ## Phase 1 — Preflight
 
-    Read plan frontmatter: id, class. Emit `plan.started` event. Check container is up.
+    Read plan frontmatter: id, class. Emit `chunk_started` event. Check container is up.
     Derive artifact predicates from slice list. Refuse DONE slices.
     Exit 66 if plan slug not found. Exit 78 if config missing. Exit 69 if container down.
 
@@ -73,7 +73,7 @@ CLEAN_FULL = textwrap.dedent("""\
     3. Run the gate. Any veto → fix, re-commit.
     4. Commit the slice via `/mentat-commit`.
 
-    If AFK class and ambiguity detected in session JSONL → emit `chunk.ejected`, exit 42.
+    If AFK class and ambiguity detected in session JSONL → emit `chunk_ejected`, exit 42.
 
     ## Phase 3 — Gate
 
@@ -83,27 +83,27 @@ CLEAN_FULL = textwrap.dedent("""\
     - `mentat-test-reviewer` — test-plan alignment ≥ 0.88.
     - `mentat-smell-reviewer` — no hard-tier smells.
 
-    Any veto or threshold fail → emit `gate.evaluated`, fix cited miss, re-commit, re-spawn.
+    Any veto or threshold fail → emit `gate_evaluated`, fix cited miss, re-commit, re-spawn.
     No rebase on gate fail. All reviewer verdicts logged via `/mentat-log emit`.
-    Each `review.submitted` event carries reviewer slug, score, threshold, verdict.
+    Each `review_submitted` event carries reviewer slug, score, threshold, verdict.
 
     ## Phase 4 — Commit
 
     Commit via `/mentat-commit`. One commit per slice. No squash.
     Rebase onto holding branch via `/mentat-rebase`.
-    Emit `chunk.landed` with sha + holding branch after successful fast-forward.
+    Emit `chunk_landed` with sha + holding branch after successful fast-forward.
 
     ## Phase 5 — Cleanup
 
-    Tear down container. Emit `plan.succeeded` event.
-    If any slice failed: emit `plan.failed` with reason, path before exit.
+    Tear down container. Emit `agent_stopped` event.
+    If any slice failed: emit `chunk_ejected` with reason, path before exit.
     Exit 0 on success. Exit 1 on gate or TDD failure.
 
     ## Rules
 
     - Never skip slices; verify artifacts on disk before marking done.
     - Container required (ADR-0004). Exit 69 if container down.
-    - AFK class forbids `AskUserQuestion`; ambiguity → emit `chunk.ejected`, exit 42.
+    - AFK class forbids `AskUserQuestion`; ambiguity → emit `chunk_ejected`, exit 42.
     - Stale-ref sweep required after any rename before commit.
     - One commit per slice. No squash at end of plan.
     - Gate verdicts are final per run; re-run gate after any fix.

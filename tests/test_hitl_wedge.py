@@ -96,8 +96,8 @@ def test_run_plan_wedge_via_marker_exits_42_with_summary(tmp_path):
                         rc = impl.run_plan(plan, harness="fake")
 
     assert rc == impl.EX_HITL_REQUIRED
-    ejected = [c.args[1] for c in emit.call_args_list if c.args[0] == "chunk.ejected"]
-    assert ejected, "no chunk.ejected emitted"
+    ejected = [c.args[1] for c in emit.call_args_list if c.args[0] == "chunk_ejected"]
+    assert ejected, "no chunk_ejected emitted"
     assert ejected[0]["reason"] == "hitl_required"
     assert ejected[0]["summary"] == "blocked: pick a DB"
     assert promoted == ["blocked: pick a DB"], "blocker not promoted to the log dir"
@@ -116,7 +116,7 @@ def test_run_plan_wedge_precedes_nonzero_exit(tmp_path):
                         rc = impl.run_plan(plan, harness="fake")
 
     assert rc == impl.EX_HITL_REQUIRED
-    reasons = [c.args[1].get("reason") for c in emit.call_args_list if c.args[0] == "chunk.ejected"]
+    reasons = [c.args[1].get("reason") for c in emit.call_args_list if c.args[0] == "chunk_ejected"]
     assert "hitl_required" in reasons
     assert "implement_failed" not in reasons
 
@@ -134,7 +134,7 @@ def test_run_plan_self_answer_still_wedges_when_no_marker(tmp_path):
                         rc = impl.run_plan(plan, harness="fake")
 
     assert rc == impl.EX_HITL_REQUIRED
-    reasons = [c.args[1].get("reason") for c in emit.call_args_list if c.args[0] == "chunk.ejected"]
+    reasons = [c.args[1].get("reason") for c in emit.call_args_list if c.args[0] == "chunk_ejected"]
     assert "hitl_required" in reasons
 
 
@@ -207,7 +207,7 @@ def testpartition_by_outcome_excludes_hitl_children_from_landing():
     assert landed_slugs == ["a"], "hitl child must not be enqueued for landing"
     assert hitl == {"b"}
     assert ejected_slugs == ["b"], "hitl child must cascade via scheduler.mark_ejected"
-    hitl_ejects = [p for e, p in emitted if e == "chunk.ejected" and p.get("reason") == "hitl_required"]
+    hitl_ejects = [p for e, p in emitted if e == "chunk_ejected" and p.get("reason") == "hitl_required"]
     assert hitl_ejects and hitl_ejects[0]["slug"] == "b"
 
 
@@ -269,9 +269,9 @@ def test_doctor_verdict_names_hitl_blocker(tmp_path):
         tmp_path,
         "s-hitl",
         [
-            {"event": "chunk.spawned", "ts": "t0", "payload": {"slug": "p", "plan": "/p/p.md"}},
+            {"event": "chunk_started", "ts": "t0", "payload": {"slug": "p", "plan": "/p/p.md"}},
             {
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "ts": "t1",
                 "payload": {"slug": "p", "reason": "hitl_required", "where": "/wt/p", "summary": "OAuth or SAML?"},
             },
@@ -288,9 +288,9 @@ def test_report_summary_names_hitl_blocker(tmp_path):
         tmp_path,
         "s-rep",
         [
-            {"event": "chunk.spawned", "ts": "t0", "payload": {"slug": "p", "plan": "/p/p.md"}},
+            {"event": "chunk_started", "ts": "t0", "payload": {"slug": "p", "plan": "/p/p.md"}},
             {
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "ts": "t1",
                 "payload": {"slug": "p", "reason": "hitl_required", "where": "/wt/p", "summary": "pick a queue"},
             },

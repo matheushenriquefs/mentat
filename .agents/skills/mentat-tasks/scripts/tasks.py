@@ -66,7 +66,7 @@ def cmd_create(args: argparse.Namespace) -> int:
     except Exception:
         Path(tmp).unlink(missing_ok=True)
         raise
-    emit("task.created", {"id": tid, "slug": slug})
+    emit("task_created", {"id": tid, "slug": slug})
     return 0
 
 
@@ -91,7 +91,7 @@ def cmd_claim(args: argparse.Namespace) -> int:
 
     fm, _ = frontmatter.parse(path.read_text())
     tid = fm.get("id", path.name.split("-", 1)[0])
-    emit("task.claimed", {"id": tid, "agent": agent, "expires_at": expires_at})
+    emit("task_claimed", {"id": tid, "agent": agent, "expires_at": expires_at})
     return 0
 
 
@@ -140,11 +140,11 @@ def _terminate(path: Path, *, status: str, event: str) -> int:
 
 
 def cmd_done(args: argparse.Namespace) -> int:
-    return _terminate(Path(args.file), status="done", event="task.done")
+    return _terminate(Path(args.file), status="done", event="task_resolved")
 
 
 def cmd_wontfix(args: argparse.Namespace) -> int:
-    return _terminate(Path(args.file), status="wontfix", event="task.wontfix")
+    return _terminate(Path(args.file), status="wontfix", event="task_canceled")
 
 
 def cmd_refresh(args: argparse.Namespace) -> int:
@@ -166,7 +166,7 @@ def cmd_release(args: argparse.Namespace) -> int:
 
     fm, _ = frontmatter.parse(path.read_text())
     tid = fm.get("id", path.name.split("-", 1)[0])
-    emit("task.released", {"id": tid})
+    emit("task_released", {"id": tid})
     return 0
 
 

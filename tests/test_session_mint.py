@@ -80,7 +80,11 @@ def test_emit_without_session_env_mints_uuid_not_orphan(monkeypatch, tmp_path) -
     monkeypatch.setenv("MENTAT_REPO", "demo")
     monkeypatch.setenv("MENTAT_SLUG", "agent")
 
-    args = argparse_ns(agent="agent", event="plan.started", payload=json.dumps({"path": "p.md"}))
+    args = argparse_ns(
+        agent="agent",
+        event="chunk_started",
+        payload=json.dumps({"slug": "p", "plan": "p.md", "harness": "default", "worktree": "/wt"}),
+    )
     assert log_mod.cmd_emit(args) == 0
 
     repo_dir = tmp_path / "demo"

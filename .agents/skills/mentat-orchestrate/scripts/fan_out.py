@@ -133,9 +133,10 @@ def spawn_with_proc(
         plan, harness=harness, model=model, seed_summary=seed_summary
     )
     _emit_event(
-        "chunk.spawned",
+        "chunk_started",
         spawned_payload(plan.slug, str(plan.path), harness=harness or "default", worktree=str(worktree)),
     )
+    _emit_event("agent_started", {"harness": harness or "default"})
     print(f"mentat-session track {session_id}")
     print(session_id)
     return session_id, proc
@@ -144,14 +145,15 @@ def spawn_with_proc(
 async def spawn_async(
     plan: _PlanLike, *, harness: str | None = None, model: str | None = None, seed_summary: str | None = None
 ) -> tuple[str, asyncio.subprocess.Process, Path]:
-    """Spawn plan headless under asyncio. Emit chunk.spawned, print track command,
+    """Spawn plan headless under asyncio. Emit chunk_started, print track command,
     return (session_id, Process, worktree)."""
     session_id, cmd, env, worktree = _prepare_chunk_spawn(plan, harness=harness, model=model, seed_summary=seed_summary)
     proc = await asyncio.create_subprocess_exec(*cmd, env=env, cwd=str(worktree), start_new_session=True)
     _emit_event(
-        "chunk.spawned",
+        "chunk_started",
         spawned_payload(plan.slug, str(plan.path), harness=harness or "default", worktree=str(worktree)),
     )
+    _emit_event("agent_started", {"harness": harness or "default"})
     print(f"mentat-session track {session_id}")
     print(session_id)
     return session_id, proc, worktree

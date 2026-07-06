@@ -74,7 +74,7 @@ def test_fan_out_emits_chunk_spawned(tmp_path):
             fan_out.spawn(plan)
 
     emitted_events = [c.args[0] for c in mock_emit.call_args_list]
-    assert any("chunk.spawned" in e for e in emitted_events)
+    assert any("chunk_started" in e for e in emitted_events)
 
 
 def test_fan_out_stdout_emits_chunk_slugs_newline_delim(tmp_path):
@@ -124,7 +124,7 @@ def test_fan_out_track_suggestion_is_bin_form(tmp_path):
 
 def test_spawn_async_emits_prints_and_returns_process(tmp_path, monkeypatch):
     """spawn_async builds the child via _build_spawn_cmd, launches it with
-    asyncio.create_subprocess_exec (start_new_session=True), emits chunk.spawned,
+    asyncio.create_subprocess_exec (start_new_session=True), emits chunk_started,
     prints the track command, and returns (session_id, Process) (fan_out.py:123-131)."""
     fan_out = load_module("fan_out")
     routing = load_module("scheduler")
@@ -152,7 +152,7 @@ def test_spawn_async_emits_prints_and_returns_process(tmp_path, monkeypatch):
     assert sid == "sess-async"
     assert proc is fake_proc
     assert captured["new_session"] is True
-    assert any("chunk.spawned" in c.args[0] for c in mock_emit.call_args_list)
+    assert any("chunk_started" in c.args[0] for c in mock_emit.call_args_list)
     assert "mentat-session track sess-async" in output
     assert "sess-async" in output
 

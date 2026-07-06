@@ -1,8 +1,6 @@
 ---
 name: mentat-session
-description: >
-  Inspect and diagnose mentat orchestration sessions.
-  Use when you want to stream live chunk events, produce a verdict markdown, or kick off a bug-hunt loop.
+description: Inspect and diagnose mentat orchestration sessions via list, track, doctor, and diagnose.
 ---
 
 Session inspection toolkit. `list` shows the repo-wide agent registry from `mentat.db` (attention-needing agents on top). `track` tails canonical audit events and the harness transcript live. `doctor` prints a verdict markdown from store events to stdout. `report` is its success-side twin — a one-paragraph report-back written to `summary.md`. `diagnose` renders the verdict from the store, then enters the `/diagnose` loop.

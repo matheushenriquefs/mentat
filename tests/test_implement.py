@@ -106,7 +106,7 @@ def test_implement_single_hitl_plan_hands_off_to_caller(tmp_path):
     """HITL plans must NOT spawn a sub-claude via the harness adapter.
 
     The harness shells `claude --headless` which loses AskUserQuestion.
-    implement.py emits chunk.spawned{harness:"hitl-in-session"} and returns 0,
+    implement.py emits chunk_started{harness:"hitl-in-session"} and returns 0,
     handing control back to the calling Claude session which drives the TDD
     loop in-session.
     """
@@ -123,8 +123,8 @@ def test_implement_single_hitl_plan_hands_off_to_caller(tmp_path):
     assert rc == 0
     mock_invoke.assert_not_called()
     events = [c.args[0] for c in mock_emit.call_args_list]
-    assert "chunk.spawned" in events
-    spawned_payload = next(c.args[1] for c in mock_emit.call_args_list if c.args[0] == "chunk.spawned")
+    assert "chunk_started" in events
+    spawned_payload = next(c.args[1] for c in mock_emit.call_args_list if c.args[0] == "chunk_started")
     assert spawned_payload.get("harness") == "hitl-in-session"
 
 
@@ -164,7 +164,7 @@ def test_implement_afk_plan_self_answer_detected_exits_42(tmp_path):
 
     assert rc == 42
     emitted = [c.args[0] for c in mock_emit.call_args_list]
-    assert any("chunk.ejected" in e for e in emitted)
+    assert any("chunk_ejected" in e for e in emitted)
 
 
 def test_implement_emits_chunk_ejected_with_hitl_reason(tmp_path):
@@ -318,7 +318,7 @@ def test_main_run_subcommand_explicit(tmp_path, monkeypatch):
     mock_run.assert_called_once()
 
 
-# ── D11: doctor auto-trigger + logs_path on chunk.ejected ────────────────────
+# ── D11: doctor auto-trigger + logs_path on chunk_ejected ────────────────────
 
 
 def test_implement_auto_doctors_on_nonzero_exit(tmp_path):
@@ -477,7 +477,7 @@ def test_auto_doctor_passes_session_id_when_set(tmp_path, monkeypatch):
 
 
 def test_implement_chunk_ejected_includes_logs_path(tmp_path, monkeypatch):
-    """Every chunk.ejected emit carries a logs_path field per ADR-0007 payload-extension rule."""
+    """Every chunk_ejected emit carries a logs_path field per ADR-0007 payload-extension rule."""
     impl = load_module("implement")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
@@ -497,7 +497,7 @@ def test_implement_chunk_ejected_includes_logs_path(tmp_path, monkeypatch):
 
 
 def test_implement_logs_path_dir_holds_jsonl_and_diagnosis(tmp_path, monkeypatch):
-    """logs_path in chunk.ejected payloads points to the session dir (JSONL + diagnosis.md)."""
+    """logs_path in chunk_ejected payloads points to the session dir (JSONL + diagnosis.md)."""
     impl = load_module("implement")
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
@@ -505,7 +505,7 @@ def test_implement_logs_path_dir_holds_jsonl_and_diagnosis(tmp_path, monkeypatch
 
     session_dir = tmp_path / "logs" / "myrepo" / "sess-002"
     session_dir.mkdir(parents=True)
-    (session_dir / "mentat-implement-impl.jsonl").write_text('{"event": "plan.started"}\n')
+    (session_dir / "mentat-implement-impl.jsonl").write_text('{"event": "chunk_started"}\n')
     (session_dir / "diagnosis.md").write_text("## Verdict\n- Reason: test\n")
 
     logs_dir = impl._session_dir_fn(impl.os.environ.get("MENTAT_SESSION", "manual"))

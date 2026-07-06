@@ -46,7 +46,7 @@ def test_fan_out_spawned_records_child_worktree(tmp_path: Path, monkeypatch) -> 
 
     monkeypatch.setattr(fan_out, "_emit_event", capture)
     fan_out.spawn_with_proc(plan)
-    assert emitted[0][0] == "chunk.spawned"
+    assert emitted[0][0] == "chunk_started"
     assert emitted[0][1]["worktree"] == str(wt)
 
 
@@ -82,9 +82,9 @@ def test_partition_marks_oom_as_transient_killed_by(monkeypatch, tmp_path: Path)
     results = [(plan, EX_UNAVAILABLE, "/logs", None)]
     chunks, hitl, transient = orch.partition_by_outcome(results, mark_ejected=lambda s: [])
     assert "p" in transient
-    eject = next(p for e, p in emitted if e == "chunk.ejected")
-    assert eject["killed_by"] == "oom"
-    assert eject["reason"] == orch.WORKER_DIED
+    eject = next(p for e, p in emitted if e == "chunk_ejected")
+    assert eject["reason"] == orch.CONTAINER_OOM
+    assert "killed_by" not in eject
 
 
 def test_mentat_chunk_memory_unset_by_default(tmp_path: Path) -> None:

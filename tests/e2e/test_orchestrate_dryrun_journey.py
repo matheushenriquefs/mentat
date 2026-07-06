@@ -3,7 +3,7 @@
 Drives ``run_orchestrate(..., dry_run=True)`` over real plan files on disk: it loads +
 frontmatter-parses them, expands a parent index into its siblings, partitions HITL/AFK,
 and prints the anchor/spawn preview — all hermetic (no worktrees, no docker, no harness
-spawn). Asserts the preview names each slug in the right group and that the batch.reviewed
+spawn). Asserts the preview names each slug in the right group and that the batch_reviewed
 audit row is written. Also drives the plan-loader guards (nested index, bad blocked_by).
 """
 
@@ -50,7 +50,7 @@ def _plan(plans_dir: Path, slug: str, *, cls: str = "AFK", blocked_by: str = "",
 
 
 def _batch_reviews(session_id: str) -> list[dict]:
-    return events_by_kind(session_id, "batch.reviewed")
+    return events_by_kind(session_id, "batch_reviewed")
 
 
 def test_dry_run_previews_partition(tmp_path, audit_env, capsys):
@@ -70,7 +70,7 @@ def test_dry_run_previews_partition(tmp_path, audit_env, capsys):
     assert "would anchor" in out and "would spawn" in out
 
     # A dry run still records the advisory batch review.
-    assert _batch_reviews(audit_env), "dry-run must emit batch.reviewed"
+    assert _batch_reviews(audit_env), "dry-run must emit batch_reviewed"
 
 
 def test_dry_run_expands_parent_index(tmp_path, audit_env, capsys):

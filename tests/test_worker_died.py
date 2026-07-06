@@ -46,7 +46,7 @@ def test_signal_exit_negative_rc_ejects_as_worker_died(tmp_path):
 
     assert chunks == [], "dead worker must not enter land queue"
     assert hitl == set(), "worker-died is not a HITL chunk"
-    assert any(ev == "chunk.ejected" and p.get("reason") == WORKER_DIED for ev, p in emitted), (
+    assert any(ev == "chunk_ejected" and p.get("reason") == WORKER_DIED for ev, p in emitted), (
         f"worker-died eject not emitted; got {emitted}"
     )
 
@@ -60,7 +60,7 @@ def test_shell_signal_exit_128_plus_ejects_as_worker_died(tmp_path):
     chunks, hitl, emitted = _run_partition(orch, routing, tmp_path, 137)
 
     assert chunks == [], "dead worker must not enter land queue"
-    assert any(ev == "chunk.ejected" and p.get("reason") == WORKER_DIED for ev, p in emitted), (
+    assert any(ev == "chunk_ejected" and p.get("reason") == WORKER_DIED for ev, p in emitted), (
         f"worker-died eject not emitted for rc=137; got {emitted}"
     )
 
@@ -74,7 +74,7 @@ def test_worker_died_boundary_rc_128_ejects(tmp_path):
     chunks, hitl, emitted = _run_partition(orch, routing, tmp_path, 128)
 
     assert chunks == [], "rc=128 must not enter land queue"
-    assert any(ev == "chunk.ejected" and p.get("reason") == WORKER_DIED for ev, p in emitted), (
+    assert any(ev == "chunk_ejected" and p.get("reason") == WORKER_DIED for ev, p in emitted), (
         f"worker-died not emitted for rc=128; got {emitted}"
     )
 
@@ -89,7 +89,7 @@ def test_normal_nonzero_rc_ejects_as_implement_failed(tmp_path):
 
     assert chunks == [], "rc=1 must not reach land queue"
     assert hitl == set()
-    assert any(ev == "chunk.ejected" and p.get("reason") == IMPLEMENT_FAILED for ev, p in emitted), (
+    assert any(ev == "chunk_ejected" and p.get("reason") == IMPLEMENT_FAILED for ev, p in emitted), (
         f"implement-failed not emitted for rc=1; got {emitted}"
     )
 
@@ -105,6 +105,6 @@ def test_hitl_rc_still_routes_to_hitl(tmp_path):
 
     assert chunks == [], "HITL chunk must not land"
     assert "dead-chunk" in hitl
-    assert any(ev == "chunk.ejected" and p.get("reason") == HITL_REQUIRED for ev, p in emitted), (
+    assert any(ev == "chunk_ejected" and p.get("reason") == HITL_REQUIRED for ev, p in emitted), (
         f"hitl-required eject not emitted; got {emitted}"
     )

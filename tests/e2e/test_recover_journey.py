@@ -148,11 +148,11 @@ def test_attempt_count_replays_recovery_spawns(monkeypatch, tmp_path):
         "repo",
         "s1",
         [
-            {"event": "chunk.spawned", "payload": {"slug": "core", "trigger": "recovery"}},
-            {"event": "chunk.spawned", "payload": {"slug": "core", "trigger": "recovery"}},
-            {"event": "chunk.spawned", "payload": {"slug": "core"}},
-            {"event": "chunk.landed", "payload": {"slug": "core", "trigger": "recovery"}},
-            {"event": "chunk.spawned", "payload": {"slug": "other", "trigger": "recovery"}},
+            {"event": "chunk_started", "payload": {"slug": "core", "trigger": "recovery"}},
+            {"event": "chunk_started", "payload": {"slug": "core", "trigger": "recovery"}},
+            {"event": "chunk_started", "payload": {"slug": "core"}},
+            {"event": "chunk_landed", "payload": {"slug": "core", "trigger": "recovery"}},
+            {"event": "chunk_started", "payload": {"slug": "other", "trigger": "recovery"}},
         ],
     )
 
@@ -267,8 +267,8 @@ def test_recover_attempt_cap_dead_letters(monkeypatch, tmp_path):
         "repo",
         "s1",
         [
-            {"event": "chunk.spawned", "payload": {"slug": "core", "trigger": "recovery"}},
-            {"event": "chunk.spawned", "payload": {"slug": "core", "trigger": "recovery"}},
+            {"event": "chunk_started", "payload": {"slug": "core", "trigger": "recovery"}},
+            {"event": "chunk_started", "payload": {"slug": "core", "trigger": "recovery"}},
         ],
     )
     out, calls = _run(m, {"core"}, {"core": _Plan("core")}, monkeypatch=monkeypatch, tmp_path=tmp_path)
@@ -293,3 +293,28 @@ def test_recover_budget_breach_escalates_remaining(monkeypatch, tmp_path):
     out, calls = _run(m, {"a", "b"}, plans, monkeypatch=monkeypatch, tmp_path=tmp_path, budget=m.Budget(1.0))
     assert calls["respawn"] == [("a", 1)]
     assert {o["slug"] for o in out if o["recovery"] == "dead-lettered"} == {"b"}
+
+
+@pytest.mark.parametrize("reason", ["preflight_worktree_failed", "container_oom"])
+def test_recover_retries_er3_transient_reasons(monkeypatch, tmp_path, reason):
+    m = _recover()
+
+    def ctx(plan, attempt, cap):
+        return {"slug": plan.slug, "reason": reason, "worktree": "/wt", "attempt": attempt, "cap": cap}
+
+    out, calls = _run(
+        m,
+        {"core"},
+        {"core": _Plan("core")},
+        monkeypatch=monkeypatch,
+        tmp_path=tmp_path,
+        context_builder=ctx,
+    )
+    assert out[0]["recovery"] == "retry"
+    assert calls["respawn"] == [("core", 1)]
+
+
+def test_git_error_is_not_transient():
+    from lib import events
+
+    assert not events.is_transient_eject(events.GIT_ERROR)

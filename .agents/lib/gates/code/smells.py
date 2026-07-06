@@ -1,7 +1,7 @@
 """Deterministic smell detector.
 
 Walks Python sources under chunk_path with the stdlib `ast` module.
-Advisory only (never blocks): findings surface in the gate.evaluated
+Advisory only (never blocks): findings surface in the gate_evaluated
 audit row so reviewers can flag what ruff misses.
 
 LLM-only smells (Feature Envy, Shotgun Surgery, etc.) live in
@@ -128,7 +128,7 @@ def run(chunk_path: Path | None) -> tuple[str, str]:
     for path in _iter_py(root):
         try:
             tree = ast.parse(path.read_text(), filename=str(path))
-        except (SyntaxError, OSError):
+        except SyntaxError, OSError:
             continue
         findings += _long_method(tree, path, long_method_limit)
         findings += _long_params(tree, path, long_params_limit)

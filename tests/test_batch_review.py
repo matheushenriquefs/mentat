@@ -1,4 +1,4 @@
-"""batch.reviewed event: run_orchestrate emits it after land, advisory."""
+"""batch_reviewed event: run_orchestrate emits it after land, advisory."""
 
 from __future__ import annotations
 
@@ -30,4 +30,4 @@ def test_run_orchestrate_emits_batch_reviewed(tmp_path):
     ):
         orch.run_orchestrate("main", [plan], harness=None, model=None, dry_run=False)
 
-    assert any("batch.reviewed" in e for e in emitted)
+    assert any("batch_reviewed" in e for e in emitted)

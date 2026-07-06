@@ -49,5 +49,5 @@ unset — unmeasured caps false-OOM legitimate work.
 ## Consequences
 
 - `worktree_for_*` raises `GitError` on miss; never `Path.cwd()`.
-- `chunk.spawned` audit records the child's real worktree path.
+- `chunk_started` audit records the child's real worktree path.
 - Concurrent runs in one repo cannot prune or down each other's resources.

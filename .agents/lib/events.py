@@ -14,7 +14,7 @@ from lib.session import agent_id_from_env, make_agent_id
 
 # Events where a failed emit must not be silently swallowed — the orchestration
 # state machine cannot proceed correctly without a confirmed log write.
-_TERMINAL_EVENTS: frozenset[str] = frozenset({"chunk.landed", "chunk.ejected"})
+_TERMINAL_EVENTS: frozenset[str] = frozenset({"chunk_landed", "chunk_ejected"})
 _EMIT_TIMEOUT_S = 30.0
 
 IMPLEMENT_FAILED = "implement_failed"
@@ -74,7 +74,7 @@ STATUS_REASONS: frozenset[str] = CHUNK_EJECT_REASONS | AGENT_STATUS_REASONS
 
 EJECT_REASONS = CHUNK_EJECT_REASONS
 
-TRANSIENT_EJECT_REASONS: frozenset[str] = frozenset({WORKER_DIED, NOT_FF})
+TRANSIENT_EJECT_REASONS: frozenset[str] = frozenset({WORKER_DIED, NOT_FF, PREFLIGHT_WORKTREE_FAILED, CONTAINER_OOM})
 
 
 def is_transient_eject(reason: str) -> bool:

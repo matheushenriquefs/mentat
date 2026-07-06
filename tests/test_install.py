@@ -29,7 +29,7 @@ def _fake_home(tmp_path: Path, monkeypatch) -> Path:
 def test_install_creates_mentat_dotdir(tmp_path, monkeypatch):
     install_mod = load_module("install")
     home = _fake_home(tmp_path, monkeypatch)
-    with patch.object(install_mod, "_execute_actions"), patch.object(install_mod, "_emit_installed"):
+    with patch.object(install_mod, "_execute_actions"):
         install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
     assert (home / ".mentat").exists()
 
@@ -55,7 +55,6 @@ def test_install_yes_flag_skips_prompt(tmp_path, monkeypatch):
     with (
         patch("builtins.input", fake_input),
         patch.object(install_mod, "_execute_actions"),
-        patch.object(install_mod, "_emit_installed"),
     ):
         install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
 
@@ -75,7 +74,7 @@ def test_install_help_flag_exits_0():
 def test_install_writes_default_config(tmp_path, monkeypatch):
     install_mod = load_module("install")
     home = _fake_home(tmp_path, monkeypatch)
-    with patch.object(install_mod, "_execute_actions"), patch.object(install_mod, "_emit_installed"):
+    with patch.object(install_mod, "_execute_actions"):
         install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
     config = home / ".mentat" / "config.toml"
     assert config.exists()
@@ -86,7 +85,7 @@ def test_install_no_symlink_farm_at_agents_bin(tmp_path, monkeypatch):
     """install must not create ~/.agents/bin/ symlink entries."""
     install_mod = load_module("install")
     home = _fake_home(tmp_path, monkeypatch)
-    with patch.object(install_mod, "_execute_actions"), patch.object(install_mod, "_emit_installed"):
+    with patch.object(install_mod, "_execute_actions"):
         install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
     agents_bin = home / ".agents" / "bin"
     if agents_bin.exists():
@@ -97,24 +96,12 @@ def test_install_no_symlink_farm_at_agents_bin(tmp_path, monkeypatch):
 def test_install_idempotent_second_run_noop(tmp_path, monkeypatch):
     install_mod = load_module("install")
     home = _fake_home(tmp_path, monkeypatch)
-    with patch.object(install_mod, "_execute_actions"), patch.object(install_mod, "_emit_installed"):
+    with patch.object(install_mod, "_execute_actions"):
         install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
         snapshot1 = set(str(p) for p in tmp_path.rglob("*"))
         install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
         snapshot2 = set(str(p) for p in tmp_path.rglob("*"))
     assert snapshot1 == snapshot2
-
-
-def test_install_emits_install_completed_event(tmp_path, monkeypatch):
-    install_mod = load_module("install")
-    home = _fake_home(tmp_path, monkeypatch)
-    emit_calls: list = []
-    with (
-        patch.object(install_mod, "_execute_actions"),
-        patch.object(install_mod, "_emit_installed", side_effect=lambda: emit_calls.append(True)),
-    ):
-        install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False, color=False)
-    assert emit_calls, "_emit_installed was not called"
 
 
 def test_shell_wrapper_execs_python_when_present():
@@ -303,7 +290,6 @@ def test_do_install_partial_failure_warns_and_returns_1(tmp_path, monkeypatch):
         patch.object(install_mod, "_execute_actions", return_value=False),
         patch.object(install_mod._companions, "install_all"),
         patch.object(install_mod._path_setup, "setup_path"),
-        patch.object(install_mod, "_emit_installed"),
     ):
         rc = install_mod.do_install(home=home, clone_root=None, yes=True, dry_run=False)
     assert rc == 1
@@ -344,17 +330,6 @@ def test_safe_symlink_recovers_from_broken_parent_symlink(tmp_path):
     assert target.resolve() == source.resolve()
 
 
-# ── _emit_installed body ───────────────────────────────────────────────────────
-
-
-def test_emit_installed_calls_bound_emit_fn(monkeypatch):
-    install_mod = load_module("install")
-    calls: list = []
-    monkeypatch.setattr(install_mod, "_emit_installed_fn", lambda event, payload: calls.append((event, payload)))
-    install_mod._emit_installed()
-    assert calls == [("plan.started", {"path": "install"})]
-
-
 # ── do_install: home=None, interactive prompt, skip_companions ─────────────────
 
 
@@ -363,7 +338,6 @@ def test_do_install_home_none_falls_back_to_home(tmp_path, monkeypatch):
     monkeypatch.setattr(install_mod.Path, "home", lambda: tmp_path)
     with (
         patch.object(install_mod, "_execute_actions"),
-        patch.object(install_mod, "_emit_installed"),
         patch.object(install_mod._companions, "install_all"),
         patch.object(install_mod._path_setup, "setup_path"),
     ):
@@ -400,7 +374,6 @@ def test_do_install_interactive_accept_and_skip_companions(tmp_path, monkeypatch
         patch.object(install_mod, "_execute_actions", return_value=True),
         patch.object(install_mod._companions, "install_all", side_effect=lambda **k: companion_calls.append(k)),
         patch.object(install_mod._path_setup, "setup_path"),
-        patch.object(install_mod, "_emit_installed"),
         patch("builtins.input", lambda prompt="": "yes"),
     ):
         rc = install_mod.do_install(

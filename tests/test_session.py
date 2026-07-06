@@ -40,7 +40,7 @@ def test_latest_session_excludes_manual(tmp_path, monkeypatch):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.landed",
+                "event": "chunk_landed",
                 "payload": {"slug": "x", "sha": "a", "holding": "h"},
             }
         ],
@@ -69,7 +69,7 @@ def test_verdict_for_chunk_landed(tmp_path):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.landed",
+                "event": "chunk_landed",
                 "payload": {"slug": "my-chunk", "sha": "abc123", "holding": "main"},
             },
         ],
@@ -87,7 +87,7 @@ def test_verdict_for_chunk_ejected_implement_failed(tmp_path):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "payload": {"slug": "my-chunk", "reason": "implement_failed", "where": "/tmp"},
             },
         ],
@@ -105,7 +105,7 @@ def test_verdict_for_chunk_ejected_hitl_required(tmp_path):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "payload": {"slug": "my-chunk", "reason": "hitl_required", "where": "/tmp"},
             },
         ],
@@ -125,7 +125,7 @@ def test_verdict_for_worker_died_names_slug_and_reason(tmp_path):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "payload": {"slug": "dead-chunk", "reason": "worker_died", "where": "/tmp/wt"},
             },
         ],
@@ -139,7 +139,7 @@ def test_verdict_for_worker_died_names_slug_and_reason(tmp_path):
 
 def test_verdict_worker_died_not_masked_by_later_land(tmp_path):
     """Batch session, two chunks: one lands, another's worker died earlier. The
-    reversed-by-ts scan must not report 'chunk.landed / Suspect: None' and bury
+    reversed-by-ts scan must not report 'chunk_landed / Suspect: None' and bury
     the dead worker — the eject is the story doctor exists to tell (S5)."""
     diag_mod = load_module("diagnose")
     session_dir = _write_log(
@@ -149,23 +149,23 @@ def test_verdict_worker_died_not_masked_by_later_land(tmp_path):
         [
             {
                 "ts": "2026-01-01T00:00:01+00:00",
-                "event": "chunk.spawned",
+                "event": "chunk_started",
                 "payload": {"slug": "dead-chunk", "plan": "dead.md", "harness": "cc", "worktree": "/tmp/wt"},
             },
             {
                 "ts": "2026-01-01T00:00:02+00:00",
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "payload": {"slug": "dead-chunk", "reason": "worker_died", "where": "/tmp/wt"},
             },
             {
                 "ts": "2026-01-01T00:00:03+00:00",
-                "event": "chunk.landed",
+                "event": "chunk_landed",
                 "payload": {"slug": "good-chunk", "sha": "abc123", "holding": "main"},
             },
         ],
     )
     verdict = diag_mod.build_verdict(session_dir)
-    assert "Reason: chunk.landed" not in verdict
+    assert "Reason: chunk_landed" not in verdict
     assert "Suspect: None" not in verdict
     assert "worker_died" in verdict
     assert "dead-chunk" in verdict
@@ -181,7 +181,7 @@ def test_doctor_writes_diagnosis_in_session_dir(tmp_path, monkeypatch):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.landed",
+                "event": "chunk_landed",
                 "payload": {"slug": "x", "sha": "abc", "holding": "main"},
             },
         ],
@@ -205,7 +205,7 @@ def test_summary_for_chunk_landed(tmp_path):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.landed",
+                "event": "chunk_landed",
                 "payload": {"slug": "my-chunk", "sha": "abc123", "holding": "main"},
             },
         ],
@@ -224,7 +224,7 @@ def test_summary_for_chunk_ejected_carries_failure(tmp_path):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "payload": {"slug": "my-chunk", "reason": "gate_failed", "where": "/x"},
             },
         ],
@@ -242,7 +242,7 @@ def test_write_summary_writes_summary_md(tmp_path):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.landed",
+                "event": "chunk_landed",
                 "payload": {"slug": "c", "sha": "deadbee", "holding": "main"},
             },
         ],
@@ -263,7 +263,7 @@ def test_report_prints_success_summary(tmp_path, monkeypatch):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.landed",
+                "event": "chunk_landed",
                 "payload": {"slug": "c", "sha": "abc999", "holding": "main"},
             },
         ],
@@ -286,7 +286,7 @@ def test_report_shows_failure_for_ejected(tmp_path, monkeypatch):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "payload": {"slug": "c", "reason": "gate_failed", "where": "/x"},
             },
         ],
@@ -308,7 +308,7 @@ def test_expected_vs_actual_derived(tmp_path):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "payload": {"slug": "x", "reason": "gate_failed", "where": "/tmp"},
             },
         ],
@@ -326,7 +326,7 @@ def test_regression_marks_unknown_when_no_prior_landed(tmp_path):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "payload": {"slug": "x", "reason": "implement_failed", "where": "/tmp"},
             },
         ],
@@ -407,7 +407,7 @@ def test_cmd_track_session_found_calls_view_session(tmp_path, monkeypatch):
     session_dir.mkdir(parents=True)
     store.record_emit(
         {"MENTAT_AGENT": "sess-abc", "MENTAT_AGENT_PID": "1", "MENTAT_HARNESS": "cursor"},
-        "chunk.spawned",
+        "chunk_started",
         {"slug": "x"},
     )
     view_calls: list = []
@@ -446,7 +446,7 @@ def test_cmd_doctor_valid_session_writes_diagnosis(tmp_path, monkeypatch):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.landed",
+                "event": "chunk_landed",
                 "payload": {"slug": "x", "sha": "a", "holding": "h"},
             }
         ],
@@ -553,7 +553,7 @@ def test_verdict_events_without_terminal_reports_no_terminal(tmp_path):
         tmp_path,
         "no-terminal",
         "mentat-implement",
-        [{"ts": "2026-01-01T00:00:00+00:00", "event": "plan.started", "payload": {"path": "/p.md"}}],
+        [{"ts": "2026-01-01T00:00:00+00:00", "event": "chunk_started", "payload": {"path": "/p.md"}}],
     )
     verdict = diag_mod.build_verdict(session_dir)
     assert "No terminal event found." in verdict
@@ -569,7 +569,7 @@ def test_verdict_hitl_blocker_appended_to_suspect(tmp_path):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "payload": {"slug": "c", "reason": "hitl_required", "where": "/wt", "summary": "need a decision"},
             }
         ],
@@ -584,7 +584,7 @@ def test_summary_no_terminal_says_completed_in_session(tmp_path):
         tmp_path,
         "insession",
         "mentat-implement",
-        [{"ts": "2026-01-01T00:00:00+00:00", "event": "chunk.spawned", "payload": {"slug": "c"}}],
+        [{"ts": "2026-01-01T00:00:00+00:00", "event": "chunk_started", "payload": {"slug": "c"}}],
     )
     summary = diag_mod.build_summary(session_dir)
     assert "not yet landed" in summary
@@ -599,7 +599,7 @@ def test_summary_hitl_blocker_appended(tmp_path):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "payload": {"slug": "c", "reason": "hitl_required", "summary": "blocked here"},
             }
         ],
@@ -639,8 +639,8 @@ def test_session_worktree_ignores_non_dict_and_non_str_payload(tmp_path):
     sd = tmp_path / "s-wt"
     sd.mkdir()
     rows = [
-        {"ts": "1", "event": "chunk.spawned", "payload": "not-a-dict"},
-        {"ts": "2", "event": "chunk.spawned", "payload": {"worktree": 123}},
+        {"ts": "1", "event": "chunk_started", "payload": "not-a-dict"},
+        {"ts": "2", "event": "chunk_started", "payload": {"worktree": 123}},
     ]
     (sd / "audit.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
     assert sessions_mod.session_worktree(sd) is None

@@ -50,7 +50,7 @@ def test_log_emit_validate_query_prune_lifecycle(tmp_path, monkeypatch, capsys):
             [
                 "emit",
                 "mentat-orchestrate",
-                "chunk.spawned",
+                "chunk_started",
                 json.dumps({"slug": "s1", "plan": "s1.md", "harness": "claude-code", "worktree": "/tmp/wt"}),
             ],
         )
@@ -62,7 +62,7 @@ def test_log_emit_validate_query_prune_lifecycle(tmp_path, monkeypatch, capsys):
             [
                 "emit",
                 "mentat-orchestrate",
-                "chunk.landed",
+                "chunk_landed",
                 json.dumps({"slug": "s1", "sha": "cafe", "holding": "main"}),
             ],
         )
@@ -71,8 +71,8 @@ def test_log_emit_validate_query_prune_lifecycle(tmp_path, monkeypatch, capsys):
 
     rows = agent_events(session)
     assert len(rows) == 2
-    assert rows[0]["event"] == "chunk.spawned"
-    assert rows[1]["event"] == "chunk.landed"
+    assert rows[0]["event"] == "chunk_started"
+    assert rows[1]["event"] == "chunk_landed"
 
     session_dir = log_root / repo / session
     assert session_dir.is_dir(), "emit must ensure the session dir exists"
@@ -84,11 +84,11 @@ def test_log_emit_validate_query_prune_lifecycle(tmp_path, monkeypatch, capsys):
     capsys.readouterr()
     assert _dispatch(log, ["list", session]) == 0
     events = [json.loads(ln)["event"] for ln in capsys.readouterr().out.splitlines() if ln.strip()]
-    assert events == ["chunk.spawned", "chunk.landed"]
+    assert events == ["chunk_started", "chunk_landed"]
 
-    assert _dispatch(log, ["list", session, "--event", "chunk.landed"]) == 0
+    assert _dispatch(log, ["list", session, "--event", "chunk_landed"]) == 0
     rows_out = [json.loads(ln) for ln in capsys.readouterr().out.splitlines() if ln.strip()]
-    assert [r["event"] for r in rows_out] == ["chunk.landed"]
+    assert [r["event"] for r in rows_out] == ["chunk_landed"]
     assert rows_out[0]["payload"]["sha"] == "cafe"
 
     assert _dispatch(log, ["list", session, "--agent", "mentat-orchestrate"]) == 0
@@ -113,7 +113,7 @@ def test_log_emit_rejects_missing_payload_field(tmp_path, monkeypatch, capsys):
     repo, session = "logrepo", "orchestrate-main-2"
     _log_env(monkeypatch, log_root, repo, session)
 
-    rc = _dispatch(log, ["emit", "mentat-orchestrate", "chunk.landed", json.dumps({"slug": "s1"})])
+    rc = _dispatch(log, ["emit", "mentat-orchestrate", "chunk_landed", json.dumps({"slug": "s1"})])
     assert rc == 1
     assert "reject" in capsys.readouterr().err
 
@@ -130,7 +130,7 @@ def test_log_emit_rejects_invalid_eject_reason(tmp_path, monkeypatch):
         [
             "emit",
             "mentat-orchestrate",
-            "chunk.ejected",
+            "chunk_ejected",
             json.dumps({"slug": "s", "reason": "made-up", "where": "land"}),
         ],
     )
@@ -140,7 +140,7 @@ def test_log_emit_rejects_invalid_eject_reason(tmp_path, monkeypatch):
 def test_log_emit_bad_json_payload(tmp_path, monkeypatch, capsys):
     log = load_script(LOG_PY, "e2e_log_badjson")
     _log_env(monkeypatch, tmp_path / "logs", "logrepo", "s")
-    rc = _dispatch(log, ["emit", "a", "plan.started", "{not json"])
+    rc = _dispatch(log, ["emit", "a", "chunk_started", "{not json"])
     assert rc == 1
     assert "not valid JSON" in capsys.readouterr().err
 
@@ -148,7 +148,7 @@ def test_log_emit_bad_json_payload(tmp_path, monkeypatch, capsys):
 def test_log_emit_non_object_payload(tmp_path, monkeypatch, capsys):
     log = load_script(LOG_PY, "e2e_log_nonobj")
     _log_env(monkeypatch, tmp_path / "logs", "logrepo", "s")
-    rc = _dispatch(log, ["emit", "a", "plan.started", "[1, 2]"])
+    rc = _dispatch(log, ["emit", "a", "chunk_started", "[1, 2]"])
     assert rc == 1
     assert "must be a JSON object" in capsys.readouterr().err
 
@@ -158,7 +158,7 @@ def test_log_validate_flags_bad_rows(tmp_path, monkeypatch, capsys):
     _log_env(monkeypatch, tmp_path / "logs", "r", "s")
     bad = tmp_path / "bad.jsonl"
     bad.write_text(
-        json.dumps({"ts": "t", "agent": "a", "session": "s", "event": "chunk.landed", "payload": {"slug": "x"}})
+        json.dumps({"ts": "t", "agent": "a", "session": "s", "event": "chunk_landed", "payload": {"slug": "x"}})
         + "\nnot json\n"
         + json.dumps({"ts": "t", "agent": "a", "session": "s", "event": "made.up", "payload": {}})
         + "\n"

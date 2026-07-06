@@ -239,7 +239,7 @@ def testpartition_by_outcome_stalled_kill_names_killer(tmp_path):
                     mark_ejected=lambda slug: [],
                 )
 
-    p = [p for ev, p in emitted if ev == "chunk.ejected"][0]
+    p = [p for ev, p in emitted if ev == "chunk_ejected"][0]
     assert p["reason"] == "worker_died"
     assert p["killed_by"] == "stalled"
     assert "timed_out" not in p, "a stall is not a wall timeout"
@@ -438,7 +438,7 @@ def testpartition_by_outcome_breaker_open_names_killer(tmp_path):
                     mark_ejected=lambda slug: [],
                 )
 
-    p = [p for ev, p in emitted if ev == "chunk.ejected"][0]
+    p = [p for ev, p in emitted if ev == "chunk_ejected"][0]
     assert p["killed_by"] == "breaker-open"
     assert "bo" in transient
 
@@ -460,7 +460,7 @@ class _KillTrackingProc:
 
 def test_group_teardown_kills_downs_and_emits_for_every_child():
     """_group_teardown group-kills each live child, stops its container, emits
-    chunk.teardown, and clears the registry (no double teardown)."""
+    chunk_teardown, and clears the registry (no double teardown)."""
     from tests.conftest import TEST_CHUNK_ID, bind_plan, chunk_label
 
     orch = load_module("orchestrate")
@@ -477,8 +477,8 @@ def test_group_teardown_kills_downs_and_emits_for_every_child():
 
     assert p0.killed == 1 and p1.killed == 1, "every child's group must be killed"
     assert set(down) == {chunk_label("c0"), chunk_label("c1")}, f"every child's container must be downed: {down}"
-    teardowns = [p["slug"] for ev, p in emitted if ev == "chunk.teardown"]
-    assert set(teardowns) == {"c0", "c1"}, f"chunk.teardown per child: {teardowns}"
+    teardowns = [p["slug"] for ev, p in emitted if ev == "chunk_teardown"]
+    assert set(teardowns) == {"c0", "c1"}, f"chunk_teardown per child: {teardowns}"
     assert live == {}, "registry must be cleared so a re-entrant signal won't re-tear-down"
 
 

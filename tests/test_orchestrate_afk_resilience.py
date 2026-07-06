@@ -109,7 +109,7 @@ def testpartition_by_outcome_rc_128plus_ejects(tmp_path):
 
 
 def testpartition_by_outcome_rc_69_emits_ejection(tmp_path):
-    """rc=69 must emit chunk.ejected event."""
+    """rc=69 must emit chunk_ejected event."""
     orch = load_module("orchestrate")
     plan = _make_plan_obj(tmp_path, "slug-b")
     emitted: list[tuple] = []
@@ -121,7 +121,7 @@ def testpartition_by_outcome_rc_69_emits_ejection(tmp_path):
                 mark_ejected=lambda slug: [],
             )
 
-    assert any(ev == "chunk.ejected" for ev, _ in emitted), "rc=69 must emit chunk.ejected"
+    assert any(ev == "chunk_ejected" for ev, _ in emitted), "rc=69 must emit chunk_ejected"
 
 
 def testpartition_by_outcome_rc_1_reason_is_implement_failed(tmp_path):
@@ -137,8 +137,8 @@ def testpartition_by_outcome_rc_1_reason_is_implement_failed(tmp_path):
                 mark_ejected=lambda slug: [],
             )
 
-    eject_events = [(ev, p) for ev, p in emitted if ev == "chunk.ejected"]
-    assert eject_events, "rc=1 must emit chunk.ejected"
+    eject_events = [(ev, p) for ev, p in emitted if ev == "chunk_ejected"]
+    assert eject_events, "rc=1 must emit chunk_ejected"
     reason = eject_events[0][1].get("reason")
     assert reason == "implement_failed", f"rc=1 reason must be implement-failed, got {reason!r}"
 
@@ -156,7 +156,7 @@ def testpartition_by_outcome_rc_69_reason_is_worker_died(tmp_path):
                 mark_ejected=lambda slug: [],
             )
 
-    eject_events = [(ev, p) for ev, p in emitted if ev == "chunk.ejected"]
+    eject_events = [(ev, p) for ev, p in emitted if ev == "chunk_ejected"]
     reason = eject_events[0][1].get("reason")
     assert reason == "worker_died", f"rc=69 reason must be worker-died, got {reason!r}"
 
@@ -178,7 +178,7 @@ def testpartition_by_outcome_timeout_kill_payload_is_self_describing(tmp_path):
                 mark_ejected=lambda slug: [],
             )
 
-    p = [p for ev, p in emitted if ev == "chunk.ejected"][0]
+    p = [p for ev, p in emitted if ev == "chunk_ejected"][0]
     assert p["reason"] == "worker_died"
     assert p["timed_out"] is True
     assert p["logs_path"] == "/logs/sess-t"
@@ -197,7 +197,7 @@ def testpartition_by_outcome_container_down_payload_names_killer(tmp_path):
                 mark_ejected=lambda slug: [],
             )
 
-    p = [p for ev, p in emitted if ev == "chunk.ejected"][0]
+    p = [p for ev, p in emitted if ev == "chunk_ejected"][0]
     assert p["reason"] == "worker_died"
     assert p["killed_by"] == "container-down"
     assert p["logs_path"] == "/logs/sess-cd"
@@ -208,7 +208,7 @@ def testpartition_by_outcome_container_down_payload_names_killer(tmp_path):
 
 
 def testpartition_by_outcome_tears_down_ejected_container(tmp_path):
-    """A partition-ejected chunk → devcontainer.down(slug) + chunk.teardown emitted
+    """A partition-ejected chunk → devcontainer.down(slug) + chunk_teardown emitted
     (it never reaches the land queue that normally tears containers down)."""
     orch = load_module("orchestrate")
     plan = _make_plan_obj(tmp_path, "ej")
@@ -222,7 +222,7 @@ def testpartition_by_outcome_tears_down_ejected_container(tmp_path):
                 orch.partition_by_outcome([(plan, -9, "/logs/ej")], mark_ejected=lambda s: [])
 
     assert down_calls == [chunk_label("ej")], f"ejected chunk container must be torn down: {down_calls}"
-    teardowns = [p for ev, p in emitted if ev == "chunk.teardown"]
+    teardowns = [p for ev, p in emitted if ev == "chunk_teardown"]
     assert teardowns and teardowns[0]["slug"] == "ej"
 
 
@@ -391,7 +391,7 @@ def test_fan_out_plans_killed_child_ejects_worker_died(monkeypatch, tmp_path):
             )
 
     assert len(chunks) == 0
-    eject = [p for ev, p in emitted if ev == "chunk.ejected"]
+    eject = [p for ev, p in emitted if ev == "chunk_ejected"]
     assert eject and eject[0]["reason"] == "worker_died"
 
 

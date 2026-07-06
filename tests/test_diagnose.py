@@ -33,11 +33,11 @@ def test_build_verdict_returns_markdown(tmp_path):
         tmp_path,
         "testrepo",
         "sess-1",
-        [{"ts": "t0", "event": "chunk.landed", "payload": {"slug": "x", "sha": "a", "holding": "h"}}],
+        [{"ts": "t0", "event": "chunk_landed", "payload": {"slug": "x", "sha": "a", "holding": "h"}}],
     )
     text = diag.build_verdict(sd)
     assert "## Verdict" in text
-    assert "chunk.landed" in text
+    assert "chunk_landed" in text
 
 
 def test_run_diagnose_wires_verdict_into_loop(tmp_path, monkeypatch, capsys):
@@ -45,3 +45,34 @@ def test_run_diagnose_wires_verdict_into_loop(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(diag, "build_verdict", lambda sd: "DOCTOR-BODY")
     diag.run_diagnose(tmp_path / "sess-1")
     assert "DOCTOR-BODY" in capsys.readouterr().out
+
+
+def test_suspect_map_covers_all_chunk_eject_reasons():
+    from lib import events
+
+    diag = load_module("diagnose")
+    assert set(diag._SUSPECT_MAP) == events.CHUNK_EJECT_REASONS
+
+
+def test_build_verdict_no_unknown_for_catalog_reasons(tmp_path):
+    from lib import events
+
+    from tests.conftest import seed_agent_events
+
+    diag = load_module("diagnose")
+    for reason in sorted(events.CHUNK_EJECT_REASONS):
+        sd = seed_agent_events(
+            tmp_path,
+            "testrepo",
+            f"sess-{reason}",
+            [
+                {
+                    "ts": "t0",
+                    "event": "chunk_ejected",
+                    "payload": {"slug": "x", "reason": reason, "where": "/wt"},
+                }
+            ],
+        )
+        text = diag.build_verdict(sd)
+        assert "Unknown reason" not in text
+        assert reason in text

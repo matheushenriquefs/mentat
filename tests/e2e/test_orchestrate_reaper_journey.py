@@ -164,11 +164,11 @@ def test_run_orchestrate_failing_batch_reports_stall_cascade_and_ejects(monkeypa
         rc = orch.run_orchestrate("hold", [tmp_path / "batch.md"], harness=None, model=None, dry_run=False)
 
     assert rc == 1  # ejections present
-    # Anchored chunk.spawned emitted for the HITL plan.
-    spawned = [p for ev, p in emitted if ev == "chunk.spawned"]
+    # Anchored chunk_started emitted for the HITL plan.
+    spawned = [p for ev, p in emitted if ev == "chunk_started"]
     assert any(p.get("slug") == "ui" for p in spawned)
     # ui is an anchored cascade victim → upstream_ejected emitted for it.
-    upstream = [p for ev, p in emitted if ev == "chunk.ejected" and p.get("reason") == "upstream_ejected"]
+    upstream = [p for ev, p in emitted if ev == "chunk_ejected" and p.get("reason") == "upstream_ejected"]
     assert any(p.get("slug") == "ui" for p in upstream)
     # Batch review still emitted (advisory).
-    assert any(ev == "batch.reviewed" for ev, _p in emitted)
+    assert any(ev == "batch_reviewed" for ev, _p in emitted)

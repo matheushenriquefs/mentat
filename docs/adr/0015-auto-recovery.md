@@ -36,11 +36,27 @@ the batch's transient-ejected **AFK** slugs (`recover.py`, wired via
 full-jitter backoff helper, and gated by guardrails so it can never make things
 worse.
 
-**Transient vs terminal.** `lib.events.TRANSIENT_EJECT_REASONS` (`worker-died`,
-`not-ff`) is the only set the engine will act on. Terminal reasons are marked
-ejected and left for the operator. HITL chunks are **never** auto-respawned — the
-operator owns them; an `upstream_ejected` victim recovers only if its upstream
-does.
+**Transient vs terminal.** `lib.events.TRANSIENT_EJECT_REASONS` is the only set the
+engine will act on. Terminal reasons are marked ejected and left for the operator.
+HITL chunks are **never** auto-respawned — the operator owns them; an
+`upstream_ejected` victim recovers only if its upstream does.
+
+| Reason | Class | Rationale |
+|--------|-------|-----------|
+| `worker_died` | transient | Worker killed or crashed before a verdict — environment/harness failure. |
+| `not_ff` | transient | Holding moved during parallel work; rebase-and-retry may land. |
+| `preflight_worktree_failed` | transient | Worktree create/isolation failed before implement ran. |
+| `container_oom` | transient | Chunk container OOMKilled; retry with more memory or smaller scope. |
+| `implement_failed` | terminal | Child exited non-zero after running — code or harness failure. |
+| `gate_failed` | terminal | Post-implement gate blocked — code quality failure. |
+| `rebase_conflicted` | terminal | Rebase onto holding conflicted — needs human merge. |
+| `hitl_required` | terminal | AFK ambiguity — operator must decide. |
+| `main_tree_refused` | terminal | Refused to run in shared main tree — isolation invariant. |
+| `upstream_ejected` | terminal | Blocked-by upstream died — cascade victim. |
+| `git_error` | terminal | Ambiguous git failure during land — do not blind-retry. |
+
+Transient set: `worker_died`, `not_ff`, `preflight_worktree_failed`, `container_oom`.
+Terminal set: all other `CHUNK_EJECT_REASONS` members.
 
 **The JIT decision, not a heuristic.** For each recoverable slug the engine hands
 a recovery agent the failure context — `{reason, diagnosis, partial diff, worktree
@@ -65,7 +81,7 @@ gives a retried payment.
 **Guardrails — three give-up rungs (Erlang/OTP, OpenHands, Akka/Azure DLQ).**
 
 - **Per-slug attempt cap** — `recovery_attempts` (default 2), replayed from the
-  canonical store (`chunk.spawned{trigger:"recovery", attempt:N}` via `EventDAO`),
+  canonical store (`chunk_started{trigger:"recovery", attempt:N}` via `EventDAO`),
   so the count survives a resume.
 - **Batch-wide restart-storm cap** — `StormGuard`, the OTP supervisor
   `MaxR`/`MaxT` intensity: at most `recovery_max_restarts` (default 3) respawns per
@@ -77,7 +93,7 @@ gives a retried payment.
 
 **Escalate-to-HITL dead-letter (Akka escalate / Azure dead-letter queue).**
 `abandon`, an attempt-cap breach, or a storm/budget breach converts the chunk to a
-HITL item (`chunk.ejected{reason:"hitl-required"}` carrying the rationale) and
+HITL item (`chunk_ejected{reason:"hitl-required"}` carrying the rationale) and
 notifies the operator — never a blind retry, never a silent eject.
 
 **Breaker / backpressure interaction.** Recovery runs only after the fan-out drain
@@ -87,10 +103,10 @@ cap is its recovery-pass analogue. The two are complementary: the breaker
 short-circuits spawns against a sick shared backend mid-batch, the storm cap stops
 the recovery pass from re-storming it afterward.
 
-**Audit is payload-only (ADR-0007).** A respawn is a `chunk.spawned` with
+**Audit is payload-only (ADR-0007).** A respawn is a `chunk_started` with
 `trigger:"recovery"` and the 1-based `attempt` (declared in mentat-log's
-`EVENT_OPTIONAL_FIELDS`); the outcome rides the existing `chunk.landed` /
-`chunk.ejected` events. No new event type.
+`EVENT_OPTIONAL_FIELDS`); the outcome rides the existing `chunk_landed` /
+`chunk_ejected` events. No new event type.
 
 Industry grounding: Erlang/OTP supervisor restart intensity, Netflix Zuul
 speculative/NNFI re-test, Temporal durable retries, Nygard's circuit breaker,

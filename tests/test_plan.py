@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from tests.conftest import load_script
 
@@ -80,34 +80,6 @@ def test_write_canonical_path(tmp_path):
     assert written.read_text() == "# Test plan\n"
 
 
-# ── emit events ──────────────────────────────────────────────────────────────
-
-
-def test_emits_plan_started_and_succeeded(tmp_path, monkeypatch):
-    """write_plan emits plan.started then plan.succeeded via subprocess."""
-    plan_mod = load_module("plan")
-    plans_dir = tmp_path / "plans"
-    plans_dir.mkdir()
-    body_file = tmp_path / "body.md"
-    body_file.write_text("# Test plan\n")
-
-    emitted: list[str] = []
-
-    original_run = subprocess.run
-
-    def fake_run(cmd, **kwargs):
-        if isinstance(cmd, list) and "log.py" in " ".join(str(c) for c in cmd):
-            emitted.append(cmd[cmd.index("emit") + 2] if "emit" in cmd else "")
-            return MagicMock(returncode=0)
-        return original_run(cmd, **kwargs)
-
-    with patch("subprocess.run", fake_run):
-        plan_mod.write_plan("test-slug", body_file, plans_dir=plans_dir)
-
-    assert any("plan.started" in e for e in emitted)
-    assert any("plan.succeeded" in e for e in emitted)
-
-
 # ── tasks handoff (S13) ───────────────────────────────────────────────────────
 
 
@@ -124,39 +96,21 @@ def test_write_plan_default_plans_dir_when_none(tmp_path):
     body_file = tmp_path / "body.md"
     body_file.write_text("# Plan\n")
 
-    calls: list[str] = []
-    original_emit = plan_mod._emit
-    plan_mod._emit = lambda event, payload: calls.append(event)
-    try:
-        with patch("pathlib.Path.home", return_value=tmp_path):
-            dest = plan_mod.write_plan("default-slug", body_file, plans_dir=None)
-        assert dest == tmp_path / ".agents" / "plans" / "default-slug.md"
-        assert "plan.succeeded" in calls
-    finally:
-        plan_mod._emit = original_emit
+    with patch("pathlib.Path.home", return_value=tmp_path):
+        dest = plan_mod.write_plan("default-slug", body_file, plans_dir=None)
+    assert dest == tmp_path / ".agents" / "plans" / "default-slug.md"
 
 
-def test_write_plan_oserror_emits_failed_and_reraises(tmp_path):
+def test_write_plan_oserror_reraises(tmp_path):
     plan_mod = load_module("plan")
     plans_dir = tmp_path / "plans"
     plans_dir.mkdir()
     nonexistent_body = tmp_path / "does_not_exist.md"
-    failed_events: list[str] = []
 
-    original_emit = plan_mod._emit
+    import pytest as _pytest
 
-    def fake_emit(event: str, payload: dict) -> None:
-        failed_events.append(event)
-
-    plan_mod._emit = fake_emit
-    try:
-        import pytest as _pytest
-
-        with _pytest.raises(OSError):
-            plan_mod.write_plan("err-slug", nonexistent_body, plans_dir=plans_dir)
-        assert "plan.failed" in failed_events
-    finally:
-        plan_mod._emit = original_emit
+    with _pytest.raises(OSError):
+        plan_mod.write_plan("err-slug", nonexistent_body, plans_dir=plans_dir)
 
 
 def test_main_no_subcommand_exits_1(tmp_path):
@@ -196,8 +150,6 @@ def test_main_write_calls_write_plan(tmp_path, monkeypatch, capsys):
     plans_dir = tmp_path / "plans"
     plans_dir.mkdir()
 
-    original_emit = plan_mod._emit
-    plan_mod._emit = lambda event, payload: None
     monkeypatch.setattr("sys.argv", ["plan.py", "write", "cli-slug", str(body_file)])
     try:
         with patch("pathlib.Path.home", return_value=tmp_path):
@@ -209,7 +161,7 @@ def test_main_write_calls_write_plan(tmp_path, monkeypatch, capsys):
         assert "/mentat-tasks" in captured.out
         assert "cli-slug" in captured.out
     finally:
-        plan_mod._emit = original_emit
+        pass
 
 
 def test_write_cli_prints_tasks_suggestion(tmp_path):

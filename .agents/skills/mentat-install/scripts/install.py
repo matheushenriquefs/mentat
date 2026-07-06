@@ -13,21 +13,14 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import store as _store  # noqa: E402
-from lib.events import bind  # noqa: E402
 from lib.exits import EX_DATAERR  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
-
-_emit_installed_fn = bind("mentat-install")
 
 _plan = load_sibling(__file__, "plan")
 _render = load_sibling(__file__, "render")
 _utils = load_sibling(__file__, "filesystem")
 _companions = load_sibling(__file__, "companions")
 _path_setup = load_sibling(__file__, "path_setup")
-
-
-def _emit_installed() -> None:
-    _emit_installed_fn("plan.started", {"path": "install"})
 
 
 def _execute_actions(ip: _plan.InstallPlan, *, dry_run: bool) -> bool:
@@ -100,7 +93,6 @@ def do_install(
     if _store.migrate_legacy_state_db():
         print("mentat-install: migrated state.db → mentat.db")
 
-    _emit_installed()
     if not ok:
         print("mentat-install: completed with warnings — skill files not installed.", file=sys.stderr)
         return 1

@@ -7,7 +7,7 @@ seams that can't run hermetically are stubbed: the harness spawn boundary (repla
 a fake that does the agent's real commit work in the worktree, then a trivial child the
 supervisor reaps) and the docker-touching prune/teardown calls. The land queue's rebase
 and fast-forward merge are real. Asserts both chunks ff-merge serially onto the holding
-tip (init → a → b-rebased-on-a) and that two ``chunk.landed`` events are recorded.
+tip (init → a → b-rebased-on-a) and that two ``chunk_landed`` events are recorded.
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def _landed_events() -> list[dict]:
         conn.close()
     out: list[dict] = []
     for agent_id in agent_ids:
-        out.extend(events_by_kind(agent_id, "chunk.landed"))
+        out.extend(events_by_kind(agent_id, "chunk_landed"))
     return out
 
 
@@ -139,7 +139,7 @@ def test_orchestrate_run_lands_both_chunks_onto_holding(tmp_path, monkeypatch):
     tree = _git(["ls-tree", "-r", "--name-only", "refs/heads/holding"], cwd=main_repo).splitlines()
     assert {"a.txt", "b.txt", "base.txt"} <= set(tree), f"holding tip missing slice files: {tree}"
 
-    # Two chunk.landed events recorded — one per ff-merge onto the tip.
+    # Two chunk_landed events recorded — one per ff-merge onto the tip.
     landed = _landed_events()
     assert {e["payload"]["slug"] for e in landed} == {"a", "b"}, f"expected both landed: {landed}"
     assert all(e["payload"]["holding"] == "holding" for e in landed)

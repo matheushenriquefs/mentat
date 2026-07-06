@@ -29,7 +29,7 @@ def test_latest_session_excludes_mentat_manual(tmp_path, monkeypatch):
         tmp_path,
         "myrepo",
         "real-session",
-        [{"ts": _ts(2_000.0), "event": "chunk.landed", "payload": {"slug": "x", "sha": "a", "holding": "h"}}],
+        [{"ts": _ts(2_000.0), "event": "chunk_landed", "payload": {"slug": "x", "sha": "a", "holding": "h"}}],
     )
     result = sessions.latest_session(repo_dir)
     assert result == "real-session"
@@ -58,7 +58,7 @@ def test_latest_session_returns_most_recent(tmp_path, monkeypatch):
         [
             {
                 "ts": _ts(1_000.0),
-                "event": "gate.evaluated",
+                "event": "gate_evaluated",
                 "payload": {"gate": "g", "verdict": "p", "severity": "", "message": ""},
             }
         ],
@@ -70,7 +70,7 @@ def test_latest_session_returns_most_recent(tmp_path, monkeypatch):
         [
             {
                 "ts": _ts(2_000.0),
-                "event": "gate.evaluated",
+                "event": "gate_evaluated",
                 "payload": {"gate": "g", "verdict": "p", "severity": "", "message": ""},
             }
         ],

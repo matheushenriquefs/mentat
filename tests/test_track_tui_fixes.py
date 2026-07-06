@@ -210,7 +210,7 @@ def test_scroll_clamps_top_to_zero():
 
 def test_empty_hint_audit_with_known_last_event():
     track = load_module("track")
-    assert track.empty_hint("audit", "chunk.landed") == "(no audit rows here — last lifecycle: chunk.landed)"
+    assert track.empty_hint("audit", "chunk_landed") == "(no audit rows here — last lifecycle: chunk_landed)"
 
 
 def test_empty_hint_audit_without_last_event():
@@ -226,7 +226,7 @@ def test_empty_hint_transcript():
 def test_empty_hint_last_event_only_used_for_audit():
     """A last_event in transcript view never leaks the lifecycle hint."""
     track = load_module("track")
-    assert track.empty_hint("transcript", "chunk.landed") == track.empty_hint("transcript", None)
+    assert track.empty_hint("transcript", "chunk_landed") == track.empty_hint("transcript", None)
 
 
 # ── Slice 5: color the transcript by structured role (+ wire audit) ───────────
@@ -297,8 +297,8 @@ def test_transcript_non_tty_stays_unwrapped(tmp_path, monkeypatch):
 
 def test_color_for_event_maps_outcome_to_sgr():
     track = load_module("track")
-    assert track._color_for_event("plan.succeeded") == "\033[32m"  # green
-    assert track._color_for_event("chunk.ejected") == "\033[31m"  # red
+    assert track._color_for_event("agent_stopped") == "\033[32m"  # green
+    assert track._color_for_event("chunk_ejected") == "\033[31m"  # red
 
 
 def test_focus_frame_header_is_bold(monkeypatch):

@@ -62,14 +62,14 @@ def test_event_dao_append_and_list(tmp_path):
         store.AgentDAO(conn).insert(_agent_row("agent-1"))
         events = store.EventDAO(conn)
         row_id = events.append(
-            kind="chunk.spawned",
+            kind="chunk_started",
             payload={"slug": "x"},
             agent_id="agent-1",
         )
         listed = events.list_by_agent("agent-1")
         assert row_id == 1
         assert len(listed) == 1
-        assert listed[0].kind == "chunk_spawned"
+        assert listed[0].kind == "chunk_started"
         assert listed[0].payload == {"slug": "x"}
     finally:
         conn.close()
@@ -110,7 +110,7 @@ def test_canonical_append_raises_on_failure(tmp_path):
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(store, "_write_with_retry", _boom)
         with pytest.raises(sqlite3.OperationalError):
-            events.append(kind="chunk.landed", payload={}, agent_id="a", canonical=True)
+            events.append(kind="chunk_landed", payload={}, agent_id="a", canonical=True)
 
 
 def _concurrent_writer(db_path: str, agent_id: str, count: int) -> None:
@@ -120,7 +120,7 @@ def _concurrent_writer(db_path: str, agent_id: str, count: int) -> None:
         events = store.EventDAO(conn)
         for i in range(count):
             events.append(
-                kind="gate.evaluated",
+                kind="gate_evaluated",
                 payload={"i": i},
                 agent_id=agent_id,
             )
@@ -201,7 +201,7 @@ def test_record_emit_creates_agent_and_event(tmp_path, monkeypatch):
         "MENTAT_AGENT_PID": str(os.getpid()),
         "MENTAT_HARNESS": "cursor",
     }
-    store.record_emit(env, "chunk.spawned", {"slug": "plan-a"})
+    store.record_emit(env, "chunk_started", {"slug": "plan-a"})
     conn = store.connect(db)
     try:
         agent = store.AgentDAO(conn).get_by_id("agent-emit")
@@ -209,7 +209,7 @@ def test_record_emit_creates_agent_and_event(tmp_path, monkeypatch):
         assert agent.status == "running"
         events = store.EventDAO(conn).list_by_agent("agent-emit")
         assert len(events) == 1
-        assert events[0].kind == "chunk_spawned"
+        assert events[0].kind == "chunk_started"
     finally:
         conn.close()
 
@@ -255,7 +255,7 @@ def test_list_track_entries_scoped_to_repo_log_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_DB", str(db))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(logs))
     env = {"MENTAT_AGENT": "agent-a", "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"}
-    store.record_emit(env, "chunk.spawned", {"slug": "x"})
+    store.record_emit(env, "chunk_started", {"slug": "x"})
     (logs / "repo" / "agent-a").mkdir(parents=True)
     rows = store.list_track_entries("repo", active_only=True)
     assert len(rows) == 1
@@ -281,7 +281,7 @@ def test_cmd_track_by_id_outside_repo(tmp_path, monkeypatch, capsys):
     agent_id = "agent-outside-repo"
     store.record_emit(
         {"MENTAT_AGENT": agent_id, "MENTAT_AGENT_PID": str(os.getpid()), "MENTAT_HARNESS": "cursor"},
-        "chunk.spawned",
+        "chunk_started",
         {"slug": "x"},
     )
     (logs / "mentat" / agent_id).mkdir(parents=True)

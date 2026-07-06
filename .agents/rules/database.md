@@ -79,7 +79,7 @@ Per `.agents/rules/naming.md`:
 
 - Value objects: frozen `@dataclass` (`Slice`, `Agent`, `Chunk`, `Event`)
 - Data access: `<Entity>DAO` with `append`, `get_by_id`, `list_by_*`
-- Event wire keys: underscore (`chunk_spawned`); dotted names at emit boundary only
+- Event wire keys: flat snake_case (`chunk_started`); stored verbatim in `event.kind`
 - Status/kind/reason: `Literal[str]` types (`AgentStatus`, `StatusReason`, …)
 - Timestamps: ISO-8601 UTC with `_at` suffix on entity columns
 

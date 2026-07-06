@@ -522,14 +522,15 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
 
     # HITL plans run in the calling Claude session — never spawn a sub-claude
     # via the harness adapter (it would shell `claude --headless` and lose
-    # AskUserQuestion). Emit chunk.spawned{harness:"hitl-in-session"} and
+    # AskUserQuestion). Emit chunk_started{harness:"hitl-in-session"} and
     # return control to the caller; the calling session reads the audit log
     # and drives the TDD loop itself.
     if not afk:
         _emit_event(
-            "chunk.spawned",
+            "chunk_started",
             spawned_payload(slug, str(plan_path), harness=HITL_IN_SESSION, worktree=str(Path.cwd())),
         )
+        _emit_event("agent_started", {"harness": HITL_IN_SESSION})
         print(
             f"mentat-implement: {slug} is class:HITL — drive in calling Claude session.\nPlan: {plan_path}",
             file=sys.stderr,
@@ -562,7 +563,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
         summary = blocker or "AFK ambiguity — self-answer detected in the session stream."
         _promote_blocked_summary(summary)
         _emit_event(
-            "chunk.ejected",
+            "chunk_ejected",
             ejected_payload(
                 slug,
                 HITL_REQUIRED,
@@ -575,7 +576,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
 
     if result.returncode != 0:
         _emit_event(
-            "chunk.ejected",
+            "chunk_ejected",
             ejected_payload(
                 slug,
                 IMPLEMENT_FAILED,
@@ -586,6 +587,7 @@ def run_plan(plan_path: Path, *, harness: str | None = None, model: str | None =
         return 1
 
     _checkpoint_if_needed(result, slug=slug, threshold=_compaction_threshold())
+    _emit_event("agent_stopped", {"reason": "ok"})
     return 0
 
 
@@ -704,7 +706,7 @@ def main() -> None:
     pf_rc, target = preflight_worktree(slug, reuse_worktree=reuse_worktree)
     if pf_rc != 0:
         _emit_event(
-            "chunk.ejected",
+            "chunk_ejected",
             ejected_payload(
                 slug,
                 PREFLIGHT_WORKTREE_FAILED,
@@ -726,7 +728,7 @@ def main() -> None:
     # session — refuse rather than risk the leak.
     if _in_shared_main_tree(reuse_worktree=reuse_worktree):
         _emit_event(
-            "chunk.ejected",
+            "chunk_ejected",
             ejected_payload(
                 slug,
                 MAIN_TREE_REFUSED,

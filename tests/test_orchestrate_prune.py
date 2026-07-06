@@ -118,7 +118,7 @@ def test_prune_stale_containers_delegates_to_devcontainer(tmp_path, monkeypatch)
 
     orchestrate._prune_stale_containers()
 
-    assert emit_calls == [("session.prune", {"reclaimed_bytes": None, "containers_removed": 2})]
+    assert emit_calls == [("agent_reaped", {"reclaimed_bytes": None, "containers_removed": 2})]
 
 
 def test_orchestrate_does_not_call_docker_directly():
@@ -365,7 +365,7 @@ def test_prune_falls_back_to_rmtree(tmp_path, monkeypatch):
 
 
 def test_prune_emits_session_prune_event(tmp_path, monkeypatch):
-    """_prune_stale_worktrees emits exactly one session.prune with worktrees_removed key."""
+    """_prune_stale_worktrees emits exactly one agent_reaped with worktrees_removed key."""
     orchestrate = _load("orchestrate")
     monkeypatch.chdir(tmp_path)
 
@@ -394,10 +394,10 @@ def test_prune_emits_session_prune_event(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrate._worktrees, "_remove", fake_remove)
     orchestrate._prune_stale_worktrees()
 
-    prune_events = [(ev, p) for ev, p in emit_calls if ev == "session.prune"]
-    assert len(prune_events) == 1, f"expected exactly one session.prune; got {prune_events}"
+    prune_events = [(ev, p) for ev, p in emit_calls if ev == "agent_reaped"]
+    assert len(prune_events) == 1, f"expected exactly one agent_reaped; got {prune_events}"
     payload = prune_events[0][1]
-    assert "worktrees_removed" in payload, f"session.prune missing worktrees_removed; payload={payload}"
+    assert "worktrees_removed" in payload, f"agent_reaped missing worktrees_removed; payload={payload}"
     assert payload["worktrees_removed"] == 1
 
 

@@ -1,9 +1,6 @@
 ---
 name: mentat-log
-description: >
-  Emit, validate, list, and prune mentat audit events.
-  Use when the user wants to inspect orchestration history, debug a failed batch,
-  or write a custom event from a script.
+description: Emit, validate, list, and prune mentat audit events for orchestration history and custom scripts.
 ---
 
 Emit, validate, list, and prune structured audit events. Canonical store: `~/.mentat/mentat.db` via `lib/store.py`. Owns `EVENT_CATALOG` — the single source of truth for event types all mentat skills emit.
@@ -18,21 +15,30 @@ mentat-log <subcommand> <args>
 
 Subcommands: `emit`, `validate`, `list`, `prune`. (`query` is a deprecated alias for `list`.)
 
-## Event catalog
+## Event catalog (18)
 
 | Event | Required payload fields |
 |---|---|
-| `plan.started` | `path` |
-| `plan.succeeded` | `path` |
-| `plan.failed` | `path`, `reason` |
-| `chunk.spawned` | `slug`, `plan`, `harness`, `worktree` |
-| `chunk.landed` | `slug`, `sha`, `holding` |
-| `chunk.ejected` | `slug`, `reason`, `where` |
-| `gate.evaluated` | `gate`, `verdict`, `severity`, `message` |
-| `review.submitted` | `reviewer`, `score`, `threshold`, `verdict` |
-| `batch.reviewed` | `session`, `summary` |
+| `slice_scheduled` | `slug` |
+| `slice_blocked` | `slug`, `blocked_by` |
+| `slice_skipped` | `slug`, `reason` |
+| `agent_started` | `harness` |
+| `agent_stopped` | `reason` |
+| `agent_reaped` | `reclaimed_bytes` |
+| `chunk_started` | `slug`, `plan`, `harness`, `worktree` |
+| `chunk_landed` | `slug`, `sha`, `holding` |
+| `chunk_ejected` | `slug`, `reason`, `where` |
+| `chunk_teardown` | `slug`, `ok` |
+| `gate_evaluated` | `gate`, `verdict`, `severity`, `message` |
+| `review_submitted` | `reviewer`, `score`, `threshold`, `verdict` |
+| `batch_reviewed` | `session`, `summary` |
+| `task_created` | `id`, `slug` |
+| `task_claimed` | `id`, `agent`, `expires_at` |
+| `task_released` | `id` |
+| `task_resolved` | `id` |
+| `task_canceled` | `id` |
 
-`chunk.ejected.reason` ∈ `implement-failed | gate-failed | rebase-conflicted | not-ff | hitl-required | …` (see `lib.events.EJECT_REASONS`)
+`chunk_ejected.reason` ∈ snake_case values in `lib.events.EJECT_REASONS`
 
 ## Environment variables
 
@@ -59,7 +65,7 @@ Log dir created with `mode=0o700` on first emit. Reject + stderr sidecar on: unk
 ## Rules
 
 - `EVENT_CATALOG` in `log.py` is single source of truth; no event emitted outside catalog.
-- Naming follows ADR-0007: past-tense verbs, `resource.action` shape, sub-reasons in payload.
+- Naming follows ADR-0007: past-tense flat snake_case verbs; sub-reasons in payload.
 - `emit` appends to `mentat.db` via `store.record_emit` — no audit `*.jsonl` files.
 - `list <agent-id> --format=jsonl` exports the wire envelope to stdout for grep.
 - `validate` checks export-format JSONL files (forensics / migration).

@@ -26,21 +26,21 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def test_spawn_success_returns_true_and_is_quiet(monkeypatch, capsys):
     monkeypatch.setattr(events.subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=0, stderr=""))
-    assert events._spawn("mentat-x", "chunk.started", {"slug": "a"}) is True
+    assert events._spawn("mentat-x", "chunk_started", {"slug": "a"}) is True
     assert capsys.readouterr().err == ""
 
 
 def test_spawn_failure_returns_false_and_prints_stderr_tail(monkeypatch, capsys):
     monkeypatch.setattr(events.subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=1, stderr="boom\ndetail"))
-    assert events._spawn("mentat-x", "chunk.started", {"slug": "a"}) is False
+    assert events._spawn("mentat-x", "chunk_started", {"slug": "a"}) is False
     err = capsys.readouterr().err
-    assert "emit 'chunk.started' failed rc=1" in err
+    assert "emit 'chunk_started' failed rc=1" in err
     assert "detail" in err
 
 
 def test_spawn_failure_with_empty_stderr_uses_no_stderr_placeholder(monkeypatch, capsys):
     monkeypatch.setattr(events.subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=2, stderr=""))
-    assert events._spawn("mentat-x", "chunk.started", {"slug": "a"}) is False
+    assert events._spawn("mentat-x", "chunk_started", {"slug": "a"}) is False
     assert "(no stderr)" in capsys.readouterr().err
 
 
@@ -51,21 +51,21 @@ def test_bind_non_terminal_event_swallows_failed_spawn(monkeypatch):
     monkeypatch.setattr(events, "_spawn", lambda *a, **k: False)
     emit = events.bind("mentat-x")
     # Non-terminal event with a failing spawn must NOT raise.
-    emit("chunk.started", {"slug": "a"})
+    emit("chunk_started", {"slug": "a"})
 
 
 def test_bind_terminal_event_raises_on_failed_spawn(monkeypatch):
     monkeypatch.setattr(events, "_spawn", lambda *a, **k: False)
     emit = events.bind("mentat-x")
     with pytest.raises(RuntimeError):
-        emit("chunk.landed", {"slug": "a"})
+        emit("chunk_landed", {"slug": "a"})
 
 
 def test_bind_terminal_event_succeeds_when_spawn_ok(monkeypatch):
     monkeypatch.setattr(events, "_spawn", lambda *a, **k: True)
     emit = events.bind("mentat-x")
     # Successful spawn on a terminal event → no raise.
-    emit("chunk.landed", {"slug": "a"})
+    emit("chunk_landed", {"slug": "a"})
 
 
 # ── spawned_payload ──────────────────────────────────────────────────────────

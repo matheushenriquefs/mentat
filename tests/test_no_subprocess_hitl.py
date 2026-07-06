@@ -1,6 +1,6 @@
 """orchestrate must not subprocess-run implement.py for HITL plans.
 
-Instead it emits chunk.spawned{harness:"hitl-in-session"} per HITL plan and
+Instead it emits chunk_started{harness:"hitl-in-session"} per HITL plan and
 returns control to the calling session. Anchored slugs are NOT landed in the
 same orchestrate invocation.
 """
@@ -84,8 +84,8 @@ def test_hitl_emits_chunk_spawned_hitl_in_session(tmp_path, monkeypatch):
 
     orchestrate.run_orchestrate("holding", [hitl], harness=None, model=None, dry_run=False)
 
-    spawned = [p for e, p in emitted if e == "chunk.spawned"]
-    assert spawned, f"no chunk.spawned event emitted; got: {emitted}"
+    spawned = [p for e, p in emitted if e == "chunk_started"]
+    assert spawned, f"no chunk_started event emitted; got: {emitted}"
     assert any(p.get("harness") == "hitl-in-session" and p.get("slug") == "fix-baz" for p in spawned), (
         f"missing harness=hitl-in-session for fix-baz: {spawned}"
     )

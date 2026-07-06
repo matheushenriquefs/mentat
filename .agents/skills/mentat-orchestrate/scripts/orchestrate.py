@@ -25,6 +25,7 @@ from lib import git as _git  # noqa: E402
 from lib import plans as _plans_lib  # noqa: E402
 from lib import worktrees as _worktrees  # noqa: E402
 from lib.events import (  # noqa: E402
+    CONTAINER_OOM,
     HITL_IN_SESSION,
     HITL_REQUIRED,
     IMPLEMENT_FAILED,
@@ -177,11 +178,11 @@ def _load_plans(paths: list[Path], *, _expanding: bool = False) -> list[_schedul
 
 
 def _emit_anchored_chunks(plans: list[_scheduler.Plan], *, harness: str | None, model: str | None) -> list[str]:
-    """Emit chunk.spawned{harness:hitl-in-session} per anchored plan, no subprocess.
+    """Emit chunk_started{harness:hitl-in-session} per anchored plan, no subprocess.
 
     HITL plans run in the **calling Claude session** — never via subprocess —
     so AskUserQuestion works. The caller queries the audit log
-    (`mentat-log query chunk.spawned --session=$MENTAT_SESSION`) and drives
+    (`mentat-log query chunk_started --session=$MENTAT_SESSION`) and drives
     `/mentat-implement <slug>` in-session per anchored slug, then re-invokes
     `orchestrate land-queue <holding>` with the HITL slugs on stdin.
 
@@ -192,9 +193,10 @@ def _emit_anchored_chunks(plans: list[_scheduler.Plan], *, harness: str | None, 
     chunks: list[str] = []
     for plan in plans:
         _utils.emit_event(
-            "chunk.spawned",
+            "chunk_started",
             spawned_payload(plan.slug, str(plan.path), harness=HITL_IN_SESSION, worktree=str(Path.cwd())),
         )
+        _utils.emit_event("agent_started", {"harness": HITL_IN_SESSION})
         chunks.append(plan.slug)
     return chunks
 
@@ -426,13 +428,13 @@ def _read_chunk_seed(session_id: str) -> str | None:
 
 
 def _group_teardown(children: dict[str, object]) -> None:
-    """Group-kill + container-down + chunk.teardown for every still-live child.
+    """Group-kill + container-down + chunk_teardown for every still-live child.
 
     The signal-shutdown counterpart to ``_await_chunk``'s per-chunk reaper: when
     the supervisor itself is killed (SIGINT/SIGTERM) it must not leave the fleet's
     child harnesses orphaned (reparented to init, still mutating worktrees) or
     their devcontainers running. Kills each child's process group, stops its
-    container, and emits ``chunk.teardown`` so the shutdown is auditable. Every
+    container, and emits ``chunk_teardown`` so the shutdown is auditable. Every
     step is best-effort — one child's docker hiccup must not strand the others —
     and each slug is popped so a re-entrant signal can't double-tear-down.
     """
@@ -442,7 +444,7 @@ def _group_teardown(children: dict[str, object]) -> None:
         ok = False
         with contextlib.suppress(Exception):
             ok = bool(_down_plan_container(slug))
-        _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
+        _emit_event("chunk_teardown", {"slug": slug, "ok": ok})
         children.pop(slug, None)
 
 
@@ -474,7 +476,7 @@ async def _await_chunk(
     real rc, not misreported as killed.
 
     Two independent kill triggers, both returning ``rc`` plus a ``killed_reason``
-    the caller turns into a self-describing ``chunk.ejected``:
+    the caller turns into a self-describing ``chunk_ejected``:
 
     * ``timed_out`` — the wall ``asyncio.timeout(deadline_s)`` fired: ran too long.
     * ``stalled`` — with ``stall_s > 0`` and a ``session_id``, the chunk emitted
@@ -637,12 +639,12 @@ def _teardown_ejected(slug: str) -> None:
 
     A chunk ejected at partition time never reaches the land queue (which is what
     normally tears containers down), so its container would otherwise leak. Mirror
-    the land-queue behaviour: ``devcontainer.down`` then emit chunk.teardown.
+    the land-queue behaviour: ``devcontainer.down`` then emit chunk_teardown.
     Best-effort — a docker failure must not abort partitioning."""
     ok = False
     with contextlib.suppress(Exception):
         ok = _down_plan_container(slug)
-    _emit_event("chunk.teardown", {"slug": slug, "ok": ok})
+    _emit_event("chunk_teardown", {"slug": slug, "ok": ok})
 
 
 def partition_by_outcome(
@@ -653,7 +655,7 @@ def partition_by_outcome(
     """Split fan-out results into (landable_chunks, hitl_slugs, transient_slugs).
 
     A child that exited EX_HITL_REQUIRED is a wedge: self-ejected, worktree
-    preserved. Mirrored as chunk.ejected{reason:hitl_required} so the operator
+    preserved. Mirrored as chunk_ejected{reason:hitl_required} so the operator
     sees it without reading the child's log, kept out of the land queue.
 
     A **transient** death (worker_died: timeout kill or container-down) is not
@@ -697,23 +699,27 @@ def partition_by_outcome(
             # short-circuit ('breaker-open', never launched) vs. a genuine downed
             # container vs. OOM.
             killed_by = killed_reason if killed_reason == "breaker-open" else "container-down"
+            oom = False
             if killed_by == "container-down":
                 from lib.chunk import chunk_id_for_plan, chunk_slug
 
                 try:
                     cs = chunk_slug(chunk_id_for_plan(plan.slug), plan.slug)
-                    if _devcontainer.container_oom_killed(cs):
-                        killed_by = "oom"
+                    oom = _devcontainer.container_oom_killed(cs)
                 except LookupError:
                     pass
-            reason = WORKER_DIED
-            payload = ejected_payload(
-                plan.slug,
-                WORKER_DIED,
-                str(worktree),
-                logs_path=logs_path,
-                killed_by=killed_by,
-            )
+            if oom:
+                reason = CONTAINER_OOM
+                payload = ejected_payload(plan.slug, CONTAINER_OOM, str(worktree), logs_path=logs_path)
+            else:
+                reason = WORKER_DIED
+                payload = ejected_payload(
+                    plan.slug,
+                    WORKER_DIED,
+                    str(worktree),
+                    logs_path=logs_path,
+                    killed_by=killed_by,
+                )
         elif rc != 0:
             reason = IMPLEMENT_FAILED
             payload = ejected_payload(plan.slug, IMPLEMENT_FAILED, str(worktree))
@@ -724,7 +730,7 @@ def partition_by_outcome(
             chunks.append(_land_queue.Chunk(slug=plan.slug, worktree=worktree, chunk_id=chunk_id))
             continue
 
-        _emit_event("chunk.ejected", payload)
+        _emit_event("chunk_ejected", payload)
         _teardown_ejected(plan.slug)
         if is_transient_eject(reason):
             transient.add(plan.slug)
@@ -745,7 +751,7 @@ def _prune_stale_containers() -> None:
     if not _run_chunk_slugs:
         return
     removed = _devcontainer.down_run(_run_chunk_slugs)
-    _utils.emit_event("session.prune", {"reclaimed_bytes": None, "containers_removed": removed})
+    _utils.emit_event("agent_reaped", {"reclaimed_bytes": None, "containers_removed": removed})
 
 
 def _prune_stale_worktrees(preserve: set[str] | None = None) -> None:
@@ -761,7 +767,7 @@ def _prune_stale_worktrees(preserve: set[str] | None = None) -> None:
     wt_root = Path.cwd() / ".mentat" / "worktrees"
     active = _preserve_chunk_slugs(preserve)
     removed = _worktrees.prune_stale(wt_root, active_slugs=active, scope_chunk_ids=scope)
-    _utils.emit_event("session.prune", {"reclaimed_bytes": None, "worktrees_removed": removed})
+    _utils.emit_event("agent_reaped", {"reclaimed_bytes": None, "worktrees_removed": removed})
 
 
 def _gc_preserved_worktrees(preserve: set[str] | None = None) -> None:
@@ -772,7 +778,7 @@ def _gc_preserved_worktrees(preserve: set[str] | None = None) -> None:
     wt_root = Path.cwd() / ".mentat" / "worktrees"
     active = _preserve_chunk_slugs(preserve)
     reclaimed = _worktrees.gc_preserved(wt_root, active_slugs=active, scope_chunk_ids=scope)
-    _utils.emit_event("session.prune", {"reclaimed_bytes": None, "worktrees_gc": reclaimed})
+    _utils.emit_event("agent_reaped", {"reclaimed_bytes": None, "worktrees_gc": reclaimed})
 
 
 def _chunk_id_for_land(plan_slug: str) -> str:
@@ -919,7 +925,7 @@ def make_recovery_seed_for_plan(
     worktree = _worktree_for_slug(plan.slug)
     return _recover.make_recovery_seed(
         slug=plan.slug,
-        reason=WORKER_DIED,
+        reason=_recover.eject_reason_for_slug(session_id, plan.slug),
         worktree=worktree,
         holding=holding,
         attempt=attempt,
@@ -974,7 +980,7 @@ def _recovery_respawn(
     _tip, err = _git.rebase_ff_only(worktree, holding)
     if err is not None:
         _emit_event(
-            "chunk.ejected",
+            "chunk_ejected",
             ejected_payload(plan.slug, REBASE_CONFLICTED, str(worktree)),
         )
         return [{"slug": plan.slug, "status": "eject", "reason": REBASE_CONFLICTED}]
@@ -988,7 +994,7 @@ def _recovery_respawn(
         seed_summary=seed_summary,
     )
     if rc != 0:
-        _emit_event("chunk.ejected", ejected_payload(plan.slug, IMPLEMENT_FAILED, str(worktree)))
+        _emit_event("chunk_ejected", ejected_payload(plan.slug, IMPLEMENT_FAILED, str(worktree)))
         return [{"slug": plan.slug, "status": "eject", "reason": IMPLEMENT_FAILED}]
     from lib.chunk import chunk_id_for_plan
 
@@ -1073,7 +1079,7 @@ def _run_recovery(
 
     def _dead_letter(plan: _scheduler.Plan, rationale: str) -> None:
         _emit_event(
-            "chunk.ejected",
+            "chunk_ejected",
             ejected_payload(plan.slug, HITL_REQUIRED, str(_worktree_for_slug(plan.slug)), summary=rationale),
         )
 
@@ -1149,7 +1155,7 @@ def run_orchestrate(
         print(f"[dry-run] would spawn: {[p.slug for p in auto]}")
         _land_all([], holding=holding)
         _utils.emit_event(
-            "batch.reviewed",
+            "batch_reviewed",
             {"session": session_id, "summary": f"batch review for session {session_id} — advisory"},
         )
         return 0
@@ -1220,12 +1226,12 @@ def run_orchestrate(
                 plan_obj = next((p for p in anchored if p.slug == slug), None)
                 where = str(plan_obj.path.parent) if plan_obj else str(Path.cwd())
                 _emit_event(
-                    "chunk.ejected",
+                    "chunk_ejected",
                     ejected_payload(slug, UPSTREAM_EJECTED, where),
                 )
 
         _utils.emit_event(
-            "batch.reviewed",
+            "batch_reviewed",
             {"session": session_id, "summary": f"batch review for session {session_id} — advisory"},
         )
 
@@ -1318,7 +1324,7 @@ def main() -> None:
 
     elif args.cmd == "batch-review":
         _utils.emit_event(
-            "batch.reviewed",
+            "batch_reviewed",
             {"session": args.session, "summary": f"batch review for session {args.session} — advisory"},
         )
 

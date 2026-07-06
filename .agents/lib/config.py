@@ -14,6 +14,7 @@ _CONFIG_NAME = "config.toml"
 class ConfigError(ValueError):
     """Malformed or unreadable Mentat config."""
 
+
 # Match // line-comments OR quoted strings (preserve strings, strip comments)
 _COMMENT_RE = re.compile(r'//[^\n]*|"(?:[^"\\]|\\.)*"')
 
@@ -30,7 +31,7 @@ def load_jsonc(path: Path) -> dict[str, object]:
     """Parse a JSONC file (e.g. .devcontainer/devcontainer.json). {} on read/parse error."""
     try:
         return json.loads(_strip_comments(path.read_text()))  # type: ignore[no-any-return]
-    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+    except json.JSONDecodeError, OSError, UnicodeDecodeError:
         return {}
 
 
@@ -72,7 +73,7 @@ def config_status(mentat_dir: Path) -> tuple[str, str | None]:
             with toml_path.open("rb") as fh:
                 tomllib.load(fh)
             return ("valid", None)
-        except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError):
+        except tomllib.TOMLDecodeError, OSError, UnicodeDecodeError:
             return ("invalid — parse error", f"{_CONFIG_NAME} parse error")
     return ("absent", None)
 

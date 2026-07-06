@@ -31,7 +31,7 @@ def test_land_queue_emits_chunk_landed_on_success():
 
     assert result["status"] == "success"
     emitted = [c.args[0] for c in mock_emit.call_args_list]
-    assert any("chunk.landed" in e for e in emitted)
+    assert any("chunk_landed" in e for e in emitted)
 
 
 def test_land_queue_emits_chunk_ejected_with_gate_failed():
@@ -46,7 +46,7 @@ def test_land_queue_emits_chunk_ejected_with_gate_failed():
     assert result["status"] == "eject"
     assert result["reason"] == "gate_failed"
     emitted = [c.args[0] for c in mock_emit.call_args_list]
-    assert any("chunk.ejected" in e for e in emitted)
+    assert any("chunk_ejected" in e for e in emitted)
 
 
 def test_land_queue_serializes_landings():

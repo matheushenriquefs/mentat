@@ -76,7 +76,7 @@ def _write_recovery_spawn(tmp_path: Path, repo: str, session_id: str, slug: str)
         [
             {
                 "ts": "2026-07-02T00:00:00+00:00",
-                "event": "chunk.spawned",
+                "event": "chunk_started",
                 "payload": {
                     "slug": slug,
                     "plan": "p",
@@ -115,11 +115,11 @@ def test_attempt_count_ignores_non_recovery_spawns(recover, monkeypatch, tmp_pat
         "s1",
         [
             {
-                "event": "chunk.spawned",
+                "event": "chunk_started",
                 "payload": {"slug": "a", "plan": "p", "harness": "d", "worktree": "w"},
             },
             {
-                "event": "chunk.landed",
+                "event": "chunk_landed",
                 "payload": {"slug": "a", "sha": "x", "holding": "h"},
             },
         ],
@@ -200,7 +200,7 @@ def test_make_recovery_seed_includes_progress_note(recover, monkeypatch, tmp_pat
         "orch-sess",
         [
             {
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "payload": {"slug": "core", "reason": "worker_died", "logs_path": str(tmp_path / "agent")},
             }
         ],
@@ -699,3 +699,46 @@ def test_recover_default_cap_from_config(recover, monkeypatch, tmp_path):
         **prim,
     )
     assert out[0]["recovery"] == "retry"  # cap defaulted to 1, attempt 1 within cap
+
+
+@pytest.mark.parametrize("reason", ["preflight_worktree_failed", "container_oom"])
+def test_recover_retries_new_transient_reasons(recover, monkeypatch, tmp_path, reason):
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    calls: dict = {}
+    prim = _wire(recover, monkeypatch, calls=calls)
+
+    def ctx(plan, attempt, cap):
+        return {"slug": plan.slug, "reason": reason, "worktree": f"/wt/{plan.slug}", "attempt": attempt, "cap": cap}
+
+    out = recover.recover(
+        {"a"},
+        plans_by_slug={"a": _Plan("a")},
+        holding="hold",
+        session_id="s1",
+        harness=None,
+        is_afk=lambda s: True,
+        context_builder=ctx,
+        decide=lambda ctx: {"action": "retry"},
+        **prim,
+    )
+    assert out[0]["recovery"] == "retry"
+    assert calls.get("respawn") == [("a", 1)]
+
+
+def test_eject_reason_for_slug_reads_latest_from_store(recover, monkeypatch, tmp_path):
+    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    monkeypatch.setenv("MENTAT_REPO", "repo")
+    seed_agent_events(
+        tmp_path,
+        "repo",
+        "s1",
+        [
+            {
+                "event": "chunk_ejected",
+                "payload": {"slug": "a", "reason": "container_oom", "where": "/wt"},
+            }
+        ],
+    )
+    assert recover.eject_reason_for_slug("s1", "a") == "container_oom"
+    assert recover.eject_reason_for_slug("s1", "missing") == "unknown"

@@ -12,10 +12,7 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import plans as _plans  # noqa: E402
-from lib.events import bind  # noqa: E402
 from lib.session import ensure_session  # noqa: E402
-
-_emit = bind("mentat-plan")
 
 
 def resolve_plan(ref: str) -> Path:
@@ -29,17 +26,8 @@ def write_plan(slug: str, body_path: Path, *, plans_dir: Path | None = None) -> 
     plans_dir.mkdir(parents=True, exist_ok=True)
     dest = plans_dir / f"{slug}.md"
 
-    # Mint a session so plan.* events key to a real uuid session, not an ad-hoc
-    # fallback minted per-emit by bind() (which would scatter started/succeeded
-    # across dirs).
     ensure_session("mentat-plan", slug)
-    _emit("plan.started", {"path": str(dest)})
-    try:
-        dest.write_text(body_path.read_text())
-        _emit("plan.succeeded", {"path": str(dest)})
-    except OSError as exc:
-        _emit("plan.failed", {"path": str(dest), "reason": str(exc)})
-        raise
+    dest.write_text(body_path.read_text())
     return dest
 
 

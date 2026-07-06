@@ -27,6 +27,7 @@ _VIEW_AUDIT = "audit"
 
 _COLORS = {
     "started": "\033[34m",  # blue
+    "stopped": "\033[32m",  # green
     "succeeded": "\033[32m",  # green
     "landed": "\033[32m",  # green
     "failed": "\033[31m",  # red
@@ -381,7 +382,7 @@ def _read_key(timeout: float, *, _fd: int | None = None) -> str | None:
         return None  # other escape sequence → swallow
     try:
         return burst.decode("utf-8")[0]
-    except (UnicodeDecodeError, IndexError):
+    except UnicodeDecodeError, IndexError:
         return None
 
 

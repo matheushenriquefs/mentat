@@ -5,7 +5,7 @@ Date: 2026-05-31
 Amended: 2026-06-09 (v2 — hybrid 1-bin+3-modules shape; Python ProcessPoolExecutor;
 folds 0010 hitl-routing + 0011 decomp + 0012 harness-registry)
 Amended: 2026-06-11 (v3 — cross-chunk dep gating via scheduler.py; upstream-HITL
-promotion; eject cascade payload on chunk.ejected)
+promotion; eject cascade payload on chunk_ejected)
 
 ## Context
 
@@ -89,7 +89,7 @@ chunk arrived first; rebase-at-land then carries A's commits underneath B.
 
 Eject cascade: when a chunk ejects (gate-failed, rebase-conflicted, not-ff),
 `Scheduler.mark_ejected` walks the reverse-dep graph and returns every
-downstream slug. `land_queue.drain` emits one `chunk.ejected` per cascaded
+downstream slug. `land_queue.drain` emits one `chunk_ejected` per cascaded
 slug with payload `{reason:"upstream_ejected", upstream:<X>}` — payload-only
 extension per ADR-0007 (no new event name) — and skips the cascaded slugs
 without rebase or gate. Sibling chunks (no dep on the ejected one) keep

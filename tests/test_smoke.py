@@ -74,7 +74,7 @@ def test_smoke_land_queue_emits_all_event_types(fixture_batch):
                     result = lq.land(chunk, holding="main")
 
     assert result["status"] == "success"
-    assert "chunk.landed" in emitted_events
+    assert "chunk_landed" in emitted_events
 
 
 # ── Smoke: doctor produces clean verdict ─────────────────────────────────────
@@ -92,7 +92,7 @@ def test_smoke_doctor_produces_clean_verdict(fixture_batch, tmp_path):
         [
             {
                 "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk.landed",
+                "event": "chunk_landed",
                 "payload": {"slug": "afk-slice", "sha": "abc123", "holding": "main"},
             }
         ],
@@ -101,34 +101,36 @@ def test_smoke_doctor_produces_clean_verdict(fixture_batch, tmp_path):
     session_dir = fixture_batch["log_dir"]
 
     verdict = diagnose.build_verdict(session_dir)
-    assert "chunk.landed" in verdict or "landed" in verdict.lower()
+    assert "chunk_landed" in verdict or "landed" in verdict.lower()
     assert "## Verdict" in verdict
     assert "## Regression" in verdict
 
 
-# ── Smoke: all 16 event types are in EVENT_CATALOG ───────────────────────────
+# ── Smoke: all 18 event types are in EVENT_CATALOG ───────────────────────────
 
 
-def test_smoke_all_16_event_types_in_catalog():
+def test_smoke_all_18_event_types_in_catalog():
     log_mod = load_module_from(REPO_ROOT / ".agents/skills/mentat-log/scripts/log.py", "log")
     catalog = log_mod.EVENT_CATALOG
     expected = {
-        "plan.started",
-        "plan.succeeded",
-        "plan.failed",
-        "chunk.spawned",
-        "chunk.landed",
-        "chunk.ejected",
-        "chunk.teardown",
-        "gate.evaluated",
-        "review.submitted",
-        "batch.reviewed",
-        "task.created",
-        "task.claimed",
-        "task.released",
-        "task.done",
-        "task.wontfix",
-        "session.prune",
+        "slice_scheduled",
+        "slice_blocked",
+        "slice_skipped",
+        "agent_started",
+        "agent_stopped",
+        "agent_reaped",
+        "chunk_started",
+        "chunk_landed",
+        "chunk_ejected",
+        "chunk_teardown",
+        "gate_evaluated",
+        "review_submitted",
+        "batch_reviewed",
+        "task_created",
+        "task_claimed",
+        "task_released",
+        "task_resolved",
+        "task_canceled",
     }
     assert set(catalog.keys()) == expected
 

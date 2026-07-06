@@ -65,12 +65,12 @@ def test_session_worktree_from_spawn_audit(tmp_path):
         [
             {
                 "ts": "2026-06-30T00:00:00Z",
-                "event": "chunk.spawned",
+                "event": "chunk_started",
                 "payload": {"slug": "s", "plan": "s.md", "harness": "claude-code", "worktree": "/wt/one"},
             },
             {
                 "ts": "2026-06-30T00:00:01Z",
-                "event": "chunk.spawned",
+                "event": "chunk_started",
                 "payload": {"slug": "s", "plan": "s.md", "harness": "claude-code", "worktree": "/wt/two"},
             },
         ],
@@ -87,7 +87,7 @@ def test_session_worktree_none_without_spawn(tmp_path):
         tmp_path,
         "repo",
         agent_id,
-        [{"ts": "2026-06-30T00:00:00Z", "event": "plan.started", "payload": {"path": "p.md"}}],
+        [{"ts": "2026-06-30T00:00:00Z", "event": "chunk_started", "payload": {"path": "p.md"}}],
     )
     sd = tmp_path / "logs" / "repo" / agent_id
     sd.mkdir(parents=True, exist_ok=True)
@@ -103,17 +103,17 @@ def test_latest_session_picks_newest_dir(tmp_path, monkeypatch):
         tmp_path,
         "repo",
         "old",
-        [{"ts": "2026-01-01T00:00:00Z", "event": "plan.started", "payload": {"path": "p"}}],
+        [{"ts": "2026-01-01T00:00:00Z", "event": "chunk_started", "payload": {"path": "p"}}],
     )
     seed_agent_events(
         tmp_path,
         "repo",
         "new",
-        [{"ts": "2026-07-01T00:00:00Z", "event": "plan.started", "payload": {"path": "p"}}],
+        [{"ts": "2026-07-01T00:00:00Z", "event": "chunk_started", "payload": {"path": "p"}}],
     )
     (repo_dir / "old").mkdir(parents=True, exist_ok=True)
     (repo_dir / "new").mkdir(parents=True, exist_ok=True)
-    _seed(repo_dir / "mentat-manual-x", events=[{"ts": "t", "event": "plan.started", "payload": {"path": "p"}}])
+    _seed(repo_dir / "mentat-manual-x", events=[{"ts": "t", "event": "chunk_started", "payload": {"path": "p"}}])
     assert ss.latest_session(repo_dir) == "new"
 
 
@@ -156,7 +156,7 @@ def test_list_sessions_ranks_attention_to_top(tmp_path, monkeypatch):
         "waiter",
         [
             {
-                "event": "chunk.ejected",
+                "event": "chunk_ejected",
                 "payload": {"slug": "s", "reason": "hitl_required", "where": "/wt"},
             },
         ],
@@ -170,7 +170,7 @@ def test_list_sessions_ranks_attention_to_top(tmp_path, monkeypatch):
         [
             {
                 "ts": "2026-06-30T00:00:00Z",
-                "event": "chunk.landed",
+                "event": "chunk_landed",
                 "payload": {"slug": "s", "sha": "x", "holding": "main"},
             },
         ],

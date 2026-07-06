@@ -67,14 +67,9 @@ def _plan(*, add=None, update=None, conflicts=None):
 # ── _emit_installed ──────────────────────────────────────────────────────────
 
 
-def test_emit_installed_emits_plan_started():
+def test_emit_installed_no_longer_emits():
     install_cli = _load("install_emit")
-    rec = _Recorder()
-    install_cli._emit_installed_fn = rec
-    install_cli._emit_installed()
-    assert rec.called
-    args, _ = rec.calls[0]
-    assert args[0] == "plan.started"
+    assert not hasattr(install_cli, "_emit_installed")
 
 
 # ── _execute_actions ─────────────────────────────────────────────────────────

@@ -39,16 +39,16 @@ def test_orchestrate_emit_event_surfaces_failure(capsys):
         return False
 
     with patch.object(_events_mod(), "_spawn", side_effect=_fail):
-        utils.emit_event("chunk.spawned", {"slug": "x"})
+        utils.emit_event("chunk_started", {"slug": "x"})
     err = capsys.readouterr().err
-    assert "emit 'chunk.spawned' failed rc=2" in err
+    assert "emit 'chunk_started' failed rc=2" in err
     assert "ERROR: bad path" in err
 
 
 def test_orchestrate_emit_event_silent_on_success(capsys):
     utils = _load(_ORCH / "plans.py", "orch_utils_ok")
     with patch.object(_events_mod(), "_spawn", return_value=True):
-        utils.emit_event("chunk.spawned", {"slug": "x"})
+        utils.emit_event("chunk_started", {"slug": "x"})
     assert capsys.readouterr().err == ""
 
 
@@ -61,14 +61,14 @@ def test_implement_emit_event_surfaces_failure(capsys):
 
     with patch.object(_events_mod(), "_spawn", side_effect=_fail):
         with pytest.raises(RuntimeError, match="terminal emit"):
-            impl._emit_event("chunk.ejected", {"slug": "y"})
+            impl._emit_event("chunk_ejected", {"slug": "y"})
     err = capsys.readouterr().err
-    assert "emit 'chunk.ejected' failed rc=1" in err
+    assert "emit 'chunk_ejected' failed rc=1" in err
     assert "permission denied" in err
 
 
 def test_implement_emit_event_silent_on_success(capsys):
     impl = _load(_IMPL / "implement.py", "impl_emit_ok")
     with patch.object(_events_mod(), "_spawn", return_value=True):
-        impl._emit_event("chunk.ejected", {"slug": "y"})
+        impl._emit_event("chunk_ejected", {"slug": "y"})
     assert capsys.readouterr().err == ""

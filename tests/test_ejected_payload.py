@@ -1,4 +1,4 @@
-"""S4 — one chunk.ejected payload shape; orchestrate stays thin.
+"""S4 — one chunk_ejected payload shape; orchestrate stays thin.
 
 Every ejection (implement-failed, hitl-required, preflight-worktree-failed,
 rebase-conflicted, gate-failed, not-ff, upstream-ejected) emits the same base
@@ -58,14 +58,22 @@ def test_builder_includes_timed_out_and_killed_by_only_when_set() -> None:
 
 
 def test_transient_reasons_are_environment_failures() -> None:
-    """worker-died + not-ff are transient (retryable); gate/hitl/implement are terminal."""
-    assert events.is_transient_eject(events.WORKER_DIED)
-    assert events.is_transient_eject(events.NOT_FF)
+    """Transient reasons are retryable environment failures; gate/hitl/implement are terminal."""
+    for transient in (
+        events.WORKER_DIED,
+        events.NOT_FF,
+        events.PREFLIGHT_WORKTREE_FAILED,
+        events.CONTAINER_OOM,
+    ):
+        assert events.is_transient_eject(transient), f"{transient} must be transient"
     for terminal in (
         events.GATE_FAILED,
         events.HITL_REQUIRED,
         events.IMPLEMENT_FAILED,
         events.MAIN_TREE_REFUSED,
+        events.GIT_ERROR,
+        events.REBASE_CONFLICTED,
+        events.UPSTREAM_EJECTED,
     ):
         assert not events.is_transient_eject(terminal), f"{terminal} must be terminal"
 
@@ -78,7 +86,7 @@ def test_catalog_declares_optional_fields() -> None:
     sys.path.insert(0, str(SKILLS / "mentat-log/scripts"))
     import log
 
-    assert set(log.EVENT_OPTIONAL_FIELDS["chunk.ejected"]) == _DECLARED_OPTIONAL
+    assert set(log.EVENT_OPTIONAL_FIELDS["chunk_ejected"]) == _DECLARED_OPTIONAL
 
 
 def test_ejection_sites_use_shared_builder() -> None:
@@ -91,5 +99,5 @@ def test_ejection_sites_use_shared_builder() -> None:
 
 
 def test_lifecycle_emit_sites_present() -> None:
-    assert "chunk.landed" in (SKILLS / "mentat-orchestrate/scripts/land_queue.py").read_text()
-    assert "chunk.spawned" in (SKILLS / "mentat-orchestrate/scripts/fan_out.py").read_text()
+    assert "chunk_landed" in (SKILLS / "mentat-orchestrate/scripts/land_queue.py").read_text()
+    assert "chunk_started" in (SKILLS / "mentat-orchestrate/scripts/fan_out.py").read_text()

@@ -126,7 +126,7 @@ def test_drain_tears_down_cascaded_eject(tmp_path, monkeypatch) -> None:
 
 
 def test_teardown_failure_swallowed(tmp_path, monkeypatch) -> None:
-    """subprocess returning non-zero: drain continues, chunk.teardown emitted with ok=false."""
+    """subprocess returning non-zero: drain continues, chunk_teardown emitted with ok=false."""
     emitted: list[tuple[str, dict]] = []
 
     import subprocess as _sp
@@ -150,8 +150,8 @@ def test_teardown_failure_swallowed(tmp_path, monkeypatch) -> None:
     results = land_queue.drain([chunk], holding="holding")
 
     assert results[0]["status"] == "success", "drain must complete despite teardown failure"
-    teardown_events = [p for e, p in emitted if e == "chunk.teardown"]
-    assert teardown_events, "chunk.teardown event must be emitted"
+    teardown_events = [p for e, p in emitted if e == "chunk_teardown"]
+    assert teardown_events, "chunk_teardown event must be emitted"
     assert teardown_events[0]["ok"] is False
 
 

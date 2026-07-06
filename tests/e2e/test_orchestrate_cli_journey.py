@@ -138,7 +138,12 @@ def test_emit_anchored_chunks_emits_spawned_per_plan(orch, monkeypatch):
     plans = [_plan(orch, "one"), _plan(orch, "two")]
     slugs = orch._emit_anchored_chunks(plans, harness=None, model=None)
     assert slugs == ["one", "two"]
-    assert [e[0] for e in events] == ["chunk.spawned", "chunk.spawned"]
+    assert [e[0] for e in events] == [
+        "chunk_started",
+        "agent_started",
+        "chunk_started",
+        "agent_started",
+    ]
     assert all(e[1]["harness"] == orch.HITL_IN_SESSION for e in events)
 
 
@@ -272,7 +277,7 @@ def testpartition_by_outcome_routes_each_returncode(orch, monkeypatch, tmp_path)
     assert [c.slug for c in chunks] == ["ok"]
     assert hitl == {"hitl"}
 
-    reasons = {payload["slug"]: payload["reason"] for ev, payload in events if ev == "chunk.ejected"}
+    reasons = {payload["slug"]: payload["reason"] for ev, payload in events if ev == "chunk_ejected"}
     assert reasons["sig"] == orch.WORKER_DIED
     assert reasons["shell-sig"] == orch.WORKER_DIED
     assert reasons["hitl"] == orch.HITL_REQUIRED
@@ -296,7 +301,7 @@ def test_prune_stale_containers_warns_dirty_and_emits_reclaimed(orch, monkeypatc
     monkeypatch.setattr(orch._devcontainer, "down_run", lambda slugs: 1)
     monkeypatch.setattr(orch._utils, "emit_event", lambda ev, payload: events.append((ev, payload)))
     orch._prune_stale_containers()
-    assert events == [("session.prune", {"reclaimed_bytes": None, "containers_removed": 1})]
+    assert events == [("agent_reaped", {"reclaimed_bytes": None, "containers_removed": 1})]
 
 
 # ── _prune_stale_worktrees ────────────────────────────────────────────────────
@@ -320,7 +325,7 @@ def test_prune_stale_worktrees_folds_preserve_into_active(orch, monkeypatch):
     monkeypatch.setattr(orch._utils, "emit_event", lambda ev, payload: events.append((ev, payload)))
     orch._prune_stale_worktrees(preserve={"wedged"})
     assert seen["active"] == {chunk_label("wedged")}
-    assert events == [("session.prune", {"reclaimed_bytes": None, "worktrees_removed": 2})]
+    assert events == [("agent_reaped", {"reclaimed_bytes": None, "worktrees_removed": 2})]
 
 
 # ── _land_all ─────────────────────────────────────────────────────────────────
@@ -382,7 +387,7 @@ def test_run_orchestrate_dry_run(orch, monkeypatch, capsys):
     assert land_calls == [([], "hold")]
     assert events == [
         (
-            "batch.reviewed",
+            "batch_reviewed",
             {"session": "sess-1", "summary": "batch review for session sess-1 — advisory"},
         )
     ]
@@ -482,7 +487,7 @@ def test_main_batch_review_emits_event(orch, monkeypatch):
     orch.main()
     assert events == [
         (
-            "batch.reviewed",
+            "batch_reviewed",
             {"session": "sess-9", "summary": "batch review for session sess-9 — advisory"},
         )
     ]

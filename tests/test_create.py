@@ -82,7 +82,7 @@ def test_create_emits_task_created_via_bind(td: Path, monkeypatch: pytest.Monkey
     t = _reload("tasks")
     with patch("lib.events._spawn") as mock_spawn:
         t.main(["create", "my-slug"])
-    mock_spawn.assert_called_once_with("mentat-tasks", "task.created", {"id": "T001", "slug": "my-slug"})
+    mock_spawn.assert_called_once_with("mentat-tasks", "task_created", {"id": "T001", "slug": "my-slug"})
 
 
 def test_create_rejects_existing_file(td: Path, monkeypatch: pytest.MonkeyPatch) -> None:

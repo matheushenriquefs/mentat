@@ -1,7 +1,8 @@
 """Model-driven JIT recovery for transiently-ejected AFK chunks — ADR-0015.
 
-When a chunk ejects for a *transient* reason (worker_died / not_ff: the environment
-failed it, not its code — ``lib.events.is_transient_eject``) the batch need not give
+When a chunk ejects for a *transient* reason (worker_died, not_ff,
+preflight_worktree_failed, container_oom: the environment failed it, not its code —
+``lib.events.is_transient_eject``) the batch need not give
 up. This pass runs AFTER the drain settles, serially: for each transient **AFK** slug
 within its attempt cap it hands a recovery AGENT the failure context and applies the
 agent's just-in-time decision:
@@ -13,8 +14,8 @@ agent's just-in-time decision:
 
 The model decides retry-vs-reslice, not a failure-class heuristic. HITL chunks are
 never auto-respawned — the operator owns them. Audit is payload-only (ADR-0007): a
-respawn is ``chunk.spawned{trigger:"recovery", attempt:N}``; the outcome rides the
-existing ``chunk.landed`` / ``chunk.ejected`` events.
+respawn is ``chunk_started{trigger:"recovery", attempt:N}``; the outcome rides the
+existing ``chunk_landed`` / ``chunk_ejected`` events.
 
 The side-effecting primitives (respawn / reslice / dead-letter / teardown) are
 injected by the caller (orchestrate) so this module stays free of the fan-out and
@@ -286,7 +287,7 @@ def _agent_log_dir_for_slug(session_id: str, slug: str) -> Path | None:
     from lib import store
 
     for row in reversed(store.list_events(session_id)):
-        if row.get("event") != "chunk.ejected":
+        if row.get("event") != "chunk_ejected":
             continue
         payload = row.get("payload")
         if not isinstance(payload, dict) or payload.get("slug") != slug:
@@ -295,6 +296,22 @@ def _agent_log_dir_for_slug(session_id: str, slug: str) -> Path | None:
         if isinstance(logs_path, str) and logs_path:
             return Path(logs_path)
     return None
+
+
+def eject_reason_for_slug(session_id: str, slug: str) -> str:
+    """Latest ``chunk_ejected.reason`` for ``slug`` from the canonical store."""
+    from lib import store
+
+    for row in reversed(store.list_events(session_id)):
+        if row.get("event") != "chunk_ejected":
+            continue
+        payload = row.get("payload")
+        if not isinstance(payload, dict) or payload.get("slug") != slug:
+            continue
+        reason = payload.get("reason")
+        if isinstance(reason, str):
+            return reason
+    return "unknown"
 
 
 def make_recovery_seed(
@@ -470,9 +487,9 @@ def recover(
         bud.spend()
 
         # Payload-only respawn audit (ADR-0007): the outcome rides the existing
-        # chunk.landed / chunk.ejected from the re-drained chunk.
+        # chunk_landed / chunk_ejected from the re-drained chunk.
         _emit_event(
-            "chunk.spawned",
+            "chunk_started",
             {
                 "slug": slug,
                 "plan": str(plan.path),

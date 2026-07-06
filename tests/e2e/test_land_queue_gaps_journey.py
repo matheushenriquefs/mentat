@@ -114,7 +114,7 @@ def test_teardown_container_fires_real_teardown_event(tmp_path, monkeypatch):
     with _patch_attr(devcontainer, "down", lambda slug: True):
         lq._teardown_container(lq.Chunk(slug="dead-slug", worktree=tmp_path / "wt", chunk_id=TEST_CHUNK_ID))
 
-    rows = _events(session, "chunk.teardown")
+    rows = _events(session, "chunk_teardown")
     assert any(r["payload"]["slug"] == "dead-slug" and r["payload"]["ok"] is True for r in rows), rows
 
 
@@ -135,7 +135,7 @@ def test_land_ejects_not_ff_when_ff_merge_reports_not_ff(tmp_path, monkeypatch):
 
     assert verdict["status"] == "eject"
     assert verdict["reason"] == lq.NOT_FF
-    ejects = _events(session, "chunk.ejected")
+    ejects = _events(session, "chunk_ejected")
     assert {e["payload"]["reason"] for e in ejects} == {lq.NOT_FF}
 
 
@@ -185,6 +185,6 @@ def test_drain_cascade_skips_downstream_not_in_pending(tmp_path, monkeypatch):
     by_slug = {r.get("slug"): r for r in results}
     assert by_slug["child"]["reason"] == lq.UPSTREAM_EJECTED
     assert "ghost" not in by_slug, "a cascaded slug not in pending yields no result row"
-    # And no chunk.ejected audit row was written for the phantom either.
-    ejected_slugs = {e["payload"]["slug"] for e in _events(session, "chunk.ejected")}
+    # And no chunk_ejected audit row was written for the phantom either.
+    ejected_slugs = {e["payload"]["slug"] for e in _events(session, "chunk_ejected")}
     assert "ghost" not in ejected_slugs

@@ -73,11 +73,11 @@ def test_done_emits_task_done(claimed_file: Path) -> None:
     t = _reload("tasks")
     with patch("lib.events._spawn") as mock_spawn:
         t.main(["done", str(claimed_file)])
-    mock_spawn.assert_called_once_with("mentat-tasks", "task.done", {"id": "T001"})
+    mock_spawn.assert_called_once_with("mentat-tasks", "task_resolved", {"id": "T001"})
 
 
 def test_wontfix_emits_task_wontfix(claimed_file: Path) -> None:
     t = _reload("tasks")
     with patch("lib.events._spawn") as mock_spawn:
         t.main(["wontfix", str(claimed_file)])
-    mock_spawn.assert_called_once_with("mentat-tasks", "task.wontfix", {"id": "T001"})
+    mock_spawn.assert_called_once_with("mentat-tasks", "task_canceled", {"id": "T001"})
