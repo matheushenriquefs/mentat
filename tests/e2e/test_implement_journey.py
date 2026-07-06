@@ -120,7 +120,7 @@ def test_mark_test_writable_happy_moves_path_and_emits(impl, monkeypatch, tmp_pa
     monkeypatch.setattr(impl, "_emit_event", lambda ev, payload: events.append((ev, payload)))
     impl.mark_test_writable("slug", "a")
     assert json.loads(manifest.read_text())["open"] == ["a"]
-    assert events == [("test.writable.requested", {"slug": "slug", "path": "a"})]
+    assert events == [("test_writable_requested", {"slug": "slug", "path": "a"})]
 
 
 def test_mark_test_writable_already_open_no_dup(impl, monkeypatch, tmp_path):
@@ -536,23 +536,6 @@ def test_auto_doctor_no_editor_just_doctors(impl, monkeypatch):
         impl._auto_doctor()
     assert seen == ["doctor"]
     assert ran == []
-
-
-def test_auto_doctor_editor_opens_diagnosis(impl, monkeypatch, tmp_path):
-    monkeypatch.setenv("EDITOR", "vi")
-    monkeypatch.setenv("MENTAT_SESSION", "s")
-    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
-    monkeypatch.setenv("MENTAT_REPO", "repo")
-    monkeypatch.setattr(impl, "_run_session_cmd", lambda sub: None)
-    monkeypatch.setattr(impl.sys, "stdout", type("S", (), {"isatty": lambda self: True})())  # interactive
-    diag = impl._session_dir_fn("s") / "diagnosis.md"
-    diag.parent.mkdir(parents=True, exist_ok=True)
-    diag.write_text("diagnosis\n")
-    captured: list = []
-    monkeypatch.setattr(impl.subprocess, "run", lambda cmd, **k: captured.append(cmd))
-    impl._auto_doctor()
-    assert captured and captured[0][0] == "vi"
-    assert str(diag) in captured[0][1]
 
 
 def test_auto_summary_runs_report(impl, monkeypatch):

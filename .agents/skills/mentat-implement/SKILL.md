@@ -88,4 +88,4 @@ When `~/.agents/plans/<slug>.tests.json` exists, reads it before `/mentat-contai
 `closed - open` → mounted `readonly`. `open` → writable. Absent manifest → no extra mounts.
 
 `mark-test-writable <slug> <path>` flips a closed path writable for the red-test step.
-Audited as `test.writable.requested`.
+Audited as `test_writable_requested`.

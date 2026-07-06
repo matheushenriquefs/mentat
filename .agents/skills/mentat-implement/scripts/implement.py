@@ -93,7 +93,7 @@ def compute_ro_mounts(closed: list[str], open_: list[str]) -> list[str]:
 
 
 def mark_test_writable(slug: str, path: str) -> None:
-    """Move path from closed to open in the tests manifest. Emits test.writable.requested."""
+    """Move path from closed to open in the tests manifest. Emits test_writable_requested."""
     manifest = _plans_dir() / f"{slug}.tests.json"
     if not manifest.exists():
         print(f"mentat-implement: no manifest for {slug}", file=sys.stderr)
@@ -108,7 +108,7 @@ def mark_test_writable(slug: str, path: str) -> None:
         open_.append(path)
     data["open"] = open_
     manifest.write_text(json.dumps(data, indent=2))
-    _emit_event("test.writable.requested", {"slug": slug, "path": path})
+    _emit_event("test_writable_requested", {"slug": slug, "path": path})
 
 
 def resolve_plan_path(ref: str) -> Path:
@@ -243,16 +243,8 @@ def _run_session_cmd(subcmd: str) -> None:
 
 
 def _auto_doctor() -> None:
-    """Spawn mentat-track doctor on death. Open $EDITOR on the diagnosis only when
-    attached to a TTY — a headless/AFK child inherits $EDITOR but has no terminal, so
-    launching a terminal editor (vim) on a pipe blocks the child until its wall-deadline
-    kill. The doctor diagnosis is always written; only the interactive open is gated."""
+    """Spawn mentat-track doctor on death; it prints the verdict to stdout."""
     _run_session_cmd("doctor")
-    editor = os.environ.get("EDITOR")
-    if editor and sys.stdout.isatty():
-        diag = _session_dir_fn(os.environ.get("MENTAT_SESSION", "manual")) / "diagnosis.md"
-        if diag.exists():
-            subprocess.run([editor, str(diag)], check=False)
 
 
 def _auto_summary() -> None:

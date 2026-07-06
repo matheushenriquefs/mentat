@@ -118,7 +118,7 @@ def test_mark_test_writable_flips_closed_to_open(tmp_path, monkeypatch, capsys):
     # Audit event emitted
     assert mock_emit.called
     event_name = mock_emit.call_args.args[0]
-    assert event_name == "test.writable.requested"
+    assert event_name == "test_writable_requested"
 
 
 def test_mark_test_writable_refuses_unknown_path(tmp_path, monkeypatch):

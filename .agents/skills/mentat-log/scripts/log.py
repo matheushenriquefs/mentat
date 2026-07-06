@@ -40,6 +40,7 @@ EVENT_CATALOG: dict[str, list[str]] = {
     "task_released": ["id"],
     "task_resolved": ["id"],
     "task_canceled": ["id"],
+    "test_writable_requested": ["slug", "path"],
 }
 
 EVENT_OPTIONAL_FIELDS: dict[str, list[str]] = {

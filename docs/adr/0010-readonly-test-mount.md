@@ -54,7 +54,7 @@ new naming scheme.
    ```
 
 4. **TDD escape.** `/mentat-implement` supports `mark-test-writable <path>`
-   subcommand (audited as `test.writable.requested`) for the red-test-write step.
+   subcommand (audited as `test_writable_requested`) for the red-test-write step.
    Flips back to `ro,bind` after red commits via `/mentat-commit`.
 
 ## Consequences

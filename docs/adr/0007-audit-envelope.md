@@ -9,6 +9,7 @@ Amended: 2026-06-12 (v5 — task.* + session.prune added, 16 events)
 Amended: 2026-06-20 (v6 — F1: summary.md is one status-bearing file in the session log dir)
 Amended: 2026-07-05 (v7 — SQLite canonical store; NDJSON export-only)
 Amended: 2026-07-06 (v8 — flat snake_case catalog, 18 events; `event.kind` column)
+Amended: 2026-07-06 (v9 — +`test_writable_requested` (red-test-write audit, ADR-0010), 19 events)
 
 ## Context
 
@@ -49,7 +50,7 @@ file per agent. Frontmatter `status:` ∈ `{succeeded, failed, blocked, hitl-req
 **`EVENT_CATALOG`** lives in `.agents/skills/mentat-log/scripts/log.py` as
 `dict[str, list[str]]` (event name → required fields). Stdlib only, no pydantic, no jsonc.
 
-**18 canonical events:**
+**19 canonical events:**
 | Event | Required fields |
 |---|---|
 | `slice_scheduled` | `slug` |
@@ -70,6 +71,7 @@ file per agent. Frontmatter `status:` ∈ `{succeeded, failed, blocked, hitl-req
 | `task_released` | `id` |
 | `task_resolved` | `id` |
 | `task_canceled` | `id` |
+| `test_writable_requested` | `slug`, `path` |
 
 `chunk_ejected.reason` — see `lib.events.EJECT_REASONS`.
 
@@ -82,7 +84,7 @@ Log dir: `mode=0o700` on first write.
 - **Reasons live in payload, not name.**
 - **New event name only when handler diverges.**
 
-Catalog at 18 events; future growth still prefers payload extension over new names.
+Catalog at 19 events; future growth still prefers payload extension over new names.
 
 ## Consequences
 
