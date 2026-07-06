@@ -24,7 +24,7 @@ from tests.conftest import bind_plan, load_script, seed_agent_events
 REPO_ROOT = Path(__file__).resolve().parents[1]
 IMPL_SCRIPTS = REPO_ROOT / ".agents/skills/mentat-implement/scripts"
 ORCH_SCRIPTS = REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts"
-SESSION_SCRIPTS = REPO_ROOT / ".agents/skills/mentat-session/scripts"
+SESSION_SCRIPTS = REPO_ROOT / ".agents/skills/mentat-track/scripts"
 sys.path.insert(0, str(REPO_ROOT / ".agents"))
 
 

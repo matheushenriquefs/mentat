@@ -271,7 +271,7 @@ def test_cmd_track_by_id_outside_repo(tmp_path, monkeypatch, capsys):
     """track <id> resolves via store, not cwd repo name."""
     from tests.conftest import load_script
 
-    session_py = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-session/scripts/session.py"
+    session_py = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-track/scripts/track.py"
     mod = load_script(session_py, "session_track_outside")
     db = tmp_path / "mentat.db"
     logs = tmp_path / "logs"

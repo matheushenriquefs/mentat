@@ -31,7 +31,7 @@ Used for: `mentat-install`.
 ### Full Skill
 
 Used for: `mentat-prd`, `mentat-tasks`, `mentat-implement`, `mentat-orchestrate`,
-`mentat-container`, `mentat-log`, `mentat-session`, `mentat-git`, `mentat-plan`, `mentat-skill`.
+`mentat-container`, `mentat-log`, `mentat-track`, `mentat-git`, `mentat-plan`, `mentat-skill`.
 
 - Frontmatter: `name` + `description` only.
 - Description: third-person, "Use when..." trigger clause.

@@ -62,9 +62,9 @@ def test_install_is_idempotent(tmp_path):
 
     # Real artifacts landed: config + the canonical skill/harness symlinks.
     assert (home / ".mentat" / "config.toml").exists()
-    skill_link = home / ".agents" / "skills" / "mentat-session"
+    skill_link = home / ".agents" / "skills" / "mentat-track"
     assert skill_link.is_symlink()
-    assert skill_link.resolve() == (REPO_ROOT / ".agents/skills/mentat-session").resolve()
+    assert skill_link.resolve() == (REPO_ROOT / ".agents/skills/mentat-track").resolve()
 
     farm_after_first = _symlink_farm(home)
     assert farm_after_first, "first install must create symlinks"

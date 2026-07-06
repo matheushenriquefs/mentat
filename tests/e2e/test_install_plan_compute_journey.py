@@ -44,7 +44,7 @@ def _build_clone(root: Path) -> Path:
         "mentat-orchestrate",
         "mentat-skill",
         "mentat-git",
-        "mentat-session",
+        "mentat-track",
         "mentat-install",
         "mentat-tasks",
         "mentat-prd",

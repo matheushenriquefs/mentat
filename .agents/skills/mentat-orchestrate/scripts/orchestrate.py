@@ -126,7 +126,7 @@ def run_orchestrate(
     dry_run: bool,
 ) -> int:
     session_id = ensure_session("orchestrate", holding)
-    print(f"mentat-orchestrate: track this run with `mentat-session track {session_id}`", file=sys.stderr)
+    print(f"mentat-orchestrate: track this run with `mentat-track track {session_id}`", file=sys.stderr)
     try:
         _git.require_commit_identity()
     except _git.GitError as e:

@@ -61,7 +61,7 @@ ENTRYPOINTS = [
     "mentat-git/scripts/git.py",
     "mentat-implement/scripts/implement.py",
     "mentat-install/scripts/install.py",
-    "mentat-session/scripts/session.py",
+    "mentat-track/scripts/track.py",
     "mentat-skill/scripts/skill.py",
     "mentat-tasks/scripts/tasks.py",
 ]

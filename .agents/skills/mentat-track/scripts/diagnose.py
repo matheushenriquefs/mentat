@@ -49,8 +49,8 @@ _SUSPECT_MAP = {
 _TERMINAL_EVENTS = ("chunk_landed", "chunk_ejected")
 
 
-def _events_for_dir(session_dir: Path) -> list[dict[str, object]]:
-    return store.list_events(session_dir.name)
+def _events_for_dir(agent_dir: Path) -> list[dict[str, object]]:
+    return store.list_events(agent_dir.name)
 
 
 def _terminal_by_chunk(events: list[dict[str, object]]) -> dict[str, dict[str, object]]:
@@ -72,8 +72,8 @@ def _select_terminal(events: list[dict[str, object]]) -> dict[str, object] | Non
     return max(landed, key=lambda e: str(e.get("ts", ""))) if landed else None
 
 
-def build_verdict(session_dir: Path) -> str:
-    events = _events_for_dir(session_dir)
+def build_verdict(agent_dir: Path) -> str:
+    events = _events_for_dir(agent_dir)
     if not events:
         return (
             "## Verdict\n- Reason: unknown\n- Phase: unknown\n\n"
@@ -137,8 +137,8 @@ def build_verdict(session_dir: Path) -> str:
     )
 
 
-def build_summary(session_dir: Path) -> str:
-    events = _events_for_dir(session_dir)
+def build_summary(agent_dir: Path) -> str:
+    events = _events_for_dir(agent_dir)
     spawned = next((e for e in events if e.get("event") == "chunk_started"), None)
     plan = "unknown"
     if spawned and isinstance(spawned.get("payload"), dict):
@@ -171,9 +171,9 @@ def build_summary(session_dir: Path) -> str:
     return f"## Summary\n- Plan: {plan}\n- Outcome: {outcome}\n- Events recorded: {len(events)}\n"
 
 
-def write_summary(session_dir: Path) -> Path:
-    content = build_summary(session_dir)
-    summary = session_dir / SUMMARY_FILE
+def write_summary(agent_dir: Path) -> Path:
+    content = build_summary(agent_dir)
+    summary = agent_dir / SUMMARY_FILE
     summary.write_text(content)
     return summary
 
@@ -184,6 +184,6 @@ def _run_diagnose_loop(context: str) -> None:
     print("=== enter diagnose loop (reproduce → minimize → hypothesize → red test) ===")
 
 
-def run_diagnose(session_dir: Path) -> None:
-    context = build_verdict(session_dir)
+def run_diagnose(agent_dir: Path) -> None:
+    context = build_verdict(agent_dir)
     _run_diagnose_loop(context)

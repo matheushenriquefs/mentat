@@ -1,6 +1,6 @@
 """E2E: the pure compose/devcontainer.json renderer.
 
-Drives ``compose_render.py`` end to end through real worktree directories under
+Drives ``override.py`` end to end through real worktree directories under
 ``tmp_path`` (a real Dockerfile / docker-compose.yml / compose.yml.tmpl on disk)
 and monkeypatched env vars for the env-driven branches. The module is a pure
 renderer — no docker, no filesystem writes — so each test loads a *fresh* module
@@ -21,12 +21,12 @@ from tests.conftest import load_script
 pytestmark = pytest.mark.e2e
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-COMPOSE_RENDER_PY = REPO_ROOT / ".agents/skills/mentat-container/scripts/compose_render.py"
+COMPOSE_RENDER_PY = REPO_ROOT / ".agents/skills/mentat-container/scripts/override.py"
 
 
 def _fresh():
-    """A fresh compose_render module instance (monkeypatched globals never leak)."""
-    return load_script(COMPOSE_RENDER_PY, "compose_render")
+    """A fresh override module instance (monkeypatched globals never leak)."""
+    return load_script(COMPOSE_RENDER_PY, "override")
 
 
 # ── _image_tag ──────────────────────────────────────────────────────────────

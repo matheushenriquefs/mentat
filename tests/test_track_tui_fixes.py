@@ -1,4 +1,4 @@
-"""TUI fixes for `mentat-session track` (the multi-AFK navigator): focus/cursor
+"""TUI fixes for `mentat-track track` (the multi-AFK navigator): focus/cursor
 pinning to session identity (flicker A), the flicker-free repaint engine
 (flicker B), transcript scrollback, honest empty states, and transcript-by-role
 coloring. Pure surface only — the raw-tty/select poll loop stays the untested I/O
@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = REPO_ROOT / ".agents/skills/mentat-session/scripts"
+SCRIPTS = REPO_ROOT / ".agents/skills/mentat-track/scripts"
 sys.path.insert(0, str(REPO_ROOT / ".agents"))
 
 from tests.conftest import load_script  # noqa: E402
@@ -18,6 +18,11 @@ from tests.conftest import load_script  # noqa: E402
 
 def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
+
+
+panes = load_module("panes")
+render = load_module("render")
+registry = load_module("registry")
 
 
 def _rec(session: str, status: str = "working", age: float = 0.0, last_event: str | None = None) -> dict:
@@ -29,49 +34,49 @@ def _rec(session: str, status: str = "working", age: float = 0.0, last_event: st
 
 def test_resolve_focus_index_follows_pinned_across_resort():
     """A background re-sort swaps the list order; the pinned name's index moves with it."""
-    track = load_module("track")
+    load_module("track")
     reg_a = [_rec("s-a"), _rec("s-b")]
     reg_b = [_rec("s-b"), _rec("s-a")]  # same names, swapped by a status flip
-    assert track.resolve_focus_index(reg_a, "s-a", 0) == 0
-    assert track.resolve_focus_index(reg_b, "s-a", 0) == 1
+    assert panes.resolve_focus_index(reg_a, "s-a", 0) == 0
+    assert panes.resolve_focus_index(reg_b, "s-a", 0) == 1
 
 
 def test_resolve_focus_index_none_when_pinned_session_reaped():
-    track = load_module("track")
-    assert track.resolve_focus_index([_rec("s-b")], "s-a", 0) is None
+    load_module("track")
+    assert panes.resolve_focus_index([_rec("s-b")], "s-a", 0) is None
 
 
 def test_resolve_focus_index_fallback_when_unpinned():
     """No pin yet (None) → the caller's fallback index, not a search."""
-    track = load_module("track")
-    assert track.resolve_focus_index([_rec("s-a"), _rec("s-b")], None, 1) == 1
+    load_module("track")
+    assert panes.resolve_focus_index([_rec("s-a"), _rec("s-b")], None, 1) == 1
 
 
 def test_resolve_focus_index_accepts_entry_tuples():
     """navigate passes (record, path) entries, not bare records."""
-    track = load_module("track")
+    load_module("track")
     entries = [(_rec("s-a"), Path("/x/s-a")), (_rec("s-b"), Path("/x/s-b"))]
-    assert track.resolve_focus_index(entries, "s-b", 0) == 1
+    assert panes.resolve_focus_index(entries, "s-b", 0) == 1
 
 
 def test_humanize_age_buckets():
-    sessions = load_module("sessions")
-    assert sessions._humanize_age(30) == "30s ago"  # <60s
-    assert sessions._humanize_age(120) == "2m ago"  # <3600s
-    assert sessions._humanize_age(7200) == "2h ago"  # <86400s
-    assert sessions._humanize_age(172800) == "2d ago"  # else
+    reg = load_module("registry")
+    assert reg._humanize_age(30) == "30s ago"  # <60s
+    assert reg._humanize_age(120) == "2m ago"  # <3600s
+    assert reg._humanize_age(7200) == "2h ago"  # <86400s
+    assert reg._humanize_age(172800) == "2d ago"  # else
 
 
 def test_session_module_reexports_humanize_age():
     """cmd_list still reaches _humanize_age after the relocate (no duplicate impl)."""
-    session = load_module("session")
-    sessions = load_module("sessions")
-    assert session._humanize_age(120) == sessions._humanize_age(120) == "2m ago"
+    track = load_module("track")
+    reg = load_module("registry")
+    assert track._humanize_age(120) == reg._humanize_age(120) == "2m ago"
 
 
 def test_render_list_shows_age_column():
-    track = load_module("track")
-    lines = track.render_list([_rec("s-a", age=120)], 0)
+    load_module("track")
+    lines = panes.render_list([_rec("s-a", age=120)], 0)
     assert "2m ago" in lines[0]
 
 
@@ -113,18 +118,18 @@ def test_paint_wraps_in_synchronized_output():
 
 
 def test_frame_fingerprint_stable_and_size_sensitive():
-    track = load_module("track")
+    load_module("track")
     f = ["row one", "row two"]
-    assert track._frame_fingerprint(f, 80, 24) == track._frame_fingerprint(list(f), 80, 24)
-    assert track._frame_fingerprint(f, 80, 24) != track._frame_fingerprint(f, 100, 24)
-    assert track._frame_fingerprint(f, 80, 24) != track._frame_fingerprint(f, 80, 40)
-    assert track._frame_fingerprint(f, 80, 24) != track._frame_fingerprint(["row one"], 80, 24)
+    assert panes._frame_fingerprint(f, 80, 24) == panes._frame_fingerprint(list(f), 80, 24)
+    assert panes._frame_fingerprint(f, 80, 24) != panes._frame_fingerprint(f, 100, 24)
+    assert panes._frame_fingerprint(f, 80, 24) != panes._frame_fingerprint(f, 80, 40)
+    assert panes._frame_fingerprint(f, 80, 24) != panes._frame_fingerprint(["row one"], 80, 24)
 
 
 def test_restore_sequence_shows_cursor_and_exits_alt_screen():
-    track = load_module("track")
+    load_module("track")
     tui = _tui()
-    seq = track._restore_seq()
+    seq = panes._restore_seq()
     assert tui.SHOW_CURSOR in seq
     assert tui.ALT_EXIT in seq
 
@@ -145,88 +150,88 @@ def _assistant(text: str) -> dict:
 
 def test_render_transcript_lines_returns_full_history(tmp_path):
     """Drop the pre-tail cap so the focus pane has something to scroll."""
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "s-1"
     _write_stream(sd, "session", [_assistant(f"line {i}") for i in range(60)])  # > old FOCUS_LINES cap
-    lines = track.render_transcript_lines(sd)
+    lines = render.render_transcript_lines(sd)
     body = "\n".join(lines)
     assert "line 0" in body and "line 59" in body  # head and tail both present
 
 
 def test_window_lines_follows_tail_when_unfrozen():
-    track = load_module("track")
+    load_module("track")
     lines = [str(i) for i in range(10)]
-    vis, above, below = track.window_lines(lines, scroll_top=None, height=3)
+    vis, above, below = panes.window_lines(lines, scroll_top=None, height=3)
     assert vis == ["7", "8", "9"]
     assert above == 7 and below == 0
 
 
 def test_window_lines_frozen_top_anchored():
-    track = load_module("track")
+    load_module("track")
     lines = [str(i) for i in range(10)]
-    vis, above, below = track.window_lines(lines, scroll_top=2, height=3)
+    vis, above, below = panes.window_lines(lines, scroll_top=2, height=3)
     assert vis == ["2", "3", "4"]
     assert above == 2 and below == 5
 
 
 def test_window_lines_clamps_out_of_range_without_raising():
-    track = load_module("track")
+    load_module("track")
     lines = [str(i) for i in range(5)]
-    vis, above, below = track.window_lines(lines, scroll_top=999, height=3)
+    vis, above, below = panes.window_lines(lines, scroll_top=999, height=3)
     assert vis == ["2", "3", "4"] and above == 2 and below == 0  # clamped to max_top
-    vis2, above2, _ = track.window_lines(lines, scroll_top=-5, height=3)
+    vis2, above2, _ = panes.window_lines(lines, scroll_top=-5, height=3)
     assert vis2 == ["0", "1", "2"] and above2 == 0
 
 
 def test_window_lines_shorter_than_height():
-    track = load_module("track")
-    vis, above, below = track.window_lines(["a", "b"], scroll_top=None, height=10)
+    load_module("track")
+    vis, above, below = panes.window_lines(["a", "b"], scroll_top=None, height=10)
     assert vis == ["a", "b"] and above == 0 and below == 0
 
 
 def test_scroll_rearms_tail_at_bottom():
-    track = load_module("track")
+    load_module("track")
     # total 10, height 3 → max_top 7; from 6 stepping +1 reaches the bottom → None.
-    assert track.scroll(6, 1, 10, 3) is None
+    assert panes.scroll(6, 1, 10, 3) is None
 
 
 def test_scroll_up_from_tail_freezes_absolute():
-    track = load_module("track")
-    assert track.scroll(None, -1, 10, 3) == 6  # tail max_top 7, up one → frozen at 6
+    load_module("track")
+    assert panes.scroll(None, -1, 10, 3) == 6  # tail max_top 7, up one → frozen at 6
 
 
 def test_scroll_half_page_delta_is_height_over_two():
-    track = load_module("track")
-    assert track.scroll(10, 6 // 2, 20, 6) == 13  # +half-page from 10
+    load_module("track")
+    assert panes.scroll(10, 6 // 2, 20, 6) == 13  # +half-page from 10
 
 
 def test_scroll_clamps_top_to_zero():
-    track = load_module("track")
-    assert track.scroll(1, -5, 10, 3) == 0
+    load_module("track")
+    assert panes.scroll(1, -5, 10, 3) == 0
 
 
 # ── Slice 4: honest empty states (audit toggle) ───────────────────────────────
 
 
 def test_empty_hint_audit_with_known_last_event():
-    track = load_module("track")
-    assert track.empty_hint("audit", "chunk_landed") == "(no audit rows here — last lifecycle: chunk_landed)"
+    load_module("track")
+    assert render.empty_hint("audit", "chunk_landed") == "(no audit rows here — last lifecycle: chunk_landed)"
 
 
 def test_empty_hint_audit_without_last_event():
-    track = load_module("track")
-    assert track.empty_hint("audit", None) == "(no audit events yet — press t for the transcript)"
+    load_module("track")
+    assert render.empty_hint("audit", None) == "(no audit events yet — press t for the transcript)"
 
 
 def test_empty_hint_transcript():
-    track = load_module("track")
-    assert track.empty_hint("transcript", None) == "(no transcript — audit-only session; press t for lifecycle)"
+    load_module("track")
+    assert render.empty_hint("transcript", None) == "(no transcript — audit-only session; press t for lifecycle)"
 
 
 def test_empty_hint_last_event_only_used_for_audit():
     """A last_event in transcript view never leaks the lifecycle hint."""
-    track = load_module("track")
-    assert track.empty_hint("transcript", "chunk_landed") == track.empty_hint("transcript", None)
+    load_module("track")
+    assert render.empty_hint("transcript", "chunk_landed") == render.empty_hint("transcript", None)
 
 
 # ── Slice 5: color the transcript by structured role (+ wire audit) ───────────
@@ -245,65 +250,65 @@ def _as_tty(monkeypatch, tui, on: bool = True):
 
 
 def test_transcript_tool_use_line_is_cyan(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     tui = _tui()
     _as_tty(monkeypatch, tui)
     sd = tmp_path / "s"
     _write_stream(sd, "session", [_tool("Read")])
-    line = next(ln for ln in track._transcript_content(sd) if "Read" in ln)
+    line = next(ln for ln in render._transcript_content(sd) if "Read" in ln)
     assert tui.CYAN in line
     assert tui.tool_glyph("Read") in line
 
 
 def test_transcript_assistant_text_is_uncolored_prose(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     tui = _tui()
     _as_tty(monkeypatch, tui)
     sd = tmp_path / "s"
     _write_stream(sd, "session", [_assistant("plain prose here")])
-    line = next(ln for ln in track._transcript_content(sd) if "plain prose here" in ln)
+    line = next(ln for ln in render._transcript_content(sd) if "plain prose here" in ln)
     assert tui.CYAN not in line and tui.YELLOW not in line  # only the dim gutter, no role color
 
 
 def test_transcript_ask_user_question_is_yellow(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     tui = _tui()
     _as_tty(monkeypatch, tui)
     sd = tmp_path / "s"
     _write_stream(sd, "session", [_tool("AskUserQuestion")])
-    line = next(ln for ln in track._transcript_content(sd) if "AskUserQuestion" in ln)
+    line = next(ln for ln in render._transcript_content(sd) if "AskUserQuestion" in ln)
     assert tui.YELLOW in line and tui.CYAN not in line
 
 
 def test_transcript_tool_result_is_dim_gutter(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     tui = _tui()
     _as_tty(monkeypatch, tui)
     sd = tmp_path / "s"
     _write_stream(sd, "session", [_tool_result_row("file contents")])
-    line = next(ln for ln in track._transcript_content(sd) if "└" in ln)
+    line = next(ln for ln in render._transcript_content(sd) if "└" in ln)
     assert tui.DIM in line
 
 
 def test_transcript_non_tty_stays_unwrapped(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     tui = _tui()
     _as_tty(monkeypatch, tui, on=False)
     sd = tmp_path / "s"
     _write_stream(sd, "session", [_tool("Read")])
-    body = "\n".join(track._transcript_content(sd))
+    body = "\n".join(render._transcript_content(sd))
     assert tui.CYAN not in body and tui.DIM not in body  # tty guard no-ops every wrap
 
 
 def test_color_for_event_maps_outcome_to_sgr():
-    track = load_module("track")
-    assert track._color_for_event("agent_stopped") == "\033[32m"  # green
-    assert track._color_for_event("chunk_ejected") == "\033[31m"  # red
+    load_module("track")
+    assert render._color_for_event("agent_stopped") == "\033[32m"  # green
+    assert render._color_for_event("chunk_ejected") == "\033[31m"  # red
 
 
 def test_focus_frame_header_is_bold(monkeypatch):
-    track = load_module("track")
+    load_module("track")
     tui = _tui()
     _as_tty(monkeypatch, tui)
-    frame = track._focus_frame(_rec("s-a", "working"), ["line"], scroll_top=None, height=5)
+    frame = panes._focus_frame(_rec("s-a", "working"), ["line"], scroll_top=None, height=5)
     assert tui.BOLD in frame[0]

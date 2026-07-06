@@ -137,7 +137,7 @@ def spawn_with_proc(
         spawned_payload(plan.slug, str(plan.path), harness=harness or "default", worktree=str(worktree)),
     )
     _emit_event("agent_started", {"harness": harness or "default"})
-    print(f"mentat-session track {session_id}")
+    print(f"mentat-track track {session_id}")
     print(session_id)
     return session_id, proc
 
@@ -154,7 +154,7 @@ async def spawn_async(
         spawned_payload(plan.slug, str(plan.path), harness=harness or "default", worktree=str(worktree)),
     )
     _emit_event("agent_started", {"harness": harness or "default"})
-    print(f"mentat-session track {session_id}")
+    print(f"mentat-track track {session_id}")
     print(session_id)
     return session_id, proc, worktree
 

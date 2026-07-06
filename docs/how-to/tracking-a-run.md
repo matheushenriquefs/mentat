@@ -6,7 +6,7 @@ one chunk's activity.
 ## List the sessions
 
 ```
-/mentat-session list
+/mentat-track list
 ```
 
 A repo-wide registry: one row per session, with a status marker, the session name,
@@ -16,7 +16,7 @@ to the top. Use this for a quick snapshot.
 ## Open the live navigator
 
 ```
-/mentat-session track
+/mentat-track track
 ```
 
 With no argument, `track` opens a live navigator over every session in the
@@ -40,14 +40,14 @@ exits instead of opening the interactive navigator.
 To watch a single chunk directly, pass its session id — the runs print it at start:
 
 ```
-/mentat-session track <session-id>
+/mentat-track track <session-id>
 ```
 
 ## After the run
 
 - **Ejected or failed** → [doctor](./doctor.md) for the diagnosis.
 - **Wedged** → [hitl-handoff](./hitl-handoff.md) to resume.
-- **Landed clean** → `/mentat-session report` for the success summary.
+- **Landed clean** → `/mentat-track report` for the success summary.
 
 ## Notes
 

@@ -102,10 +102,10 @@ curl -fsSL https://raw.githubusercontent.com/matheushenriquefs/mentat/main/insta
 /mentat-orchestrate run holding/add-csv-export add-csv-export-plan
 
 # 3. watch the batch land
-/mentat-session track
+/mentat-track track
 
 # 4. inspect ejected chunks (if any)
-/mentat-session doctor
+/mentat-track doctor
 
 # 5. review what landed on holding before merging upstream
 /mentat-git diff main..holding/add-csv-export
@@ -140,7 +140,7 @@ task test      # pytest tests/
 
 | Symptom | What to try |
 |---|---|
-| Chunk ejected, unclear why | `/mentat-session doctor` — writes `diagnosis.md` alongside the session log. |
+| Chunk ejected, unclear why | `/mentat-track doctor` — writes `diagnosis.md` alongside the session log. |
 | Container won't come up | `mentat-container doctor` — diagnoses Docker daemon, arch mismatch, missing devcontainer.json. |
 | `mentat-container run` fails with exit 69 | Container not running for current worktree — `mentat-container up` first. Never fall back to host or `docker exec` (ADR-0004). |
 | Land queue stuck on rebase | The chunk's branch is not fast-forward onto holding. Inspect with `mentat-git diff holding/<plan>..HEAD`; rebuild the slice and re-run. |

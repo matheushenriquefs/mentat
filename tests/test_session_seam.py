@@ -39,7 +39,7 @@ def _load_log():
 
 
 def _load_mentat_session_py():
-    return _load("mentat_session.session", _SKILLS / "mentat-session/scripts/session.py")
+    return _load("mentat_track.agent", _SKILLS / "mentat-track/scripts/agent.py")
 
 
 # ── seam existence ────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ def test_summary_file_under_session_dir(tmp_path, monkeypatch):
 def test_repo_name_stable_from_worktree(tmp_path, monkeypatch):
     """repo_name() resolves the main repo basename even when cwd is a linked worktree.
 
-    Regression: a fresh `mentat-session track` shell has no MENTAT_REPO, so the
+    Regression: a fresh `mentat-track track` shell has no MENTAT_REPO, so the
     reader fell back to cwd().name. Run from a worktree, that is the slug, not the
     repo — pointing the registry at an empty log dir ("couldn't track sessions").
     The writer froze MENTAT_REPO to the repo-root basename at spawn, so the reader
@@ -204,7 +204,7 @@ def test_all_callers_resolve_same_dir(tmp_path, monkeypatch):
       - lib.session.session_dir (the seam itself)
       - fan_out._log_dir_for
       - log.py _session_dir (via _log_root + _repo)
-      - mentat-session/session.py _session_dir (via _log_root + _repo)
+      - mentat-track/agent.py _agent_dir (via _log_root + _repo)
     implement._logs_path is tested separately below (needs MENTAT_SESSION env).
     """
     base = str(tmp_path)
@@ -229,9 +229,9 @@ def test_all_callers_resolve_same_dir(tmp_path, monkeypatch):
     log_mod = _load_log()
     assert log_mod._session_dir(tmp_path, repo, sid) == expected, "log._session_dir diverges from seam"
 
-    # mentat-session/session.py _session_dir
+    # mentat-track/agent.py _agent_dir
     mss = _load_mentat_session_py()
-    assert mss._session_dir(repo, sid) == expected, "mentat-session/session._session_dir diverges from seam"
+    assert mss._agent_dir(repo, sid) == expected, "mentat-track/agent._agent_dir diverges from seam"
 
 
 def test_session_dir_slash_is_flattened(tmp_path, monkeypatch):

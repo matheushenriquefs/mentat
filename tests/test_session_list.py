@@ -1,4 +1,4 @@
-"""S6 — `mentat-session list`: repo-wide agent registry from the canonical store."""
+"""S6 — `mentat-track list`: repo-wide agent registry from the canonical store."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from unittest.mock import patch
 from tests.conftest import load_script, seed_agent_events
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = REPO_ROOT / ".agents/skills/mentat-session/scripts"
+SCRIPTS = REPO_ROOT / ".agents/skills/mentat-track/scripts"
 sys.path.insert(0, str(REPO_ROOT / ".agents"))
 from lib import harness_stream  # noqa: E402
 
@@ -55,13 +55,13 @@ def _ev(event: str, epoch: float, **payload) -> dict:
 
 
 def test_derive_status_terminal_is_idle():
-    sessions = load_module("sessions")
+    sessions = load_module("registry")
     assert sessions.derive_status(_ev("chunk_landed", 0, slug="x", sha="a", holding="h"), 9999.0) == "idle"
     assert sessions.derive_status(_ev("agent_stopped", 0, reason="ok"), 9999.0) == "idle"
 
 
 def test_derive_status_nonterminal_fresh_is_working():
-    sessions = load_module("sessions")
+    sessions = load_module("registry")
     assert (
         sessions.derive_status(_ev("gate_evaluated", 0, gate="g", verdict="pass", severity="", message=""), 1.0)
         == "working"
@@ -69,19 +69,19 @@ def test_derive_status_nonterminal_fresh_is_working():
 
 
 def test_derive_status_nonterminal_stale_is_crashed():
-    sessions = load_module("sessions")
+    sessions = load_module("registry")
     age = sessions.STALE_SECS + 60
     assert sessions.derive_status(_ev("chunk_started", 0, slug="x", plan="p", harness="h", worktree="w"), age) == "?"
 
 
 def test_derive_status_hitl_eject_is_waiting():
-    sessions = load_module("sessions")
+    sessions = load_module("registry")
     row = _ev("chunk_ejected", 0, slug="x", reason="hitl_required", where="impl")
     assert sessions.derive_status(row, sessions.STALE_SECS + 999) == "waiting"
 
 
 def test_derive_status_waiting_stream_askuserquestion():
-    sessions = load_module("sessions")
+    sessions = load_module("registry")
     stream_row = {
         "type": "assistant",
         "message": {"content": [{"type": "tool_use", "name": "AskUserQuestion"}]},
@@ -90,7 +90,7 @@ def test_derive_status_waiting_stream_askuserquestion():
 
 
 def test_derive_status_empty_is_crashed_when_stale():
-    sessions = load_module("sessions")
+    sessions = load_module("registry")
     assert sessions.derive_status(None, sessions.STALE_SECS + 1) == "?"
 
 
@@ -100,7 +100,7 @@ def test_derive_status_empty_is_crashed_when_stale():
 def test_list_sessions_full_rank_order(tmp_path, monkeypatch):
     """All four ranks present and fully ordered waiting < idle < ? < working."""
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("sessions")
+    sessions = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     now = 1_000_000.0
     _write_log(
@@ -132,7 +132,7 @@ def test_list_sessions_full_rank_order(tmp_path, monkeypatch):
 def test_list_sessions_age_tiebreak_within_rank(tmp_path, monkeypatch):
     """Within one rank, the fresher (smaller age) session sorts first."""
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("sessions")
+    sessions = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     now = 1_000_000.0
     _write_log(
@@ -152,7 +152,7 @@ def test_list_sessions_age_tiebreak_within_rank(tmp_path, monkeypatch):
 def test_list_sessions_survives_vanished_file(tmp_path, monkeypatch):
     """Store-backed registry scan must not raise when log dirs are present."""
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("sessions")
+    sessions = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     _write_log(
         tmp_path,
@@ -165,7 +165,7 @@ def test_list_sessions_survives_vanished_file(tmp_path, monkeypatch):
 
 def test_list_sessions_killed_shows_crashed(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("sessions")
+    sessions = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     now = 9_999_999_999.0
     _write_log(
@@ -181,7 +181,7 @@ def test_list_sessions_killed_shows_crashed(tmp_path, monkeypatch):
 
 def test_list_sessions_empty_repo(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("sessions")
+    sessions = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     repo_dir.mkdir(parents=True)
     assert sessions.list_sessions(repo_dir, now=1.0) == []
@@ -189,7 +189,7 @@ def test_list_sessions_empty_repo(tmp_path, monkeypatch):
 
 def test_list_sessions_records_mtime_and_last_event(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("sessions")
+    sessions = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     event_ts = 1_234_500.0
     _write_log(
@@ -208,7 +208,7 @@ def test_list_sessions_records_mtime_and_last_event(tmp_path, monkeypatch):
 
 def test_cmd_list_renders_table(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    session = load_module("session")
+    session = load_module("track")
     _write_log(
         tmp_path,
         "implement-a-1",
@@ -226,14 +226,14 @@ def test_cmd_list_renders_table(tmp_path, monkeypatch):
 
 def test_cmd_list_no_sessions(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    session = load_module("session")
+    session = load_module("track")
     (tmp_path / "logs" / "myrepo").mkdir(parents=True)
     env = {"MENTAT_LOG_PATH": str(tmp_path / "logs"), "MENTAT_REPO": "myrepo"}
     buf = io.StringIO()
     with patch.dict(os.environ, env, clear=False), redirect_stdout(buf):
         rc = session.cmd_list()
     assert rc == 0
-    assert "no sessions" in buf.getvalue().lower()
+    assert "no agents" in buf.getvalue().lower()
 
 
 # ── V6: active_only filter + --all flag ──────────────────────────────────────
@@ -242,7 +242,7 @@ def test_cmd_list_no_sessions(tmp_path, monkeypatch):
 def test_list_sessions_active_only_drops_old_idle(tmp_path, monkeypatch):
     """active_only=True keeps working/waiting + recent idle, drops old idle + old crashed."""
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    sessions = load_module("sessions")
+    sessions = load_module("registry")
     repo_dir = tmp_path / "logs" / "myrepo"
     now = 1_000_000.0
     recency = sessions._RECENCY_SECS
@@ -297,8 +297,8 @@ def test_list_sessions_active_only_drops_old_idle(tmp_path, monkeypatch):
 def test_cmd_list_all_flag(tmp_path, monkeypatch):
     """cmd_list(all_sessions=True) shows old sessions; False hides them."""
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    session = load_module("session")
-    sessions = load_module("sessions")
+    session = load_module("track")
+    sessions = load_module("registry")
     recency = sessions._RECENCY_SECS
     now = 1_000_000.0
     env = {"MENTAT_LOG_PATH": str(tmp_path / "logs"), "MENTAT_REPO": "myrepo"}
@@ -321,14 +321,14 @@ def test_cmd_list_all_flag(tmp_path, monkeypatch):
 
 
 def test_build_parser_list_has_all_flag():
-    session = load_module("session")
+    session = load_module("track")
     p = session.build_parser()
     args = p.parse_args(["list", "--all"])
     assert args.all_sessions is True
 
 
 def test_build_parser_track_has_all_flag():
-    session = load_module("session")
+    session = load_module("track")
     p = session.build_parser()
     args = p.parse_args(["track", "--all"])
     assert args.all_sessions is True

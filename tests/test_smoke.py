@@ -81,7 +81,7 @@ def test_smoke_land_queue_emits_all_event_types(fixture_batch):
 
 
 def test_smoke_doctor_produces_clean_verdict(fixture_batch, tmp_path):
-    diagnose = load_module_from(REPO_ROOT / ".agents/skills/mentat-session/scripts/diagnose.py", "diagnose")
+    diagnose = load_module_from(REPO_ROOT / ".agents/skills/mentat-track/scripts/diagnose.py", "diagnose")
 
     from tests.conftest import seed_agent_events
 

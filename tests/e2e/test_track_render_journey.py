@@ -21,11 +21,37 @@ from tests.conftest import load_script
 
 pytestmark = pytest.mark.e2e
 
-TRACK_PY = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-session/scripts/track.py"
+TRACK_PY = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-track/scripts/track.py"
+SCRIPTS = TRACK_PY.parent
 
 
-def _track():
-    return load_script(TRACK_PY, "e2e_track")
+class _TrackFacade:
+    """Delegate to track/render/panes modules after the ES4 split."""
+
+    def __init__(self) -> None:
+        self._track = load_script(TRACK_PY, "e2e_track")
+        self._render = load_script(SCRIPTS / "render.py", "e2e_render")
+        self._panes = load_script(SCRIPTS / "panes.py", "e2e_panes")
+
+    def __setattr__(self, name: str, value) -> None:
+        if name in ("_track", "_render", "_panes"):
+            super().__setattr__(name, value)
+            return
+        for mod in (self._panes, self._render, self._track):
+            if hasattr(mod, name):
+                setattr(mod, name, value)
+                return
+        super().__setattr__(name, value)
+
+    def __getattr__(self, name: str):
+        for mod in (self._panes, self._render, self._track):
+            if hasattr(mod, name):
+                return getattr(mod, name)
+        raise AttributeError(name)
+
+
+def _track() -> _TrackFacade:
+    return _TrackFacade()
 
 
 def _assistant(*tool_names: str, text: str = "") -> dict:
@@ -106,7 +132,7 @@ def test_view_session_non_tty_prints_transcript(tmp_path, capsys):
     m = _track()
     sd = tmp_path / "sess"
     _write(sd, "session", [_assistant("Read", text="hi")])
-    m.view_session(sd)  # non-tty stdin → one-shot transcript print
+    m.view_agent(sd)  # non-tty stdin → one-shot transcript print
     assert "hi" in capsys.readouterr().out
 
 

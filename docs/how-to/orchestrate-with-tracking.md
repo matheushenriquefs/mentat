@@ -16,7 +16,7 @@ session.
 ## 2. Track the run
 
 ```
-/mentat-session track
+/mentat-track track
 ```
 
 With no session argument, `track` opens the live navigator over every session in the
@@ -30,7 +30,7 @@ current repository — one row per chunk, with status and last event. From there
 To follow one chunk directly, pass its session id:
 
 ```
-/mentat-session track <session-id>
+/mentat-track track <session-id>
 ```
 
 See [tracking a run](./tracking-a-run.md) for the full view reference.

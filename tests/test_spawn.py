@@ -100,7 +100,7 @@ def test_fan_out_stdout_emits_chunk_slugs_newline_delim(tmp_path):
 
 
 def test_fan_out_track_suggestion_is_bin_form(tmp_path):
-    """spawn_with_proc must print `mentat-session track <id>`, never `python3 ...`."""
+    """spawn_with_proc must print `mentat-track track <id>`, never `python3 ...`."""
     spawn = load_module("spawn")
     routing = load_module("scheduler")
     plan = routing.Plan(slug="p", kind="AFK", blocked_by=[], path=tmp_path / "p.md")
@@ -115,7 +115,7 @@ def test_fan_out_track_suggestion_is_bin_form(tmp_path):
             output = buf.getvalue()
 
     assert "python3" not in output, f"bin form must not contain python3: {output!r}"
-    assert "mentat-session track" in output, f"must use bin form; got: {output!r}"
+    assert "mentat-track track" in output, f"must use bin form; got: {output!r}"
     assert "sess-binform" in output, f"session id missing from track output: {output!r}"
 
 
@@ -153,7 +153,7 @@ def test_spawn_async_emits_prints_and_returns_process(tmp_path, monkeypatch):
     assert proc is fake_proc
     assert captured["new_session"] is True
     assert any("chunk_started" in c.args[0] for c in mock_emit.call_args_list)
-    assert "mentat-session track sess-async" in output
+    assert "mentat-track track sess-async" in output
     assert "sess-async" in output
 
 

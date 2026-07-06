@@ -2,25 +2,28 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
 from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parents[1]
-_SESSIONS_SCRIPTS = _SCRIPTS.parent / "mentat-session" / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
-if str(_SESSIONS_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_SESSIONS_SCRIPTS))
 
-import sessions  # noqa: E402
+_TRACK_REGISTRY = Path(__file__).resolve().parents[3] / "mentat-track" / "scripts" / "registry.py"
+_spec = importlib.util.spec_from_file_location("mentat_track_registry", _TRACK_REGISTRY)
+_track_registry = importlib.util.module_from_spec(_spec)
+assert _spec.loader is not None
+_spec.loader.exec_module(_track_registry)
+
 from harness import Result
 
 
 def _parse_usage(log_path: Path) -> int | None:
     """Parse total tokens (input + output) from a stream-json session log."""
-    for event in sessions.iter_rows(log_path):
+    for event in _track_registry.iter_rows(log_path):
         if event.get("type") == "result":
             usage = event.get("usage", {})
             input_t = usage.get("input_tokens", 0)
@@ -41,7 +44,7 @@ def invoke(
     Reads MENTAT_SESSION_LOG from env (set by mentat-orchestrate spawn). When
     set the run is captured: claude gets --output-format stream-json --verbose,
     and stdout is redirected into <session_log>. Result.session_log carries the
-    path back so the self-answer detector and mentat-session track can read it.
+    path back so the self-answer detector and mentat-track track can read it.
 
     afk=True → --disallowedTools AskUserQuestion (AFK contract).
     seed_summary → prepended to prompt for seeded fresh-session continuity.

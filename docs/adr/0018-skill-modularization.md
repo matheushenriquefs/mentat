@@ -6,7 +6,7 @@ Date: 2026-07-06
 ## Context
 
 Several skill `scripts/` modules grew into god-files (`orchestrate.py` ~1300 LOC,
-`track.py` ~600, `container.py` ~670 with `compose_render.py`). `lib/` is already
+`track.py` ~600, `container.py` ~670 with `override.py`). `lib/` is already
 well-factored. The owner wants each skill's `scripts/` to be a private workspace of
 scoped submodules with factories and sub-packages — bebop-level internal structure —
 and every module/class/function renamed per [`.agents/rules/naming.md`](../../.agents/rules/naming.md).
@@ -36,13 +36,13 @@ Test layout mirrors source: `test_spawn.py`, `test_landing.py`, `test_supervise.
 | Submodule | Responsibility | Source today |
 |---|---|---|
 | `container.py` | CLI entry, argparse | thin shell |
-| `client.py` | `ContainerService` — docker/devcontainer exec | `container_ops.py` (rename) |
-| `override.py` | RI2 override-config generation | `compose_render.py` (rename) |
+| `client.py` | `ContainerService` — docker/devcontainer exec | `client.py` (rename) |
+| `override.py` | RI2 override-config generation | `override.py` (rename) |
 | `lifecycle.py` | `cmd_up`, `cmd_down`, safe-directory, identity | extracted from `container.py` |
 | `runtime.py` | Host-vs-container runtime select, env scrub | extracted from `container.py` |
 | `doctor.py` | `cmd_doctor` sections | extracted from `container.py` |
 
-### Track skill (`mentat-session/` → `mentat-track/`)
+### Track skill (`mentat-track/` → `mentat-track/`)
 
 | Submodule | Responsibility | Source today |
 |---|---|---|
@@ -54,7 +54,7 @@ Test layout mirrors source: `test_spawn.py`, `test_landing.py`, `test_supervise.
 
 Entity rename during split: `view_session`→`view_agent`, `SessionRecord`→`Agent`,
 `SessionStatus`→`AgentStatus = Literal[...]`, `_resolve_session`→`_resolve_agent`.
-Skill dir `mentat-session/` → `mentat-track/`; install symlinks and evals follow.
+Skill dir `mentat-track/` → `mentat-track/`; install symlinks and evals follow.
 
 ### Shared lib moves
 
@@ -71,12 +71,12 @@ Skill dir `mentat-session/` → `mentat-track/`; install symlinks and evals foll
 |---|---|
 | `fan_out.py` | `spawn.py` |
 | `land_queue.py` | `landing.py` |
-| `compose_render.py` | `override.py` |
-| `container_ops.py` | `client.py` (`ContainerService`) |
+| `override.py` | `override.py` |
+| `client.py` | `client.py` (`ContainerService`) |
 | `harness_stream.py` | `lib/harness/schema.py` |
 | `harness_utils.py` | `harness/utils.py` |
 | install `render.py` | `report.py` |
-| skill `mentat-session/` | `mentat-track/` |
+| skill `mentat-track/` | `mentat-track/` |
 
 Function-level renames are owned by their feature plans and are **not** duplicated
 here: `mentat-log query`→`list` (drift-guardrail), `next_ready`→`list_ready_slices`
@@ -108,7 +108,7 @@ Held-state resources become `<Thing>Service`: `ContainerService`, `GitService`,
 
 - Public CLI paths unchanged; importers update to new module names.
 - `test_orchestrate.py` and `test_implement.py` monoliths split to mirror modules.
-- `mentat-session` skill name retires; docs, install symlinks, and evals reference
+- `mentat-track` skill name retires; docs, install symlinks, and evals reference
   `mentat-track` only.
 - `lib/support/` is optional grouping — core subsystems (`git`, `events`, `store`)
   stay top-level `lib/` modules.

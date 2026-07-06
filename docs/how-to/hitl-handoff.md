@@ -22,8 +22,8 @@ A wedged chunk surfaces in the registry and prints a hitl-required ejection. Con
 it and read the blocker:
 
 ```
-/mentat-session list
-/mentat-session report <session-id>
+/mentat-track list
+/mentat-track report <session-id>
 ```
 
 `report` renders the `summary.md` the agent wrote, including the question and the

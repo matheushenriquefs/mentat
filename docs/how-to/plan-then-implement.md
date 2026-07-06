@@ -39,7 +39,7 @@ What the run does, in order:
 ## 3. Handle a stop
 
 - **Gate failure** → the run exits non-zero, the worktree is preserved, and
-  `mentat-session doctor` is spawned to write a diagnosis. See [doctor](./doctor.md).
+  `mentat-track doctor` is spawned to write a diagnosis. See [doctor](./doctor.md).
 - **A HITL slice** → the run hands control back to your session at the decision
   point rather than guessing. See [hitl-handoff](./hitl-handoff.md).
 
@@ -54,5 +54,5 @@ git checkout main && git merge --ff-only holding/add-csv-export
 
 - One plan slug per `mentat-implement` run. Passing more than one is refused — use
   [orchestrate](./plan-then-orchestrate.md) for multiple plans.
-- The run prints `mentat-session track <session>` at the start so you can watch it
+- The run prints `mentat-track track <session>` at the start so you can watch it
   from another session. See [tracking a run](./tracking-a-run.md).

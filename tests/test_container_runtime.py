@@ -23,7 +23,7 @@ def _container():
 
 
 def _ops():
-    return load_script(SCRIPTS / "container_ops.py", "container_ops")
+    return load_script(SCRIPTS / "client.py", "client")
 
 
 class _R:

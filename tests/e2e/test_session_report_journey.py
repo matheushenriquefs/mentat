@@ -1,4 +1,4 @@
-"""E2E: mentat-session report / doctor / diagnose / list over real seeded sessions.
+"""E2E: mentat-track report / doctor / diagnose / list over real seeded sessions.
 
 Drives the actual ``session.py`` command layer in-process over real audit trees under a
 temp log root: ``report`` (success-side summary for landed + ejected outcomes and the
@@ -27,9 +27,9 @@ if str(_AGENTS) not in sys.path:
     sys.path.insert(0, str(_AGENTS))
 from lib import store  # noqa: E402
 
-SESSION_DIR = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-session/scripts"
-SESSION_PY = SESSION_DIR / "session.py"
+SESSION_DIR = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-track/scripts"
 TRACK_PY = SESSION_DIR / "track.py"
+RENDER_PY = SESSION_DIR / "render.py"
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def repo_log(tmp_path, monkeypatch):
 
 
 def _session():
-    return load_script(SESSION_PY, "e2e_session")
+    return load_script(TRACK_PY, "e2e_track_cli")
 
 
 def _seed_session(
@@ -216,7 +216,7 @@ def test_list_empty_repo_reports_none(repo_log, capsys):
     _, _ = repo_log
     s = _session()
     assert s.cmd_list(all_sessions=False) == 0
-    assert "no sessions" in capsys.readouterr().out
+    assert "no agents" in capsys.readouterr().out
 
 
 def test_report_missing_session_errors(repo_log, capsys):
@@ -231,7 +231,7 @@ def test_doctor_no_sessions_errors(repo_log, capsys):
     s = _session()
     # Empty repo dir → latest_session None → error path.
     assert s.cmd_doctor(None) == 1
-    assert "no sessions found" in capsys.readouterr().err
+    assert "no agents found" in capsys.readouterr().err
 
 
 def test_track_single_session_view(repo_log, capsys, tmp_path, monkeypatch):
@@ -276,7 +276,7 @@ def test_track_navigator_oneshot_lists_registry(repo_log, capsys, monkeypatch, t
 
 def test_track_render_helpers_over_real_streams(repo_log, tmp_path):
     log_root, repo = repo_log
-    track = load_script(TRACK_PY, "e2e_track")
+    track = load_script(RENDER_PY, "e2e_render")
     sd = _seed_session(tmp_path, log_root, repo, "orchestrate-main-8", _EJECTED)
     (sd / "session.jsonl").write_text(
         json.dumps(

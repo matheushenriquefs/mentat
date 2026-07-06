@@ -38,7 +38,7 @@ def test_compute_plan_over_fresh_home_adds_symlinks(tmp_path):
     add_targets = {str(a.target) for a in result.add}
     assert any(t.endswith(".mentat/config.toml") for t in add_targets), "config must be planned"
     assert any(t.endswith(".mentat") for t in add_targets), "mentat dir must be planned"
-    assert any("/.agents/skills/mentat-session" in t for t in add_targets), "skill symlink must be planned"
+    assert any("/.agents/skills/mentat-track" in t for t in add_targets), "skill symlink must be planned"
     # No harness dirs present → their fanout is skipped, not added.
     assert result.skipped, "absent .claude/.cursor harness dirs are skipped"
     assert not result.conflicts, "a clean fresh HOME has no conflicts"
@@ -53,7 +53,7 @@ def test_compute_plan_flags_a_real_file_conflict(tmp_path):
     home = tmp_path / "home"
     (home / ".agents" / "skills").mkdir(parents=True)
     # A real (non-symlink) file where a skill symlink should go → conflict.
-    conflict_target = home / ".agents" / "skills" / "mentat-session"
+    conflict_target = home / ".agents" / "skills" / "mentat-track"
     conflict_target.write_text("not a symlink\n")
 
     result = plan.compute_plan(home, REPO_ROOT)
@@ -69,16 +69,16 @@ def test_compute_plan_detects_settled_symlink_as_no_op(tmp_path):
     skills = home / ".agents" / "skills"
     skills.mkdir(parents=True)
     # Materialize the exact symlink compute_plan wants → it must not re-add it.
-    target = skills / "mentat-session"
-    target.symlink_to(REPO_ROOT / ".agents" / "skills" / "mentat-session")
+    target = skills / "mentat-track"
+    target.symlink_to(REPO_ROOT / ".agents" / "skills" / "mentat-track")
 
     result = plan.compute_plan(home, REPO_ROOT)
     add_targets = {str(a.target) for a in result.add}
-    assert not any(t.endswith("/.agents/skills/mentat-session") for t in add_targets), (
+    assert not any(t.endswith("/.agents/skills/mentat-track") for t in add_targets), (
         "a correctly-linked skill is neither re-added nor updated"
     )
     update_targets = {str(a.target) for a in result.update}
-    assert not any(t.endswith("/.agents/skills/mentat-session") for t in update_targets)
+    assert not any(t.endswith("/.agents/skills/mentat-track") for t in update_targets)
 
 
 def test_compute_plan_flags_wrong_symlink_as_update(tmp_path):
@@ -89,12 +89,12 @@ def test_compute_plan_flags_wrong_symlink_as_update(tmp_path):
     # A symlink pointing somewhere stale → planned as an update.
     stale_src = tmp_path / "stale"
     stale_src.mkdir()
-    target = skills / "mentat-session"
+    target = skills / "mentat-track"
     target.symlink_to(stale_src)
 
     result = plan.compute_plan(home, REPO_ROOT)
     update_targets = {str(a.target) for a in result.update}
-    assert any(t.endswith("/.agents/skills/mentat-session") for t in update_targets), (
+    assert any(t.endswith("/.agents/skills/mentat-track") for t in update_targets), (
         "a symlink pointing at the wrong source must be re-pointed (update)"
     )
 

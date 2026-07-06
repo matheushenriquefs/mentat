@@ -12,7 +12,7 @@ _SKILL_NAMES = [
     "mentat-orchestrate",
     "mentat-skill",
     "mentat-git",
-    "mentat-session",
+    "mentat-track",
     "mentat-install",
     "mentat-tasks",
     "mentat-prd",

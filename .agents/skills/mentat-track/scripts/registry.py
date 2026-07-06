@@ -1,4 +1,4 @@
-"""Session directory helpers."""
+"""Agent registry: repo-wide list/filter, status derivation, AgentDAO wire-up."""
 
 from __future__ import annotations
 
@@ -7,15 +7,18 @@ import json
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import Literal, TypedDict, cast
 
 
-class SessionRecord(TypedDict):
+class Agent(TypedDict):
     session: str
     status: str
     mtime: float
     age: float
     last_event: str | None
+
+
+AgentStatus = Literal["waiting", "idle", "?", "working"]
 
 
 _AGENTS_ROOT = Path(__file__).resolve().parents[3]
@@ -25,15 +28,15 @@ if str(_AGENTS_ROOT) not in sys.path:
 from lib import harness_stream  # noqa: E402
 from lib.events import HITL_REQUIRED  # noqa: E402
 
-# Terminal audit events — a session whose newest tail is one of these is done, not crashed.
+# Terminal audit events — an agent whose newest tail is one of these is done, not crashed.
 TERMINAL_EVENTS = frozenset({"chunk_landed", "chunk_teardown", "batch_reviewed", "agent_stopped"})
 # chunk_ejected is terminal too, but a hitl_required eject needs an operator → waiting.
 _WAITING_EJECT_REASONS = frozenset({HITL_REQUIRED})
 
-# No activity for this long with a non-terminal tail = the session crashed silently.
+# No activity for this long with a non-terminal tail = the agent crashed silently.
 STALE_SECS = 300
 
-# Sessions idle/crashed for longer than this are hidden in the default active view.
+# Agents idle/crashed for longer than this are hidden in the default active view.
 _RECENCY_SECS = 86400  # 24 hours
 
 # Attention-to-top: lower rank shown first.
@@ -41,7 +44,7 @@ STATUS_RANK = {"waiting": 0, "idle": 1, "?": 2, "working": 3}
 
 
 def _humanize_age(age_secs: float) -> str:
-    """Coarse 'N{s,m,h,d} ago' bucket for a session's idle age.
+    """Coarse 'N{s,m,h,d} ago' bucket for an agent's idle age.
 
     Lives here so the registry list (`cmd_list`) and the navigator list pane
     (`render_list`) share one impl — no duplicate.
@@ -85,14 +88,14 @@ def iter_rows(log_file: Path) -> Iterator[dict[str, object]]:
         yield from iter_rows_from_text(log_file.read_text())
 
 
-def all_events(session_dir: Path) -> list[dict[str, object]]:
-    return list_events(session_dir)
+def all_events(agent_dir: Path) -> list[dict[str, object]]:
+    return list_events(agent_dir)
 
 
-def list_events(session_dir: Path) -> list[dict[str, object]]:
+def list_events(agent_dir: Path) -> list[dict[str, object]]:
     from lib import store
 
-    return store.list_events(session_dir.name)
+    return store.list_events(agent_dir.name)
 
 
 # ── repo-wide registry (list_agents reads the canonical store) ───────────────
@@ -111,11 +114,13 @@ def _is_waiting_stream(row: dict[str, object]) -> bool:
     return harness_stream.is_ask_user_question(row)
 
 
-def derive_status(row: dict[str, object] | None, age_secs: float | None, *, stale_secs: float = STALE_SECS) -> str:
+def derive_status(
+    row: dict[str, object] | None, age_secs: float | None, *, stale_secs: float = STALE_SECS
+) -> AgentStatus:
     """Map a single representative row + freshness to working / waiting / idle / ? (crashed).
 
     `row` is an audit row (`event` key) or a harness stream row (`type` key). `age_secs` is
-    seconds since the session was last active. Pure — `session_status` picks the right row.
+    seconds since the agent was last active. Pure — `AgentScan` picks the right row.
     """
     is_stale = age_secs is None or age_secs > stale_secs
     if row is not None:
@@ -138,7 +143,7 @@ def _status_from_signals(
     age_secs: float | None,
     *,
     stale_secs: float = STALE_SECS,
-) -> str:
+) -> AgentStatus:
     """Classify from already-read signals: audit tail row + newest-file tail row.
 
     Terminal/eject audit event wins regardless of file mtime. Otherwise an
@@ -152,16 +157,16 @@ def _status_from_signals(
     return derive_status(audit if audit is not None else newest_tail, age_secs, stale_secs=stale_secs)
 
 
-class SessionStatus:
-    """Fused single-pass scan for one session directory.
+class AgentScan:
+    """Fused single-pass scan for one agent directory.
 
     One pass per jsonl finds both the audit tail and the newest-file tail.
     Memoized — safe to construct once and query many times.
     Falls back to directory mtime when no jsonl files exist.
     """
 
-    def __init__(self, session_dir: Path, now: float, *, stale_secs: float = STALE_SECS) -> None:
-        self._dir = session_dir
+    def __init__(self, agent_dir: Path, now: float, *, stale_secs: float = STALE_SECS) -> None:
+        self._dir = agent_dir
         self._now = now
         self._stale_secs = stale_secs
         self._scanned = False
@@ -206,7 +211,7 @@ class SessionStatus:
         self._scan()
         return self._newest_tail
 
-    def derive(self) -> str:
+    def derive(self) -> AgentStatus:
         """Classification string: working / waiting / idle / ? — one entry point."""
         self._scan()
         age = max(0.0, self._now - self._mtime) if self._mtime is not None else None
@@ -224,7 +229,7 @@ def list_sessions(
     now: float | None = None,
     stale_secs: float = STALE_SECS,
     active_only: bool = True,
-) -> list[SessionRecord]:
+) -> list[Agent]:
     return list_agents(repo_dir, now=now, stale_secs=stale_secs, active_only=active_only)
 
 
@@ -234,34 +239,34 @@ def list_agents(
     now: float | None = None,
     stale_secs: float = STALE_SECS,
     active_only: bool = True,
-) -> list[SessionRecord]:
+) -> list[Agent]:
     from lib import store
 
     rows = store.list_track_entries(repo_dir.name, active_only=active_only, now=now)
-    return [cast("SessionRecord", r) for r in rows]
+    return [cast("Agent", r) for r in rows]
 
 
-def session_stream_tools(session_dir: Path, *, limit: int = 20) -> list[str]:
-    """The last `limit` harness tool-call names from a session's stream (preview pane).
+def agent_stream_tools(agent_dir: Path, *, limit: int = 20) -> list[str]:
+    """The last `limit` harness tool-call names from an agent's stream (preview pane).
 
     Reads the harness transcript (`transcript.jsonl`, legacy `session.jsonl`). Only
     assistant tool_use blocks count. Order is the file's append order.
     """
     names: list[str] = []
-    for f in sorted(session_dir.glob("*.jsonl")):
+    for f in sorted(agent_dir.glob("*.jsonl")):
         for row in iter_rows(f):
             names.extend(harness_stream.tool_uses(row))
     return names[-limit:]
 
 
-def session_worktree(session_dir: Path) -> str | None:
-    """The worktree path this session was spawned into (from its `chunk_started` audit), or None.
+def agent_worktree(agent_dir: Path) -> str | None:
+    """The worktree path this agent was spawned into (from its `chunk_started` audit), or None.
 
-    The kill bind needs the worktree to tear down; the session log dir is not the
+    The kill bind needs the worktree to tear down; the agent log dir is not the
     worktree. Returns the `worktree` field of the latest spawn event by ts.
     """
     worktree: str | None = None
-    for ev in all_events(session_dir):
+    for ev in all_events(agent_dir):
         if ev.get("event") == "chunk_started":
             payload = ev.get("payload")
             if isinstance(payload, dict):
@@ -271,17 +276,21 @@ def session_worktree(session_dir: Path) -> str | None:
     return worktree
 
 
-def _build_record(sub: Path, clock: float, stale_secs: float) -> SessionRecord | None:
-    """One session's status record, or None if it vanished mid-scan."""
-    ss = SessionStatus(sub, clock, stale_secs=stale_secs)
-    mtime = ss.mtime
+def _build_record(sub: Path, clock: float, stale_secs: float) -> Agent | None:
+    """One agent's status record, or None if it vanished mid-scan."""
+    scan = AgentScan(sub, clock, stale_secs=stale_secs)
+    mtime = scan.mtime
     if mtime is None:
         return None
     age = max(0.0, clock - mtime)
     return {
         "session": sub.name,
-        "status": ss.derive(),
+        "status": scan.derive(),
         "mtime": mtime,
         "age": age,
-        "last_event": _event_name(ss.audit_tail),
+        "last_event": _event_name(scan.audit_tail),
     }
+
+
+session_stream_tools = agent_stream_tools
+session_worktree = agent_worktree

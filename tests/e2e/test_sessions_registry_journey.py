@@ -19,7 +19,7 @@ from tests.conftest import load_script, seed_agent_events
 
 pytestmark = pytest.mark.e2e
 
-SESSIONS_PY = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-session/scripts/sessions.py"
+SESSIONS_PY = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-track/scripts/registry.py"
 
 
 def _sessions():

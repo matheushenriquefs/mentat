@@ -15,7 +15,7 @@ from tests.conftest import load_script, seed_agent_events
 pytestmark = pytest.mark.e2e
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DIAGNOSE_PY = REPO_ROOT / ".agents/skills/mentat-session/scripts/diagnose.py"
+DIAGNOSE_PY = REPO_ROOT / ".agents/skills/mentat-track/scripts/diagnose.py"
 
 
 def _diagnose():

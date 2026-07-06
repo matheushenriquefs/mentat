@@ -1,4 +1,4 @@
-"""C1 — sidecar-aware workspace detection in compose_render._parse_compose_service.
+"""C1 — sidecar-aware workspace detection in override._parse_compose_service.
 
 A service counts as the workspace only when it has `build` or a *source-tree* mount
 (the worktree root: `.`/`./`/`..`/`$PWD`). A bind-mount of a single config file
@@ -22,7 +22,7 @@ _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 @pytest.fixture
 def cr():
-    return load_script(_SCRIPTS / "compose_render.py", "compose_render")
+    return load_script(_SCRIPTS / "override.py", "override")
 
 
 # --- sidecar-only → typed signal -------------------------------------------------
@@ -186,7 +186,7 @@ def test_real_volume_mount_still_resolves_with_env_present(cr):
 
 
 def test_resolve_platform_env_override(cr, monkeypatch):
-    """MENTAT_PLATFORM override wins (compose_render 36-37 covered elsewhere; 130 here)."""
+    """MENTAT_PLATFORM override wins (override 36-37 covered elsewhere; 130 here)."""
     monkeypatch.setenv("MENTAT_PLATFORM", "linux/custom")
     assert cr._resolve_platform() == "linux/custom"
 

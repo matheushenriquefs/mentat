@@ -43,7 +43,7 @@ def fake_clone(tmp_path: Path) -> Path:
         "mentat-orchestrate",
         "mentat-skill",
         "mentat-git",
-        "mentat-session",
+        "mentat-track",
         "mentat-install",
     ):
         (clone / ".agents" / "skills" / skill).mkdir(parents=True)

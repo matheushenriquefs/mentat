@@ -87,7 +87,7 @@ def test_compute_plan_symlinks_all_11_skills(tmp_path):
         "mentat-orchestrate",
         "mentat-skill",
         "mentat-git",
-        "mentat-session",
+        "mentat-track",
         "mentat-install",
         "mentat-tasks",
         "mentat-prd",

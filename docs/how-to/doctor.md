@@ -4,7 +4,7 @@ Task-oriented. Goal: understand why a chunk ejected or failed, using the doctor.
 
 ## What doctor is
 
-`mentat-session doctor` reads a session's audit log and writes a `diagnosis.md`
+`mentat-track doctor` reads a session's audit log and writes a `diagnosis.md`
 into that session's log directory — a verdict on what the chunk attempted, what
 happened, and the suspected cause. It is the death-side counterpart to `report`,
 which writes the success-side summary.
@@ -21,7 +21,7 @@ chunk usually already has a `diagnosis.md` waiting; you rarely invoke doctor by 
 List the repository's sessions and their statuses:
 
 ```
-/mentat-session list
+/mentat-track list
 ```
 
 An ejected or failed chunk stands out by its status.
@@ -29,7 +29,7 @@ An ejected or failed chunk stands out by its status.
 ## 2. Read the diagnosis
 
 ```
-/mentat-session doctor <session-id>
+/mentat-track doctor <session-id>
 ```
 
 With no session id, doctor falls back to the most recent session in the repository.
@@ -41,7 +41,7 @@ later reading.
 For a guided loop that runs doctor first and walks the evidence:
 
 ```
-/mentat-session diagnose <session-id>
+/mentat-track diagnose <session-id>
 ```
 
 ## 4. Act on the verdict
@@ -55,4 +55,4 @@ For a guided loop that runs doctor first and walks the evidence:
 - One diagnosis per session — re-running doctor overwrites it.
 - The diagnosis lives beside the events it explains (`diagnosis.md` next to the
   session's audit log), so one directory holds both verdict and evidence.
-- To read the success side of a clean run instead, use `/mentat-session report`.
+- To read the success side of a clean run instead, use `/mentat-track report`.

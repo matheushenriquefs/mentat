@@ -103,4 +103,4 @@ with the pending list; orchestrate exits 1.
 Shell bins `mentat-fan-out`, `mentat-land-queue`, `mentat-batch-review` replaced by
 debug subcommands. Old ADRs 0010, 0011, 0012 archived. Docker required per worktree.
 Track prompt prints immediately after spawn (not at end) so user can monitor while
-anchored plans run. `mentat-session track` remains the live view.
+anchored plans run. `mentat-track track` remains the live view.

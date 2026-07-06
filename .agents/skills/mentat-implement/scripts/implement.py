@@ -20,7 +20,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 from lib import paths  # noqa: E402
 
-_SESSION_SCRIPT = paths.SKILLS_DIR / "mentat-session/scripts/session.py"
+_SESSION_SCRIPT = paths.SKILLS_DIR / "mentat-track/scripts/session.py"
 _GIT_SCRIPT = paths.SKILLS_DIR / "mentat-git/scripts/git.py"
 _GIT_WORKTREE_PY = paths.SKILLS_DIR / "mentat-git/scripts/worktree.py"
 
@@ -243,7 +243,7 @@ def _run_session_cmd(subcmd: str) -> None:
 
 
 def _auto_doctor() -> None:
-    """Spawn mentat-session doctor on death. Open $EDITOR on the diagnosis only when
+    """Spawn mentat-track doctor on death. Open $EDITOR on the diagnosis only when
     attached to a TTY — a headless/AFK child inherits $EDITOR but has no terminal, so
     launching a terminal editor (vim) on a pipe blocks the child until its wall-deadline
     kill. The doctor diagnosis is always written; only the interactive open is gated."""
@@ -441,7 +441,7 @@ def _read_blocked_summary(worktree: Path) -> str | None:
 
 def _promote_blocked_summary(body: str) -> None:
     """Ensure the blocker body is in the session log dir's summary.md so
-    ``mentat-session report`` surfaces it. Agent already writes there on a wedge;
+    ``mentat-track report`` surfaces it. Agent already writes there on a wedge;
     this covers the self-answer case where it never wrote the file."""
     seam = _blocked_summary_path()
     target = seam if seam is not None else _session_dir_fn(os.environ.get("MENTAT_SESSION", "manual")) / SUMMARY_FILE
@@ -689,7 +689,7 @@ def main() -> None:
     # in the main worktree so MENTAT_REPO resolves to the repo, not the slug dir.
     ensure_session("implement", slug)
     session_id = os.environ.get("MENTAT_SESSION", slug)
-    print(f"mentat-implement: track this run with `mentat-session track {session_id}`", file=sys.stderr)
+    print(f"mentat-implement: track this run with `mentat-track track {session_id}`", file=sys.stderr)
     _prune_worktrees_preflight()
     harness = _utils.default_harness()
     reuse_worktree = bool(getattr(args, "reuse_worktree", False))

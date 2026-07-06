@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-import sessions
+from tests.conftest import load_script, seed_agent_events
 
-from tests.conftest import seed_agent_events
+SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-track/scripts"
+sessions = load_script(SCRIPTS / "registry.py", "registry")
 
 
 def _ts(epoch: float) -> str:

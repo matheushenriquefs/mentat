@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""mentat-session — track / doctor / diagnose."""
+"""mentat-track — track / list / doctor / diagnose."""
 
 from __future__ import annotations
 
@@ -20,72 +20,53 @@ from lib.session import log_root as _log_root  # noqa: E402
 from lib.session import repo_name as _repo
 from lib.session import resolve_agent_dir as _resolve_agent_dir
 
-_sessions = load_sibling(__file__, "sessions")
-_track = load_sibling(__file__, "track")
+_registry = load_sibling(__file__, "registry")
+_render = load_sibling(__file__, "render")
+_panes = load_sibling(__file__, "panes")
+_agent = load_sibling(__file__, "agent")
 _diagnose = load_sibling(__file__, "diagnose")
 
 
-def _session_dir(repo: str, session_id: str) -> Path:
-    """Preserved for test assertions; delegates to the seam."""
-    return _log_root() / repo / session_id
+_humanize_age = _registry._humanize_age
 
 
 def cmd_track(session_id: str | None, all_sessions: bool = False) -> int:
     repo = _repo()
     repo_dir = _log_root() / repo
     if session_id is None:
-        return _track.navigate(repo_dir, repo=repo, active_only=not all_sessions)
+        return _panes.navigate(repo_dir, repo=repo, active_only=not all_sessions)
     agent = _store.get_agent(session_id)
     if agent is None:
-        print(f"mentat-session: agent not found: {session_id}", file=sys.stderr)
+        print(f"mentat-track: agent not found: {session_id}", file=sys.stderr)
         return 1
-    sd = _resolve_agent_dir(session_id) or _agent_dir_fn(session_id)
-    sd.mkdir(parents=True, exist_ok=True)
-    _track.view_session(sd)
+    ad = _resolve_agent_dir(session_id) or _agent_dir_fn(session_id)
+    ad.mkdir(parents=True, exist_ok=True)
+    _render.view_agent(ad)
     return 0
 
 
-def _resolve_session(session_id: str | None) -> Path | int:
-    """Resolve session_id to an existing session dir, or return an exit code."""
-    repo = _repo()
-    sd = _resolve_agent_dir(session_id) if session_id else None
-    if session_id is not None and sd is None:
-        sd = _agent_dir_fn(session_id)
-    if session_id is None:
-        session_id = _store.get_latest_agent(repo)
-    if session_id is None:
-        print("mentat-session: no sessions found", file=sys.stderr)
-        return 1
-    if sd is None:
-        sd = _resolve_agent_dir(session_id) or _agent_dir_fn(session_id)
-    if not sd.exists():
-        print(f"mentat-session: session dir not found: {sd}", file=sys.stderr)
-        return 1
-    return sd
-
-
 def cmd_doctor(session_id: str | None) -> int:
-    sd = _resolve_session(session_id)
-    if isinstance(sd, int):
-        return sd
-    print(_diagnose.build_verdict(sd))
+    ad = _agent._resolve_agent(session_id)
+    if isinstance(ad, int):
+        return ad
+    print(_diagnose.build_verdict(ad))
     return 0
 
 
 def cmd_report(session_id: str | None) -> int:
     """Render the success-side report-back summary. Operator sees what an AFK
-    session implemented without asking the main harness."""
-    sd = _resolve_session(session_id)
-    if isinstance(sd, int):
-        return sd
-    summary = _diagnose.write_summary(sd)
+    agent implemented without asking the main harness."""
+    ad = _agent._resolve_agent(session_id)
+    if isinstance(ad, int):
+        return ad
+    summary = _diagnose.write_summary(ad)
     print(summary.read_text())
     return 0
 
 
-# Age humanizer lives in the sessions lib so cmd_list and the navigator share one
-# impl; re-exported here under the name test_session.py and cmd_list reach for.
-_humanize_age = _sessions._humanize_age
+# Age humanizer lives in the registry lib so cmd_list and the navigator share one
+# impl; re-exported here under the name test_track.py and cmd_list reach for.
+_humanize_age = _registry._humanize_age
 
 
 # ASCII status markers (no emoji — shares the tui.py vocabulary).
@@ -97,7 +78,7 @@ def cmd_list(all_sessions: bool = False) -> int:
     repo = _repo()
     rows = _store.list_track_entries(repo, active_only=not all_sessions)
     if not rows:
-        print(f"mentat-session: no sessions for {repo}")
+        print(f"mentat-track: no agents for {repo}")
         return 0
     width = max(len(r["session"]) for r in rows)
     for r in rows:
@@ -108,15 +89,15 @@ def cmd_list(all_sessions: bool = False) -> int:
 
 
 def cmd_diagnose(session_id: str | None) -> int:
-    sd = _resolve_session(session_id)
-    if isinstance(sd, int):
-        return sd
-    _diagnose.run_diagnose(sd)
+    ad = _agent._resolve_agent(session_id)
+    if isinstance(ad, int):
+        return ad
+    _diagnose.run_diagnose(ad)
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="mentat-session")
+    p = argparse.ArgumentParser(prog="mentat-track")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     list_p = sub.add_parser("list", help="Repo-wide session registry (attention-ordered)")

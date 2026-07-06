@@ -13,13 +13,18 @@ from pathlib import Path
 from tests.conftest import load_script, seed_agent_events
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = REPO_ROOT / ".agents/skills/mentat-session/scripts"
+SCRIPTS = REPO_ROOT / ".agents/skills/mentat-track/scripts"
 sys.path.insert(0, str(REPO_ROOT / ".agents"))
 from lib import harness_stream, tui  # noqa: E402
 
 
 def load_module(name: str):
     return load_script(SCRIPTS / f"{name}.py", name)
+
+
+panes = load_module("panes")
+render = load_module("render")
+registry = load_module("registry")
 
 
 def _assistant(*tool_names: str, text: str = "") -> dict:
@@ -106,7 +111,7 @@ def test_section_rule_wraps_label():
     assert tui.section_rule("impl-a-1") == "── [impl-a-1] ──"
 
 
-# ── sessions.session_stream_tools — registry stream tail ──────────────────────
+# ── registry.agent_stream_tools — registry stream tail ──────────────────────
 
 
 def _write_stream(session_dir: Path, name: str, rows: list[dict]) -> Path:
@@ -119,81 +124,81 @@ def _write_stream(session_dir: Path, name: str, rows: list[dict]) -> Path:
 
 
 def test_session_stream_tools_returns_tool_names_in_order(tmp_path):
-    sessions = load_module("sessions")
+    load_module("registry")
     sd = tmp_path / "s-1"
     _write_stream(sd, "session", [_assistant("Read"), {"type": "user"}, _assistant("Edit", "Bash")])
-    assert sessions.session_stream_tools(sd) == ["Read", "Edit", "Bash"]
+    assert registry.agent_stream_tools(sd) == ["Read", "Edit", "Bash"]
 
 
 def test_session_stream_tools_tails_last_n(tmp_path):
-    sessions = load_module("sessions")
+    load_module("registry")
     sd = tmp_path / "s-1"
     _write_stream(sd, "session", [_assistant(f"T{i}") for i in range(10)])
-    assert sessions.session_stream_tools(sd, limit=3) == ["T7", "T8", "T9"]
+    assert registry.agent_stream_tools(sd, limit=3) == ["T7", "T8", "T9"]
 
 
 def test_session_stream_tools_ignores_audit_rows(tmp_path):
     """Audit rows (event key, no assistant tool_use) contribute nothing."""
-    sessions = load_module("sessions")
+    load_module("registry")
     sd = tmp_path / "s-1"
     _write_stream(sd, "mentat-implement", [{"ts": "t", "event": "chunk_started", "payload": {}}])
     _write_stream(sd, "session", [_assistant("Read")])
-    assert sessions.session_stream_tools(sd) == ["Read"]
+    assert registry.agent_stream_tools(sd) == ["Read"]
 
 
 def test_session_stream_tools_empty_when_absent(tmp_path):
-    sessions = load_module("sessions")
-    assert sessions.session_stream_tools(tmp_path / "nope") == []
+    load_module("registry")
+    assert registry.agent_stream_tools(tmp_path / "nope") == []
 
 
-# ── sessions.session_worktree — kill-bind target lookup ───────────────────────
+# ── registry.agent_worktree — kill-bind target lookup ───────────────────────
 
 
 def test_session_worktree_from_spawn_event(tmp_path):
-    sessions = load_module("sessions")
+    load_module("registry")
     sd = _seed_spawn(tmp_path, "s-1", "/wt/x")
-    assert sessions.session_worktree(sd) == "/wt/x"
+    assert registry.agent_worktree(sd) == "/wt/x"
 
 
 def test_session_worktree_none_when_no_spawn(tmp_path):
-    sessions = load_module("sessions")
+    load_module("registry")
     sd = tmp_path / "s-1"
     sd.mkdir(parents=True)
     (sd / "a.jsonl").write_text(json.dumps({"ts": "t", "event": "gate_evaluated", "payload": {}}) + "\n")
-    assert sessions.session_worktree(sd) is None
+    assert registry.agent_worktree(sd) is None
 
 
 # ── track — navigator keypress reducer (pure) ─────────────────────────────────
 
 
 def test_handle_key_quit():
-    track = load_module("track")
-    assert track.handle_key("q", 0, 3) == (0, "quit")
-    assert track.handle_key("\x1b", 1, 3) == (1, "quit")
+    load_module("track")
+    assert panes.handle_key("q", 0, 3) == (0, "quit")
+    assert panes.handle_key("\x1b", 1, 3) == (1, "quit")
 
 
 def test_handle_key_navigation_clamps():
-    track = load_module("track")
-    assert track.handle_key("j", 0, 3) == (1, None)
-    assert track.handle_key("j", 2, 3) == (2, None)  # clamp at bottom
-    assert track.handle_key("k", 0, 3) == (0, None)  # clamp at top
-    assert track.handle_key("k", 2, 3) == (1, None)
+    load_module("track")
+    assert panes.handle_key("j", 0, 3) == (1, None)
+    assert panes.handle_key("j", 2, 3) == (2, None)  # clamp at bottom
+    assert panes.handle_key("k", 0, 3) == (0, None)  # clamp at top
+    assert panes.handle_key("k", 2, 3) == (1, None)
 
 
 def test_handle_key_navigation_empty_list():
-    track = load_module("track")
-    assert track.handle_key("j", 0, 0) == (0, None)
+    load_module("track")
+    assert panes.handle_key("j", 0, 0) == (0, None)
 
 
 def test_handle_key_focus_and_kill():
-    track = load_module("track")
-    assert track.handle_key("\r", 1, 3) == (1, "focus")
-    assert track.handle_key("x", 2, 3) == (2, "kill")
+    load_module("track")
+    assert panes.handle_key("\r", 1, 3) == (1, "focus")
+    assert panes.handle_key("x", 2, 3) == (2, "kill")
 
 
 def test_handle_key_unknown_is_noop():
-    track = load_module("track")
-    assert track.handle_key("z", 1, 3) == (1, None)
+    load_module("track")
+    assert panes.handle_key("z", 1, 3) == (1, None)
 
 
 # ── track — list + preview renderers (pure) ───────────────────────────────────
@@ -204,9 +209,9 @@ def _rec(session: str, status: str, last_event: str | None = None) -> dict:
 
 
 def test_render_list_marks_selection_and_status():
-    track = load_module("track")
+    load_module("track")
     records = [_rec("s-a", "waiting", "chunk_ejected"), _rec("s-b", "working")]
-    lines = track.render_list(records, selected=1)
+    lines = panes.render_list(records, selected=1)
     assert len(lines) == 2
     assert "s-a" in lines[0] and "s-b" in lines[1]
     assert lines[1].startswith(">")  # cursor on selected
@@ -215,13 +220,13 @@ def test_render_list_marks_selection_and_status():
 
 
 def test_render_list_empty():
-    track = load_module("track")
-    assert track.render_list([], selected=0) == []
+    load_module("track")
+    assert panes.render_list([], selected=0) == []
 
 
 def test_render_preview_gutter_and_glyphs():
-    track = load_module("track")
-    lines = track.render_preview(["Read", "Edit"])
+    load_module("track")
+    lines = panes.render_preview(["Read", "Edit"])
     body = "\n".join(lines)
     assert tui.PIPE in body  # │ gutter
     assert tui.tool_glyph("Read") in body
@@ -230,17 +235,17 @@ def test_render_preview_gutter_and_glyphs():
 
 
 def test_render_preview_empty_still_renders_gutter():
-    track = load_module("track")
-    lines = track.render_preview([])
+    load_module("track")
+    lines = panes.render_preview([])
     assert isinstance(lines, list)
 
 
 def test_render_focus_shows_session_rule_and_tools(tmp_path):
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "s-a"
     _write_stream(sd, "session", [_assistant("Read", "Bash")])
     rec = _rec("s-a", "working", "chunk_started")
-    lines = track.render_focus(rec, sd)
+    lines = render.render_focus(rec, sd)
     body = "\n".join(lines)
     assert tui.section_rule("s-a — working") in body  # focused header rule
     assert "Read" in body and "Bash" in body
@@ -282,7 +287,7 @@ def test_tool_result_empty_for_non_user():
 
 def test_render_transcript_shows_chat_not_blank(tmp_path):
     """session.jsonl with only harness rows renders chat text, not '[] {}'."""
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "s-1"
     _write_stream(
         sd,
@@ -292,7 +297,7 @@ def test_render_transcript_shows_chat_not_blank(tmp_path):
             _tool_result("file contents"),
         ],
     )
-    lines = track.render_transcript_lines(sd)
+    lines = render.render_transcript_lines(sd)
     body = "\n".join(lines)
     assert "Let me read that." in body
     assert "Read" in body
@@ -301,38 +306,38 @@ def test_render_transcript_shows_chat_not_blank(tmp_path):
 
 def test_render_audit_shows_events(tmp_path):
     """Audit-only dir renders event timeline."""
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "s-audit"
     sd.mkdir()
     (sd / "mentat-impl.jsonl").write_text(
         json.dumps({"ts": "2026-01-01T00:00:00+00:00", "event": "chunk_started", "payload": {"slug": "x"}}) + "\n"
     )
-    lines = track.render_audit_lines(sd)
+    lines = render.render_audit_lines(sd)
     body = "\n".join(lines)
     assert "chunk_started" in body
 
 
 def test_toggle_view_flips():
-    track = load_module("track")
-    assert track.toggle_view("transcript") == "audit"
-    assert track.toggle_view("audit") == "transcript"
+    load_module("track")
+    assert render.toggle_view("transcript") == "audit"
+    assert render.toggle_view("audit") == "transcript"
 
 
 # ── V3: handle_key toggle + render_focus wired to dual-stream renderer ────────
 
 
 def test_handle_key_toggle():
-    track = load_module("track")
-    assert track.handle_key("t", 1, 3) == (1, "toggle")
+    load_module("track")
+    assert panes.handle_key("t", 1, 3) == (1, "toggle")
 
 
 def test_render_focus_transcript_shows_chat(tmp_path):
     """render_focus in transcript view shows assistant text and tool names."""
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "s-1"
     _write_stream(sd, "session", [_assistant("Read", text="doing stuff")])
     rec = _rec("s-1", "working")
-    lines = track.render_focus(rec, sd, "transcript")
+    lines = render.render_focus(rec, sd, "transcript")
     body = "\n".join(lines)
     assert "doing stuff" in body
     assert "Read" in body
@@ -342,12 +347,12 @@ def test_render_focus_transcript_shows_chat(tmp_path):
 
 def test_render_focus_audit_shows_events(tmp_path):
     """render_focus in audit view shows event timeline."""
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "s-1"
     sd.mkdir(parents=True, exist_ok=True)
     (sd / "mentat-impl.jsonl").write_text(json.dumps({"ts": "t", "event": "chunk_started", "payload": {}}) + "\n")
     rec = _rec("s-1", "working")
-    lines = track.render_focus(rec, sd, "audit")
+    lines = render.render_focus(rec, sd, "audit")
     body = "\n".join(lines)
     assert "chunk_started" in body
 
@@ -363,10 +368,10 @@ def test_stream_symbol_absent():
 
 def test_module_imports_without_stream():
     """Removing stream() must not break module load or any other export."""
-    track = load_module("track")
-    assert callable(track.handle_key)
-    assert callable(track.render_list)
-    assert callable(track.navigate)
+    load_module("track")
+    assert callable(panes.handle_key)
+    assert callable(panes.render_list)
+    assert callable(panes.navigate)
 
 
 # ── V4: viewport bounding for the list pane ───────────────────────────────────
@@ -374,9 +379,9 @@ def test_module_imports_without_stream():
 
 def test_render_list_viewport_keeps_cursor_visible():
     """50 records, viewport=10, selected=30 → window around row 30, row 0 absent."""
-    track = load_module("track")
+    load_module("track")
     records = [_rec(f"s-{i:02d}", "working") for i in range(50)]
-    lines = track.render_list(records, 30, viewport_height=10)
+    lines = panes.render_list(records, 30, viewport_height=10)
     body = "\n".join(lines)
     assert "s-30" in body
     assert "s-00" not in body
@@ -385,17 +390,17 @@ def test_render_list_viewport_keeps_cursor_visible():
 
 
 def test_render_list_no_viewport_shows_all():
-    track = load_module("track")
+    load_module("track")
     records = [_rec(f"s-{i}", "working") for i in range(5)]
-    lines = track.render_list(records, 0)
+    lines = panes.render_list(records, 0)
     assert len(lines) == 5
 
 
 def test_render_list_affordance_when_truncated():
     """… N more line appears when viewport cuts records at the bottom."""
-    track = load_module("track")
+    load_module("track")
     records = [_rec(f"s-{i}", "working") for i in range(20)]
-    lines = track.render_list(records, 0, viewport_height=5)
+    lines = panes.render_list(records, 0, viewport_height=5)
     body = "\n".join(lines)
     assert "more" in body
 
@@ -405,17 +410,17 @@ def test_render_list_affordance_when_truncated():
 
 def test_render_list_never_exceeds_viewport_height():
     """render_list with affordance must stay within viewport_height, not exceed it."""
-    track = load_module("track")
+    load_module("track")
     records = [_rec(f"s-{i}", "working") for i in range(20)]
-    lines = track.render_list(records, selected=2, viewport_height=5)
+    lines = panes.render_list(records, selected=2, viewport_height=5)
     assert len(lines) <= 5, f"expected ≤5 rows, got {len(lines)}"
 
 
 def test_render_list_cursor_on_screen_small_terminal():
     """24-row terminal budget (list_viewport=5), >5 sessions → selected row in output."""
-    track = load_module("track")
+    load_module("track")
     records = [_rec(f"s-{i:02d}", "working") for i in range(10)]
-    lines = track.render_list(records, selected=7, viewport_height=5)
+    lines = panes.render_list(records, selected=7, viewport_height=5)
     body = "\n".join(lines)
     assert "s-07" in body, "selected row must be in the rendered window"
     assert len(lines) <= 5
@@ -423,9 +428,9 @@ def test_render_list_cursor_on_screen_small_terminal():
 
 def test_render_list_viewport_exact_budget():
     """When viewport matches count, no affordance, stays exactly at budget."""
-    track = load_module("track")
+    load_module("track")
     records = [_rec(f"s-{i}", "working") for i in range(5)]
-    lines = track.render_list(records, 0, viewport_height=5)
+    lines = panes.render_list(records, 0, viewport_height=5)
     assert len(lines) == 5
     assert all("more" not in ln for ln in lines)
 
@@ -440,7 +445,7 @@ def test_read_key_over_pty():
     import termios
     import tty as _tty
 
-    track = load_module("track")
+    load_module("track")
     cases = [
         (b"\x1b[A", "UP"),
         (b"\x1b[B", "DOWN"),
@@ -454,7 +459,7 @@ def test_read_key_over_pty():
         _tty.setraw(slave)
         try:
             os.write(master, data)
-            result = track._read_key(0.5, _fd=slave)
+            result = render._read_key(0.5, _fd=slave)
             assert result == expected, f"data={data!r}: expected {expected!r}, got {result!r}"
         finally:
             termios.tcsetattr(slave, termios.TCSADRAIN, old)
@@ -468,20 +473,20 @@ def test_read_key_over_pty():
 
 
 def test_color_for_event_known_suffix_returns_nonempty():
-    track = load_module("track")
-    color = track._color_for_event("agent_stopped")
+    load_module("track")
+    color = render._color_for_event("agent_stopped")
     assert color != ""
     assert color.startswith("\033[")
 
 
 def test_color_for_event_unknown_suffix_returns_empty():
-    track = load_module("track")
-    assert track._color_for_event("totally.unknown.event") == ""
+    load_module("track")
+    assert render._color_for_event("totally.unknown.event") == ""
 
 
 def test_color_for_event_ejected_suffix():
-    track = load_module("track")
-    color = track._color_for_event("chunk_ejected")
+    load_module("track")
+    color = render._color_for_event("chunk_ejected")
     assert color != ""
 
 
@@ -489,37 +494,37 @@ def test_color_for_event_ejected_suffix():
 
 
 def test_render_transcript_lines_empty_session_shows_placeholder(tmp_path):
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "empty-session"
     sd.mkdir()
-    lines = track.render_transcript_lines(sd)
+    lines = render.render_transcript_lines(sd)
     assert any("no transcript yet" in ln for ln in lines)
 
 
 def test_render_transcript_lines_audit_only_shows_placeholder(tmp_path):
     """Audit-only rows (event key) are filtered out — transcript shows placeholder."""
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "audit-only"
     sd.mkdir()
     (sd / "impl.jsonl").write_text(json.dumps({"ts": "t", "event": "chunk_started", "payload": {"slug": "x"}}) + "\n")
-    lines = track.render_transcript_lines(sd)
+    lines = render.render_transcript_lines(sd)
     assert any("no transcript yet" in ln for ln in lines)
 
 
 def test_render_audit_lines_empty_session_shows_placeholder(tmp_path):
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "empty-audit"
     sd.mkdir()
-    lines = track.render_audit_lines(sd)
+    lines = render.render_audit_lines(sd)
     assert any("no audit events yet" in ln for ln in lines)
 
 
 def test_render_audit_lines_stream_only_shows_placeholder(tmp_path):
     """Harness stream rows (no event key) are filtered out — audit shows placeholder."""
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "stream-only"
     _write_stream(sd, "session", [_assistant("Read")])
-    lines = track.render_audit_lines(sd)
+    lines = render.render_audit_lines(sd)
     assert any("no audit events yet" in ln for ln in lines)
 
 
@@ -527,13 +532,13 @@ def test_render_audit_lines_stream_only_shows_placeholder(tmp_path):
 
 
 def test_view_session_non_tty_prints_transcript_and_returns(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "s-view"
     _write_stream(sd, "session", [_assistant("Read", text="doing work")])
     monkeypatch.setattr("sys.stdin", type("FakeStdin", (), {"isatty": lambda self: False})())
     lines_captured = []
     monkeypatch.setattr("builtins.print", lambda *a, **kw: lines_captured.append(" ".join(str(x) for x in a)))
-    track.view_session(sd)
+    render.view_session(sd)
     body = "\n".join(lines_captured)
     assert "Read" in body or "doing work" in body
 
@@ -544,9 +549,9 @@ def test_view_session_non_tty_prints_transcript_and_returns(tmp_path, monkeypatc
 def test_read_key_timeout_returns_none(monkeypatch):
     import select as _select
 
-    track = load_module("track")
+    load_module("track")
     monkeypatch.setattr(_select, "select", lambda *a, **kw: ([], [], []))
-    result = track._read_key(0.01, _fd=0)
+    result = render._read_key(0.01, _fd=0)
     assert result is None
 
 
@@ -555,14 +560,14 @@ def test_read_key_oserror_returns_none(monkeypatch):
     import os as _os
     import select as _select
 
-    track = load_module("track")
+    load_module("track")
     monkeypatch.setattr(_select, "select", lambda *a, **kw: ([0], [], []))
 
     def _boom(fd: int, n: int) -> bytes:
         raise OSError
 
     monkeypatch.setattr(_os, "read", _boom)
-    assert track._read_key(0.01, _fd=0) is None
+    assert render._read_key(0.01, _fd=0) is None
 
 
 def test_read_key_empty_burst_returns_none(monkeypatch):
@@ -570,10 +575,10 @@ def test_read_key_empty_burst_returns_none(monkeypatch):
     import os as _os
     import select as _select
 
-    track = load_module("track")
+    load_module("track")
     monkeypatch.setattr(_select, "select", lambda *a, **kw: ([0], [], []))
     monkeypatch.setattr(_os, "read", lambda fd, n: b"")
-    assert track._read_key(0.01, _fd=0) is None
+    assert render._read_key(0.01, _fd=0) is None
 
 
 def test_read_key_undecodable_returns_none(monkeypatch):
@@ -581,10 +586,10 @@ def test_read_key_undecodable_returns_none(monkeypatch):
     import os as _os
     import select as _select
 
-    track = load_module("track")
+    load_module("track")
     monkeypatch.setattr(_select, "select", lambda *a, **kw: ([0], [], []))
     monkeypatch.setattr(_os, "read", lambda fd, n: b"\xff")
-    assert track._read_key(0.01, _fd=0) is None
+    assert render._read_key(0.01, _fd=0) is None
 
 
 # ── untested helpers: terminal size, selection, tools, registry, kill, frame ──
@@ -593,39 +598,39 @@ def test_read_key_undecodable_returns_none(monkeypatch):
 def test_terminal_size_reads_device(monkeypatch):
     import os as _os
 
-    track = load_module("track")
+    load_module("track")
     monkeypatch.setattr(_os, "get_terminal_size", lambda fd: _os.terminal_size((120, 40)))
-    assert track._terminal_size() == (120, 40)
+    assert panes._terminal_size() == (120, 40)
 
 
 def test_terminal_size_fallback_on_oserror(monkeypatch):
     import os as _os
 
-    track = load_module("track")
+    load_module("track")
 
     def _boom(fd: int) -> object:
         raise OSError
 
     monkeypatch.setattr(_os, "get_terminal_size", _boom)
-    assert track._terminal_size() == (80, 20)
+    assert panes._terminal_size() == (80, 20)
 
 
 def test_selected_clamps_to_range():
-    track = load_module("track")
+    load_module("track")
     entries = [({"session": "a"}, Path("/a")), ({"session": "b"}, Path("/b"))]
-    assert track._selected(entries, 5)[0]["session"] == "b"
-    assert track._selected(entries, 0)[0]["session"] == "a"
+    assert panes._selected(entries, 5)[0]["session"] == "b"
+    assert panes._selected(entries, 0)[0]["session"] == "a"
 
 
 def test_tools_delegates_to_stream_tools(tmp_path):
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "s-tools"
     _write_stream(sd, "session", [_assistant("Read", "Grep")])
-    assert track._tools(sd, limit=10) == ["Read", "Grep"]
+    assert panes._tools(sd, limit=10) == ["Read", "Grep"]
 
 
 def test_registry_pairs_records_with_dirs(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     from lib import store
 
     db = tmp_path / "mentat.db"
@@ -636,7 +641,7 @@ def test_registry_pairs_records_with_dirs(tmp_path, monkeypatch):
     store.record_emit(env, "chunk_started", {"slug": "x"})
     (logs / "repo" / "implement-a-1").mkdir(parents=True)
     repo_dir = logs / "repo"
-    entries = track._registry(repo_dir, active_only=False)
+    entries = panes._registry(repo_dir, active_only=False)
     assert entries, "expected the seeded session in the registry"
     rec, sd = entries[0]
     assert rec["session"] == "implement-a-1"
@@ -645,7 +650,7 @@ def test_registry_pairs_records_with_dirs(tmp_path, monkeypatch):
 
 def test_registry_reads_sqlite_lists_live_and_idle(tmp_path, monkeypatch):
     """track/registry reads the canonical store — live sessions list without recency window."""
-    track = load_module("track")
+    load_module("track")
     from lib import store
 
     db = tmp_path / "mentat.db"
@@ -659,17 +664,17 @@ def test_registry_reads_sqlite_lists_live_and_idle(tmp_path, monkeypatch):
     (logs / "repo" / "live").mkdir(parents=True)
     (logs / "repo" / "idle").mkdir(parents=True)
     repo_dir = logs / "repo"
-    entries = track._registry(repo_dir, active_only=True)
+    entries = panes._registry(repo_dir, active_only=True)
     assert {rec["session"] for rec, _ in entries} == {"live", "idle"}
     assert repo_dir / "live" in {sd for _, sd in entries}
 
 
 def test_on_sigterm_sets_terminate_flag():
-    track = load_module("track")
-    track._TERMINATE = False
-    track._on_sigterm(15, None)
-    assert track._TERMINATE is True
-    track._TERMINATE = False
+    load_module("track")
+    panes._TERMINATE = False
+    panes._on_sigterm(15, None)
+    assert panes._TERMINATE is True
+    panes._TERMINATE = False
 
 
 def _seed_spawn(tmp_path: Path, agent_id: str, worktree: str) -> Path:
@@ -688,38 +693,38 @@ def _seed_spawn(tmp_path: Path, agent_id: str, worktree: str) -> Path:
 
 
 def test_kill_removes_worktree_via_git(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     sd = _seed_spawn(tmp_path, "s-kill", "/wt/x")
     calls: list[tuple] = []
-    monkeypatch.setattr(track.subprocess, "run", lambda *a, **k: calls.append(a))
-    track._kill(sd)
+    monkeypatch.setattr(panes.subprocess, "run", lambda *a, **k: calls.append(a))
+    panes._kill(sd)
     assert calls, "expected a git worktree remove call"
     assert "/wt/x" in calls[0][0]
 
 
 def test_kill_noop_when_no_worktree(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "s-nokill"
     sd.mkdir()
     calls: list[tuple] = []
-    monkeypatch.setattr(track.subprocess, "run", lambda *a, **k: calls.append(a))
-    track._kill(sd)
+    monkeypatch.setattr(panes.subprocess, "run", lambda *a, **k: calls.append(a))
+    panes._kill(sd)
     assert calls == []
 
 
 def test_kill_swallows_git_error(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     sd = _seed_spawn(tmp_path, "s-killerr", "/wt/y")
 
     def _boom(*a, **k):
         raise OSError("git missing")
 
-    monkeypatch.setattr(track.subprocess, "run", _boom)
-    track._kill(sd)  # must not raise
+    monkeypatch.setattr(panes.subprocess, "run", _boom)
+    panes._kill(sd)  # must not raise
 
 
 def test_frame_builds_list_view_with_repo_and_hint(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     from lib import store
 
     db = tmp_path / "mentat.db"
@@ -731,8 +736,8 @@ def test_frame_builds_list_view_with_repo_and_hint(tmp_path, monkeypatch):
     repo_dir = logs / "repo"
     (repo_dir / "implement-a-1").mkdir(parents=True)
     _write_stream(repo_dir / "implement-a-1", "session", [_assistant("Read", "Grep")])
-    entries = track._registry(repo_dir, active_only=False)
-    body = "\n".join(track._frame(entries, 0, "myrepo", rows=24))
+    entries = panes._registry(repo_dir, active_only=False)
+    body = "\n".join(panes._frame(entries, 0, "myrepo", rows=24))
     assert "myrepo" in body
     assert "session(s)" in body
     assert "move" in body  # the list-view key hint
@@ -740,40 +745,40 @@ def test_frame_builds_list_view_with_repo_and_hint(tmp_path, monkeypatch):
 
 def test_frame_empty_entries_has_no_preview():
     """The list frame with no sessions still renders the header (0 session(s)), no preview."""
-    track = load_module("track")
-    body = "\n".join(track._frame([], 0, "repo", rows=24))
+    load_module("track")
+    body = "\n".join(panes._frame([], 0, "repo", rows=24))
     assert "0 session(s)" in body
 
 
 def test_transcript_content_continues_after_tool_row(tmp_path):
     """Tool row, a non-assistant/non-user stream row (skipped), then a text row —
     exercises both the outer-loop continue and the neither-branch fall-through."""
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "s-multi"
     rows = [_assistant("Read"), {"type": "system", "subtype": "init"}, _assistant(text="after")]
     _write_stream(sd, "session", rows)
-    body = "\n".join(track.render_transcript_lines(sd))
+    body = "\n".join(render.render_transcript_lines(sd))
     assert "Read" in body and "after" in body
 
 
 def test_focus_frame_shows_scroll_affordances():
-    track = load_module("track")
+    load_module("track")
     record = {"session": "s", "status": "working"}
     content = [f"line {i}" for i in range(20)]
-    body = "\n".join(track._focus_frame(record, content, scroll_top=5, height=5))
+    body = "\n".join(panes._focus_frame(record, content, scroll_top=5, height=5))
     assert "more" in body  # both ↑ and ↓ affordances render mid-scroll
 
 
 def test_transcript_content_skips_user_row_without_result(tmp_path):
     """A user row carrying no tool_result and an empty assistant row → placeholder."""
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "s-noresult"
     rows = [
         {"type": "user", "message": {"content": [{"type": "text", "text": "hi"}]}},
         _assistant(text=""),
     ]
     _write_stream(sd, "session", rows)
-    lines = track.render_transcript_lines(sd)
+    lines = render.render_transcript_lines(sd)
     assert any("no transcript yet" in ln for ln in lines)
 
 
@@ -781,18 +786,18 @@ def test_transcript_content_skips_user_row_without_result(tmp_path):
 
 
 def test_view_session_tty_dispatches_to_loop(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     sd = tmp_path / "s-vt"
     sd.mkdir()
     monkeypatch.setattr("sys.stdin", type("FakeStdin", (), {"isatty": lambda self: True})())
     seen: list[Path] = []
-    monkeypatch.setattr(track, "_view_session_tty", lambda d: seen.append(d))
-    track.view_session(sd)
+    monkeypatch.setattr(render, "_view_agent_tty", lambda d: seen.append(d))
+    render.view_session(sd)
     assert seen == [sd]
 
 
 def test_navigate_non_tty_prints_list_and_returns_zero(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     from lib import store
 
     db = tmp_path / "mentat.db"
@@ -807,13 +812,13 @@ def test_navigate_non_tty_prints_list_and_returns_zero(tmp_path, monkeypatch):
     monkeypatch.setattr("sys.stdin", type("FakeStdin", (), {"isatty": lambda self: False})())
     out: list[str] = []
     monkeypatch.setattr("builtins.print", lambda *a, **k: out.append(" ".join(str(x) for x in a)))
-    rc = track.navigate(repo_dir, repo="repo", active_only=False)
+    rc = panes.navigate(repo_dir, repo="repo", active_only=False)
     assert rc == 0
     assert any("implement-x-1" in ln for ln in out)
 
 
 def test_navigate_tty_dispatches_to_loop(tmp_path, monkeypatch):
-    track = load_module("track")
+    load_module("track")
     monkeypatch.setattr("sys.stdin", type("FakeStdin", (), {"isatty": lambda self: True})())
     seen: dict[str, object] = {}
 
@@ -821,7 +826,7 @@ def test_navigate_tty_dispatches_to_loop(tmp_path, monkeypatch):
         seen.update(repo=repo, active_only=active_only)
         return 0
 
-    monkeypatch.setattr(track, "_navigate_tty", _fake)
-    rc = track.navigate(tmp_path, repo="r", active_only=True)
+    monkeypatch.setattr(panes, "_navigate_tty", _fake)
+    rc = panes.navigate(tmp_path, repo="r", active_only=True)
     assert rc == 0
     assert seen == {"repo": "r", "active_only": True}

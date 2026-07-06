@@ -13,13 +13,13 @@ from tests.conftest import load_script
 _SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-container/scripts"
 
 
-def _load_compose_render():
-    return load_script(_SCRIPTS / "compose_render.py", "compose_render")
+def _load_override():
+    return load_script(_SCRIPTS / "override.py", "override")
 
 
 @pytest.fixture
 def cr():
-    return _load_compose_render()
+    return _load_override()
 
 
 @pytest.fixture

@@ -44,7 +44,7 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 : Docker container for a chunk's target repo — where all project tools run. `python3 ~/.agents/skills/mentat-container/scripts/container.py up` brings it up; `... container.py run '<cmd>'` executes commands inside. _Avoid_: "the container", "the Docker".
 
 **Headless agent CLI**
-: The harness CLI — `cursor-agent` or `claude-code`. What `--harness=` selects; `/mentat-session track` watches it; each harness adapter module under `.agents/skills/mentat-implement/scripts/harness/` declares its `cmd` and `output_format`. _Avoid_: "build" (collides with Docker `build:` in `mentat-container-up`).
+: The harness CLI — `cursor-agent` or `claude-code`. What `--harness=` selects; `/mentat-track track` watches it; each harness adapter module under `.agents/skills/mentat-implement/scripts/harness/` declares its `cmd` and `output_format`. _Avoid_: "build" (collides with Docker `build:` in `mentat-container-up`).
 
 **Reviewer gate**
 : The six ADR-0003 reviewer subagents — `mentat-plan-reviewer`, `mentat-test-reviewer`, `mentat-bug-reviewer`, `mentat-rules-reviewer`, `mentat-context-reviewer`, `mentat-smell-reviewer`. Plan and test score against a threshold; bug, rules, and context veto; smell is advisory. They gate each chunk at implement and land time. `mentat-orchestrate` additionally runs them as an advisory end-of-queue batch review over the final tip. _Avoid_: conflating the per-chunk gate with the end-of-queue review.
@@ -77,7 +77,7 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 : A chunk's unique id — also its worktree dirname and `mentat_slug` container label. Format: `mentat-<epoch>-<pid>-<rand>`. _Avoid_: "id", "name", "tag".
 
 **Summary file status vocabulary**
-: `summary.md` in the agent log dir carries a `status:` frontmatter field that disambiguates outcome. Canonical values: `succeeded` (plan completed cleanly), `failed` (TDD/gate failure), `blocked` (AFK hit an unresolvable design call — operator must resolve), `hitl-required` (same intent, used in audit payloads). The file is written by the AFK agent (blocked) or by `mentat-session report` (succeeded/failed). _Avoid_: "completed" (hides outcome), custom strings outside this set.
+: `summary.md` in the agent log dir carries a `status:` frontmatter field that disambiguates outcome. Canonical values: `succeeded` (plan completed cleanly), `failed` (TDD/gate failure), `blocked` (AFK hit an unresolvable design call — operator must resolve), `hitl-required` (same intent, used in audit payloads). The file is written by the AFK agent (blocked) or by `mentat-track report` (succeeded/failed). _Avoid_: "completed" (hides outcome), custom strings outside this set.
 
 ## Relationships
 
@@ -153,5 +153,5 @@ Present-tense facts, not promises of future work.
 | [0015](docs/adr/0015-auto-recovery.md) | Model-driven auto-recovery | JIT retry/reslice/abandon over transient ejects; storm/budget/attempt caps. Superseded by ADR-0007 v7 (SQLite canonical store) for its audit substrate. |
 | [0016](docs/adr/0016-mutation-signal.md) | Mutation signal | Advisory surviving-mutant hint (`task mutation`, mutmut) scoped to changed shipped-source files. Never a gate. |
 | [0017](docs/adr/0017-per-run-isolation.md) | Per-run isolation | Chunk-keyed identity, override-config, run-scoped prune, OOM recovery. |
-| [0018](docs/adr/0018-skill-modularization.md) | Skill modularization | God-file splits, rename map, `mentat-session`→`mentat-track`, `lib/support/` grouping. ES5 dropped (RI2). |
+| [0018](docs/adr/0018-skill-modularization.md) | Skill modularization | God-file splits, rename map, `mentat-track`→`mentat-track`, `lib/support/` grouping. ES5 dropped (RI2). |
 

@@ -5,7 +5,7 @@ cwd scanning an empty log dir and showing nothing. ``track`` now reads the fixed
 sqlite projection instead of a cwd-relative dir scan, so that failure mode can't recur.
 This is its real-subprocess twin: project a live + two terminal sessions into the db,
 seed the same tree on disk for ``list`` (still a dir scan), run the actual
-``mentat-session`` CLI non-interactively (``track --all`` and ``list``), and assert
+``mentat-track`` CLI non-interactively (``track --all`` and ``list``), and assert
 every seeded session surfaces. If the tracker ever stops finding sessions again, this
 test goes red.
 """
@@ -30,7 +30,7 @@ if str(_AGENTS) not in sys.path:
     sys.path.insert(0, str(_AGENTS))
 from lib import store  # noqa: E402
 
-SESSION_PY = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-session/scripts/session.py"
+SESSION_PY = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-track/scripts/track.py"
 
 # Statuses are pulled from each session's newest jsonl tail (sessions.derive_status):
 # a terminal audit event → idle, a non-terminal tail that is fresh → working, the
@@ -75,7 +75,7 @@ def _seed_tree(log_root: Path, repo: str) -> Path:
 
 
 def _run(args: list[str], log_root: Path, repo: str) -> str:
-    """Run the mentat-session CLI non-interactively (stdin not a tty → one-shot path)."""
+    """Run the mentat-track CLI non-interactively (stdin not a tty → one-shot path)."""
     env = subprocess_env(
         MENTAT_LOG_PATH=str(log_root),
         MENTAT_REPO=repo,

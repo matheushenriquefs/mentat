@@ -21,13 +21,13 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-containe
 _FIXTURE = Path(__file__).resolve().parents[1] / "tests/fixtures/compose_sidecar_only.yml"
 
 
-def _load_compose_render():
-    return load_script(_SCRIPTS / "compose_render.py", "compose_render")
+def _load_override():
+    return load_script(_SCRIPTS / "override.py", "override")
 
 
 @pytest.fixture
 def cr():
-    return _load_compose_render()
+    return _load_override()
 
 
 @pytest.fixture(autouse=True)

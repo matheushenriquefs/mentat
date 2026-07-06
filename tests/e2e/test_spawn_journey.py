@@ -173,7 +173,7 @@ def test_spawn_with_proc_prints_track_command_and_session_id(isolate_logs, tmp_p
     monkeypatch.setattr(spawn_mod, "_emit_event", lambda name, payload: None)
     session_id, _proc = spawn_mod.spawn_with_proc(_fake_plan(tmp_path))
     out = capsys.readouterr().out
-    assert f"mentat-session track {session_id}" in out
+    assert f"mentat-track track {session_id}" in out
     assert session_id in out
 
 

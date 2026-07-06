@@ -1,4 +1,4 @@
-"""mentat-session diagnose: verdict from the canonical store, then the /diagnose loop."""
+"""mentat-track diagnose: verdict from the canonical store, then the /diagnose loop."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 from tests.conftest import load_script
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = REPO_ROOT / ".agents/skills/mentat-session/scripts"
+SCRIPTS = REPO_ROOT / ".agents/skills/mentat-track/scripts"
 sys.path.insert(0, str(REPO_ROOT / ".agents"))
 
 
