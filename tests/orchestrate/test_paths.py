@@ -2,7 +2,7 @@ import ast
 import sys
 from pathlib import Path
 
-_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
+_SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestrate/scripts"
 
 
 def _src(name: str) -> str:

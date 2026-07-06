@@ -39,6 +39,7 @@ _spawn = load_sibling(__file__, "spawn")
 _land_queue = load_sibling(__file__, "landing")
 _supervise = load_sibling(__file__, "supervise")
 _recover = load_sibling(__file__, "recover")
+_cleanup = load_sibling(__file__, "cleanup")
 
 _fan_out_plans = _supervise._fan_out_plans
 
@@ -156,42 +157,31 @@ def partition_by_outcome(
 
 
 def _prune_stale_containers() -> None:
-    """Tear down exited containers for this run's chunk slugs only.
-
-    Machine-wide docker prune is forbidden — it would reap a concurrent run's
-    idle container (H3). Another run's resources are never candidates.
-    """
-    if not _supervise._run_chunk_slugs:
-        return
-    removed = _devcontainer.down_run(_supervise._run_chunk_slugs)
-    _utils.emit_event("agent_reaped", {"reclaimed_bytes": None, "containers_removed": removed})
+    _cleanup.prune_stale_containers(
+        _supervise._run_chunk_slugs,
+        devcontainer_mod=_devcontainer,
+        emit_event=_utils.emit_event,
+    )
 
 
 def _prune_stale_worktrees(preserve: set[str] | None = None) -> None:
-    """End-of-batch sweep of clean, inactive, stale worktrees for this run only.
-
-    ``preserve`` plan slugs are held back from the sweep — a wedged (hitl_required)
-    chunk's worktree must survive for the operator even when it is clean and
-    inactive.
-    """
-    scope = _supervise._run_chunk_ids()
-    if not scope:
-        return
-    wt_root = Path.cwd() / ".mentat" / "worktrees"
-    active = _supervise._preserve_chunk_slugs(preserve)
-    removed = _worktrees.prune_stale(wt_root, active_slugs=active, scope_chunk_ids=scope)
-    _utils.emit_event("agent_reaped", {"reclaimed_bytes": None, "worktrees_removed": removed})
+    _cleanup.prune_stale_worktrees(
+        run_chunk_ids_fn=_supervise._run_chunk_ids,
+        preserve_chunk_slugs_fn=_supervise._preserve_chunk_slugs,
+        preserve=preserve,
+        worktrees_mod=_worktrees,
+        emit_event=_utils.emit_event,
+    )
 
 
 def _gc_preserved_worktrees(preserve: set[str] | None = None) -> None:
-    """Reclaim long-abandoned preserved worktrees for this run's chunk ids only."""
-    scope = _supervise._run_chunk_ids()
-    if not scope:
-        return
-    wt_root = Path.cwd() / ".mentat" / "worktrees"
-    active = _supervise._preserve_chunk_slugs(preserve)
-    reclaimed = _worktrees.gc_preserved(wt_root, active_slugs=active, scope_chunk_ids=scope)
-    _utils.emit_event("agent_reaped", {"reclaimed_bytes": None, "worktrees_gc": reclaimed})
+    _cleanup.gc_preserved_worktrees(
+        run_chunk_ids_fn=_supervise._run_chunk_ids,
+        preserve_chunk_slugs_fn=_supervise._preserve_chunk_slugs,
+        preserve=preserve,
+        worktrees_mod=_worktrees,
+        emit_event=_utils.emit_event,
+    )
 
 
 def _chunk_id_for_land(plan_slug: str) -> str:

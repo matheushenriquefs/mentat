@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from tests.conftest import load_script
 
-SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
+SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestrate/scripts"
 
 
 def load_module(name: str):
@@ -17,93 +17,6 @@ def load_module(name: str):
 def make_chunk(slug: str):
     lq = load_module("landing")
     return lq.Chunk(slug=slug, worktree=Path(f"/tmp/{slug}"))
-
-
-def test_land_queue_emits_chunk_landed_on_success():
-    lq = load_module("landing")
-    chunk = make_chunk("my-chunk")
-
-    with patch.object(lq, "_rebase_chunk", return_value=("abc123", None)):
-        with patch.object(lq, "_run_gates", return_value=("pass", "")):
-            with patch.object(lq, "_ff_merge", return_value=None):
-                with patch.object(lq, "_emit_event") as mock_emit:
-                    result = lq.land(chunk, holding="main")
-
-    assert result["status"] == "success"
-    emitted = [c.args[0] for c in mock_emit.call_args_list]
-    assert any("chunk_landed" in e for e in emitted)
-
-
-def test_land_queue_emits_chunk_ejected_with_gate_failed():
-    lq = load_module("landing")
-    chunk = make_chunk("fail-chunk")
-
-    with patch.object(lq, "_rebase_chunk", return_value=("abc123", None)):
-        with patch.object(lq, "_run_gates", return_value=("block", "too smelly")):
-            with patch.object(lq, "_emit_event") as mock_emit:
-                result = lq.land(chunk, holding="main")
-
-    assert result["status"] == "eject"
-    assert result["reason"] == "gate_failed"
-    emitted = [c.args[0] for c in mock_emit.call_args_list]
-    assert any("chunk_ejected" in e for e in emitted)
-
-
-def test_land_queue_serializes_landings():
-    """drain processes chunks one-by-one (serial)."""
-    lq = load_module("landing")
-    chunks = [make_chunk(f"c{i}") for i in range(3)]
-
-    call_order: list[str] = []
-
-    def fake_land(chunk, *, holding):
-        call_order.append(chunk.slug)
-        return {"status": "success", "tip": "abc", "slug": chunk.slug}
-
-    with patch.object(lq, "land", side_effect=fake_land):
-        with patch.object(lq, "_teardown_container", lambda chunk: None):
-            results = lq.drain(chunks, holding="main")
-
-    assert call_order == ["c0", "c1", "c2"]
-    assert len(results) == 3
-
-
-def test_land_queue_rebases_each_chunk():
-    """land() calls _rebase_chunk with the correct holding branch."""
-    lq = load_module("landing")
-    chunk = make_chunk("r-chunk")
-
-    rebase_calls = []
-
-    def fake_rebase(c, holding):
-        rebase_calls.append((c.slug, holding))
-        return ("sha123", None)
-
-    with patch.object(lq, "_rebase_chunk", side_effect=fake_rebase):
-        with patch.object(lq, "_run_gates", return_value=("pass", "")):
-            with patch.object(lq, "_ff_merge", return_value=None):
-                with patch.object(lq, "_emit_event"):
-                    lq.land(chunk, holding="my-holding")
-
-    assert any(slug == "r-chunk" for slug, _ in rebase_calls)
-    assert any(h == "my-holding" for _, h in rebase_calls)
-
-
-def test_land_queue_emits_canonical_verdict_jsonl_shape():
-    lq = load_module("landing")
-    chunk = make_chunk("shape-chunk")
-
-    with patch.object(lq, "_rebase_chunk", return_value=("sha1", None)):
-        with patch.object(lq, "_run_gates", return_value=("pass", "")):
-            with patch.object(lq, "_ff_merge", return_value=None):
-                with patch.object(lq, "_emit_event"):
-                    result = lq.land(chunk, holding="main")
-
-    assert "slug" in result
-    assert "status" in result
-    assert "tip" in result
-    assert result["status"] in ("success", "eject")
-    assert result["tip"] == "sha1"
 
 
 # ── _ff_merge integration tests ──────────────────────────────────────────────

@@ -8,10 +8,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from tests.conftest import TEST_CHUNK_ID, bind_plan, load_script
 
-SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
+SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestrate/scripts"
 
 
 def load_module(name: str):
@@ -22,56 +21,6 @@ def _make_plan_file(tmp_path: Path, slug: str, kind: str = "AFK") -> Path:
     p = tmp_path / f"{slug}.md"
     p.write_text(f"---\nid: {slug}\nkind: {kind}\n---\n")
     return p
-
-
-def test_orchestrate_full_pipeline_exits_0_on_all_success(tmp_path):
-    orch = load_module("orchestrate")
-    plan = _make_plan_file(tmp_path, "plan-a", "AFK")
-
-    with (
-        patch.object(orch._batch, "_fan_out_plans", return_value=[]),
-        patch.object(orch._batch._land_queue, "drain", return_value=[{"slug": "plan-a", "status": "success"}]),
-        patch.object(orch._batch, "_prune_stale_containers", lambda: None),
-        patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None),
-        patch.object(orch._utils, "emit_event", lambda *a, **k: None),
-    ):
-        rc = orch.run_orchestrate(
-            holding="main",
-            plan_paths=[plan],
-            harness=None,
-            model=None,
-            dry_run=False,
-        )
-    assert rc == 0
-
-
-def test_orchestrate_exits_1_on_any_ejection(tmp_path):
-    orch = load_module("orchestrate")
-    routing = load_module("scheduler")
-    plan = _make_plan_file(tmp_path, "plan-b", "AFK")
-
-    from lib.exits import EX_HITL_REQUIRED
-
-    plan_obj = routing.Plan(slug="plan-b", kind="AFK", blocked_by=[], path=plan)
-
-    with (
-        patch.object(orch._batch, "_fan_out_plans", return_value=[(plan_obj, EX_HITL_REQUIRED)]),
-        patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path),
-        patch.object(orch._batch._land_queue, "drain", return_value=[]),
-        patch.object(orch._batch, "_prune_stale_containers", lambda: None),
-        patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None),
-        patch.object(orch._utils, "emit_event", lambda *a, **k: None),
-        patch.object(orch, "_emit_event", lambda *a, **k: None),
-        patch.object(orch._batch, "_emit_event", lambda *a, **k: None),
-    ):
-        rc = orch.run_orchestrate(
-            holding="main",
-            plan_paths=[plan],
-            harness=None,
-            model=None,
-            dry_run=False,
-        )
-    assert rc == 1
 
 
 def test_orchestrate_holding_positional_required():

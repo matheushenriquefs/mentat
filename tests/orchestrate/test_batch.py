@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from tests.conftest import TEST_CHUNK_ID, bind_plan, load_script
 
-SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
+SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestrate/scripts"
 
 
 def load_module(name: str):

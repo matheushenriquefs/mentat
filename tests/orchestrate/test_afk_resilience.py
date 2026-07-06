@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from tests.conftest import async_spawner, bind_plan, chunk_label, load_script
 
-SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
+SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestrate/scripts"
 
 
 def load_module(name: str):
@@ -534,8 +534,7 @@ def test_prune_stale_containers_runs_even_with_dirty_worktree(tmp_path, monkeypa
 
     orch = load_module("orchestrate")
     from lib import devcontainer as _dc_mod
-
-    from tests.test_orchestrate_prune import _seed_run_chunks
+    from tests.orchestrate.test_cleanup import _seed_run_chunks
 
     monkeypatch.chdir(tmp_path)
     _seed_run_chunks(orch, "a")

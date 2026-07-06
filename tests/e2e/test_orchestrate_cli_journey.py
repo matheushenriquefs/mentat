@@ -294,7 +294,7 @@ def testpartition_by_outcome_routes_each_returncode(orch, monkeypatch, tmp_path)
 
 
 def test_prune_stale_containers_warns_dirty_and_emits_reclaimed(orch, monkeypatch, capsys):
-    from tests.test_orchestrate_prune import _seed_run_chunks
+    from tests.orchestrate.test_cleanup import _seed_run_chunks
 
     events = []
     _seed_run_chunks(orch, "a")
@@ -309,7 +309,7 @@ def test_prune_stale_containers_warns_dirty_and_emits_reclaimed(orch, monkeypatc
 
 def test_prune_stale_worktrees_folds_preserve_into_active(orch, monkeypatch):
     from tests.conftest import TEST_CHUNK_ID, bind_plan, chunk_label
-    from tests.test_orchestrate_prune import _seed_run_chunks
+    from tests.orchestrate.test_cleanup import _seed_run_chunks
 
     events = []
     seen = {}

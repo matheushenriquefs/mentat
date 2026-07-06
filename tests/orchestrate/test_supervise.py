@@ -6,7 +6,7 @@ from pathlib import Path
 
 from tests.conftest import bind_plan, load_script
 
-SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
+SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestrate/scripts"
 
 
 def load_module(name: str):

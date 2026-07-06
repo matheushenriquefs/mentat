@@ -5,10 +5,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
+_SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestrate/scripts"
 
 from lib.exits import EX_HITL_REQUIRED  # noqa: E402
-
 from tests.conftest import patch_orchestrate_worktree  # noqa: E402
 
 

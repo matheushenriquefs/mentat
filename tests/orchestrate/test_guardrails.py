@@ -13,8 +13,8 @@ from unittest.mock import patch
 
 from tests.conftest import async_spawner, load_script
 
-SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
-LIB = Path(__file__).resolve().parents[1] / ".agents/lib"
+SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestrate/scripts"
+LIB = Path(__file__).resolve().parents[2] / ".agents/lib"
 
 
 def load_module(name: str):

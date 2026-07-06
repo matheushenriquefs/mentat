@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from tests.conftest import load_script
 
-SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
+SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestrate/scripts"
 
 
 class _FakePopen:
@@ -51,9 +51,7 @@ def test_fan_out_prints_track_command_immediately(tmp_path):
 
     fake_agent_id = "agent-123"
 
-    with patch.object(
-        spawn, "_spawn_worktree_subprocess", return_value=(fake_agent_id, _FakePopen(), tmp_path / "wt")
-    ):
+    with patch.object(spawn, "_spawn_worktree_subprocess", return_value=(fake_agent_id, _FakePopen(), tmp_path / "wt")):
         buf = io.StringIO()
         with redirect_stdout(buf):
             agent_id = spawn.spawn(plan)

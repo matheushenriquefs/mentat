@@ -12,10 +12,9 @@ import sys
 import time as _time
 from pathlib import Path
 
-ORCH_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
+ORCH_SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestrate/scripts"
 _AGENTS_ROOT = Path(__file__).resolve().parents[3]  # .agents/
 from lib import devcontainer as _dc_mod  # noqa: E402
-
 from tests.conftest import TEST_CHUNK_ID, bind_plan, chunk_label, patch_orchestrate_worktree  # noqa: E402
 
 

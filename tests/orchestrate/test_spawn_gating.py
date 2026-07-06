@@ -21,7 +21,7 @@ from pathlib import Path
 
 from tests.conftest import bind_chunk_worktrees
 
-ORCH_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
+ORCH_SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestrate/scripts"
 
 
 def _load(name: str):

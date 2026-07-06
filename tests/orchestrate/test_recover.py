@@ -13,10 +13,9 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from tests.conftest import seed_agent_events
 
-ORCH_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
+ORCH_SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-orchestrate/scripts"
 
 
 def _load(name: str):
