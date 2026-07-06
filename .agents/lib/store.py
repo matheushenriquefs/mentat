@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, cast
 
+from lib.chunk import get_chunk_id_from_env
 from lib.events import HITL_REQUIRED, StatusReason
 
 _WRITE_RETRIES = 8
@@ -560,7 +561,7 @@ def record_emit(env: dict[str, str], event: str, payload: dict[str, object]) -> 
         terminal = _AGENT_TERMINAL_EVENTS.get(event)
         if terminal is not None:
             agents.update_status(agent_id, status=terminal, ended_at=iso_now())
-        raw_chunk = env.get("MENTAT_CHUNK_ID", "").strip()
+        raw_chunk = get_chunk_id_from_env(env)
         chunk_id: str | None = None
         if raw_chunk and ChunkDAO(conn).get_by_id(raw_chunk) is not None:
             chunk_id = raw_chunk

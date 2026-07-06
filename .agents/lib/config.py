@@ -3,15 +3,25 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tomllib
 from pathlib import Path
 
 _CONFIG_NAME = "config.toml"
+_DEFAULT_CONFIG_PATH = Path.home() / ".mentat" / "config.toml"
 
 
 class ConfigError(ValueError):
     """Malformed or unreadable Mentat config."""
+
+
+def get_config_dir() -> Path:
+    """Return MENTAT_CONFIG path when set, else ~/.mentat/config.toml."""
+    raw = os.environ.get("MENTAT_CONFIG", "").strip()
+    if raw:
+        return Path(raw)
+    return _DEFAULT_CONFIG_PATH
 
 
 def _strip_json_comments(text: str) -> str:
@@ -161,4 +171,7 @@ def read_config() -> dict[str, object]:
     global_cfg = _load_layer(Path.home() / ".mentat")
     repo_dir = _repo_mentat_dir()
     repo_cfg = _load_layer(repo_dir) if repo_dir is not None else {}
-    return {**global_cfg, **repo_cfg}
+    merged: dict[str, object] = {**global_cfg, **repo_cfg}
+    if os.environ.get("MENTAT_CONFIG", "").strip():
+        merged = {**merged, **load_config_file(get_config_dir())}
+    return merged

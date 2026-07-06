@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_SCRIPTS = Path(__file__).resolve().parent
-_SKILL_ROOT = _SCRIPTS.parents[3]
+from lib.support import paths
 
 
 def default_skills_root() -> Path:
-    return _SKILL_ROOT / ".agents" / "skills"
+    return paths.REPO_SKILLS_DIR
 
 
 def default_evals_dir() -> Path:
-    return _SKILL_ROOT / "evals"
+    return paths.EVALS_DIR

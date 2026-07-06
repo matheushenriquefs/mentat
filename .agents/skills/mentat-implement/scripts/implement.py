@@ -24,6 +24,8 @@ _AGENT_SCRIPT = paths.SKILLS_DIR / "mentat-track/scripts/agent.py"
 _GIT_SCRIPT = paths.SKILLS_DIR / "mentat-git/scripts/git.py"
 _GIT_WORKTREE_PY = paths.SKILLS_DIR / "mentat-git/scripts/worktree.py"
 
+from lib.chunk import get_chunk_id_from_env  # noqa: E402
+from lib.chunk import set_chunk_id_in_env  # noqa: E402
 from lib.exits import (  # noqa: E402
     EX_CONFIG,
     EX_DATAERR,
@@ -138,10 +140,9 @@ _emit_event = _bind("mentat-implement")
 
 def _compaction_threshold() -> int | None:
     """Read compaction_threshold_tokens from config. Returns None if absent or unset."""
-    from lib.config import load_config_file as _load_cfg
+    from lib.config import get_config_dir, load_config_file as _load_cfg
 
-    cfg_path_env = os.environ.get("MENTAT_CONFIG")
-    cfg_path = Path(cfg_path_env) if cfg_path_env else Path.home() / ".mentat" / "config.toml"
+    cfg_path = get_config_dir()
     if not cfg_path.exists():
         return None
     data = _load_cfg(cfg_path)
@@ -179,7 +180,7 @@ def _prune_worktrees_preflight() -> None:
     """
     from lib import devcontainer, worktrees
 
-    chunk_id = os.environ.get("MENTAT_CHUNK_ID", "").strip()
+    chunk_id = get_chunk_id_from_env()
     if not chunk_id:
         return
     wt_root = Path.cwd() / ".mentat" / "worktrees"
@@ -318,10 +319,10 @@ def preflight_worktree(slug: str, *, reuse_worktree: bool = False) -> tuple[int,
     if not _in_shared_main_tree(reuse_worktree=reuse_worktree):
         return (0, None)
 
-    from lib.chunk import bind_plan_chunk, make_chunk_id
+    from lib.chunk import bind_plan_chunk, get_chunk_id_from_env, make_chunk_id, set_chunk_id_in_env
 
-    chunk_id = os.environ.get("MENTAT_CHUNK_ID", "").strip() or make_chunk_id()
-    os.environ["MENTAT_CHUNK_ID"] = chunk_id
+    chunk_id = get_chunk_id_from_env() or make_chunk_id()
+    set_chunk_id_in_env(chunk_id)
     bind_plan_chunk(slug, chunk_id)
 
     result = subprocess.run(
@@ -597,7 +598,7 @@ def _land_and_review(slug: str, worktree: Path, holding: str) -> dict[str, objec
     """
     _land_script = paths.SKILLS_DIR / "mentat-orchestrate/scripts/landing.py"
     land_queue = _load_mod("landing", _land_script)
-    chunk_id = os.environ.get("MENTAT_CHUNK_ID", "").strip()
+    chunk_id = get_chunk_id_from_env()
     chunk = land_queue.Chunk(slug=slug, worktree=worktree, chunk_id=chunk_id)
     verdict = _do_land(chunk, holding=holding, land_queue=land_queue)
     return {

@@ -10,7 +10,7 @@ Architecture Decision Records for Mentat.
 | [0004](./0004-parallel-orchestration.md) | Parallel orchestration (folds HITL + decomp + harness-registry) | Accepted |
 | [0005](./0005-ubiquitous-lexicon.md) | Ubiquitous lexicon (slice/chunk/batch) | Accepted |
 | [0006](./0006-soft-readonly-test-enforcement.md) | Soft read-only test enforcement | Accepted |
-| [0007](./0007-audit-envelope.md) | Audit envelope — 19-event catalog | Accepted |
+| [0007](./0007-audit-envelope.md) | Audit envelope — flat snake_case catalog | Accepted |
 | [0008](./0008-python-runtime.md) | Python runtime | Accepted |
 | [0009](./0009-plugin-api.md) | Plugin API (Vite-derived, one slot: harness) | Retired |
 | [0010](./0010-readonly-test-mount.md) | Read-only test mount (OCP manifest + bind-mount) | Accepted |
@@ -22,3 +22,5 @@ Architecture Decision Records for Mentat.
 | [0016](./0016-mutation-signal.md) | Mutation signal — advisory surviving-mutant hint, never a gate | Accepted |
 | [0017](./0017-per-run-isolation.md) | Per-run isolation — chunk-keyed identity, override-config, run-scoped prune, OOM recover | Accepted |
 | [0018](./0018-skill-modularization.md) | Skill modularization boundaries + rename map | Accepted |
+| [0019](./0019-code-organization.md) | Code organization — domain-not-kind, protocol+registry+adapter, no utils/helpers | Accepted |
+| [0020](./0020-test-craft.md) | Test craft — mirror source, real dep, real_audit_store, filterwarnings=error | Accepted |

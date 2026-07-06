@@ -1,7 +1,10 @@
 from pathlib import Path
 
 AGENTS_DIR: Path
+EVALS_DIR: Path
 LIB_DIR: Path
+REPO_ROOT: Path
+REPO_SKILLS_DIR: Path
 SKILLS_DIR: Path
 LOG_SCRIPT: Path
 CONTAINER_SCRIPT: Path

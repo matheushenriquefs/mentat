@@ -4,12 +4,24 @@ from __future__ import annotations
 
 import os
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 
 HOLDING_PREFIX = "mentat"
 CHUNK_LABEL = "mentat_chunk"
 
 _plan_chunk_ids: dict[str, str] = {}
+
+
+def get_chunk_id_from_env(env: Mapping[str, str] | None = None) -> str:
+    """Return MENTAT_CHUNK_ID from env (or os.environ when omitted)."""
+    source = os.environ if env is None else env
+    return source.get("MENTAT_CHUNK_ID", "").strip()
+
+
+def set_chunk_id_in_env(chunk_id: str) -> None:
+    """Bind MENTAT_CHUNK_ID for the current process."""
+    os.environ["MENTAT_CHUNK_ID"] = chunk_id
 
 
 def make_chunk_id() -> str:
@@ -60,7 +72,7 @@ def chunk_id_for_plan(plan_slug: str) -> str:
     bound = _plan_chunk_ids.get(plan_slug)
     if bound:
         return bound
-    env = os.environ.get("MENTAT_CHUNK_ID", "").strip()
+    env = get_chunk_id_from_env()
     if env:
         return env
     raise LookupError(f"no chunk_id bound for plan {plan_slug!r}")
