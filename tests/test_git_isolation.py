@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 
-from tests.conftest import REPO_ROOT, init_git_repo
+from tests.conftest import REPO_ROOT, init_git_repo, subprocess_env
 
 
 def test_ceiling_hides_live_repo_from_bare_tmp(tmp_path) -> None:
@@ -41,3 +41,21 @@ def test_ephemeral_repo_does_not_move_live_head(tmp_path) -> None:
         check=True,
     ).stdout.strip()
     assert live_before == live_after
+
+
+def test_subprocess_env_ignores_hook_git_vars(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("GIT_INDEX_FILE", "/hook/index")
+    monkeypatch.setenv("LEFTHOOK", "1")
+    env = subprocess_env()
+    assert "GIT_INDEX_FILE" not in env
+    assert "LEFTHOOK" not in env
+    repo = tmp_path / "sandbox"
+    init_git_repo(repo, ceiling=tmp_path)
+    proc = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env=subprocess_env(),
+    )
+    assert proc.returncode == 0

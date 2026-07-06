@@ -12,6 +12,7 @@ from types import ModuleType
 from unittest.mock import patch
 
 import pytest
+from lib.git import scrub_ambient_git_env
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TEST_CHUNK_ID = "b" * 32
@@ -19,19 +20,25 @@ TEST_CHUNK_ID = "b" * 32
 
 def git_isolation_env(ceiling: Path) -> dict[str, str]:
     """Git env that blocks upward discovery past ``ceiling``."""
-    env = os.environ.copy()
-    for key in list(env):
-        if key.startswith("GIT_") and key != "GIT_CEILING_DIRECTORIES":
-            env.pop(key, None)
+    env = scrub_ambient_git_env()
     env["GIT_CEILING_DIRECTORIES"] = str(ceiling)
     return env
 
 
 def strip_git_hook_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Drop inherited git hook vars (GIT_INDEX_FILE, GIT_DIR, …) before subprocess git."""
+    """Drop inherited git/lefthook vars (GIT_INDEX_FILE, GIT_DIR, LEFTHOOK, …)."""
     for key in list(os.environ):
-        if key.startswith("GIT_") and key != "GIT_CEILING_DIRECTORIES":
+        if key == "GIT_CEILING_DIRECTORIES":
+            continue
+        if key.startswith("GIT_") or key.startswith("LEFTHOOK"):
             monkeypatch.delenv(key, raising=False)
+
+
+def subprocess_env(**overrides: str) -> dict[str, str]:
+    """Subprocess env without inherited GIT_/LEFTHOOK hook context."""
+    env = scrub_ambient_git_env()
+    env.update(overrides)
+    return env
 
 
 def load_script(path: Path, key: str | None = None) -> ModuleType:
@@ -128,6 +135,7 @@ def _isolate_state_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("MENTAT_STATE_DB", str(tmp_path / "state.db"))
     monkeypatch.setenv("MENTAT_DB", str(tmp_path / "mentat.db"))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
+    strip_git_hook_env(monkeypatch)
     for key in (
         "MENTAT_AGENT",
         "MENTAT_SESSION",

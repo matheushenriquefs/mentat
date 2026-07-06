@@ -164,3 +164,49 @@ def test_require_commit_identity_raises_when_unset(tmp_path: Path, monkeypatch) 
     monkeypatch.setattr(git_lib, "host_commit_identity", lambda **kw: {})
     with pytest.raises(git_lib.GitError, match="user.name and user.email"):
         git_lib.require_commit_identity(cwd=repo)
+
+
+# ── ambient git env scrub (FL4) ───────────────────────────────────────────────
+
+
+def test_scrub_ambient_git_env_drops_git_and_lefthook(monkeypatch) -> None:
+    monkeypatch.setenv("GIT_INDEX_FILE", "/hook/index")
+    monkeypatch.setenv("GIT_DIR", "/wrong/.git")
+    monkeypatch.setenv("LEFTHOOK", "1")
+    monkeypatch.setenv("LEFTHOOK_VERBOSE", "1")
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", "/ceiling")
+    monkeypatch.setenv("PATH", "/bin")
+
+    env = git_lib.scrub_ambient_git_env()
+
+    assert "GIT_INDEX_FILE" not in env
+    assert "GIT_DIR" not in env
+    assert "LEFTHOOK" not in env
+    assert "LEFTHOOK_VERBOSE" not in env
+    assert env["GIT_CEILING_DIRECTORIES"] == "/ceiling"
+    assert env["PATH"] == "/bin"
+
+
+def test_run_passes_scrubbed_env_with_pinned_dirs(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    other = tmp_path / "other"
+    init_git_repo(repo, ceiling=tmp_path)
+    init_git_repo(other, ceiling=tmp_path)
+    other_git = subprocess.run(
+        ["git", "rev-parse", "--git-dir"],
+        cwd=other,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if not Path(other_git).is_absolute():
+        other_git = str((other / other_git).resolve())
+    monkeypatch.setenv("GIT_DIR", other_git)
+    monkeypatch.setenv("GIT_WORK_TREE", str(other))
+    monkeypatch.setenv("GIT_INDEX_FILE", str(tmp_path / "poison-index"))
+    monkeypatch.setenv("LEFTHOOK", "1")
+    env = git_lib.git_subprocess_env(cwd=repo)
+    assert "GIT_INDEX_FILE" not in env
+    assert "LEFTHOOK" not in env
+    assert env.get("GIT_WORK_TREE") == str(repo.resolve())
+    assert git_lib.repo_root(cwd=repo) == repo.resolve()

@@ -2,23 +2,85 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
 from lib.chunk import chunk_slug, holding_branch
 from lib.chunk import worktree_path as chunk_worktree_path
 
+_GIT_CEILING = "GIT_CEILING_DIRECTORIES"
+
 
 class GitError(RuntimeError):
     """A git target could not be resolved or a git operation failed."""
 
 
+def scrub_ambient_git_env(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Drop inherited GIT_/LEFTHOOK vars so hook context cannot steer git."""
+    env = dict(base if base is not None else os.environ)
+    for key in list(env):
+        if key == _GIT_CEILING:
+            continue
+        if key.startswith("GIT_") or key.startswith("LEFTHOOK"):
+            env.pop(key, None)
+    return env
+
+
+def _resolve_git_dirs(cwd: Path, env: dict[str, str]) -> tuple[str, str] | None:
+    """Resolve absolute GIT_DIR and GIT_WORK_TREE for cwd under scrubbed env."""
+    r = subprocess.run(
+        ["git", "rev-parse", "--git-dir", "--show-toplevel"],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if r.returncode != 0:
+        return None
+    lines = [line.strip() for line in r.stdout.splitlines() if line.strip()]
+    if len(lines) < 2:
+        return None
+    git_dir_raw, work_tree = lines[0], lines[1]
+    git_dir_path = Path(git_dir_raw)
+    if not git_dir_path.is_absolute():
+        git_dir_raw = str((cwd / git_dir_raw).resolve())
+    return git_dir_raw, work_tree
+
+
+def git_subprocess_env(*, cwd: Path | None = None, base: dict[str, str] | None = None) -> dict[str, str]:
+    """Hermetic git env: scrub hook inheritance, pin GIT_DIR/GIT_WORK_TREE when cwd set."""
+    env = scrub_ambient_git_env(base)
+    if cwd is None or not cwd.is_dir():
+        return env
+    resolved = _resolve_git_dirs(cwd.resolve(), env)
+    if resolved is None:
+        return env
+    git_dir, work_tree = resolved
+    env["GIT_DIR"] = git_dir
+    env["GIT_WORK_TREE"] = work_tree
+    return env
+
+
+def _effective_cwd(args: list[str], cwd: Path | None) -> Path | None:
+    if cwd is not None:
+        return cwd
+    if len(args) >= 2 and args[0] == "-C":
+        return Path(args[1])
+    return None
+
+
 def _run(args: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    effective = _effective_cwd(args, cwd)
+    pin_cwd = effective if effective is not None and effective.is_dir() else None
+    env = git_subprocess_env(cwd=pin_cwd)
+    proc_cwd = str(cwd) if cwd is not None and cwd.is_dir() else None
     return subprocess.run(
         ["git", *args],
         capture_output=True,
         text=True,
-        cwd=str(cwd) if cwd else None,
+        cwd=proc_cwd,
+        env=env,
     )
 
 

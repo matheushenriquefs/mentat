@@ -62,9 +62,19 @@ def _warn_host_runtime_once(slug: str) -> None:
         pass  # best-effort suppression; a missing marker only costs an extra warning
 
 
+def _subprocess_env_for_wt(wt: Path) -> dict[str, str]:
+    from lib.git import git_subprocess_env
+
+    return git_subprocess_env(cwd=wt.resolve())
+
+
 def _run_on_host(command: str, cwd: Path) -> int:
     """Execute a command on the host (runtime=host opt-out). No container."""
-    return subprocess.run(["bash", "-lc", command], cwd=str(cwd)).returncode
+    return subprocess.run(
+        ["bash", "-lc", command],
+        cwd=str(cwd),
+        env=_subprocess_env_for_wt(cwd),
+    ).returncode
 
 
 def _git_root() -> Path:
@@ -86,7 +96,7 @@ def _git_mount_for_worktree(wt: Path) -> str | None:
         return None
     try:
         content = git_path.read_text().strip()
-    except (OSError, UnicodeDecodeError):
+    except OSError, UnicodeDecodeError:
         return None
     if not content.startswith("gitdir:"):
         return None
@@ -102,7 +112,7 @@ def _main_repo_root_for_wt(wt: Path) -> Path | None:
         return None
     try:
         content = git_path.read_text().strip()
-    except (OSError, UnicodeDecodeError):
+    except OSError, UnicodeDecodeError:
         return None
     if not content.startswith("gitdir:"):
         return None
@@ -404,7 +414,11 @@ def cmd_run(wt: Path, command: str) -> int:
         _warn_host_runtime_once(chunk_slug)
         return _run_on_host(command, wt)
     if _inside_devcontainer(wt):
-        return subprocess.run(["bash", "-lc", command], cwd=str(wt.resolve())).returncode
+        return subprocess.run(
+            ["bash", "-lc", command],
+            cwd=str(wt.resolve()),
+            env=_subprocess_env_for_wt(wt),
+        ).returncode
     cid = utils.container_id_for(chunk_slug)
     if cid is utils.DAEMON_DOWN:
         print(
@@ -462,7 +476,7 @@ def _doctor_section_container(wt: Path, host_arch: str) -> tuple[list[str], list
     print("[container]")
     try:
         daemon_ok = subprocess.run([_docker(), "info"], capture_output=True, timeout=30).returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         daemon_ok = False
     if not daemon_ok:
         print(_col("daemon", "not running"))
@@ -590,7 +604,7 @@ def cmd_doctor(wt: Path) -> int:
 
     try:
         host_arch = subprocess.run(["uname", "-m"], capture_output=True, text=True, timeout=30).stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         host_arch = "unknown"
     host_os = f"{_platform.system().lower()} {_platform.release()}"
 

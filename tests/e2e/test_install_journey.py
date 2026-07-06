@@ -9,14 +9,13 @@ or trips over its own prior links.
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from tests.conftest import load_script
+from tests.conftest import load_script, subprocess_env
 
 pytestmark = pytest.mark.e2e
 
@@ -26,7 +25,7 @@ INSTALL_PY = REPO_ROOT / ".agents/skills/mentat-install/scripts/install.py"
 
 def _run_install(home: Path) -> subprocess.CompletedProcess[str]:
     """Run the real install CLI non-interactively, with this repo as the clone root."""
-    env = {**os.environ, "HOME": str(home)}
+    env = subprocess_env(HOME=str(home))
     return subprocess.run(
         [sys.executable, str(INSTALL_PY), "--yes", "--no-color", "--skip-companions"],
         cwd=str(REPO_ROOT),  # cwd has .agents/skills → install auto-detects it as clone root

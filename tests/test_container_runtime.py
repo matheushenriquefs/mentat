@@ -41,9 +41,13 @@ def test_run_host_runtime_executes_on_host(tmp_path):
     """With runtime=host, cmd_run runs `bash -lc <cmd>` on the host, not docker exec."""
     container = _container()
     calls: list[list[str]] = []
+    envs: list[dict[str, str]] = []
 
     def fake_run(cmd, **kw):
         calls.append(cmd)
+        env = kw.get("env")
+        if isinstance(env, dict):
+            envs.append(env)
         return _R()
 
     with (
@@ -55,9 +59,12 @@ def test_run_host_runtime_executes_on_host(tmp_path):
 
     assert rc == 0
     assert calls, "cmd_run made no subprocess call"
-    assert calls[0][0] == "bash", f"expected host bash exec, got {calls[0]!r}"
-    assert "echo hi" in calls[0][-1]
+    bash_calls = [c for c in calls if c and c[0] == "bash"]
+    assert bash_calls, f"expected host bash exec among {calls!r}"
+    assert "echo hi" in bash_calls[0][-1]
     assert not any("exec" in str(c) for c in calls), "must not docker-exec in host mode"
+    assert envs, "host cmd_run must pass explicit env"
+    assert "GIT_INDEX_FILE" not in envs[-1]
 
 
 def test_run_host_runtime_warns_once(tmp_path, capsys):

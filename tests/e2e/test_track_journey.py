@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import seed_agent_events
+from tests.conftest import seed_agent_events, subprocess_env
 
 pytestmark = pytest.mark.e2e
 
@@ -76,12 +76,11 @@ def _seed_tree(log_root: Path, repo: str) -> Path:
 
 def _run(args: list[str], log_root: Path, repo: str) -> str:
     """Run the mentat-session CLI non-interactively (stdin not a tty → one-shot path)."""
-    env = {
-        **os.environ,
-        "MENTAT_LOG_PATH": str(log_root),
-        "MENTAT_REPO": repo,
-        "MENTAT_DB": str(log_root.parent / "mentat.db"),
-    }
+    env = subprocess_env(
+        MENTAT_LOG_PATH=str(log_root),
+        MENTAT_REPO=repo,
+        MENTAT_DB=str(log_root.parent / "mentat.db"),
+    )
     proc = subprocess.run(
         [sys.executable, str(SESSION_PY), *args],
         env=env,

@@ -6,14 +6,13 @@ then run the actual ``mentat-session doctor`` CLI non-interactively.
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from tests.conftest import seed_agent_events
+from tests.conftest import seed_agent_events, subprocess_env
 
 pytestmark = pytest.mark.e2e
 
@@ -45,12 +44,11 @@ def test_doctor_reports_a_clean_landing(tmp_path):
     sd = log_root / repo / session_id
     sd.mkdir(parents=True, exist_ok=True)
 
-    env = {
-        **os.environ,
-        "MENTAT_LOG_PATH": str(log_root),
-        "MENTAT_REPO": repo,
-        "MENTAT_DB": str(tmp_path / "mentat.db"),
-    }
+    env = subprocess_env(
+        MENTAT_LOG_PATH=str(log_root),
+        MENTAT_REPO=repo,
+        MENTAT_DB=str(tmp_path / "mentat.db"),
+    )
     proc = subprocess.run(
         [sys.executable, str(SESSION_PY), "doctor", session_id],
         env=env,

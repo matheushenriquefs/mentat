@@ -128,8 +128,11 @@ def test_run_on_host_uses_bash_lc_and_returns_rc(cc, monkeypatch, tmp_path):
     rec = Recorder(lambda cmd: _cp(7))
     monkeypatch.setattr(cc.subprocess, "run", rec)
     assert cc._run_on_host("make", tmp_path) == 7
-    assert rec.calls[0]["cmd"] == ["bash", "-lc", "make"]
-    assert rec.calls[0]["kwargs"]["cwd"] == str(tmp_path)
+    bash_calls = [c for c in rec.calls if c["cmd"] and c["cmd"][0] == "bash"]
+    assert bash_calls, f"expected bash exec among {rec.calls!r}"
+    assert bash_calls[0]["cmd"] == ["bash", "-lc", "make"]
+    assert bash_calls[0]["kwargs"]["cwd"] == str(tmp_path)
+    assert "env" in bash_calls[0]["kwargs"]
 
 
 # ── _git_root ───────────────────────────────────────────────────────────────────
