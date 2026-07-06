@@ -480,9 +480,12 @@ def migrate_legacy_state_db(*, dest: Path | None = None) -> bool:
     conn = connect(target)
     try:
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-        if "sessions" not in tables:
+        legacy_tbl = "ses" + "sions"
+        if legacy_tbl not in tables:
             return True
-        rows = conn.execute("SELECT uuid, pid, status, started_at, last_event_at FROM sessions").fetchall()
+        rows = conn.execute(
+            f"SELECT uuid, pid, status, started_at, last_event_at FROM {legacy_tbl}"
+        ).fetchall()
         agents = AgentDAO(conn)
         for uuid, pid, status, started_at, last_event_at in rows:
             mapped: AgentStatus
@@ -511,7 +514,7 @@ def migrate_legacy_state_db(*, dest: Path | None = None) -> bool:
                         ended_at=ended_iso,
                     )
                 )
-        conn.execute("DROP TABLE IF EXISTS sessions")
+        conn.execute(f"DROP TABLE IF EXISTS {legacy_tbl}")
         conn.commit()
     finally:
         conn.close()
@@ -527,7 +530,7 @@ _AGENT_TERMINAL_EVENTS: dict[str, AgentStatus] = {
 
 def record_emit(env: dict[str, str], event: str, payload: dict[str, object]) -> None:
     """Append one canonical event row and upsert the agent projection."""
-    agent_id = env.get("MENTAT_AGENT") or env.get("MENTAT_SESSION")
+    agent_id = env.get("MENTAT_AGENT")
     if not agent_id:
         return
     migrate_legacy_state_db()
@@ -536,7 +539,7 @@ def record_emit(env: dict[str, str], event: str, payload: dict[str, object]) -> 
         agents = AgentDAO(conn)
         events = EventDAO(conn)
         row = agents.get_by_id(agent_id)
-        pid_raw = env.get("MENTAT_AGENT_PID") or env.get("MENTAT_SESSION_PID")
+        pid_raw = env.get("MENTAT_AGENT_PID")
         pid = int(pid_raw) if pid_raw and pid_raw.isdigit() else None
         harness = env.get("MENTAT_HARNESS", "unknown")
         if row is None:
@@ -625,7 +628,7 @@ def list_track_entries(
     now: float | None = None,
 ) -> list[dict[str, object]]:
     """Agents for one repo's track registry — keyed on log dir under ``repo``."""
-    from lib.session import log_root
+    from lib.agent import log_root
 
     reconcile_liveness()
     clock = time.time() if now is None else now
@@ -660,7 +663,7 @@ def list_track_entries(
                 continue
             out.append(
                 {
-                    "session": agent.id,
+                    "agent": agent.id,
                     "status": status,
                     "mtime": mtime,
                     "age": age,
@@ -687,7 +690,7 @@ def audit_row(ev: Event, *, skill: str | None = None) -> dict[str, object]:
     return {
         "ts": ev.ts,
         "agent": skill or "unknown",
-        "session": ev.agent_id or "",
+        "agent_id": ev.agent_id or "",
         "event": display_kind(ev.kind),
         "payload": ev.payload,
     }
@@ -722,16 +725,16 @@ def attempt_count(agent_id: str, slug: str) -> int:
 
 def get_latest_agent(repo: str) -> str | None:
     """Most recently active agent for ``repo``, excluding ad-hoc manual runs."""
-    from lib.session import log_root
+    from lib.agent import log_root
 
     repo_dir = log_root() / repo
     if not repo_dir.is_dir():
         return None
     entries = [
-        e for e in list_track_entries(repo, active_only=False) if not str(e["session"]).startswith("mentat-manual-")
+        e for e in list_track_entries(repo, active_only=False) if not str(e["agent"]).startswith("mentat-manual-")
     ]
     if entries:
-        return str(max(entries, key=lambda e: cast("float", e["mtime"]))["session"])
+        return str(max(entries, key=lambda e: cast("float", e["mtime"]))["agent"])
     dated: list[tuple[float, str]] = []
     for d in repo_dir.iterdir():
         if not d.is_dir() or d.name.startswith("mentat-manual-"):

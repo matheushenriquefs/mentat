@@ -1,9 +1,9 @@
 """Harness stream-json (NDJSON) row helpers. One owner of the wire schema.
 
-Harness adapters (claude_code / cursor) write NDJSON when MENTAT_SESSION_LOG is
+Harness adapters (claude_code / cursor) write NDJSON when MENTAT_AGENT_LOG is
 set: rows where `type == "assistant"` carry `message.content[*]` blocks. This is
 the single place that knows that shape — consumers (self-answer detection,
-session-status pull) call these instead of re-parsing it. Stdlib only.
+agent-status pull) call these instead of re-parsing it. Stdlib only.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def is_ask_user_question(row: object) -> bool:
     """True if an assistant stream row carries an AskUserQuestion tool_use block.
 
     For AFK plans this is the self-answer signal (the agent asked instead of
-    ejecting); for live tracking it means the session is blocked on the operator.
+    ejecting); for live tracking it means the agent is blocked on the operator.
     """
     return "AskUserQuestion" in tool_uses(row)
 

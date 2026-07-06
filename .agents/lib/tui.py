@@ -112,17 +112,17 @@ def lifecycle_glyph(name: str) -> str:
 
 
 def status_color(status: str) -> str:
-    """ANSI SGR code for a session status (dim fallback for unknown)."""
+    """ANSI SGR code for an agent status (dim fallback for unknown)."""
     return _STATUS_ANSI.get(status, _ANSI_DIM)
 
 
 def status_dot(status: str) -> str:
-    """A `●` colored by session status (plain when not a tty)."""
+    """A `●` colored by agent status (plain when not a tty)."""
     return color("●", status_color(status))
 
 
 def section_rule(label: str) -> str:
-    """A `── [label] ──` section rule, the per-session header in the tracker."""
+    """A `── [label] ──` section rule, the per-agent header in the tracker."""
     return f"── [{label}] ──"
 
 

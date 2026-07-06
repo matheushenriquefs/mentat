@@ -1,7 +1,7 @@
 """Shared worktree lifecycle: identity-by-path prune + single-worktree teardown.
 
 A mentat worktree is one living under ``<repo>/.mentat/worktrees/`` — identity is
-PATH, never a session-id name prefix. Any ``startswith`` heuristic on the name
+PATH, never an agent-id name prefix. Any ``startswith`` heuristic on the name
 would silently match nothing and orphan worktrees. Preserve-vs-remove is
 dirty-vs-clean (``git status``), not a name guess.
 

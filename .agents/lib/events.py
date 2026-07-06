@@ -9,7 +9,7 @@ import sys
 from collections.abc import Callable
 from typing import Literal
 
-from lib.session import agent_id_from_env, make_agent_id
+from lib.agent import agent_id_from_env, make_agent_id
 from lib.support import paths
 
 # Events where a failed emit must not be silently swallowed — the orchestration
@@ -86,7 +86,6 @@ def _spawn(skill: str, event: str, payload: dict[str, object]) -> bool:
     env = dict(os.environ)
     if not agent_id_from_env(env):
         env["MENTAT_AGENT"] = make_agent_id(skill, "adhoc")
-        env.setdefault("MENTAT_SESSION", env["MENTAT_AGENT"])
     r = subprocess.run(
         ["python3", str(paths.LOG_SCRIPT), "emit", skill, event, json.dumps(payload)],
         capture_output=True,
@@ -112,7 +111,7 @@ def bind(skill: str) -> Callable[[str, dict[str, object]], None]:
 
 SUMMARY_FILE = "summary.md"
 
-HITL_IN_SESSION = "hitl-in-session"
+HITL_IN_AGENT = "hitl-in-agent"
 
 
 def _with_optional(payload: dict[str, object], **fields: object | None) -> dict[str, object]:
