@@ -75,7 +75,7 @@ See [ADR-0004](./adr/0004-parallel-orchestration.md).
 
 ## Audit envelope
 
-Commands emit events through `mentat-log emit`. Nineteen canonical event types (see ADR-0007) append to `~/.mentat/mentat.db` via `lib/store.py`. Export for grep: `mentat-log list <agent-id> --format=jsonl`. Harness transcripts live at `~/.mentat/logs/<repo>/<agent_id>/transcript.jsonl` (not in sqlite). Subprocess stderr on emit reject goes to `.stderr/<skill>-<slug>.stderr`. The catalog is defined once in `mentat-log/scripts/log.py` as `EVENT_CATALOG`.
+Commands emit events through `mentat-log emit`. Canonical event types (see ADR-0007 and `EVENT_CATALOG`) append to `~/.mentat/mentat.db` via `lib/store.py`. Export for grep: `mentat-log list <agent-id> --format=jsonl`. Harness transcripts live at `~/.mentat/logs/<repo>/<agent_id>/transcript.jsonl` (not in sqlite). Subprocess stderr on emit reject goes to `.stderr/<skill>-<slug>.stderr`. The catalog is defined once in `mentat-log/scripts/log.py` as `EVENT_CATALOG`.
 
 `mentat-track track` reads the canonical store and transcript file. `mentat-track diagnose` renders a verdict from store events.
 

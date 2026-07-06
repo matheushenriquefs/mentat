@@ -119,15 +119,15 @@ reintroduce the retired alternative.
 - **`kind`, never `class`.** `class` is a Python keyword (unusable as a
   dataclass field) and was overloaded between "plan classification" and
   "Python class." One taxonomy field name: `event.kind` (SQLite column),
-  `slice.kind`, plan frontmatter `kind`.
+  slice kind field, plan frontmatter `kind`.
 - **Event names are flat snake_case, generic-verb-first (Stripe style).**
   `_started` is shared across entities; distinct outcomes get distinct
   verbs (`landed` vs `ejected`, `resolved` vs `canceled`), and a
   domain-only verb is fine where no generic one fits (`reaped`,
   `teardown`). No dot-separated resource namespace at the emit boundary
-  (`chunk.started` is wrong; `chunk_started` is right).
-- **Self-referencing foreign keys are `<role>_id`.** `agent.supervisor_id`,
-  `agent.resumed_from_id` — the role the referenced row plays, not a bare
+- Dotted emit names (resource dot verb) are wrong; flat `chunk_started` is right.
+- **Self-referencing foreign keys are `<role>_id`.** `supervisor_id`,
+  `resumed_from_id` on Agent — the role the referenced row plays, not a bare
   `parent_id`.
 - **Timestamps end in `_at`.** `started_at`, `ended_at`, `expires_at` — UTC
   ISO-8601, always the suffix, never `_time`/`_ts`/a bare noun.

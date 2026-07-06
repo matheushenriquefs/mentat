@@ -84,7 +84,7 @@ Exit codes: 0 all-landed; 1 partial; ≥2 tool error.
 `land_queue.drain` accepts an optional `Scheduler` (`scheduler.py`). With one,
 the drain pulls the next-ready chunk via `Scheduler.next_ready(pending)` — a
 chunk lands only when every slug in its `blocked_by` is already in
-`scheduler.landed`. `B(blocked_by=[A])` waits for `A.landed` even if B's
+`chunk_landed`. `B(blocked_by=[A])` waits for `A` landed even if B's
 chunk arrived first; rebase-at-land then carries A's commits underneath B.
 
 Eject cascade: when a chunk ejects (gate-failed, rebase-conflicted, not-ff),

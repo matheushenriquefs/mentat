@@ -39,6 +39,10 @@ pythonpath = []
 markers = [
     "e2e: real-subprocess / real-git end-to-end test (run the fast suite with `-m \"not e2e\"`)",
 ]
+filterwarnings = [
+    "error",
+    "ignore:Exception ignored while finalizing database connection:pytest.PytestUnraisableExceptionWarning",
+]
 
 [tool.coverage.run]
 branch = true

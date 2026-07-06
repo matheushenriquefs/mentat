@@ -4,11 +4,11 @@ Status: Accepted (locked)
 Date: 2026-06-06
 Amended: 2026-06-09 (v2 — past-tense verbs; `~/.mentat/logs`; `EVENT_CATALOG` in Python)
 Amended: 2026-06-10 (v3 — Stripe-style naming policy; reasons live in payload, not name)
-Amended: 2026-06-11 (v4 — chunk_teardown added, 10 events)
-Amended: 2026-06-12 (v5 — task.* + session.prune added, 16 events)
+Amended: 2026-06-11 (v4 — chunk_teardown added)
+Amended: 2026-06-12 (v5 — task lifecycle events added)
 Amended: 2026-06-20 (v6 — F1: summary.md is one status-bearing file in the agent log dir)
 Amended: 2026-07-05 (v7 — SQLite canonical store; NDJSON export-only)
-Amended: 2026-07-06 (v8 — flat snake_case catalog, 18 events; `event.kind` column)
+Amended: 2026-07-06 (v8 — flat snake_case catalog; event kind column)
 Amended: 2026-07-06 (v10 — wire field `session` → `agent_id`; term retired repo-wide)
 
 ## Context
@@ -23,8 +23,8 @@ loader) replaced by a Python-only SSOT.
 **All audit events routed through `mentat-log emit`.** No skill writes audit rows directly.
 
 **Canonical store:** `~/.mentat/mentat.db` (SQLite WAL, `lib/store.py`). The `event`
-table is append-only truth; `agent`/`chunk`/`slice` are projections. The `event.kind`
-column stores the flat snake_case catalog name. Emit validates against `EVENT_CATALOG`,
+table is append-only truth; `agent`/`chunk`/`slice` are projections. The kind
+column on `event` stores the flat snake_case catalog name. Emit validates against `EVENT_CATALOG`,
 then appends via `store.record_emit`.
 
 **Wire envelope** (export shape for grep; `mentat-log list --format=jsonl`):
@@ -50,7 +50,7 @@ file per agent. Frontmatter `status:` ∈ `{succeeded, failed, blocked, hitl-req
 **`EVENT_CATALOG`** lives in `.agents/skills/mentat-log/scripts/log.py` as
 `dict[str, list[str]]` (event name → required fields). Stdlib only, no pydantic, no jsonc.
 
-**19 canonical events:**
+**Canonical events** (count and fields live only in `EVENT_CATALOG`):
 | Event | Required fields |
 |---|---|
 | `slice_scheduled` | `slug` |
@@ -73,7 +73,7 @@ file per agent. Frontmatter `status:` ∈ `{succeeded, failed, blocked, hitl-req
 | `task_canceled` | `id` |
 | `test_writable_requested` | `slug`, `path` |
 
-`chunk_ejected.reason` — see `lib.events.EJECT_REASONS`.
+`chunk_ejected` payload field `reason` — see `lib.events.EJECT_REASONS`.
 
 Log dir: `mode=0o700` on first write.
 
@@ -84,7 +84,7 @@ Log dir: `mode=0o700` on first write.
 - **Reasons live in payload, not name.**
 - **New event name only when handler diverges.**
 
-Catalog at 19 events; future growth still prefers payload extension over new names.
+Future growth still prefers payload extension over new event names.
 
 ## Consequences
 

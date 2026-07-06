@@ -13,6 +13,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib.gates.code import precommit as _precommit  # noqa: E402
 from lib.gates.code import smells as _smells  # noqa: E402
+from lib.gates import drift_lint as _drift_lint  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -27,7 +28,7 @@ class Gate(Protocol):
     def run(self, ctx: GateContext) -> tuple[str, str]: ...
 
 
-_GATES: list[Gate] = [_precommit.gate, _smells.gate]
+_GATES: list[Gate] = [_drift_lint.gate, _precommit.gate, _smells.gate]
 
 
 def evaluate(chunk_path: Path, *, _gates: list[Gate] | None = None) -> tuple[str, str]:
