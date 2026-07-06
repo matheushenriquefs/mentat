@@ -23,7 +23,7 @@ mentat-track diagnose
 
 | Status | Marker | Meaning |
 |---|---|---|
-| `waiting` | `◆` | Needs the operator — `chunk.ejected{reason: hitl-required}` (AFK wrote `summary.md{status: blocked}`), or a live `AskUserQuestion` in the harness stream. |
+| `waiting` | `◆` | Needs the operator — `chunk_ejected{reason: hitl-required}` (AFK wrote `summary.md{status: blocked}`), or a live `AskUserQuestion` in the harness stream. |
 | `idle` | `✓` | Terminal event (landed / succeeded / failed / teardown). Done. |
 | `?` | `?` | Non-terminal tail but stale `st_mtime` (no activity > 300s) — crashed silently. |
 | `working` | `•` | Non-terminal tail, recently active. |
@@ -34,23 +34,23 @@ Rows sort attention-to-top by `(rank, age)` — `waiting` (0) > `idle` (1) > `?`
 
 ```markdown
 ## Verdict
-- Reason: <chunk.landed | chunk.ejected.reason>
+- Reason: <chunk_landed | chunk_ejected.reason>
 - Phase: <last event type>
 - First failed event: <event-type> @ <ts>
 - Suspect: <human-readable hypothesis from last event payload>
 
 ## Expected vs actual
-- Expected: <from plan.started or chunk.spawned payload>
-- Actual:   <from chunk.ejected.reason + tail of assistant transcript>
+- Expected: <from chunk_started payload>
+- Actual:   <from chunk_ejected.reason + tail of assistant transcript>
 
 ## Regression
-- Last known good commit: <from chunk.landed payload if any prior chunk, else "unknown">
+- Last known good commit: <from chunk_landed payload if any prior chunk, else "unknown">
 - Is regression: <yes | no | unknown>
 ```
 
 ## Per-reason Suspect formatters
 
-| `chunk.ejected.reason` | Hypothesis |
+| `chunk_ejected.reason` | Hypothesis |
 |---|---|
 | `implement-failed` | TDD/gate fail mid-implementation. Check `<chunk>.stdout`. |
 | `gate-failed` | Code/LLM gate `<gate>` returned `block`. See payload `message:`. |

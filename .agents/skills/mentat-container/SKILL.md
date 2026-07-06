@@ -5,7 +5,7 @@ description: >
   Use when you need to start, stop, run commands inside, or diagnose a devcontainer.
 ---
 
-Start, stop, exec inside, and diagnose devcontainers for mentat worktrees. Wraps `devcontainer` CLI + Docker with worktree-aware slug derivation and atomic `compose_render`.
+Start, stop, exec inside, and diagnose devcontainers for mentat worktrees. Wraps `devcontainer` CLI + Docker with worktree-aware slug derivation and atomic `override`.
 
 ## How to invoke
 
@@ -57,7 +57,7 @@ python3 ~/.agents/skills/mentat-container/scripts/container.py doctor
 - `up` is idempotent: calling it twice is safe, returns exit 0 if already running.
 - `down` stops and removes the container (`docker rm -f`) — never touches branch state. Container respawns on the next `up`.
 - `run` requires container already up; fails fast with exit 2 if not running.
-- `compose_render` auto-detects `docker-compose.yml` or `Dockerfile` in worktree root; a sidecar-only compose gets a generated `mentat-dev` service layered on (see below).
+- `override` auto-detects `docker-compose.yml` or `Dockerfile` in worktree root; a sidecar-only compose gets a generated `mentat-dev` service layered on (see below).
 - Atomic write for `.devcontainer/devcontainer.json`: writes to `.tmp` then renames.
 - Slug = `basename(git rev-parse --show-toplevel)`.
 - `workspaceFolder` is normalized to `/workspaces/<slug>` on the write path; read from existing `devcontainer.json` at run/exec time.
@@ -88,7 +88,7 @@ project compose via multi-file compose:
 
 - `devcontainer.json` lists `dockerComposeFile: ["../docker-compose.yml", "mentat-dev.compose.yml"]`
   and sets `service: mentat-dev`. The overlay (`.devcontainer/mentat-dev.compose.yml`) is
-  written by `container.py`; `compose_render.synth_spec` stays pure and hands it back as text.
+  written by `container.py`; `override.synth_spec` stays pure and hands it back as text.
 - The two files merge into **one** compose project, so the dev service joins the project's
   default network automatically — no explicit `networks:` block. The agent runs containerized
   and the ADR-0004 mantra holds (nothing on the host).

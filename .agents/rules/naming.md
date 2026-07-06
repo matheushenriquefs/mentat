@@ -110,7 +110,7 @@ syntax — `mentat-log emit`, not `mentat-log:emit`.
   not a "result," "deliverable," or "output file." One noun, used the same
   way in every `SKILL.md` and agent prompt.
 
-## Locked taxonomy (this reset)
+## Locked taxonomy
 
 These are cross-cutting decisions already applied across the schema, event
 log, and plan frontmatter. A new field or symbol follows them; do not

@@ -25,7 +25,7 @@ test files until the slice is green. Rule, not kernel guarantee.
 reads agent's edit trajectory. Test-file write during impl phase, weakened assertion,
 redirected runner → blacklisted move. Deterministic veto: score `0.0`.
 
-Enforcement is pytest-shaped:
+Enforcement is test-runner-shaped:
 1. Write failing test → commit.
 2. Implement → `task test` green.
 3. Gate pass → commit per slice.

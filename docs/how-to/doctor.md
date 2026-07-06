@@ -4,21 +4,22 @@ Task-oriented. Goal: understand why a chunk ejected or failed, using the doctor.
 
 ## What doctor is
 
-`mentat-track doctor` reads a session's audit log and writes a `diagnosis.md`
-into that session's log directory — a verdict on what the chunk attempted, what
-happened, and the suspected cause. It is the death-side counterpart to `report`,
-which writes the success-side summary.
+`mentat-track doctor` reads a chunk's audit events and prints a verdict to stdout —
+what the chunk attempted, what happened, and the suspected cause. It is the
+death-side counterpart to `report`, which writes the success-side summary to
+`summary.md`. Doctor itself writes no file; its output is the printed verdict.
 
 ## When it is spawned
 
 Doctor runs automatically when a run ends on a diagnosable exit code — a gate or
 implementation failure, a HITL wedge, a container or configuration error, or an
 unhandled exception. Signal-interrupt exits are skipped. So an ejected or failed
-chunk usually already has a `diagnosis.md` waiting; you rarely invoke doctor by hand.
+chunk usually has its verdict printed to the run output already; you rarely invoke
+doctor by hand.
 
 ## 1. Find the chunk
 
-List the repository's sessions and their statuses:
+List the repository's agents and their statuses:
 
 ```
 /mentat-track list
@@ -32,9 +33,8 @@ An ejected or failed chunk stands out by its status.
 /mentat-track doctor <session-id>
 ```
 
-With no session id, doctor falls back to the most recent session in the repository.
-It prints the diagnosis and leaves `diagnosis.md` in the session's log directory for
-later reading.
+With no id, doctor falls back to the most recent agent in the repository. It prints
+the verdict to stdout.
 
 ## 3. Diagnose interactively
 
@@ -52,7 +52,7 @@ For a guided loop that runs doctor first and walks the evidence:
 
 ## Notes
 
-- One diagnosis per session — re-running doctor overwrites it.
-- The diagnosis lives beside the events it explains (`diagnosis.md` next to the
-  session's audit log), so one directory holds both verdict and evidence.
-- To read the success side of a clean run instead, use `/mentat-track report`.
+- Doctor is read-only: it derives the verdict from stored audit events each time and
+  prints it. Re-running is safe and always reflects the latest events.
+- To read the success side of a clean run instead, use `/mentat-track report`, which
+  writes `summary.md` beside the run's transcript.

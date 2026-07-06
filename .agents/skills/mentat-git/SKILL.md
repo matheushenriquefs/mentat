@@ -37,7 +37,7 @@ rm .commit-msg
 1. Verify `holding` is an ancestor of `HEAD` — fast-forward must be safe (replay would fire host-side pre-commit on the holding branch).
 2. Resolve the main repo root from the current worktree.
 3. Fast-forward the holding branch (checked out at the main root) to `HEAD`.
-4. Non-FF condition → non-zero exit. Caller treats as `chunk.ejected{reason: rebase-conflicted}` per ADR-0007.
+4. Non-FF condition → non-zero exit. Caller treats as `chunk_ejected{reason: rebase-conflicted}` per ADR-0007.
 
 ## Worktree create flow
 

@@ -21,7 +21,7 @@ Subcommands (peers): `run` (default), `mark-test-writable <slug> <path>`.
 ## Preflight
 
 1. **Worktree.** Main worktree → create sibling via `mentat-git worktree create <slug>` + chdir. Already in sibling → skipped. Not in repo → skipped. `MENTAT_SKIP_PREFLIGHT=1` → skipped.
-2. **Failure** → emit `chunk.ejected{reason: preflight-worktree-failed}` + exit rc (65/66/70).
+2. **Failure** → emit `chunk_ejected{reason: preflight-worktree-failed}` + exit rc (65/66/70).
 3. **Slice artifacts.** Skip already-passing predicates; refuse re-run on DONE slices.
 4. **Container** auto-ups via `mentat-container up`; second miss → exit 69.
 
@@ -48,7 +48,7 @@ Fail → fix, re-commit, re-spawn. No rebase on FAIL. Dismissals require refuted
 2. AFK: adapter invoked `--disallowedTools AskUserQuestion`; unresolvable call → write `summary.md{status: blocked}`, stop.
 3. HITL: adapter invoked normally (`AskUserQuestion` allowed).
 4. TDD loop: red test → impl → gate → commit per slice.
-5. AFK wedge detected → emit `chunk.ejected{hitl-required}` + exit 42, preserve worktree.
+5. AFK wedge detected → emit `chunk_ejected{hitl-required}` + exit 42, preserve worktree.
 6. Success → exit 0. TDD/gate failure → exit 1.
 
 ## Exit codes
@@ -69,13 +69,13 @@ Fail → fix, re-commit, re-spawn. No rebase on FAIL. Dismissals require refuted
 
 - One plan slug per invocation. Refuse multi-slug input with exit 64.
 - Container required (ADR-0004). Exit 69 if container down at preflight.
-- AFK: no interactive prompts. Ambiguity → `summary.md{status: blocked}` → `chunk.ejected{hitl-required}` exit 42.
+- AFK: no interactive prompts. Ambiguity → `summary.md{status: blocked}` → `chunk_ejected{hitl-required}` exit 42.
 - HITL: `AskUserQuestion` allowed at any phase.
 - Rename/delete: `git mv`/`git rm` first in own commit; post-commit `git ls-files | grep <old>` must be empty.
 - Stale-ref sweep: after rename/delete, non-zero rg hits → abort the slice.
 - One commit per slice via `/mentat-commit`. No squash.
 - All emit calls route through `mentat-log emit`; never write JSONL directly.
-- Session id from `$MENTAT_SESSION` (`<role>-<slug>-<pid>` format).
+- Agent id from `$MENTAT_AGENT` (`<role>-<slug>-<pid>` format).
 
 ## Read-only test mount (ADR-0010)
 

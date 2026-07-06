@@ -38,7 +38,7 @@ Subcommands: `emit`, `validate`, `list`, `prune`. (`query` is a deprecated alias
 | `task_resolved` | `id` |
 | `task_canceled` | `id` |
 
-`chunk_ejected.reason` ∈ snake_case values in `lib.events.EJECT_REASONS`
+`chunk_ejected.reason` ∈ snake_case values in `lib.events.CHUNK_EJECT_REASONS`
 
 ## Environment variables
 

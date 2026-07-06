@@ -54,7 +54,7 @@ flowchart LR
     G2 --> Q
     G3 --> Q
     Q -->|pass| H["holding/&lt;plan&gt;"]
-    Q -.->|veto| E["chunk.ejected<br/><i>left for repair</i>"]
+    Q -.->|veto| E["chunk_ejected<br/><i>left for repair</i>"]
     H --> M["upstream merge"]
 
     classDef chunk fill:#1f2937,stroke:#475569,color:#e2e8f0
@@ -121,7 +121,7 @@ curl -fsSL https://raw.githubusercontent.com/matheushenriquefs/mentat/main/insta
 | **Scored review gate** | 6 reviewer subagents (plan / test / bug / smell / context / rules) emit JSON verdicts. Never average — veto > threshold. |
 | **Anti-cheat blacklist** | Trajectory scanner in `mentat-bug-reviewer` hard-vetoes forbidden moves (test-runner redirection, asserting the inverse). No threshold mediation. |
 | **AFK vs HITL** | Slice-level tags control whether agents stall for human review or proceed unattended. AFK depends on the scored gate. |
-| **Audit envelope** | Every command emits start + complete events. NDJSON to `~/.mentat/logs/<repo>/<session>/`. |
+| **Audit envelope** | Every command emits start + complete events to the canonical SQLite store `~/.mentat/mentat.db`; harness transcripts under `~/.mentat/logs/<repo>/<agent_id>/`. |
 | **Harness-agnostic** | Pluggable headless-agent CLIs (`claude-code`, `cursor` today). Drop a module to add another. |
 | **Plugin API** | Pluggable harness adapters without forking core. One slot: harness. |
 | **Stdlib-only bin layer** | Installs without pip. Dev layer uses `uv` / `ruff` / `pyright` / `pytest`. |
@@ -140,7 +140,7 @@ task test      # pytest tests/
 
 | Symptom | What to try |
 |---|---|
-| Chunk ejected, unclear why | `/mentat-track doctor` — writes `diagnosis.md` alongside the session log. |
+| Chunk ejected, unclear why | `/mentat-track doctor` — prints the verdict to stdout. |
 | Container won't come up | `mentat-container doctor` — diagnoses Docker daemon, arch mismatch, missing devcontainer.json. |
 | `mentat-container run` fails with exit 69 | Container not running for current worktree — `mentat-container up` first. Never fall back to host or `docker exec` (ADR-0004). |
 | Land queue stuck on rebase | The chunk's branch is not fast-forward onto holding. Inspect with `mentat-git diff holding/<plan>..HEAD`; rebuild the slice and re-run. |
@@ -155,7 +155,7 @@ task test      # pytest tests/
 | [How-to guides](./docs/how-to/) | Worked workflows: implement, orchestrate, track, doctor, HITL handoff. |
 | [Architecture](./docs/ARCHITECTURE.md) | Narrative overview, ADR pointers. |
 | [Glossary](./CONTEXT.md) | Domain lexicon — slice / chunk / batch / land / eject / AFK / HITL. |
-| [ADRs](./docs/adr/README.md) | 13 architecture decision records, 0001–0013. |
+| [ADRs](./docs/adr/README.md) | 18 architecture decision records, 0001–0018. |
 | [Filesystem layout](./.agents/docs/PATHS.md) | Every path Mentat reads or writes. |
 | [Style guide](./docs/STYLE.md) | Voice classes, LOC budgets, banned words. |
 | [Plugin API](./docs/PLUGINS.md) | The harness adapter slot. |

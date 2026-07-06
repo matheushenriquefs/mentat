@@ -63,11 +63,11 @@ Pick only if:
 
 | Event | Payload |
 |---|---|
-| `task.created` | `{id, slug}` |
-| `task.claimed` | `{id, agent, expires_at}` |
-| `task.released` | `{id}` |
-| `task.done` | `{id}` |
-| `task.wontfix` | `{id}` |
+| `task_created` | `{id, slug}` |
+| `task_claimed` | `{id, agent, expires_at}` |
+| `task_released` | `{id}` |
+| `task_resolved` | `{id}` |
+| `task_canceled` | `{id}` |
 
 ## Boundary with other skills
 

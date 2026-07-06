@@ -1,6 +1,6 @@
 # ADR 0015: Model-driven auto-recovery
 
-Status: Superseded by ADR-0007 v7 (SQLite canonical store)
+Status: Accepted
 Date: 2026-07-03
 
 ## Context

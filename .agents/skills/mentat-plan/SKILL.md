@@ -25,7 +25,7 @@ Subcommands: `write`, `resolve-slug`.
 
 | Subcommand | Args | Description |
 |---|---|---|
-| `write` | `<slug> <body-path>` | Write `~/.agents/plans/<slug>.md` from body file. Emits `plan.started` + `plan.succeeded`. |
+| `write` | `<slug> <body-path>` | Write `~/.agents/plans/<slug>.md` from body file. |
 | `resolve-slug` | `<slug-or-path>` | Print canonical absolute path. Pure — no stat. |
 
 ## Plan-ref resolution
@@ -112,5 +112,4 @@ created_at: 2026-06-13
 - Plan files live under `~/.agents/plans/` only; no project-local plan storage.
 - `write` overwrites an existing plan at the same slug without warning — slug collisions are caller responsibility.
 - `resolve-slug` is pure path arithmetic; it does not stat or validate the slug.
-- All audit emissions route through `mentat-log emit`; the skill never writes JSONL directly.
-- `write` is atomic only at the OS level: a successful write emits `plan.succeeded`; an `OSError` emits `plan.failed` and propagates to the caller.
+- `write` is atomic only at the OS level; an `OSError` propagates to the caller.

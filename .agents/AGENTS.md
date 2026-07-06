@@ -49,12 +49,16 @@ read on demand):
 - **0004** parallel-slicing orchestration — fan-out parallel, land serial, Docker-required.
 - **0005** ubiquitous lexicon — slice/chunk/batch, one Laravel borrow (batch, noun only).
 - **0006** soft read-only tests — impl-only-after-red contract + blacklist, driver agnostic.
-- **0007** audit envelope — 16-event NDJSON catalog, per-session log dir.
+- **0007** audit envelope — 18-event catalog, SQLite canonical store, per-agent log dir.
 - **0008** python runtime — stdlib-only bin layer; uv/ruff/pyright/pytest dev layer.
-- **0009** plugin API — Vite-derived 2-slot extension (rubric, gate).
+- **0009** plugin API — Vite-derived 1-slot harness adapter (drop-in module).
 - **0010** read-only test mount — OCP manifest + container bind-mount.
 - **0011** compose-aware container — sidecar detection, dev-service layering (default), host opt-out (ADR-0004 forfeit).
 - **0012** code-rules layer — `.agents/rules/` reviewed against changed files, veto gate.
 - **0013** session continuity over compaction — resume from summary, no early wrap-up.
-- **0014** coverage gate — unit 100% testable-line + e2e journey floor, blocking `task coverage`.
+- **0014** coverage gate — unit 90% testable-line + e2e journey floor, blocking `task coverage`.
+- **0015** model-driven auto-recovery — JIT respawn of AFK chunks, supervisor + watchdog/breaker guards.
+- **0016** mutation signal — advisory only, never a gate; test-ROI heuristic.
+- **0017** per-run isolation — chunk-keyed worktrees, ambient git-env scrub.
+- **0018** skill modularization — split container/track skills, domain-type rename map.
 

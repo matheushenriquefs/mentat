@@ -83,7 +83,7 @@ section covers judgment.
     (defaulting an unresolved branch to `"main"`, an unresolved path to
     `Path.cwd()`) is the same smell wearing a different shape — reject
     the input instead of guessing at it.
-  - The `mentat-fail-loud` discipline enforces this at review time.
+  - Enforced at review time by the bug-reviewer latent-bug lens (fail-loud over silent-mask).
 - **Per-run isolation.** Every per-run resource is keyed by `chunk_slug`
   (see the isolation lexicon in `naming.md`) — never machine-wide, never
   `Path.cwd()`. Two chunks running concurrently on the same host must not

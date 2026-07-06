@@ -6,11 +6,11 @@ Single source of truth for every path mentat reads or writes.
 
 ```
 ~/.mentat/                                         # user state root
-├── logs/<repo>/<session>/                         # per-session audit
-│   ├── <agent>-<slug>.jsonl                       # canonical event stream
-│   ├── <agent>-<slug>.stdout                      # raw harness output (opaque)
-│   ├── .stderr/<agent>-<slug>.stderr              # subprocess stderr sidecar
-│   └── diagnosis.md                               # per-session diagnosis (mentat-track doctor output)
+├── mentat.db                                      # canonical SQLite store (events, agents, chunks, slices)
+├── logs/<repo>/<agent_id>/                        # per-agent files
+│   ├── transcript.jsonl                           # opaque harness transcript (redirected stdout)
+│   ├── summary.md                                 # report-back (mentat-track report)
+│   └── .stderr/<skill>-<slug>.stderr              # subprocess stderr sidecar
 └── config.toml                                    # single flat config (user-edited, TOML)
 ```
 

@@ -36,9 +36,9 @@ Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the hol
    - AFK with no HITL anywhere in the dep chain → auto_spawn
 4. Spawn auto_spawn in parallel (subprocess.Popen with manual polling).
    Print track command immediately after spawn.
-5. Emit `chunk.spawned{harness:"hitl-in-session"}` per anchored plan and
+5. Emit `chunk_started{harness:"hitl-in-session"}` per anchored plan and
    return control. Caller queries the audit log
-   (`mentat-log query chunk.spawned --session=$MENTAT_SESSION`) and invokes
+   (`mentat-log list chunk_started --session=$MENTAT_AGENT`) and invokes
    `/mentat-implement <slug>` in-session per anchored slug, then re-invokes
    `orchestrate land-queue <holding>` with the HITL slugs on stdin. Orchestrate
    never subprocess-runs HITL implement — interactivity would be lost.
@@ -48,7 +48,7 @@ Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the hol
    pulls chunks via `Scheduler.next_ready` — topo order is respected, so
    `B(blocked_by=[A])` waits until `A.landed` even if B's chunk arrived
    first. Ejecting a chunk cascades to every downstream chunk as
-   `chunk.ejected{reason:"upstream_ejected", upstream:<slug>}` —
+   `chunk_ejected{reason:"upstream_ejected", upstream:<slug>}` —
    payload-only extension per ADR-0007, no rebase/gate fired for the
    cascaded slugs. Cycle / missing upstream → `status:"stalled"` with
    the pending list and exit 1.
@@ -104,7 +104,7 @@ Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the hol
 - Container required per chunk (ADR-0004). Exit 69 if container unavailable.
 - Plan kind read from frontmatter only; no env var override.
 - `--dry-run` prints what would run; does not spawn or land.
-- Session id from `$MENTAT_SESSION` for audit events.
+- Session id from `$MENTAT_AGENT` for audit events.
 - `batch-review` is always advisory; ejected counts do not affect its exit code.
 - Config resolved as layered stack: CLI flag > `<repo-root>/.mentat/config.toml` > `~/.mentat/config.toml`. Scaffold repo overlay with `mentat-install --repo`.
 

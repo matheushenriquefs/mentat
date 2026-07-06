@@ -26,7 +26,7 @@ SCRIPTS = TRACK_PY.parent
 
 
 class _TrackFacade:
-    """Delegate to track/render/panes modules after the ES4 split."""
+    """Delegate to track/render/panes modules after the track-module split."""
 
     def __init__(self) -> None:
         self._track = load_script(TRACK_PY, "e2e_track")

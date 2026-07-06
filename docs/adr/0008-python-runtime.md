@@ -49,7 +49,7 @@ imports. Pydantic, PyYAML allowed in `[dependency-groups] dev` (tests only).
 ├── bin/                    # CLI wrappers (symlink → <repo>/bin)
 ├── lib/                    # shared Python library (symlink → <repo>/lib)
 ├── docs/                   # ARCHITECTURE, ADRs, PATHS.md (symlinks)
-├── logs/<repo>/<session>/  # audit NDJSON (per ADR-0007)
+├── logs/<repo>/<agent_id>/  # harness transcript (SQLite canonical store, per ADR-0007)
 ├── config.toml             # user config
 └── worktrees/<slug>/       # chunk worktrees (per ADR-0002)
 ```

@@ -58,7 +58,7 @@ See [ADR-0006](./adr/0006-soft-readonly-test-enforcement.md) and [ADR-0010](./ad
 
 ## Coverage gate
 
-Coverage is a blocking gate, run by `task coverage`, in two branch-coverage passes: the fast unit suite (`-m "not e2e"`) over the shipped runtime `.agents/lib`, `.agents/skills` must hit **100% testable-line** (floor in `pyproject.toml` `fail_under`; `tasks/` dev tooling is out of the gated source), and the `e2e`-marked journeys over `.agents` must clear a **journey floor** (`--fail-under=45`) that caps well below the unit gate because Docker-in-Docker, real-harness spawn, worktree plumbing, and the gate toolchain are not e2e-reachable from inside the devcontainer. Entrypoints, `TYPE_CHECKING` blocks, and the stdlib-only `sys.path` bootstrap idiom are omit-listed; raw-tty I/O shells are covered through their extracted pure helpers, not by driving the terminal. A branch that drops below its floor fails the land the same way a red test does.
+Coverage is a blocking gate, run by `task coverage`, in two branch-coverage passes: the fast unit suite (`-m "not e2e"`) over the shipped runtime `.agents/lib`, `.agents/skills` must hit **90% testable-line** (floor in `pyproject.toml` `fail_under`; `tasks/` dev tooling is out of the gated source), and the `e2e`-marked journeys over `.agents` must clear a **journey floor** (`--fail-under=45`) that caps well below the unit gate because Docker-in-Docker, real-harness spawn, worktree plumbing, and the gate toolchain are not e2e-reachable from inside the devcontainer. Entrypoints, `TYPE_CHECKING` blocks, and the stdlib-only `sys.path` bootstrap idiom are omit-listed; raw-tty I/O shells are covered through their extracted pure helpers, not by driving the terminal. A branch that drops below its floor fails the land the same way a red test does.
 
 See [ADR-0014](./adr/0014-coverage-gate.md).
 
@@ -75,7 +75,7 @@ See [ADR-0004](./adr/0004-parallel-orchestration.md).
 
 ## Audit envelope
 
-Commands emit events through `mentat-log emit`. Sixteen canonical event types (see ADR-0007) append to `~/.mentat/mentat.db` via `lib/store.py`. Export for grep: `mentat-log list <agent-id> --format=jsonl`. Harness transcripts live at `~/.mentat/logs/<repo>/<agent_id>/transcript.jsonl` (not in sqlite). Subprocess stderr on emit reject goes to `.stderr/<skill>-<slug>.stderr`. The catalog is defined once in `mentat-log/scripts/log.py` as `EVENT_CATALOG`.
+Commands emit events through `mentat-log emit`. Eighteen canonical event types (see ADR-0007) append to `~/.mentat/mentat.db` via `lib/store.py`. Export for grep: `mentat-log list <agent-id> --format=jsonl`. Harness transcripts live at `~/.mentat/logs/<repo>/<agent_id>/transcript.jsonl` (not in sqlite). Subprocess stderr on emit reject goes to `.stderr/<skill>-<slug>.stderr`. The catalog is defined once in `mentat-log/scripts/log.py` as `EVENT_CATALOG`.
 
 `mentat-track track` reads the canonical store and transcript file. `mentat-track diagnose` renders a verdict from store events.
 
@@ -125,7 +125,7 @@ Headless agent CLIs are pluggable. Built-in adapters:
 | `claude-code` | `.agents/skills/mentat-implement/scripts/harness/claude_code.py` |
 | `cursor` | `.agents/skills/mentat-implement/scripts/harness/cursor.py` |
 
-Adding a harness: drop a module exposing `cmd()`, `output_format()`, `normalize()` into the harness dir. The orchestrator auto-discovers and the implementation skill picks it up. No core changes needed.
+Adding a harness: drop a module exposing `invoke(prompt, *, afk, model=None, seed_summary=None)` into the harness dir. The orchestrator auto-discovers and the implementation skill picks it up. No core changes needed.
 
 Config is resolved as a layered stack (highest precedence first):
 

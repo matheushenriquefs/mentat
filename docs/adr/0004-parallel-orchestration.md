@@ -64,7 +64,7 @@ to avoid accidental activation of globally-installed plugins in scoped repos.
 
 Repo root resolved via `git rev-parse --show-toplevel` in each skill entry
 (not memoized; called once per invocation). Non-zero rc (outside git repo)
-falls back to global only. Malformed repo JSONC is swallowed; global config
+falls back to global only. Malformed repo TOML is swallowed; global config
 is kept.
 
 `mentat-install --repo` scaffolds `<repo>/.mentat/config.toml` with a
