@@ -1,8 +1,6 @@
 ---
 name: mentat-plan
-description: >
-  Write and resolve mentat plan files.
-  Use when you need to create a new plan file or canonicalize a plan slug-or-path reference.
+description: Write and resolve mentat plan files. Use when you need to create a new plan file or canonicalize a plan slug-or-path reference.
 ---
 
 Write structured plan files to `~/.agents/plans/` and resolve plan slug-or-path references to canonical absolute paths. Plans capture grilled requirements as tracer-bullet vertical slices, each AFK- or HITL-tagged, with explicit `blocked_by` between dependent slices.
@@ -43,10 +41,7 @@ Slash or `.md` suffix → treated as a path (expanduser + resolve).
 4. Tag each slice **AFK** (gate clears unattended → eligible to auto-spawn) or **HITL** (needs an architectural call → anchors in calling session).
 5. Note `blocked_by` between slices for true dependencies; orchestrator topo-sorts.
 6. Write body to a temp file, then `plan.py write <slug> <temp-path>`.
-7. `write` ends by suggesting `/mentat-tasks <slug>` — run it to turn the plan's
-   slices into trackable tasks. The full handoff is **plan → tasks → track**:
-   author the plan here, materialize its slices as tasks with `/mentat-tasks`, then
-   watch progress with `mentat-session track`.
+7. `write` suggests `/mentat-tasks <slug>`. Handoff: **plan → tasks → track** — materialize slices with `/mentat-tasks`, then `mentat-session track`.
 
 ## Tracer-bullet slicing
 
@@ -57,20 +52,23 @@ A slice is well-formed when:
 - Its diff lives in a bounded set of paths.
 - Its gate passes deterministically on its own merits (red test → green).
 
-## Slice sizing — fit the wall, don't over-shard
+## Slice sizing
 
-Each slice runs as one orchestrated chunk under a wall-clock timeout (`chunk_timeout`, default 1800s) that also pays container cold-start + one red→green cycle + the full land gate (coverage per ADR-0014). Size so a slice **finishes inside the wall with headroom** — target roughly half of it. A slice that needs the whole wall times out and ejects (observed: cold-start + one gate ≈ 25 of 30 min).
+A slice runs as one chunk under a wall-clock timeout (`chunk_timeout`, default 1800s). That
+same wall also pays for container startup, one red→green cycle, and the full land gate. Size a
+slice to finish inside the wall with room to spare — aim for about half of it. A slice that needs
+the whole wall times out and ejects.
 
-Do **not** size by predicting duration. Neither model self-estimates nor point estimates (story points / COCOMO) are reliable for agent work — COCOMO's average error is ≈100%, and LLM agents are measurably not budget-aware (they can't forecast or self-throttle to a cost cap). Industry abandoned upfront point-estimation for *size-to-fit* + *historical throughput* (INVEST "Small"; CI timing-based test sharding). Size by the **shape** of the work instead:
-- one behavior / one red→green cycle,
-- a bounded, non-overlapping file-set,
-- no dependence on a sibling's partial work.
+Do not size by guessing how long the work will take; such estimates are unreliable. Size by the
+shape of the work instead:
 
-There is a floor. Every slice pays a fixed transaction cost — cold-start + a full land/review gate. Shattering work below that floor spends real tokens per slice to remove risk that is already near zero. Batch size is a U-curve — transaction cost falls per unit as a slice grows, timeout/rework risk rises — with a **flat bottom**: a ~10% sizing error costs ~2–3%, so aim for the band, don't over-optimize. Rule of thumb (mirrors CI shard tuning): a slice projected near the wall → split; a cluster of trivial slices each far under the floor → merge.
+- one behavior, one red→green cycle,
+- a bounded, non-overlapping set of files,
+- no dependence on a sibling's unfinished work.
 
-Prefer historical signal when you have it: past chunk durations (`chunk.spawned`→`chunk.landed` in the audit log) are the most accurate sizing input — size a new slice against observed times of *similar* past slices, not a guess.
-
-If the per-slice tax is the real pain, the higher-leverage fix is orchestrate-side, not sizing: drive the fixed cost down (warm/pooled containers, tiered review that reserves the full gate for risky slices). That shifts the optimum *smaller* and lets you slice finer without waste — a cheaper gate buys what a sizing guess cannot.
+There is a floor. Every slice pays for startup and a full gate, so merge a cluster of trivial
+slices, and split one that projects near the wall. When you have past `chunk_started`→`chunk_landed`
+times for similar slices, size against those — measured times beat any estimate.
 
 ## Sibling-plan split
 
@@ -99,10 +97,7 @@ created_at: 2026-06-13
 ---
 ```
 
-`mentat-orchestrate` reads `siblings:` and expands the parent into its sibling plans
-before routing. Passing the parent ref to `orchestrate run` produces the same schedule
-as passing every sibling ref directly. Any plan that depends on a sibling must list the
-sibling slug (not the parent slug) in its own `blocked_by`.
+`mentat-orchestrate` expands parent `siblings:` before routing — same schedule as passing every sibling ref. Dependent plans list sibling slugs in `blocked_by`, not the parent.
 
 ## Rules
 
@@ -110,8 +105,7 @@ sibling slug (not the parent slug) in its own `blocked_by`.
 - `class` is `AFK` or `HITL`; lives in frontmatter, never overridden at runtime.
 - `blocked_by` lists slugs (not paths). Frontmatter parsing and cycle detection live in `mentat-orchestrate` (exits 65 on either).
 - Slug doubles as the plan's `id` field; filename and `id` should match or orchestrator topo-sort gets confused.
-- One commit per slice during implementation (`mentat-implement` contract); no squash.
-- Script body is stdlib-only; no PyYAML dependency (frontmatter parsing is delegated to `mentat-orchestrate`).
+- One commit per slice (`mentat-implement` contract); no squash. Stdlib-only scripts — frontmatter parsing delegated to `mentat-orchestrate` (no PyYAML).
 
 ## Constraints
 
