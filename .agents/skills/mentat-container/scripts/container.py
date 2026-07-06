@@ -120,10 +120,18 @@ def _main_repo_root_for_wt(wt: Path) -> Path | None:
 
 
 def _atomic_write(path: Path, text: str) -> None:
-    """Write text via a sibling .tmp then atomic replace."""
-    tmp = path.parent / (path.name + ".tmp")
-    tmp.write_text(text)
-    tmp.replace(path)
+    """Write text atomically via mkstemp + replace (matches frontmatter._write_atomic)."""
+    import os
+    import tempfile
+
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except Exception:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def _repo_root_for_wt(wt: Path) -> Path:

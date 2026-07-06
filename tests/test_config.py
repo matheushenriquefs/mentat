@@ -154,14 +154,13 @@ def test_load_config_file_toml_non_utf8_raises(tmp_path):
         config.load_config_file(f)
 
 
-def test_repo_mentat_dir_surfaces_git_failure(tmp_path, monkeypatch):
+def test_repo_mentat_dir_returns_none_on_git_failure(tmp_path, monkeypatch):
     def fake_run(cmd, **kwargs):
         return subprocess.CompletedProcess(cmd, 128, "", "fatal: unexpected git error")
 
     monkeypatch.chdir(tmp_path)
     with patch.object(subprocess, "run", fake_run):
-        with pytest.raises(config.ConfigError, match="git rev-parse failed"):
-            config._repo_mentat_dir()
+        assert config._repo_mentat_dir() is None
 
 
 def test_config_status_non_utf8_toml_is_invalid_not_crash(tmp_path):

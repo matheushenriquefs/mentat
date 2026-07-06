@@ -164,19 +164,20 @@ def test_speculative_threadpool_never_exceeds_chunk_count():
 
 
 def test_land_concurrency_cap_clamps_to_half_cores(monkeypatch):
-    """The land-queue cap mirrors the fan-out clamp: config 8 on a 4-core box → 2."""
+    """The land-queue cap mirrors the fan-out clamp (shared plans.concurrency_cap):
+    config 8 on a 4-core box → 2."""
     lq = load_module("land_queue")
     monkeypatch.setattr(lq._utils, "read_config", lambda: {"concurrency": 8})
-    monkeypatch.setattr(lq.os, "cpu_count", lambda: 4)
+    monkeypatch.setattr(lq._utils.os, "cpu_count", lambda: 4)
     assert lq._concurrency_cap() == 2
 
 
 def test_land_concurrency_cap_non_int_config_falls_back_to_default(monkeypatch):
     """A non-numeric `concurrency` value falls back to the default of 3 rather
-    than raising (land_queue.py:69-70)."""
+    than raising (plans.concurrency_cap)."""
     lq = load_module("land_queue")
     monkeypatch.setattr(lq._utils, "read_config", lambda: {"concurrency": "lots"})
-    monkeypatch.setattr(lq.os, "cpu_count", lambda: 16)
+    monkeypatch.setattr(lq._utils.os, "cpu_count", lambda: 16)
     assert lq._concurrency_cap() == 3  # want=3 default, min(3, 8)
 
 

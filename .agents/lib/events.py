@@ -115,6 +115,13 @@ SUMMARY_FILE = "summary.md"
 HITL_IN_SESSION = "hitl-in-session"
 
 
+def _with_optional(payload: dict[str, object], **fields: object | None) -> dict[str, object]:
+    for key, value in fields.items():
+        if value is not None:
+            payload[key] = value
+    return payload
+
+
 def spawned_payload(
     slug: str,
     plan: str,
@@ -124,12 +131,11 @@ def spawned_payload(
     trigger: str | None = None,
     attempt: int | None = None,
 ) -> dict[str, object]:
-    payload: dict[str, object] = {"slug": slug, "plan": plan, "harness": harness, "worktree": worktree}
-    if trigger is not None:
-        payload["trigger"] = trigger
-    if attempt is not None:
-        payload["attempt"] = attempt
-    return payload
+    return _with_optional(
+        {"slug": slug, "plan": plan, "harness": harness, "worktree": worktree},
+        trigger=trigger,
+        attempt=attempt,
+    )
 
 
 def ejected_payload(
@@ -144,17 +150,12 @@ def ejected_payload(
     killed_by: str | None = None,
     timed_out: bool | None = None,
 ) -> dict[str, object]:
-    payload: dict[str, object] = {"slug": slug, "reason": reason, "where": where}
-    if logs_path is not None:
-        payload["logs_path"] = logs_path
-    if preflight_exit is not None:
-        payload["preflight_exit"] = preflight_exit
-    if upstream is not None:
-        payload["upstream"] = upstream
-    if summary is not None:
-        payload["summary"] = summary
-    if killed_by is not None:
-        payload["killed_by"] = killed_by
-    if timed_out is not None:
-        payload["timed_out"] = timed_out
-    return payload
+    return _with_optional(
+        {"slug": slug, "reason": reason, "where": where},
+        logs_path=logs_path,
+        preflight_exit=preflight_exit,
+        upstream=upstream,
+        summary=summary,
+        killed_by=killed_by,
+        timed_out=timed_out,
+    )

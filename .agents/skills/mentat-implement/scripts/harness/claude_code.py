@@ -2,25 +2,25 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 
+_SCRIPTS = Path(__file__).resolve().parents[1]
+_SESSIONS_SCRIPTS = _SCRIPTS.parent / "mentat-session" / "scripts"
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+if str(_SESSIONS_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SESSIONS_SCRIPTS))
+
+import sessions  # noqa: E402
 from harness import Result
 
 
 def _parse_usage(log_path: Path) -> int | None:
     """Parse total tokens (input + output) from a stream-json session log."""
-    for line in log_path.read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    for event in sessions.iter_rows(log_path):
         if event.get("type") == "result":
             usage = event.get("usage", {})
             input_t = usage.get("input_tokens", 0)

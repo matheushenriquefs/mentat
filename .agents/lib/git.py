@@ -140,13 +140,13 @@ def worktree_list(cwd: Path | None = None) -> list[dict[str, str]]:
                 cur = {}
             continue
         if line.startswith("worktree "):
-            cur = {"worktree": line[len("worktree ") :]}
+            cur = {"worktree": line.removeprefix("worktree ")}
         elif line.startswith("branch refs/heads/"):
-            cur["branch"] = line[len("branch refs/heads/") :]
+            cur["branch"] = line.removeprefix("branch refs/heads/")
         elif line.startswith("HEAD "):
-            cur["HEAD"] = line[len("HEAD ") :]
+            cur["HEAD"] = line.removeprefix("HEAD ")
         elif line.startswith("prunable"):
-            cur["prunable"] = line[len("prunable") :].strip()
+            cur["prunable"] = line.removeprefix("prunable").strip()
     if cur:
         entries.append(cur)
     return entries

@@ -201,32 +201,7 @@ def _emit_anchored_chunks(plans: list[_scheduler.Plan], *, harness: str | None, 
     return chunks
 
 
-def _concurrency_cap() -> int:
-    """Max parallel AFK chunk processes, clamped to machine headroom.
-
-    Honors ADR-0004 (config default 3) but CLAMPS the configured value to
-    ``min(config, max(1, cpu_count // 2))``. One heavy agent per core is the
-    timeout root-cause: when the number of concurrent chunks equals the core
-    count, every agent starves for CPU and trips its wall/stall deadline on a
-    live-but-slow build. Halving the cores reserves headroom for the supervisor,
-    the devcontainers, and the host. The clamp is logged so an operator seeing
-    an effective cap below their configured ``concurrency`` knows why.
-    """
-    raw = _utils.read_config().get("concurrency", 3)
-    try:
-        want = max(1, int(raw))
-    except TypeError, ValueError:
-        want = 3
-    cores = os.cpu_count() or 1
-    ceiling = max(1, cores // 2)
-    effective = min(want, ceiling)
-    if effective < want:
-        print(
-            f"mentat-orchestrate: concurrency clamped {want}→{effective} "
-            f"(cpu_count={cores}, headroom=cores//2) — config asked {want}",
-            file=sys.stderr,
-        )
-    return effective
+_concurrency_cap = _utils.concurrency_cap
 
 
 def _load_headroom_ok() -> bool:
@@ -896,8 +871,8 @@ def _run_batch(
             list_ready_slices=sched.list_ready_slices,
         )
         drain_results.extend(wave_results)
-        for plan in wave:
-            pending.remove(plan)
+        wave_slugs = {p.slug for p in wave}
+        pending = [p for p in pending if p.slug not in wave_slugs]
 
     return drain_results, hitl_slugs, transient_slugs
 

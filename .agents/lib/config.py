@@ -149,12 +149,10 @@ def config_status(mentat_dir: Path) -> tuple[str, str | None]:
 
 
 def _repo_mentat_dir() -> Path | None:
+    """Repo-local .mentat dir — same contract as ``lib.git.repo_root()`` + ``/.mentat``."""
     r = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
     if r.returncode != 0:
-        stderr = r.stderr.strip()
-        if "not a git repository" in stderr:
-            return None
-        raise ConfigError(f"git rev-parse failed: {stderr or 'unknown error'}")
+        return None
     return Path(r.stdout.strip()) / ".mentat"
 
 

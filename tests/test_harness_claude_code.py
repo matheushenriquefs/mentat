@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from tests.conftest import load_script
 
 HARNESS_DIR = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts/harness"
@@ -133,7 +131,6 @@ def test_parse_usage_sums_input_and_output(tmp_path):
     assert cc._parse_usage(log) == 15
 
 
-def test_parse_usage_raises_on_oserror(tmp_path):
+def test_parse_usage_missing_log_returns_none(tmp_path):
     cc = load_module("claude_code")
-    with pytest.raises(OSError):
-        cc._parse_usage(tmp_path / "does-not-exist.jsonl")
+    assert cc._parse_usage(tmp_path / "does-not-exist.jsonl") is None

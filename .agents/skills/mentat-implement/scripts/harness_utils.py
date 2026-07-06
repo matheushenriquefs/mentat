@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
 _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
+_SESSIONS_SCRIPTS = Path(__file__).resolve().parents[2] / "mentat-session" / "scripts"
+if str(_SESSIONS_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SESSIONS_SCRIPTS))
 
+import sessions  # noqa: E402
 from lib import harness_stream  # noqa: E402
 from lib.config import read_config  # noqa: E402
 
@@ -31,14 +34,4 @@ def detect_self_answer(session_log_path: Path | str | None) -> bool:
     path = Path(session_log_path)
     if not path.exists():
         return False
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if harness_stream.is_ask_user_question(row):
-            return True
-    return False
+    return any(harness_stream.is_ask_user_question(row) for row in sessions.iter_rows(path))
