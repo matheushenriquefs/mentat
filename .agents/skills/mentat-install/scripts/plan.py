@@ -36,6 +36,10 @@ _STALE_PATHS = [
     ".cursor/agents/mentat-plan-reviewer",
     ".cursor/agents/mentat-smell-reviewer",
     ".cursor/agents/mentat-test-reviewer",
+    # Renamed mentat-session → mentat-track (ADR-0018 ES4).
+    ".agents/skills/mentat-session",
+    ".claude/skills/mentat-session",
+    ".cursor/skills/mentat-session",
     # Pre-rehome: mentat-private dirs were under ~/.agents/ — now under ~/.mentat/.
     ".agents/bin",
     ".agents/lib",
