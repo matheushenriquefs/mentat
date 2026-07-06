@@ -7,6 +7,7 @@ import re
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
 _AGENTS_ROOT = Path(__file__).resolve().parents[2]
 if str(_AGENTS_ROOT) not in sys.path:
@@ -14,9 +15,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib.gates._walk import SKIP_DIRS as _SKIP_DIRS  # noqa: E402
 
-_EVENT_TOKEN = re.compile(
-    r"\b(?:slice|agent|chunk|gate|review|batch|task|test)_[a-z][a-z0-9_]*\b"
-)
+_EVENT_TOKEN = re.compile(r"\b(?:slice|agent|chunk|gate|review|batch|task|test)_[a-z][a-z0-9_]*\b")
 _DOTTED_EVENT = re.compile(r"\b[a-z][a-z0-9_]*\.[a-z][a-z0-9_]+\b")
 _BACKTICK_TOKEN = re.compile(r"`([^`]+)`")
 _WIRE_TERM_RE = re.compile(r"\b" + "ses" + "sion" + r"s?\b", re.IGNORECASE)
@@ -107,7 +106,7 @@ def _load_catalog() -> frozenset[str]:
     catalog = getattr(mod, "EVENT_CATALOG", None)
     if not isinstance(catalog, dict):
         raise RuntimeError("EVENT_CATALOG missing from mentat-log")
-    return frozenset(catalog)
+    return frozenset(str(k) for k in cast("dict[str, object]", catalog))
 
 
 def _iter_prose(root: Path) -> Iterator[Path]:

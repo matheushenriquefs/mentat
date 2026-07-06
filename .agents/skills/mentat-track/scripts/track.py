@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import cast
 
 _SCRIPTS = Path(__file__).resolve().parent
 
@@ -14,11 +15,10 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import store as _store
-from lib.loader import load_sibling  # noqa: E402
-from lib.agent import agent_dir as _agent_dir_fn  # noqa: E402
 from lib.agent import log_root as _log_root  # noqa: E402
-from lib.agent import repo_name as _repo
 from lib.agent import resolve_agent_dir as _resolve_agent_dir
+from lib.agent import resolve_track_repo as _resolve_track_repo
+from lib.loader import load_sibling  # noqa: E402
 
 _registry = load_sibling(__file__, "registry")
 _render = load_sibling(__file__, "render")
@@ -31,7 +31,7 @@ _humanize_age = _registry._humanize_age
 
 
 def cmd_track(agent_id: str | None, all_agents: bool = False) -> int:
-    repo = _repo()
+    repo = _resolve_track_repo()
     repo_dir = _log_root() / repo
     if agent_id is None:
         return _panes.navigate(repo_dir, repo=repo, active_only=not all_agents)
@@ -39,7 +39,10 @@ def cmd_track(agent_id: str | None, all_agents: bool = False) -> int:
     if agent is None:
         print(f"mentat-track: agent not found: {agent_id}", file=sys.stderr)
         return 1
-    ad = _resolve_agent_dir(agent_id) or _agent_dir_fn(agent_id)
+    ad = _resolve_agent_dir(agent_id)
+    if ad is None:
+        print(f"mentat-track: agent dir not found: {agent_id}", file=sys.stderr)
+        return 1
     ad.mkdir(parents=True, exist_ok=True)
     _render.view_agent(ad)
     return 0
@@ -75,16 +78,18 @@ _STATUS_MARK = {"waiting": "◆", "idle": "✓", "?": "?", "working": "•"}
 
 def cmd_list(all_agents: bool = False) -> int:
     """Repo-wide agent registry from the canonical store."""
-    repo = _repo()
+    repo = _resolve_track_repo()
     rows = _store.list_track_entries(repo, active_only=not all_agents)
     if not rows:
         print(f"mentat-track: no agents for {repo}")
         return 0
-    width = max(len(r["agent"]) for r in rows)
+    width = max(len(str(r["agent"])) for r in rows)
     for r in rows:
-        mark = _STATUS_MARK.get(r["status"], "?")
+        status = str(r["status"])
+        mark = _STATUS_MARK.get(status, "?")
         last = r["last_event"] or "-"
-        print(f"{mark} {r['status']:<8} {r['agent']:<{width}}  {_humanize_age(r['age']):>9}  {last}")
+        age = cast("float", r["age"])
+        print(f"{mark} {status:<8} {r['agent']:<{width}}  {_humanize_age(age):>9}  {last}")
     return 0
 
 

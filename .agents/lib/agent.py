@@ -12,6 +12,7 @@ are keyed from the first event instead of relying on an emit-time fallback.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
 import uuid
@@ -138,3 +139,35 @@ def resolve_agent_dir(agent_id: str) -> Path | None:
         if candidate.is_dir():
             return candidate
     return None
+
+
+def resolve_track_repo() -> str:
+    """Repo key for track list/navigate — cwd-independent when outside a git worktree.
+
+    Honors ``MENTAT_REPO`` and ``repo_name()`` when they resolve a real repo.
+    When ``repo_name()`` is ``unknown``, scans ``log_root`` for a repo dir that
+    contains at least one agent log subtree (newest mtime wins).
+    """
+    env = os.environ.get("MENTAT_REPO")
+    if env:
+        return env
+    name = repo_name()
+    if name != "unknown":
+        return name
+    root = log_root()
+    if not root.is_dir():
+        return name
+    best_name = name
+    best_mtime = -1.0
+    for repo_path in sorted(root.iterdir()):
+        if not repo_path.is_dir():
+            continue
+        latest = -1.0
+        with contextlib.suppress(OSError):
+            for child in repo_path.iterdir():
+                if child.is_dir():
+                    latest = max(latest, child.stat().st_mtime)
+        if latest > best_mtime:
+            best_mtime = latest
+            best_name = repo_path.name
+    return best_name
