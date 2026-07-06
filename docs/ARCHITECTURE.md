@@ -81,15 +81,15 @@ Commands emit events through `mentat-log emit`. Sixteen canonical event types (s
 
 See [ADR-0007](./adr/0007-audit-envelope.md).
 
-## Plugin API
+## Harness extensibility
 
-The formal plugin surface is one slot: **harness**. A plugin package registers
-through a `mentat-plugin` entry point and fills the `harness` slot with a
-`HarnessProvider`; resolution is first-wins, with the built-in adapters as the
-last-resort fallback. Declare the active harness via `~/.mentat/config.toml`
-`harness`. Built-in: `claude-code`, `cursor`.
+Harness selection is a filesystem convention, not a plugin registry: `implement.py`
+maps a `harness` name to a script under `.agents/skills/mentat-implement/scripts/harness/`
+via a plain `_HARNESS` dict, and loads it by path. Built-in: `claude-code`, `cursor`.
+Add a harness by dropping a module in `harness/` and adding an entry to `_HARNESS`.
+Declare the active harness via `~/.mentat/config.toml` `harness`.
 
-Two more surfaces extend by filesystem convention rather than the plugin registry:
+Two more surfaces extend the same way:
 
 - **Reviewers** — drop a reviewer subagent body into `.agents/agents/<name>-reviewer.md`.
 - **Code gates** — drop a Python module exposing `run(chunk_path) -> (verdict, message)` into `.agents/lib/gates/code/`.
@@ -100,7 +100,7 @@ prints that command as the review suggestion at run end.
 Mentat core stays minimal; project-specific concerns extend through these surfaces
 without forking.
 
-See [ADR-0009](./adr/0009-plugin-api.md) and [docs/PLUGINS.md](./PLUGINS.md).
+See [docs/PLUGINS.md](./PLUGINS.md).
 
 ## Python runtime
 

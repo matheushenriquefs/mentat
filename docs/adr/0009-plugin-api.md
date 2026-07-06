@@ -1,6 +1,8 @@
 # ADR 0009: Plugin API — Vite-derived, one slot (harness), entry-point discovery
 
-Status: Accepted (locked)
+Status: Retired — `lib/plugins/` deleted, zero runtime imports ever wired in. The real
+harness extensibility is the filesystem convention `implement.py` actually uses: drop a
+module in `harness/` and add it to the `_HARNESS` dict. See docs/PLUGINS.md.
 Date: 2026-06-10
 Amended: 2026-06-20 (v2 — harness-only slot set; HarnessProvider as documented-future-API)
 

@@ -48,5 +48,5 @@ a seed summary. The loop runs between slices (in `implement.py`) and between chu
 ## Consequences
 
 `implement.py` calls `invoke()` with `seed_summary` on respawn. `fan_out.py` does the same
-between chunks. No new abstract methods on `HarnessProvider` Protocol — both adapters already
-implement the extended `invoke()` signature. A follow-on change wires the checkpoint loop.
+between chunks. No new harness-adapter signature needed — both built-in adapters already
+implement the extended `invoke()` shape. A follow-on change wires the checkpoint loop.

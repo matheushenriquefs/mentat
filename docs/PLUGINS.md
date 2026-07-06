@@ -1,109 +1,69 @@
-# Plugins — Mentat Plugin API
+# Plugins — harness extensibility
 
-Plugins extend or replace Mentat's built-in harness adapter. ADR-0009 documents the design decisions.
+Mentat has one third-party extension point: harness adapters (AI CLI selection). It is a
+filesystem convention, not a plugin registry — no entry points, no `MentatPlugin` dataclass,
+no discovery step. `implement.py` maps a harness name straight to a script path and loads it.
 
 ---
 
-## Plugin shape
+## Built-in harnesses
 
 ```python
-from dataclasses import dataclass
-from typing import Protocol
-
-class HarnessProvider(Protocol):
-    name: str
-    def invoke(self, cmd: list[str]) -> int: ...
-
-@dataclass
-class MentatPlugin:
-    name: str
-    harness: HarnessProvider | None = None
+_HARNESS_DIR = Path(__file__).resolve().parent / "harness"
+_HARNESS: dict[str, Path] = {
+    "claude-code": _HARNESS_DIR / "claude_code.py",
+    "cursor": _HARNESS_DIR / "cursor.py",
+}
 ```
 
-A plugin is a factory function returning `MentatPlugin`. Name must be unique.
+Built-in: `claude-code`, `cursor`, living at
+`.agents/skills/mentat-implement/scripts/harness/{claude_code,cursor}.py`.
 
 ---
 
-## Available slots
+## Adding a harness adapter
 
-| Slot | Kind | Description |
-|---|---|---|
-| `harness` | `first` | AI CLI adapter. Built-in: `claude-code`, `cursor`. |
-
-Kind `first` — first plugin in ordered list whose slot is non-`None` wins.
-The built-in acts as last-resort fallback if no plugin provides the slot.
-
-**Diff rendering** is configured via `diff_tool` in `~/.mentat/config.toml`. Mentat
-prints a suggestion at run end (`git diff` or the configured tool). Not a plugin slot.
-
----
-
-## Writing a harness plugin
-
-### 1. Implement the provider
+### 1. Write the adapter module
 
 ```python
-# mentat_plugin_aider/__init__.py
-from mentat.plugins import MentatPlugin, HarnessProvider
-
-class AiderHarness:
-    name = "aider"
-
-    def invoke(self, cmd: list[str]) -> int:
-        import subprocess
-        return subprocess.run(["aider", *cmd]).returncode
-
-def plugin() -> MentatPlugin:
-    return MentatPlugin(name="aider-harness", harness=AiderHarness())
+# .agents/skills/mentat-implement/scripts/harness/aider.py
+def invoke(prompt: str, *, afk: bool, model: str | None = None, seed_summary: str | None = None):
+    import subprocess
+    return subprocess.run(["aider", "--message", prompt]).returncode
 ```
 
-### 2. Register the entry point
+The module must expose `invoke(prompt, *, afk, model=None, seed_summary=None)` — the same
+signature `_invoke_harness` calls on the built-ins.
 
-```toml
-# pyproject.toml of your plugin package
-[project.entry-points."mentat-plugin"]
-aider = "mentat_plugin_aider:plugin"
+### 2. Register it
+
+Add an entry to the `_HARNESS` dict in `implement.py`:
+
+```python
+_HARNESS: dict[str, Path] = {
+    "claude-code": _HARNESS_DIR / "claude_code.py",
+    "cursor": _HARNESS_DIR / "cursor.py",
+    "aider": _HARNESS_DIR / "aider.py",
+}
 ```
 
-### 3. Declare in config
+### 3. Select it
 
 ```toml
 # ~/.mentat/config.toml
-harness = "aider-harness"
-plugins = { order = ["aider-harness"] }
+harness = "aider"
 ```
 
-> **`HarnessProvider` is a documented-future-API (ADR-0009).** The real harness seam
-> today is `implement/scripts/harness/{claude_code,cursor}.py`. `_invoke_harness` is not yet
-> wired through the Protocol. Use `--harness` CLI flag or `harness =` in config.toml to
-> select built-ins; third-party adapters registered here are not yet auto-invoked by `_invoke_harness`.
+Or per-run: `--harness aider` on the `mentat-implement` CLI.
 
 ---
 
-## Discovery
+## Other filesystem-convention seams
 
-At startup, mentat calls:
+Two more surfaces extend the same way — drop a file, no registration step:
 
-```python
-from importlib.metadata import entry_points
-plugins = [
-    ep.load()()
-    for ep in entry_points(group="mentat-plugin")
-]
-```
+- **Reviewers** — drop a reviewer subagent body into `.agents/agents/<name>-reviewer.md`.
+- **Code gates** — drop a Python module exposing `run(chunk_path) -> (verdict, message)` into `.agents/lib/gates/code/`.
 
-Each entry point must be a zero-argument factory returning `MentatPlugin`.
-
----
-
-## Naming convention
-
-PyPI package name: `mentat-plugin-<name>`.
-
----
-
-## Future slots
-
-Ordering primitives (`enforce: 'pre'|'post'`, `apply: 'install'|'orchestrate'`) are
-not part of the current plugin API — see ADR-0009. New slots are added as optional
-`MentatPlugin` fields; existing plugins continue to work without changes.
+**Diff rendering** is configured via `diff_tool` in `~/.mentat/config.toml`. Mentat
+prints a suggestion at run end (`git diff` or the configured tool) — not a harness concern.
