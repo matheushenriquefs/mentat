@@ -238,6 +238,27 @@ def mentat_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def real_audit_store(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, str]:
+    """Temp SQLite + real mentat-log emit path (ADR-0020)."""
+    db = tmp_path / "mentat.db"
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    agent_id = "foundation-audit-agent"
+    install_agents_home(tmp_path)
+    env = {
+        "MENTAT_DB": str(db),
+        "MENTAT_LOG_PATH": str(logs),
+        "MENTAT_AGENT": agent_id,
+        "MENTAT_HARNESS": "test",
+        "MENTAT_REPO": "fixture-repo",
+        "HOME": str(tmp_path),
+    }
+    for key, val in env.items():
+        monkeypatch.setenv(key, val)
+    return {"db": str(db), "logs": str(logs), "agent_id": agent_id, "home": str(tmp_path)}
+
+
+@pytest.fixture
 def fixture_repo(tmp_path: Path) -> Generator[Path]:
     """Create a minimal git repo with optional plan files. Yield the repo root."""
     repo = tmp_path / "repo"
