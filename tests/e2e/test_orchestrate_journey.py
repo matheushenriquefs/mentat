@@ -118,13 +118,13 @@ def test_orchestrate_run_lands_both_chunks_onto_holding(tmp_path, monkeypatch):
 
     with ExitStack() as stack:
         # Docker-touching seams: stubbed (hermetic, no devcontainer).
-        stack.enter_context(_patch_attr(orch, "_prune_stale_containers", lambda: None))
-        stack.enter_context(_patch_attr(orch, "_prune_stale_worktrees", lambda preserve=None: None))
+        stack.enter_context(_patch_attr(orch._batch, "_prune_stale_containers", lambda: None))
+        stack.enter_context(_patch_attr(orch._batch, "_prune_stale_worktrees", lambda preserve=None: None))
         # Harness spawn boundary: the fake agent does the real per-slice commit.
-        stack.enter_context(_patch_attr(orch._fan_out, "spawn_async", _fake_spawn({"a": wt_a, "b": wt_b})))
+        stack.enter_context(_patch_attr(orch._supervise._spawn, "spawn_async", _fake_spawn({"a": wt_a, "b": wt_b})))
         # Land-queue gate passes; container teardown is a no-op (no docker).
-        stack.enter_context(_patch_attr(orch._land_queue, "_run_gates", lambda chunk: ("pass", "")))
-        stack.enter_context(_patch_attr(orch._land_queue, "_teardown_container", lambda chunk: None))
+        stack.enter_context(_patch_attr(orch._batch._land_queue, "_run_gates", lambda chunk: ("pass", "")))
+        stack.enter_context(_patch_attr(orch._batch._land_queue, "_teardown_container", lambda chunk: None))
 
         rc = orch.run_orchestrate("holding", [plan_a, plan_b], harness=None, model=None, dry_run=False)
 

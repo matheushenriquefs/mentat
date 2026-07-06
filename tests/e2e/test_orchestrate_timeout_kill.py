@@ -84,9 +84,9 @@ def test_timeout_group_kill_reaps_grandchild(monkeypatch, tmp_path):
         return "sess-hung", proc, tmp_path / "worktree"
 
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "1")
-    monkeypatch.setattr(orch._fan_out, "spawn_async", fake_spawn)
+    monkeypatch.setattr(orch._supervise._spawn, "spawn_async", fake_spawn)
 
-    results = orch._fan_out_plans([plan], harness=None, model=None)
+    results = orch._supervise._fan_out_plans([plan], harness=None, model=None)
 
     # Grandchild pid must have been written before the kill landed.
     deadline = time.monotonic() + 2.0
@@ -110,9 +110,9 @@ def test_timeout_group_kill_reaps_grandchild(monkeypatch, tmp_path):
     worktree = tmp_path / "worktree"
     worktree.mkdir()
     emitted: list[tuple[str, dict]] = []
-    with patch.object(orch, "_worktree_for_slug", return_value=worktree):
-        with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-            chunks, hitl, _transient = orch.partition_by_outcome(results, mark_ejected=lambda _slug: [])
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=worktree):
+        with patch.object(orch._batch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+            chunks, hitl, _transient = orch._batch.partition_by_outcome(results, mark_ejected=lambda _slug: [])
 
     assert chunks == [] and not hitl
     ejects = [p for ev, p in emitted if ev == "chunk_ejected"]

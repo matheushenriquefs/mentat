@@ -85,12 +85,12 @@ def test_throttle_wait_drains_healthy_chunk_before_spawning_next(monkeypatch, tm
     _pin_cap_one(monkeypatch, orch)
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "10")
     monkeypatch.setattr(
-        orch._fan_out,
+        orch._supervise._spawn,
         "spawn_async",
         _spawner(tmp_path, {"a": (0.4, 0), "b": (0.1, 0)}),
     )
 
-    results = orch._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
+    results = orch._supervise._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
 
     by_slug = {item[0].slug: item[1] for item in results}
     assert by_slug == {"a": 0, "b": 0}
@@ -107,13 +107,13 @@ def test_throttle_wait_kills_hung_chunk_to_free_a_slot(monkeypatch, tmp_path):
     _pin_cap_one(monkeypatch, orch)
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "1")
     monkeypatch.setattr(
-        orch._fan_out,
+        orch._supervise._spawn,
         "spawn_async",
         _spawner(tmp_path, {"a": (30.0, 0), "b": (0.3, 0)}),
     )
 
     started = time.monotonic()
-    results = orch._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
+    results = orch._supervise._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
     elapsed = time.monotonic() - started
 
     by_slug = {plan.slug: rc for plan, rc, *_ in results}
@@ -144,20 +144,21 @@ def test_run_orchestrate_failing_batch_reports_stall_cascade_and_ejects(monkeypa
 
     monkeypatch.setattr(orch, "ensure_session", lambda role, slug: "sess-x")
     monkeypatch.setattr(orch, "_load_plans", lambda paths: [gate, core, ui])
-    monkeypatch.setattr(orch, "_prune_stale_containers", lambda: None)
-    monkeypatch.setattr(orch, "_prune_stale_worktrees", lambda *, preserve=None: None)
-    monkeypatch.setattr(orch, "_worktree_for_slug", lambda slug: tmp_path / slug)
+    monkeypatch.setattr(orch._batch, "_prune_stale_containers", lambda: None)
+    monkeypatch.setattr(orch._batch, "_prune_stale_worktrees", lambda *, preserve=None: None)
+    monkeypatch.setattr(orch._batch, "_worktree_for_slug", lambda slug: tmp_path / slug)
     # Auto chunk fails (rc=1) → real partition_by_outcome ejects it + cascades to ui.
-    monkeypatch.setattr(orch, "_fan_out_plans", lambda auto, *, harness, model: [(core, 1)])
+    monkeypatch.setattr(orch._batch, "_fan_out_plans", lambda auto, *, harness, model: [(core, 1)])
     # Land queue returns a stalled row + an eject row for the failed core chunk.
     drain_rows = [
         {"status": "stalled", "pending": ["core"]},
         {"status": "eject", "slug": "core", "reason": "gate_failed"},
     ]
-    monkeypatch.setattr(orch._land_queue, "drain", lambda *a, **k: drain_rows)
+    monkeypatch.setattr(orch._batch._land_queue, "drain", lambda *a, **k: drain_rows)
 
     emitted: list[tuple[str, dict]] = []
     monkeypatch.setattr(orch, "_emit_event", lambda ev, p: emitted.append((ev, p)))
+    monkeypatch.setattr(orch._batch, "_emit_event", lambda ev, p: emitted.append((ev, p)))
     monkeypatch.setattr(orch._utils, "emit_event", lambda ev, p: emitted.append((ev, p)))
 
     with patch.object(orch.sys, "stderr"):

@@ -29,11 +29,11 @@ def test_run_orchestrate_returns_1_on_stalled_drain(tmp_path: Path) -> None:
 
     stalled_results = [{"slug": None, "status": "stalled", "pending": ["stall-plan"]}]
 
-    with patch.object(orch, "_fan_out_plans", return_value=[]):
+    with patch.object(orch._batch, "_fan_out_plans", return_value=[]):
         with patch.object(orch, "ensure_session", return_value="orch-test"):
-            with patch.object(orch._land_queue, "drain", return_value=stalled_results):
-                with patch.object(orch, "_prune_stale_containers", lambda: None):
-                    with patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None):
+            with patch.object(orch._batch._land_queue, "drain", return_value=stalled_results):
+                with patch.object(orch._batch, "_prune_stale_containers", lambda: None):
+                    with patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None):
                         with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
                             rc = orch.run_orchestrate(
                                 holding="main",
@@ -56,11 +56,11 @@ def test_run_orchestrate_returns_0_on_no_stall(tmp_path: Path) -> None:
 
     success_results = [{"slug": "ok-plan", "status": "success", "tip": "abc123"}]
 
-    with patch.object(orch, "_fan_out_plans", return_value=[]):
+    with patch.object(orch._batch, "_fan_out_plans", return_value=[]):
         with patch.object(orch, "ensure_session", return_value="orch-test"):
-            with patch.object(orch._land_queue, "drain", return_value=success_results):
-                with patch.object(orch, "_prune_stale_containers", lambda: None):
-                    with patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None):
+            with patch.object(orch._batch._land_queue, "drain", return_value=success_results):
+                with patch.object(orch._batch, "_prune_stale_containers", lambda: None):
+                    with patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None):
                         with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
                             rc = orch.run_orchestrate(
                                 holding="main",

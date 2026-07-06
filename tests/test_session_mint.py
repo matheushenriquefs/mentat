@@ -183,7 +183,7 @@ def test_ensure_session_preserves_existing(monkeypatch, tmp_path) -> None:
 # (re-keyed to path in S3), not a session-minting literal.
 _MINT_SITES = [
     "mentat-log/scripts/log.py",
-    "mentat-orchestrate/scripts/fan_out.py",
+    "mentat-orchestrate/scripts/spawn.py",
     "mentat-implement/scripts/implement.py",
 ]
 _FORBIDDEN = {
@@ -203,7 +203,7 @@ def test_no_legacy_session_literals(rel: str) -> None:
 @pytest.mark.parametrize(
     "rel",
     [
-        "mentat-orchestrate/scripts/fan_out.py",
+        "mentat-orchestrate/scripts/spawn.py",
         "mentat-orchestrate/scripts/orchestrate.py",
         "mentat-implement/scripts/implement.py",
     ],

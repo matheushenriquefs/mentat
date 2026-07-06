@@ -1,4 +1,4 @@
-"""Tests for mentat-orchestrate land_queue module."""
+"""Tests for mentat-orchestrate landing module."""
 
 from __future__ import annotations
 
@@ -15,12 +15,12 @@ def load_module(name: str):
 
 
 def make_chunk(slug: str):
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     return lq.Chunk(slug=slug, worktree=Path(f"/tmp/{slug}"))
 
 
 def test_land_queue_emits_chunk_landed_on_success():
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunk = make_chunk("my-chunk")
 
     with patch.object(lq, "_rebase_chunk", return_value=("abc123", None)):
@@ -35,7 +35,7 @@ def test_land_queue_emits_chunk_landed_on_success():
 
 
 def test_land_queue_emits_chunk_ejected_with_gate_failed():
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunk = make_chunk("fail-chunk")
 
     with patch.object(lq, "_rebase_chunk", return_value=("abc123", None)):
@@ -51,7 +51,7 @@ def test_land_queue_emits_chunk_ejected_with_gate_failed():
 
 def test_land_queue_serializes_landings():
     """drain processes chunks one-by-one (serial)."""
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunks = [make_chunk(f"c{i}") for i in range(3)]
 
     call_order: list[str] = []
@@ -70,7 +70,7 @@ def test_land_queue_serializes_landings():
 
 def test_land_queue_rebases_each_chunk():
     """land() calls _rebase_chunk with the correct holding branch."""
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunk = make_chunk("r-chunk")
 
     rebase_calls = []
@@ -90,7 +90,7 @@ def test_land_queue_rebases_each_chunk():
 
 
 def test_land_queue_emits_canonical_verdict_jsonl_shape():
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunk = make_chunk("shape-chunk")
 
     with patch.object(lq, "_rebase_chunk", return_value=("sha1", None)):
@@ -117,7 +117,7 @@ def _git(args: list[str], cwd) -> None:
 
 def _setup_ff_repo(tmp_path):
     """Two-worktree fixture: main on 'holding', chunk on 'feature' 1 commit ahead."""
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     main_repo = tmp_path / "main"
     main_repo.mkdir()
 
@@ -209,7 +209,7 @@ def _setup_divergent_repo(tmp_path):
       └── C (feature commit)
     holding tip (B) is NOT an ancestor of feature HEAD (C).
     """
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     main_repo = tmp_path / "main"
     main_repo.mkdir()
 
@@ -250,7 +250,7 @@ def test_ff_merge_non_ancestor_returns_not_ff(tmp_path) -> None:
 
 def test_ff_merge_non_git_dir_returns_git_error(tmp_path) -> None:
     """Non-git worktree dir must return 'git_error', not 'not_ff'."""
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     # tmp_path has no .git — rev-parse HEAD will fail
     chunk = lq.Chunk(slug="err-chunk", worktree=tmp_path)
     result = lq._ff_merge(chunk, "holding")
@@ -260,7 +260,7 @@ def test_ff_merge_non_git_dir_returns_git_error(tmp_path) -> None:
 
 def test_land_ejects_with_not_ff_reason_on_non_ancestor(tmp_path) -> None:
     """land() must emit NOT_FF reason when merge is genuinely not fast-forward."""
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     _main_repo, chunk, _lq = _setup_divergent_repo(tmp_path)
 
     with patch.object(lq, "_rebase_chunk", return_value=("sha1", None)):
@@ -276,7 +276,7 @@ def test_land_ejects_with_not_ff_reason_on_non_ancestor(tmp_path) -> None:
 
 def test_land_ejects_with_git_error_reason_on_git_failure(tmp_path) -> None:
     """land() must emit GIT_ERROR reason when git/setup fails, not NOT_FF."""
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunk = lq.Chunk(slug="err-chunk", worktree=tmp_path)
 
     with patch.object(lq, "_rebase_chunk", return_value=("sha1", None)):
@@ -295,7 +295,7 @@ def test_land_ejects_with_git_error_reason_on_git_failure(tmp_path) -> None:
 
 def test_drain_cascade_skips_downstream_not_in_pending():
     """A cascaded slug no longer in `pending` is skipped (no duplicate eject verdict)."""
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     a, b = make_chunk("a"), make_chunk("b")
 
     def fake_land(chunk, *, holding):

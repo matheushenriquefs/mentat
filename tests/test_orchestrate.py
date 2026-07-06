@@ -28,18 +28,20 @@ def test_orchestrate_full_pipeline_exits_0_on_all_success(tmp_path):
     orch = load_module("orchestrate")
     plan = _make_plan_file(tmp_path, "plan-a", "AFK")
 
-    with patch.object(orch, "_fan_out_plans", return_value=[]):
-        with patch.object(orch._land_queue, "drain", return_value=[{"slug": "plan-a", "status": "success"}]):
-            with patch.object(orch, "_prune_stale_containers", lambda: None):
-                with patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None):
-                    with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
-                        rc = orch.run_orchestrate(
-                            holding="main",
-                            plan_paths=[plan],
-                            harness=None,
-                            model=None,
-                            dry_run=False,
-                        )
+    with (
+        patch.object(orch._batch, "_fan_out_plans", return_value=[]),
+        patch.object(orch._batch._land_queue, "drain", return_value=[{"slug": "plan-a", "status": "success"}]),
+        patch.object(orch._batch, "_prune_stale_containers", lambda: None),
+        patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None),
+        patch.object(orch._utils, "emit_event", lambda *a, **k: None),
+    ):
+        rc = orch.run_orchestrate(
+            holding="main",
+            plan_paths=[plan],
+            harness=None,
+            model=None,
+            dry_run=False,
+        )
     assert rc == 0
 
 
@@ -52,20 +54,23 @@ def test_orchestrate_exits_1_on_any_ejection(tmp_path):
 
     plan_obj = routing.Plan(slug="plan-b", kind="AFK", blocked_by=[], path=plan)
 
-    with patch.object(orch, "_fan_out_plans", return_value=[(plan_obj, EX_HITL_REQUIRED)]):
-        with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-            with patch.object(orch._land_queue, "drain", return_value=[]):
-                with patch.object(orch, "_prune_stale_containers", lambda: None):
-                    with patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None):
-                        with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
-                            with patch.object(orch, "_emit_event", lambda *a, **k: None):
-                                rc = orch.run_orchestrate(
-                                    holding="main",
-                                    plan_paths=[plan],
-                                    harness=None,
-                                    model=None,
-                                    dry_run=False,
-                                )
+    with (
+        patch.object(orch._batch, "_fan_out_plans", return_value=[(plan_obj, EX_HITL_REQUIRED)]),
+        patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path),
+        patch.object(orch._batch._land_queue, "drain", return_value=[]),
+        patch.object(orch._batch, "_prune_stale_containers", lambda: None),
+        patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None),
+        patch.object(orch._utils, "emit_event", lambda *a, **k: None),
+        patch.object(orch, "_emit_event", lambda *a, **k: None),
+        patch.object(orch._batch, "_emit_event", lambda *a, **k: None),
+    ):
+        rc = orch.run_orchestrate(
+            holding="main",
+            plan_paths=[plan],
+            harness=None,
+            model=None,
+            dry_run=False,
+        )
     assert rc == 1
 
 
@@ -95,7 +100,10 @@ def test_orchestrate_dry_run_flag_skips_spawn(tmp_path):
     orch = load_module("orchestrate")
     plan = _make_plan_file(tmp_path, "dry-plan", "AFK")
 
-    with patch.object(orch, "_fan_out_plans") as mock_fan, patch.object(orch, "_land_all", return_value=[]):
+    with (
+        patch.object(orch._batch, "_fan_out_plans") as mock_fan,
+        patch.object(orch._batch, "_land_all", return_value=[]),
+    ):
         with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
             orch.run_orchestrate(
                 holding="main",
@@ -118,18 +126,20 @@ def test_orchestrate_anchored_runs_in_current_session(tmp_path):
             anchored_calls.append(p.slug)
         return ["chunk-hitl"]
 
-    with patch.object(orch, "_emit_anchored_chunks", side_effect=fake_run_anchored):
-        with patch.object(orch._land_queue, "drain", return_value=[]):
-            with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
-                with patch.object(orch, "_prune_stale_containers", lambda: None):
-                    with patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None):
-                        orch.run_orchestrate(
-                            holding="main",
-                            plan_paths=[hitl],
-                            harness=None,
-                            model=None,
-                            dry_run=False,
-                        )
+    with (
+        patch.object(orch, "_emit_anchored_chunks", side_effect=fake_run_anchored),
+        patch.object(orch._batch._land_queue, "drain", return_value=[]),
+        patch.object(orch._utils, "emit_event", lambda *a, **k: None),
+        patch.object(orch._batch, "_prune_stale_containers", lambda: None),
+        patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None),
+    ):
+        orch.run_orchestrate(
+            holding="main",
+            plan_paths=[hitl],
+            harness=None,
+            model=None,
+            dry_run=False,
+        )
 
     assert anchored_calls
 
@@ -139,10 +149,10 @@ def test_orchestrate_auto_spawn_runs_headless(tmp_path):
     afk = _make_plan_file(tmp_path, "afk-plan", "AFK")
 
     with (
-        patch.object(orch, "_fan_out_plans", return_value=[]) as mock_fan,
-        patch.object(orch, "_prune_stale_containers", lambda: None),
-        patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
-        patch.object(orch._land_queue, "drain", return_value=[{"status": "success", "slug": "chunk-afk"}]),
+        patch.object(orch._batch, "_fan_out_plans", return_value=[]) as mock_fan,
+        patch.object(orch._batch, "_prune_stale_containers", lambda: None),
+        patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None),
+        patch.object(orch._batch._land_queue, "drain", return_value=[{"status": "success", "slug": "chunk-afk"}]),
         patch.object(orch._utils, "emit_event", lambda *a, **k: None),
     ):
         orch.run_orchestrate(
@@ -166,108 +176,22 @@ def test_orchestrate_harness_flag_overrides_config(tmp_path):
         captured.append(harness)
         return []
 
-    with patch.object(orch, "_emit_anchored_chunks", side_effect=fake_run_anchored):
-        with patch.object(orch._land_queue, "drain", return_value=[]):
-            with patch.object(orch._utils, "emit_event", lambda *a, **k: None):
-                with patch.object(orch, "_prune_stale_containers", lambda: None):
-                    with patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None):
-                        orch.run_orchestrate(
-                            holding="main",
-                            plan_paths=[plan],
-                            harness="cursor",
-                            model=None,
-                            dry_run=False,
-                        )
+    with (
+        patch.object(orch, "_emit_anchored_chunks", side_effect=fake_run_anchored),
+        patch.object(orch._batch._land_queue, "drain", return_value=[]),
+        patch.object(orch._utils, "emit_event", lambda *a, **k: None),
+        patch.object(orch._batch, "_prune_stale_containers", lambda: None),
+        patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None),
+    ):
+        orch.run_orchestrate(
+            holding="main",
+            plan_paths=[plan],
+            harness="cursor",
+            model=None,
+            dry_run=False,
+        )
 
     assert captured and captured[0] == "cursor"
-
-
-# ── concurrency cap (ADR-0004) ──────────────────────────────────────────────
-
-
-class _CountingAsyncProc:
-    """asyncio.subprocess.Process double that tracks peak concurrency.
-
-    On spawn it bumps a shared live-counter; communicate() yields to the loop a
-    few times (so siblings interleave) then exits 0, decrementing the counter.
-    """
-
-    def __init__(self, live: dict, watermark: dict) -> None:
-        self.pid = None
-        self.returncode: int | None = None
-        self._live = live
-        self._watermark = watermark
-
-    async def communicate(self):
-        import asyncio as _a
-
-        self._live["n"] += 1
-        self._watermark["n"] = max(self._watermark["n"], self._live["n"])
-        for _ in range(3):
-            await _a.sleep(0)
-        self._live["n"] -= 1
-        self.returncode = 0
-        return (b"", b"")
-
-    async def wait(self):
-        return self.returncode
-
-
-def test_concurrency_cap_defaults_to_3_when_config_missing(monkeypatch):
-    orch = load_module("orchestrate")
-    monkeypatch.setattr(orch._utils, "read_config", lambda: {})
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)  # headroom well above the default
-    assert orch._concurrency_cap() == 3
-
-
-def test_concurrency_cap_reads_config(monkeypatch):
-    orch = load_module("orchestrate")
-    monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 7})
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)  # headroom above config → no clamp
-    assert orch._concurrency_cap() == 7
-
-
-def test_concurrency_cap_clamps_to_min_1(monkeypatch):
-    orch = load_module("orchestrate")
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)
-    monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 0})
-    assert orch._concurrency_cap() == 1
-    monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": -5})
-    assert orch._concurrency_cap() == 1
-
-
-def test_concurrency_cap_rejects_bad_value(monkeypatch):
-    orch = load_module("orchestrate")
-    monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": "lots"})
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)
-    assert orch._concurrency_cap() == 3
-
-
-def test_fan_out_plans_blocks_until_slot_free(monkeypatch, tmp_path):
-    """With cap=2 and 4 plans, the asyncio semaphore must keep at most 2 chunks
-    running concurrently — the peak live count never exceeds the cap."""
-    orch = load_module("orchestrate")
-    routing = load_module("scheduler")
-
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 2)
-    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 5.0)
-
-    plans = [routing.Plan(slug=f"p{i}", kind="AFK", blocked_by=[], path=tmp_path / f"p{i}.md") for i in range(4)]
-    for i in range(4):
-        bind_plan(f"p{i}")
-
-    live = {"n": 0}
-    high_watermark = {"n": 0}
-
-    async def fake_spawn(plan, *, harness=None, model=None, seed_summary=None):
-        return (f"sess-{plan.slug}", _CountingAsyncProc(live, high_watermark), tmp_path / plan.slug)
-
-    monkeypatch.setattr(orch._fan_out, "spawn_async", fake_spawn)
-
-    results = orch._fan_out_plans(plans, harness=None, model=None)
-    assert [p.slug for p, *_ in results] == ["p0", "p1", "p2", "p3"]
-    assert all(rc == 0 for _p, rc, *_ in results)
-    assert high_watermark["n"] <= 2, f"cap=2 was breached; saw {high_watermark['n']} concurrent live subprocesses"
 
 
 # ── B5: diff suggestion is raw git diff ───────────────────────────────────────
@@ -279,10 +203,10 @@ def test_run_orchestrate_diff_suggestion_is_raw_git_diff(tmp_path, capsys):
     plan = _make_plan_file(tmp_path, "diff-plan", "AFK")
 
     with (
-        patch.object(orch, "_fan_out_plans", return_value=[]),
-        patch.object(orch._land_queue, "drain", return_value=[{"slug": "diff-plan", "status": "success"}]),
-        patch.object(orch, "_prune_stale_containers", lambda: None),
-        patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
+        patch.object(orch._batch, "_fan_out_plans", return_value=[]),
+        patch.object(orch._batch._land_queue, "drain", return_value=[{"slug": "diff-plan", "status": "success"}]),
+        patch.object(orch._batch, "_prune_stale_containers", lambda: None),
+        patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None),
         patch.object(orch._utils, "emit_event", lambda *a, **k: None),
     ):
         rc = orch.run_orchestrate(
@@ -297,49 +221,6 @@ def test_run_orchestrate_diff_suggestion_is_raw_git_diff(tmp_path, capsys):
     captured = capsys.readouterr()
     assert "git diff my-holding..HEAD" in captured.err, f"raw git diff not in stderr: {captured.err!r}"
     assert "diff_tool" not in captured.err, "diff_tool config path must not appear in suggestion"
-
-
-# ── _land_all dep-aware path (plans is not None) ─────────────────────────────
-
-
-def test_land_all_no_plans_iterates_input_order(tmp_path):
-    """`_land_all` without plans drains chunks in input order (no scheduler)."""
-    orch = load_module("orchestrate")
-    bind_plan("a")
-
-    with (
-        patch.object(
-            orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / ".mentat" / "worktrees" / TEST_CHUNK_ID / s
-        ),
-        patch.object(orch._land_queue, "drain", return_value=[{"slug": "a", "status": "success"}]) as mock_drain,
-    ):
-        out = orch._land_all(["a"], holding="main")
-
-    assert out == [{"slug": "a", "status": "success"}]
-    # No scheduler callbacks when plans is None.
-    _, kwargs = mock_drain.call_args
-    assert "on_landed" not in kwargs
-
-
-def test_land_all_with_plans_wires_scheduler_callbacks(tmp_path):
-    """`_land_all` with plans builds a Scheduler and passes its callbacks to drain."""
-    orch = load_module("orchestrate")
-    routing = load_module("scheduler")
-    bind_plan("a")
-    plan_obj = routing.Plan(slug="a", kind="AFK", blocked_by=[], path=tmp_path / "a.md")
-
-    with (
-        patch.object(
-            orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / ".mentat" / "worktrees" / TEST_CHUNK_ID / s
-        ),
-        patch.object(orch._land_queue, "drain", return_value=[]) as mock_drain,
-    ):
-        orch._land_all(["a"], holding="main", plans=[plan_obj])
-
-    _, kwargs = mock_drain.call_args
-    assert callable(kwargs["on_landed"])
-    assert callable(kwargs["on_ejected"])
-    assert callable(kwargs["list_ready_slices"])
 
 
 # ── eject summary: drain-carried eject reasons are named on stderr ───────────
@@ -360,15 +241,18 @@ def test_run_orchestrate_prints_drain_eject_reasons(tmp_path, capsys):
     drain_out = [{"slug": "p-land", "status": "eject", "reason": "gate_failed"}]
 
     with (
-        patch.object(orch, "_fan_out_plans", return_value=[(fail_obj, 1), (land_obj, 0)]),
+        patch.object(orch._batch, "_fan_out_plans", return_value=[(fail_obj, 1), (land_obj, 0)]),
         patch.object(
-            orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / ".mentat" / "worktrees" / TEST_CHUNK_ID / s
+            orch._batch,
+            "_worktree_for_slug",
+            side_effect=lambda s: tmp_path / ".mentat" / "worktrees" / TEST_CHUNK_ID / s,
         ),
-        patch.object(orch._land_queue, "drain", return_value=drain_out),
-        patch.object(orch, "_prune_stale_containers", lambda: None),
-        patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
+        patch.object(orch._batch._land_queue, "drain", return_value=drain_out),
+        patch.object(orch._batch, "_prune_stale_containers", lambda: None),
+        patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None),
         patch.object(orch._utils, "emit_event", lambda *a, **k: None),
         patch.object(orch, "_emit_event", lambda *a, **k: None),
+        patch.object(orch._batch, "_emit_event", lambda *a, **k: None),
     ):
         rc = orch.run_orchestrate(
             holding="main",
@@ -405,15 +289,18 @@ def test_run_orchestrate_emits_upstream_ejected_for_anchored_cascade(tmp_path):
     with (
         patch.object(orch, "_load_plans", return_value=[y, z, x]),
         patch.object(orch, "_emit_anchored_chunks", lambda *a, **k: []),
-        patch.object(orch, "_fan_out_plans", return_value=[(y, 1)]),
+        patch.object(orch._batch, "_fan_out_plans", return_value=[(y, 1)]),
         patch.object(
-            orch, "_worktree_for_slug", side_effect=lambda s: tmp_path / ".mentat" / "worktrees" / TEST_CHUNK_ID / s
+            orch._batch,
+            "_worktree_for_slug",
+            side_effect=lambda s: tmp_path / ".mentat" / "worktrees" / TEST_CHUNK_ID / s,
         ),
-        patch.object(orch._land_queue, "drain", return_value=[]),
-        patch.object(orch, "_prune_stale_containers", lambda: None),
-        patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
+        patch.object(orch._batch._land_queue, "drain", return_value=[]),
+        patch.object(orch._batch, "_prune_stale_containers", lambda: None),
+        patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None),
         patch.object(orch._utils, "emit_event", lambda *a, **k: None),
         patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))),
+        patch.object(orch._batch, "_emit_event", lambda ev, p: emitted.append((ev, p))),
     ):
         rc = orch.run_orchestrate(
             holding="main",
@@ -473,7 +360,7 @@ def test_main_fan_out_spawns_each_plan(monkeypatch, tmp_path):
     spawned: list[str] = []
     with (
         patch.object(orch, "_load_plans", return_value=[plan_obj]),
-        patch.object(orch._fan_out, "spawn", side_effect=lambda p: spawned.append(p.slug)),
+        patch.object(orch._spawn, "spawn", side_effect=lambda p: spawned.append(p.slug)),
     ):
         orch.main()
 
@@ -488,7 +375,7 @@ def test_main_land_queue_reads_stdin_and_prints_json(monkeypatch, capsys):
     # slugs resolve to non-existent paths → lq_plans falls back to None.
     monkeypatch.setattr(orch._utils, "resolve_plan_ref", lambda s: Path(f"/nonexistent/{s}.md"))
 
-    with patch.object(orch, "_land_all", return_value=[{"slug": "slug-a", "status": "success"}]) as mock_land:
+    with patch.object(orch._batch, "_land_all", return_value=[{"slug": "slug-a", "status": "success"}]) as mock_land:
         orch.main()
 
     args, kwargs = mock_land.call_args
@@ -510,7 +397,7 @@ def test_main_land_queue_resolves_existing_plans(monkeypatch, tmp_path):
     with (
         patch.object(orch, "_load_plans", return_value=["PLAN"]) as mock_load,
         patch.object(
-            orch, "_land_all", side_effect=lambda slugs, *, holding, plans: captured.update(plans=plans) or []
+            orch._batch, "_land_all", side_effect=lambda slugs, *, holding, plans: captured.update(plans=plans) or []
         ),
     ):
         orch.main()

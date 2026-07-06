@@ -70,9 +70,9 @@ def test_concurrency_cap_clamps_to_half_cores(monkeypatch, capsys):
     """config concurrency=8 on a 4-CPU box → effective cap == 2; clamp logged."""
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 8})
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 4)
+    monkeypatch.setattr(orch._supervise.os, "cpu_count", lambda: 4)
 
-    assert orch._concurrency_cap() == 2, "8 must clamp to cpu_count//2 == 2"
+    assert orch._supervise._concurrency_cap() == 2, "8 must clamp to cpu_count//2 == 2"
     err = capsys.readouterr().err
     assert "clamp" in err.lower(), f"clamp must be logged; got: {err!r}"
     assert "8" in err and "2" in err, f"log must name want→effective; got: {err!r}"
@@ -82,9 +82,9 @@ def test_concurrency_cap_no_clamp_when_config_fits(monkeypatch, capsys):
     """A config that fits under the headroom ceiling is returned verbatim, no log."""
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 3})
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 16)
+    monkeypatch.setattr(orch._supervise.os, "cpu_count", lambda: 16)
 
-    assert orch._concurrency_cap() == 3
+    assert orch._supervise._concurrency_cap() == 3
     assert "clamp" not in capsys.readouterr().err.lower()
 
 
@@ -92,16 +92,16 @@ def test_concurrency_cap_floors_at_1_on_single_core(monkeypatch):
     """A 1-CPU box floors the ceiling at 1 (never 0)."""
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 8})
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 1)
-    assert orch._concurrency_cap() == 1
+    monkeypatch.setattr(orch._supervise.os, "cpu_count", lambda: 1)
+    assert orch._supervise._concurrency_cap() == 1
 
 
 def test_concurrency_cap_handles_none_cpu_count(monkeypatch):
     """os.cpu_count() returning None degrades to a 1-core ceiling."""
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 8})
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: None)
-    assert orch._concurrency_cap() == 1
+    monkeypatch.setattr(orch._supervise.os, "cpu_count", lambda: None)
+    assert orch._supervise._concurrency_cap() == 1
 
 
 def test_load_headroom_ok_permissive_when_getloadavg_missing(monkeypatch):
@@ -111,23 +111,23 @@ def test_load_headroom_ok_permissive_when_getloadavg_missing(monkeypatch):
     def _boom():
         raise AttributeError("no getloadavg")
 
-    monkeypatch.setattr(orch.os, "getloadavg", _boom)
-    assert orch._load_headroom_ok() is True
+    monkeypatch.setattr(orch._supervise.os, "getloadavg", _boom)
+    assert orch._supervise._load_headroom_ok() is True
 
 
 def test_load_headroom_ok_false_when_saturated(monkeypatch):
     """load-per-core >= 1.0 → not ok (advisory)."""
     orch = load_module("orchestrate")
-    monkeypatch.setattr(orch.os, "getloadavg", lambda: (16.0, 0, 0))
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 4)
-    assert orch._load_headroom_ok() is False
+    monkeypatch.setattr(orch._supervise.os, "getloadavg", lambda: (16.0, 0, 0))
+    monkeypatch.setattr(orch._supervise.os, "cpu_count", lambda: 4)
+    assert orch._supervise._load_headroom_ok() is False
 
 
 def test_load_headroom_ok_true_when_idle(monkeypatch):
     orch = load_module("orchestrate")
-    monkeypatch.setattr(orch.os, "getloadavg", lambda: (0.5, 0, 0))
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 4)
-    assert orch._load_headroom_ok() is True
+    monkeypatch.setattr(orch._supervise.os, "getloadavg", lambda: (0.5, 0, 0))
+    monkeypatch.setattr(orch._supervise.os, "cpu_count", lambda: 4)
+    assert orch._supervise._load_headroom_ok() is True
 
 
 # ── S2: no-progress watchdog ──────────────────────────────────────────────────
@@ -137,21 +137,21 @@ def test_stall_timeout_default_is_300(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {})
     monkeypatch.delenv("MENTAT_STALL_TIMEOUT", raising=False)
-    assert orch._stall_timeout() == 300
+    assert orch._supervise._stall_timeout() == 300
 
 
 def test_stall_timeout_reads_config(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"stall_timeout": 120})
     monkeypatch.delenv("MENTAT_STALL_TIMEOUT", raising=False)
-    assert orch._stall_timeout() == 120
+    assert orch._supervise._stall_timeout() == 120
 
 
 def test_stall_timeout_env_overrides_config(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"stall_timeout": 120})
     monkeypatch.setenv("MENTAT_STALL_TIMEOUT", "30")
-    assert orch._stall_timeout() == 30
+    assert orch._supervise._stall_timeout() == 30
 
 
 def test_stall_timeout_zero_disables(monkeypatch):
@@ -159,14 +159,14 @@ def test_stall_timeout_zero_disables(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"stall_timeout": 0})
     monkeypatch.delenv("MENTAT_STALL_TIMEOUT", raising=False)
-    assert orch._stall_timeout() <= 0
+    assert orch._supervise._stall_timeout() <= 0
 
 
 def test_event_age_none_when_no_log(tmp_path, monkeypatch):
     """No session.jsonl → None (not a stall — a just-spawned chunk)."""
     orch = load_module("orchestrate")
-    monkeypatch.setattr(orch, "_session_dir", lambda sid: tmp_path)
-    assert orch._event_age("sess-x") is None
+    monkeypatch.setattr(orch._supervise, "_session_dir", lambda sid: tmp_path)
+    assert orch._supervise._event_age("sess-x") is None
 
 
 def test_event_age_reads_mtime(tmp_path, monkeypatch):
@@ -178,8 +178,8 @@ def test_event_age_reads_mtime(tmp_path, monkeypatch):
     log = tmp_path / "session.jsonl"
     log.write_text("{}\n")
     _os.utime(log, (_time.time() - 42, _time.time() - 42))
-    monkeypatch.setattr(orch, "_session_dir", lambda sid: tmp_path)
-    age = orch._event_age("sess-x")
+    monkeypatch.setattr(orch._supervise, "_session_dir", lambda sid: tmp_path)
+    age = orch._supervise._event_age("sess-x")
     assert age is not None and age >= 40
 
 
@@ -190,14 +190,14 @@ def test_fan_out_plans_kills_stalled_chunk_before_wall(monkeypatch, tmp_path):
     routing = load_module("scheduler")
     plan = routing.Plan(slug="stalled", kind="AFK", blocked_by=[], path=tmp_path / "stalled.md")
 
-    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 30.0)  # wall far away
-    monkeypatch.setattr(orch, "_stall_timeout", lambda: 0.05)  # tiny stall window
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
-    monkeypatch.setattr(orch, "_event_age", lambda sid: 999.0)  # log gone silent
-    monkeypatch.setattr(orch._devcontainer, "down", lambda slug: True)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)], tmp_path))
+    monkeypatch.setattr(orch._supervise, "_chunk_timeout", lambda: 30.0)  # wall far away
+    monkeypatch.setattr(orch._supervise, "_stall_timeout", lambda: 0.05)  # tiny stall window
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._supervise, "_event_age", lambda sid: 999.0)  # log gone silent
+    monkeypatch.setattr(orch._batch._devcontainer, "down", lambda slug: True)
+    monkeypatch.setattr(orch._supervise._spawn, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)], tmp_path))
 
-    results = orch._fan_out_plans([plan], harness=None, model=None)
+    results = orch._batch._fan_out_plans([plan], harness=None, model=None)
 
     _p, rc, _logs, reason = results[0]
     assert rc is not None and rc < 0, f"stalled chunk must be killed (rc<0), got {rc}"
@@ -211,13 +211,15 @@ def test_fan_out_plans_progress_resets_stall_window(monkeypatch, tmp_path):
     routing = load_module("scheduler")
     plan = routing.Plan(slug="live", kind="AFK", blocked_by=[], path=tmp_path / "live.md")
 
-    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 30.0)
-    monkeypatch.setattr(orch, "_stall_timeout", lambda: 0.05)
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
-    monkeypatch.setattr(orch, "_event_age", lambda sid: 0.0)  # always fresh
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(sleep=0.15, rc=0)], tmp_path))
+    monkeypatch.setattr(orch._supervise, "_chunk_timeout", lambda: 30.0)
+    monkeypatch.setattr(orch._supervise, "_stall_timeout", lambda: 0.05)
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._supervise, "_event_age", lambda sid: 0.0)  # always fresh
+    monkeypatch.setattr(
+        orch._supervise._spawn, "spawn_async", _async_spawner([FakeAsyncProc(sleep=0.15, rc=0)], tmp_path)
+    )
 
-    results = orch._fan_out_plans([plan], harness=None, model=None)
+    results = orch._batch._fan_out_plans([plan], harness=None, model=None)
 
     _p, rc, _logs, reason = results[0]
     assert rc == 0, f"a live chunk must complete, got rc={rc}"
@@ -231,10 +233,10 @@ def testpartition_by_outcome_stalled_kill_names_killer(tmp_path):
     plan = _make_plan_obj(tmp_path, "st")
     emitted: list[tuple] = []
 
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch._devcontainer, "down", lambda slug: True):
-            with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-                _c, _h, transient = orch.partition_by_outcome(
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch._devcontainer, "down", lambda slug: True):
+            with patch.object(orch._batch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+                _c, _h, transient = orch._batch.partition_by_outcome(
                     [(plan, -9, "/logs/st", "stalled")],
                     mark_ejected=lambda slug: [],
                 )
@@ -252,7 +254,7 @@ def testpartition_by_outcome_stalled_kill_names_killer(tmp_path):
 def test_breaker_opens_after_threshold_consecutive_failures():
     """N consecutive failures OPEN the breaker; further allow() short-circuits."""
     orch = load_module("orchestrate")
-    b = orch._CircuitBreaker(threshold=3, cooldown_s=1000.0)  # long cooldown → stays open
+    b = orch._supervise._CircuitBreaker(threshold=3, cooldown_s=1000.0)  # long cooldown → stays open
     assert b.allow() is True
     b.record_failure()
     b.record_failure()
@@ -266,7 +268,7 @@ def test_breaker_opens_after_threshold_consecutive_failures():
 def test_breaker_success_resets_consecutive_count():
     """A success between failures resets the count — non-consecutive failures never trip."""
     orch = load_module("orchestrate")
-    b = orch._CircuitBreaker(threshold=3, cooldown_s=1000.0)
+    b = orch._supervise._CircuitBreaker(threshold=3, cooldown_s=1000.0)
     b.record_failure()
     b.record_failure()
     b.record_success()
@@ -277,7 +279,7 @@ def test_breaker_success_resets_consecutive_count():
 def test_breaker_half_open_probe_closes_on_success():
     """After cooldown the breaker half-opens, admits ONE probe; success re-CLOSEs."""
     orch = load_module("orchestrate")
-    b = orch._CircuitBreaker(threshold=2, cooldown_s=0.0)  # cooldown elapsed immediately
+    b = orch._supervise._CircuitBreaker(threshold=2, cooldown_s=0.0)  # cooldown elapsed immediately
     b.record_failure()
     b.record_failure()
     assert b.state == "open"
@@ -291,7 +293,7 @@ def test_breaker_half_open_probe_closes_on_success():
 def test_breaker_probe_failure_reopens():
     """A failed probe re-OPENs the breaker (backend still sick)."""
     orch = load_module("orchestrate")
-    b = orch._CircuitBreaker(threshold=1, cooldown_s=0.0)
+    b = orch._supervise._CircuitBreaker(threshold=1, cooldown_s=0.0)
     b.record_failure()
     assert b.state == "open"
     assert b.allow() is True  # probe
@@ -307,7 +309,7 @@ def test_breaker_half_open_admits_exactly_one_probe_under_concurrency():
     import asyncio
 
     orch = load_module("orchestrate")
-    b = orch._CircuitBreaker(threshold=1, cooldown_s=0.0)
+    b = orch._supervise._CircuitBreaker(threshold=1, cooldown_s=0.0)
     b.record_failure()  # open; cooldown 0 → first allow half-opens
     admits: list = []
 
@@ -329,7 +331,7 @@ def test_breaker_abandoned_probe_releases_and_recools():
     half-open forever, short-circuiting the whole remaining fleet."""
     orch = load_module("orchestrate")
     clk = [0.0]
-    b = orch._CircuitBreaker(threshold=1, cooldown_s=5.0, clock=lambda: clk[0])
+    b = orch._supervise._CircuitBreaker(threshold=1, cooldown_s=5.0, clock=lambda: clk[0])
     b.record_failure()  # open at t=0
     clk[0] = 5.0
     assert b.allow() is True, "cooldown elapsed → one probe"
@@ -345,7 +347,7 @@ def test_breaker_abandoned_noop_when_closed():
     """record_abandoned on a healthy (closed) breaker is a no-op — a non-probe kill
     doesn't perturb a backend that's up."""
     orch = load_module("orchestrate")
-    b = orch._CircuitBreaker(threshold=3, cooldown_s=1000.0)
+    b = orch._supervise._CircuitBreaker(threshold=3, cooldown_s=1000.0)
     b.record_abandoned()
     assert b.state == "closed" and b.allow() is True
 
@@ -359,17 +361,17 @@ def test_supervisor_releases_probe_on_kill(monkeypatch, tmp_path):
     plan = routing.Plan(slug="p", kind="AFK", blocked_by=[], path=tmp_path / "p.md")
 
     clk = [100.0]
-    b = orch._CircuitBreaker(threshold=1, cooldown_s=0.0, clock=lambda: clk[0])
+    b = orch._supervise._CircuitBreaker(threshold=1, cooldown_s=0.0, clock=lambda: clk[0])
     b.record_failure()  # open; cooldown 0 → the run's allow() half-opens (probe)
-    monkeypatch.setattr(orch, "_make_breaker", lambda: b)
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
-    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 30.0)  # wall far away
-    monkeypatch.setattr(orch, "_stall_timeout", lambda: 0.05)  # tiny stall window
-    monkeypatch.setattr(orch, "_event_age", lambda sid: 999.0)  # force a stall kill
-    monkeypatch.setattr(orch._devcontainer, "down", lambda slug: True)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)], tmp_path))
+    monkeypatch.setattr(orch._supervise, "_make_breaker", lambda: b)
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._supervise, "_chunk_timeout", lambda: 30.0)  # wall far away
+    monkeypatch.setattr(orch._supervise, "_stall_timeout", lambda: 0.05)  # tiny stall window
+    monkeypatch.setattr(orch._supervise, "_event_age", lambda sid: 999.0)  # force a stall kill
+    monkeypatch.setattr(orch._batch._devcontainer, "down", lambda slug: True)
+    monkeypatch.setattr(orch._supervise._spawn, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)], tmp_path))
 
-    orch._fan_out_plans([plan], harness=None, model=None)
+    orch._batch._fan_out_plans([plan], harness=None, model=None)
 
     assert b._probe_inflight is False, "a killed probe must release the half-open token"
     assert b.allow() is True, "breaker must re-admit a probe, not stay wedged"
@@ -382,10 +384,10 @@ def test_supervisor_short_circuits_when_breaker_open(monkeypatch, tmp_path):
     routing = load_module("scheduler")
     plan = routing.Plan(slug="sc", kind="AFK", blocked_by=[], path=tmp_path / "sc.md")
 
-    opened = orch._CircuitBreaker(threshold=1, cooldown_s=1000.0)
+    opened = orch._supervise._CircuitBreaker(threshold=1, cooldown_s=1000.0)
     opened.record_failure()  # now open, cooldown far off
-    monkeypatch.setattr(orch, "_make_breaker", lambda: opened)
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._supervise, "_make_breaker", lambda: opened)
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 1)
 
     launches: list[str] = []
 
@@ -393,13 +395,13 @@ def test_supervisor_short_circuits_when_breaker_open(monkeypatch, tmp_path):
         launches.append(plan.slug)
         return (f"sess-{plan.slug}", FakeAsyncProc(rc=0), tmp_path)
 
-    monkeypatch.setattr(orch._fan_out, "spawn_async", spy_spawn)
+    monkeypatch.setattr(orch._supervise._spawn, "spawn_async", spy_spawn)
 
-    results = orch._fan_out_plans([plan], harness=None, model=None)
+    results = orch._batch._fan_out_plans([plan], harness=None, model=None)
 
     assert launches == [], f"open breaker must not launch a spawn: {launches}"
     _p, rc, _logs, reason = results[0]
-    assert rc == orch.EX_UNAVAILABLE, f"short-circuit must report EX_UNAVAILABLE, got {rc}"
+    assert rc == orch._batch.EX_UNAVAILABLE, f"short-circuit must report EX_UNAVAILABLE, got {rc}"
     assert reason == "breaker-open"
 
 
@@ -409,17 +411,17 @@ def test_supervisor_records_rc69_as_breaker_failure(monkeypatch, tmp_path):
     routing = load_module("scheduler")
     plans = [routing.Plan(slug=f"c{i}", kind="AFK", blocked_by=[], path=tmp_path / f"c{i}.md") for i in range(2)]
 
-    b = orch._CircuitBreaker(threshold=2, cooldown_s=1000.0)
-    monkeypatch.setattr(orch, "_make_breaker", lambda: b)
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)  # sequential → consecutive
-    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 5.0)
-    monkeypatch.setattr(orch, "_stall_timeout", lambda: 0)  # disable stall watchdog
-    monkeypatch.setattr(orch._devcontainer, "down", lambda slug: True)
+    b = orch._supervise._CircuitBreaker(threshold=2, cooldown_s=1000.0)
+    monkeypatch.setattr(orch._supervise, "_make_breaker", lambda: b)
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 1)  # sequential → consecutive
+    monkeypatch.setattr(orch._supervise, "_chunk_timeout", lambda: 5.0)
+    monkeypatch.setattr(orch._supervise, "_stall_timeout", lambda: 0)  # disable stall watchdog
+    monkeypatch.setattr(orch._batch._devcontainer, "down", lambda slug: True)
     monkeypatch.setattr(
-        orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(rc=69), FakeAsyncProc(rc=69)], tmp_path)
+        orch._supervise._spawn, "spawn_async", _async_spawner([FakeAsyncProc(rc=69), FakeAsyncProc(rc=69)], tmp_path)
     )
 
-    orch._fan_out_plans(plans, harness=None, model=None)
+    orch._batch._fan_out_plans(plans, harness=None, model=None)
 
     assert b.state == "open", "two consecutive rc69 spawns must open the breaker"
 
@@ -430,11 +432,11 @@ def testpartition_by_outcome_breaker_open_names_killer(tmp_path):
     plan = _make_plan_obj(tmp_path, "bo")
     emitted: list[tuple] = []
 
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch._devcontainer, "down", lambda slug: True):
-            with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-                _c, _h, transient = orch.partition_by_outcome(
-                    [(plan, orch.EX_UNAVAILABLE, None, "breaker-open")],
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch._devcontainer, "down", lambda slug: True):
+            with patch.object(orch._batch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+                _c, _h, transient = orch._batch.partition_by_outcome(
+                    [(plan, orch._batch.EX_UNAVAILABLE, None, "breaker-open")],
                     mark_ejected=lambda slug: [],
                 )
 
@@ -471,9 +473,9 @@ def test_group_teardown_kills_downs_and_emits_for_every_child():
     down: list[str] = []
     emitted: list[tuple] = []
 
-    with patch.object(orch._devcontainer, "down", lambda slug: down.append(slug) or True):
-        with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-            orch._group_teardown(live)
+    with patch.object(orch._batch._devcontainer, "down", lambda slug: down.append(slug) or True):
+        with patch.object(orch._supervise, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+            orch._supervise._group_teardown(live)
 
     assert p0.killed == 1 and p1.killed == 1, "every child's group must be killed"
     assert set(down) == {chunk_label("c0"), chunk_label("c1")}, f"every child's container must be downed: {down}"
@@ -491,10 +493,10 @@ def test_install_signal_handlers_registers_sigint_and_sigterm():
         def add_signal_handler(self, sig, cb, *args):
             registered.append(sig)
 
-    orch._install_signal_handlers(_FakeLoop(), lambda name: None)
+    orch._supervise._install_signal_handlers(_FakeLoop(), lambda name: None)
 
-    assert orch.signal.SIGINT in registered
-    assert orch.signal.SIGTERM in registered
+    assert orch._supervise.signal.SIGINT in registered
+    assert orch._supervise.signal.SIGTERM in registered
 
 
 def test_supervisor_installs_signal_handlers(monkeypatch, tmp_path):
@@ -509,13 +511,13 @@ def test_supervisor_installs_signal_handlers(monkeypatch, tmp_path):
     def spy_install(loop, handler):
         captured["handler"] = handler
 
-    monkeypatch.setattr(orch, "_install_signal_handlers", spy_install)
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
-    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 5.0)
-    monkeypatch.setattr(orch, "_stall_timeout", lambda: 0)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(rc=0)], tmp_path))
+    monkeypatch.setattr(orch._supervise, "_install_signal_handlers", spy_install)
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._supervise, "_chunk_timeout", lambda: 5.0)
+    monkeypatch.setattr(orch._supervise, "_stall_timeout", lambda: 0)
+    monkeypatch.setattr(orch._supervise._spawn, "spawn_async", _async_spawner([FakeAsyncProc(rc=0)], tmp_path))
 
-    orch._fan_out_plans([plan], harness=None, model=None)
+    orch._batch._fan_out_plans([plan], harness=None, model=None)
 
     assert callable(captured.get("handler")), "supervisor must install a signal handler"
 
@@ -528,7 +530,7 @@ def test_install_signal_handlers_swallows_unsupported():
         def add_signal_handler(self, *a):
             raise NotImplementedError
 
-    orch._install_signal_handlers(_BadLoop(), lambda name: None)  # must not raise
+    orch._supervise._install_signal_handlers(_BadLoop(), lambda name: None)  # must not raise
 
 
 # ── config fallbacks: malformed values degrade to defaults ────────────────────
@@ -539,7 +541,7 @@ def test_stall_timeout_bad_env_falls_through_to_config(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setenv("MENTAT_STALL_TIMEOUT", "not-an-int")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"stall_timeout": 42})
-    assert orch._stall_timeout() == 42
+    assert orch._supervise._stall_timeout() == 42
 
 
 def test_stall_timeout_bad_config_falls_back_to_300(monkeypatch):
@@ -547,21 +549,21 @@ def test_stall_timeout_bad_config_falls_back_to_300(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.delenv("MENTAT_STALL_TIMEOUT", raising=False)
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"stall_timeout": "soon"})
-    assert orch._stall_timeout() == 300
+    assert orch._supervise._stall_timeout() == 300
 
 
 def test_breaker_threshold_bad_config_falls_back_to_3(monkeypatch):
     """A non-numeric breaker_threshold degrades to 3 (orchestrate.py 286-287)."""
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"breaker_threshold": "many"})
-    assert orch._breaker_threshold() == 3
+    assert orch._supervise._breaker_threshold() == 3
 
 
 def test_breaker_cooldown_bad_config_falls_back_to_30(monkeypatch):
     """A non-numeric breaker_cooldown degrades to 30.0 (orchestrate.py 295-296)."""
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"breaker_cooldown": "later"})
-    assert orch._breaker_cooldown() == 30.0
+    assert orch._supervise._breaker_cooldown() == 30.0
 
 
 # ── _kill_proc_group: getpgid failure fallback ────────────────────────────────
@@ -582,8 +584,8 @@ def test_kill_proc_group_falls_back_to_kill_when_getpgid_fails(monkeypatch):
     def _boom(_pid):
         raise ProcessLookupError()
 
-    monkeypatch.setattr(orch.os, "getpgid", _boom)
-    orch._kill_proc_group(_Proc())
+    monkeypatch.setattr(orch._supervise.os, "getpgid", _boom)
+    orch._supervise._kill_proc_group(_Proc())
     assert killed == [True]
 
 
@@ -597,10 +599,10 @@ def test_supervisor_warns_when_load_high_but_still_spawns(monkeypatch, tmp_path,
     routing = load_module("scheduler")
     plan = routing.Plan(slug="hl", kind="AFK", blocked_by=[], path=tmp_path / "hl.md")
 
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
-    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 5.0)
-    monkeypatch.setattr(orch, "_stall_timeout", lambda: 0)
-    monkeypatch.setattr(orch, "_load_headroom_ok", lambda: False)
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._supervise, "_chunk_timeout", lambda: 5.0)
+    monkeypatch.setattr(orch._supervise, "_stall_timeout", lambda: 0)
+    monkeypatch.setattr(orch._supervise, "_load_headroom_ok", lambda: False)
 
     launches: list[str] = []
 
@@ -608,9 +610,9 @@ def test_supervisor_warns_when_load_high_but_still_spawns(monkeypatch, tmp_path,
         launches.append(plan.slug)
         return (f"sess-{plan.slug}", FakeAsyncProc(rc=0), tmp_path)
 
-    monkeypatch.setattr(orch._fan_out, "spawn_async", spy_spawn)
+    monkeypatch.setattr(orch._supervise._spawn, "spawn_async", spy_spawn)
 
-    results = orch._fan_out_plans([plan], harness=None, model=None)
+    results = orch._batch._fan_out_plans([plan], harness=None, model=None)
 
     assert launches == ["hl"], "high load is advisory — chunk still spawns"
     assert "load high" in capsys.readouterr().err.lower()
@@ -626,14 +628,14 @@ def test_supervisor_signal_handler_tears_down_and_cancels(monkeypatch, tmp_path)
     plan = routing.Plan(slug="sig", kind="AFK", blocked_by=[], path=tmp_path / "sig.md")
 
     teardowns: list = []
-    monkeypatch.setattr(orch, "_group_teardown", lambda live: teardowns.append(dict(live)))
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._supervise, "_group_teardown", lambda live: teardowns.append(dict(live)))
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 1)
     # Fire the handler synchronously at install time — before any task has run — so
     # every task is cancelled and harvested through the BaseException branch.
-    monkeypatch.setattr(orch, "_install_signal_handlers", lambda loop, cb: cb("SIGTERM"))
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(rc=0)], tmp_path))
+    monkeypatch.setattr(orch._supervise, "_install_signal_handlers", lambda loop, cb: cb("SIGTERM"))
+    monkeypatch.setattr(orch._supervise._spawn, "spawn_async", _async_spawner([FakeAsyncProc(rc=0)], tmp_path))
 
-    results = orch._fan_out_plans([plan], harness=None, model=None)
+    results = orch._batch._fan_out_plans([plan], harness=None, model=None)
 
     assert teardowns, "_group_teardown must run on signal"
     assert results[0][1] == -1, "a cancelled task is harvested as a dead worker (rc=-1)"

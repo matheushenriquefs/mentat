@@ -106,7 +106,7 @@ def test_rebase_chunk_succeeds_with_dirty_devcontainer(tmp_path: Path) -> None:
     dcj = feature_wt / ".devcontainer" / "devcontainer.json"
     dcj.write_text('{"name": "mentat-overwritten-by-container-up", "workspaceFolder": "/workspaces/feature-wt"}\n')
 
-    lq = load_script(_SCRIPTS / "land_queue.py", "land_queue")
+    lq = load_script(_SCRIPTS / "landing.py", "landing")
     chunk = lq.Chunk(slug="feature", worktree=feature_wt)
 
     tip, err = lq._rebase_chunk(chunk, "main")

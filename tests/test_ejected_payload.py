@@ -92,12 +92,12 @@ def test_catalog_declares_optional_fields() -> None:
 def test_ejection_sites_use_shared_builder() -> None:
     for rel in (
         "mentat-implement/scripts/implement.py",
-        "mentat-orchestrate/scripts/land_queue.py",
+        "mentat-orchestrate/scripts/landing.py",
     ):
         text = (SKILLS / rel).read_text()
         assert "ejected_payload" in text, f"{rel} does not use the shared ejected_payload builder"
 
 
 def test_lifecycle_emit_sites_present() -> None:
-    assert "chunk_landed" in (SKILLS / "mentat-orchestrate/scripts/land_queue.py").read_text()
-    assert "chunk_started" in (SKILLS / "mentat-orchestrate/scripts/fan_out.py").read_text()
+    assert "chunk_landed" in (SKILLS / "mentat-orchestrate/scripts/landing.py").read_text()
+    assert "chunk_started" in (SKILLS / "mentat-orchestrate/scripts/spawn.py").read_text()

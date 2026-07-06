@@ -38,7 +38,7 @@ def invoke(
 ) -> Result:
     """Invoke claude-code headless with the given prompt.
 
-    Reads MENTAT_SESSION_LOG from env (set by mentat-orchestrate fan_out). When
+    Reads MENTAT_SESSION_LOG from env (set by mentat-orchestrate spawn). When
     set the run is captured: claude gets --output-format stream-json --verbose,
     and stdout is redirected into <session_log>. Result.session_log carries the
     path back so the self-answer detector and mentat-session track can read it.

@@ -31,7 +31,7 @@ def _load_session():
 
 
 def _load_fan_out():
-    return _load("mentat_orchestrate.fan_out", _SKILLS / "mentat-orchestrate/scripts/fan_out.py")
+    return _load("mentat_orchestrate.spawn", _SKILLS / "mentat-orchestrate/scripts/spawn.py")
 
 
 def _load_log():
@@ -215,7 +215,7 @@ def test_all_callers_resolve_same_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", repo)
 
     # Clear cached modules to pick up fresh env
-    for key in ["lib.session", "mentat_orchestrate.fan_out", "mentat_log.log", "mentat_session.session"]:
+    for key in ["lib.session", "mentat_orchestrate.spawn", "mentat_log.log", "mentat_session.session"]:
         sys.modules.pop(key, None)
 
     session_mod = _load_session()

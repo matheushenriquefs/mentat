@@ -33,8 +33,8 @@ def test_orchestrate_exit_codes_unchanged(tmp_path, monkeypatch):
     a_path = tmp_path / "a.md"
     a_path.write_text("---\nid: a\nstatus: ready\nkind: AFK\nblocked_by: []\n---\n# a\n")
 
-    monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)
-    monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: None)
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_containers", lambda: None)
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_worktrees", lambda **kw: None)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
     monkeypatch.setattr(orchestrate, "_emit_event", lambda *a, **k: None)
 
@@ -42,23 +42,23 @@ def test_orchestrate_exit_codes_unchanged(tmp_path, monkeypatch):
 
     # Ejected path: child exits EX_HITL_REQUIRED → hitl_slugs non-empty → exit 1
     monkeypatch.setattr(
-        orchestrate,
+        orchestrate._batch,
         "_fan_out_plans",
         lambda plans, **kw: [(plan_obj, EX_HITL_REQUIRED)],
     )
-    monkeypatch.setattr(orchestrate._land_queue, "drain", lambda chunks, **kw: [])
+    monkeypatch.setattr(orchestrate._batch._land_queue, "drain", lambda chunks, **kw: [])
     with patch_orchestrate_worktree(orchestrate, tmp_path):
         rc_eject = orchestrate.run_orchestrate("holding", [a_path], harness=None, model=None, dry_run=False)
     assert rc_eject == 1, f"hitl-required → exit 1; got {rc_eject}"
 
     # Success path: all chunks land cleanly → exit 0
     monkeypatch.setattr(
-        orchestrate,
+        orchestrate._batch,
         "_fan_out_plans",
         lambda plans, **kw: [(plan_obj, 0)],
     )
     monkeypatch.setattr(
-        orchestrate._land_queue,
+        orchestrate._batch._land_queue,
         "drain",
         lambda chunks, **kw: [{"slug": c.slug, "status": "success"} for c in chunks],
     )

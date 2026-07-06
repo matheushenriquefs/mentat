@@ -25,7 +25,7 @@ def load_module(name: str):
 
 
 def make_chunk(slug: str):
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     return lq.Chunk(slug=slug, worktree=Path(f"/tmp/{slug}"))
 
 
@@ -34,20 +34,20 @@ def make_chunk(slug: str):
 
 def test_speculative_disabled_by_default_reads_config_false():
     """`speculative_land` absent from config → helper returns False (serial path)."""
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     with patch.object(lq._utils, "read_config", return_value={}):
         assert lq._speculative_land_enabled() is False
 
 
 def test_speculative_enabled_when_config_true():
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     with patch.object(lq._utils, "read_config", return_value={"speculative_land": True}):
         assert lq._speculative_land_enabled() is True
 
 
 def test_drain_default_off_uses_serial_path():
     """With the flag off, drain lands chunks serially (one land() call each, in order)."""
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunks = [make_chunk(f"c{i}") for i in range(3)]
     call_order: list[str] = []
 
@@ -76,7 +76,7 @@ def test_speculative_gates_run_in_parallel_and_all_land():
     barrier before any is released. A serial gate loop would deadlock and the
     barrier's timeout would raise, failing the test.
     """
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunks = [make_chunk(f"c{i}") for i in range(3)]
     barrier = threading.Barrier(3, timeout=5)
     gated: list[str] = []
@@ -102,7 +102,7 @@ def test_speculative_gates_run_in_parallel_and_all_land():
 
 
 def test_speculative_emits_landed_for_each_chunk():
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunks = [make_chunk("a"), make_chunk("b")]
 
     with (
@@ -146,7 +146,7 @@ def _run_speculative_capturing_workers(lq, chunks):
 def test_speculative_threadpool_bounded_by_cap():
     """A batch larger than the cap must not spawn one thread per chunk — the gate
     threadpool is bounded by the effective concurrency cap (C < N → C workers)."""
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunks = [make_chunk(f"c{i}") for i in range(8)]
     with patch.object(lq, "_concurrency_cap", return_value=3):
         workers = _run_speculative_capturing_workers(lq, chunks)
@@ -156,7 +156,7 @@ def test_speculative_threadpool_bounded_by_cap():
 def test_speculative_threadpool_never_exceeds_chunk_count():
     """When the cap exceeds the batch size, the pool is sized to the batch — never
     over-allocated idle threads."""
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunks = [make_chunk("a"), make_chunk("b")]
     with patch.object(lq, "_concurrency_cap", return_value=16):
         workers = _run_speculative_capturing_workers(lq, chunks)
@@ -166,7 +166,7 @@ def test_speculative_threadpool_never_exceeds_chunk_count():
 def test_land_concurrency_cap_clamps_to_half_cores(monkeypatch):
     """The land-queue cap mirrors the fan-out clamp (shared plans.concurrency_cap):
     config 8 on a 4-core box → 2."""
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     monkeypatch.setattr(lq._utils, "read_config", lambda: {"concurrency": 8})
     monkeypatch.setattr(lq._utils.os, "cpu_count", lambda: 4)
     assert lq._concurrency_cap() == 2
@@ -175,7 +175,7 @@ def test_land_concurrency_cap_clamps_to_half_cores(monkeypatch):
 def test_land_concurrency_cap_non_int_config_falls_back_to_default(monkeypatch):
     """A non-numeric `concurrency` value falls back to the default of 3 rather
     than raising (plans.concurrency_cap)."""
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     monkeypatch.setattr(lq._utils, "read_config", lambda: {"concurrency": "lots"})
     monkeypatch.setattr(lq._utils.os, "cpu_count", lambda: 16)
     assert lq._concurrency_cap() == 3  # want=3 default, min(3, 8)
@@ -183,8 +183,8 @@ def test_land_concurrency_cap_non_int_config_falls_back_to_default(monkeypatch):
 
 def test_speculative_gate_rebase_error_reports_not_passed(monkeypatch):
     """A rebase conflict in speculation returns (chunk, False) without running
-    gates — the caller abandons speculation (land_queue.py:166)."""
-    lq = load_module("land_queue")
+    gates — the caller abandons speculation (landing.py:166)."""
+    lq = load_module("landing")
     chunk = make_chunk("z")
     gates_called: list[str] = []
 
@@ -207,7 +207,7 @@ def test_speculative_gate_failure_falls_back_to_serial_drain():
     Fallback re-drains the whole batch through land(): the failing chunk ejects
     with its real reason (gate-failed), the others land clean.
     """
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunks = [make_chunk("a"), make_chunk("b"), make_chunk("c")]
 
     def fake_gates(chunk):
@@ -235,7 +235,7 @@ def test_speculative_merge_conflict_falls_back_to_serial():
     Chunk `a` lands, `b`'s FF-merge reports not-ff → fall back to serial re-drain
     of the remainder. `b` ejects not-ff, `c` still lands.
     """
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunks = [make_chunk("a"), make_chunk("b"), make_chunk("c")]
 
     def fake_ff(chunk, holding):
@@ -263,7 +263,7 @@ def test_speculative_only_applies_to_independent_path():
     Speculation assumes 1..N-1 land; a live dep graph forbids that, so the
     dep-aware path is left on the safe serial rebase.
     """
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     chunks = [make_chunk("a"), make_chunk("b")]
     land_calls: list[str] = []
 

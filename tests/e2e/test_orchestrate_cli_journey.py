@@ -152,26 +152,26 @@ def test_emit_anchored_chunks_emits_spawned_per_plan(orch, monkeypatch):
 
 def test_concurrency_cap_reads_config(orch, monkeypatch):
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 5})
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)  # headroom above config → no clamp
-    assert orch._concurrency_cap() == 5
+    monkeypatch.setattr(orch._supervise.os, "cpu_count", lambda: 32)  # headroom above config → no clamp
+    assert orch._supervise._concurrency_cap() == 5
 
 
 def test_concurrency_cap_bad_value_falls_back_to_default(orch, monkeypatch):
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": "bad"})
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)
-    assert orch._concurrency_cap() == 3
+    monkeypatch.setattr(orch._supervise.os, "cpu_count", lambda: 32)
+    assert orch._supervise._concurrency_cap() == 3
 
 
 def test_concurrency_cap_missing_key_defaults(orch, monkeypatch):
     monkeypatch.setattr(orch._utils, "read_config", lambda: {})
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)
-    assert orch._concurrency_cap() == 3
+    monkeypatch.setattr(orch._supervise.os, "cpu_count", lambda: 32)
+    assert orch._supervise._concurrency_cap() == 3
 
 
 def test_concurrency_cap_zero_floored_to_one(orch, monkeypatch):
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 0})
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)
-    assert orch._concurrency_cap() == 1
+    monkeypatch.setattr(orch._supervise.os, "cpu_count", lambda: 32)
+    assert orch._supervise._concurrency_cap() == 1
 
 
 # ── _chunk_timeout ────────────────────────────────────────────────────────────
@@ -180,25 +180,25 @@ def test_concurrency_cap_zero_floored_to_one(orch, monkeypatch):
 def test_chunk_timeout_env_wins(orch, monkeypatch):
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "600")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"chunk_timeout": 900})
-    assert orch._chunk_timeout() == 600
+    assert orch._supervise._chunk_timeout() == 600
 
 
 def test_chunk_timeout_bad_env_falls_through_to_config(orch, monkeypatch):
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "bad")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"chunk_timeout": 900})
-    assert orch._chunk_timeout() == 900
+    assert orch._supervise._chunk_timeout() == 900
 
 
 def test_chunk_timeout_config_bad_defaults(orch, monkeypatch):
     monkeypatch.delenv("MENTAT_CHUNK_TIMEOUT", raising=False)
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"chunk_timeout": "nope"})
-    assert orch._chunk_timeout() == 1800
+    assert orch._supervise._chunk_timeout() == 1800
 
 
 def test_chunk_timeout_config_missing_defaults(orch, monkeypatch):
     monkeypatch.delenv("MENTAT_CHUNK_TIMEOUT", raising=False)
     monkeypatch.setattr(orch._utils, "read_config", lambda: {})
-    assert orch._chunk_timeout() == 1800
+    assert orch._supervise._chunk_timeout() == 1800
 
 
 # ── _kill_proc_group ──────────────────────────────────────────────────────────
@@ -218,7 +218,7 @@ class _FakeProc:
 
 def test_kill_proc_group_no_pid_falls_back_to_kill(orch):
     proc = _FakeProc(pid=None)
-    orch._kill_proc_group(proc)
+    orch._supervise._kill_proc_group(proc)
     # No resolvable pgid → fall back to proc.kill().
     assert proc.killed is True
 
@@ -226,10 +226,10 @@ def test_kill_proc_group_no_pid_falls_back_to_kill(orch):
 def test_kill_proc_group_signals_group_when_pgid_resolves(orch, monkeypatch):
     proc = _FakeProc(pid=4242)
     calls: list[tuple[int, int]] = []
-    monkeypatch.setattr(orch.os, "getpgid", lambda _pid: 4242)
-    monkeypatch.setattr(orch.os, "killpg", lambda pg, sig: calls.append((pg, sig)))
-    orch._kill_proc_group(proc)
-    assert calls == [(4242, orch.signal.SIGKILL)]
+    monkeypatch.setattr(orch._supervise.os, "getpgid", lambda _pid: 4242)
+    monkeypatch.setattr(orch._supervise.os, "killpg", lambda pg, sig: calls.append((pg, sig)))
+    orch._supervise._kill_proc_group(proc)
+    assert calls == [(4242, orch._supervise.signal.SIGKILL)]
     assert proc.killed is False
 
 
@@ -239,14 +239,14 @@ def test_kill_proc_group_signals_group_when_pgid_resolves(orch, monkeypatch):
 def test_read_chunk_seed_returns_content_when_present(orch, monkeypatch, tmp_path):
     sf = tmp_path / "summary.md"
     sf.write_text("seed content")
-    monkeypatch.setattr(orch, "_summary_file", lambda sid: sf)
-    assert orch._read_chunk_seed("sess-x") == "seed content"
+    monkeypatch.setattr(orch._supervise, "_summary_file", lambda sid: sf)
+    assert orch._supervise._read_chunk_seed("sess-x") == "seed content"
 
 
 def test_read_chunk_seed_returns_none_when_absent(orch, monkeypatch, tmp_path):
     sf = tmp_path / "missing.md"
-    monkeypatch.setattr(orch, "_summary_file", lambda sid: sf)
-    assert orch._read_chunk_seed("sess-x") is None
+    monkeypatch.setattr(orch._supervise, "_summary_file", lambda sid: sf)
+    assert orch._supervise._read_chunk_seed("sess-x") is None
 
 
 # ── partition_by_outcome ─────────────────────────────────────────────────────────
@@ -260,29 +260,29 @@ def testpartition_by_outcome_routes_each_returncode(orch, monkeypatch, tmp_path)
 
     events = []
     ejected = []
-    monkeypatch.setattr(orch, "_emit_event", lambda ev, payload: events.append((ev, payload)))
-    monkeypatch.setattr(orch, "_worktree_for_slug", lambda slug: tmp_path / slug)
+    monkeypatch.setattr(orch._batch, "_emit_event", lambda ev, payload: events.append((ev, payload)))
+    monkeypatch.setattr(orch._batch, "_worktree_for_slug", lambda slug: tmp_path / slug)
 
     results = [
         (_plan(orch, "ok"), 0),
         (_plan(orch, "sig"), -9),
         (_plan(orch, "shell-sig"), 137),
-        (_plan(orch, "hitl"), orch.EX_HITL_REQUIRED),
-        (_plan(orch, "infra"), orch.EX_UNAVAILABLE),
+        (_plan(orch, "hitl"), orch._batch.EX_HITL_REQUIRED),
+        (_plan(orch, "infra"), orch._batch.EX_UNAVAILABLE),
         (_plan(orch, "impl"), 1),
     ]
-    chunks, hitl, transient = orch.partition_by_outcome(results, mark_ejected=lambda s: ejected.append(s))
+    chunks, hitl, transient = orch._batch.partition_by_outcome(results, mark_ejected=lambda s: ejected.append(s))
 
     # rc == 0 is the only landable chunk.
     assert [c.slug for c in chunks] == ["ok"]
     assert hitl == {"hitl"}
 
     reasons = {payload["slug"]: payload["reason"] for ev, payload in events if ev == "chunk_ejected"}
-    assert reasons["sig"] == orch.WORKER_DIED
-    assert reasons["shell-sig"] == orch.WORKER_DIED
-    assert reasons["hitl"] == orch.HITL_REQUIRED
-    assert reasons["infra"] == orch.WORKER_DIED
-    assert reasons["impl"] == orch.IMPLEMENT_FAILED
+    assert reasons["sig"] == orch._batch.WORKER_DIED
+    assert reasons["shell-sig"] == orch._batch.WORKER_DIED
+    assert reasons["hitl"] == orch._batch.HITL_REQUIRED
+    assert reasons["infra"] == orch._batch.WORKER_DIED
+    assert reasons["impl"] == orch._batch.IMPLEMENT_FAILED
 
     # Transient (worker-died) ejects are RETURNED for the recovery engine, not
     # mark_ejected'd inside partition; only terminal ejects are marked.
@@ -298,9 +298,9 @@ def test_prune_stale_containers_warns_dirty_and_emits_reclaimed(orch, monkeypatc
 
     events = []
     _seed_run_chunks(orch, "a")
-    monkeypatch.setattr(orch._devcontainer, "down_run", lambda slugs: 1)
+    monkeypatch.setattr(orch._batch._devcontainer, "down_run", lambda slugs: 1)
     monkeypatch.setattr(orch._utils, "emit_event", lambda ev, payload: events.append((ev, payload)))
-    orch._prune_stale_containers()
+    orch._batch._prune_stale_containers()
     assert events == [("agent_reaped", {"reclaimed_bytes": None, "containers_removed": 1})]
 
 
@@ -321,9 +321,9 @@ def test_prune_stale_worktrees_folds_preserve_into_active(orch, monkeypatch):
         seen["scope"] = scope_chunk_ids
         return 2
 
-    monkeypatch.setattr(orch._worktrees, "prune_stale", _prune_stale)
+    monkeypatch.setattr(orch._batch._worktrees, "prune_stale", _prune_stale)
     monkeypatch.setattr(orch._utils, "emit_event", lambda ev, payload: events.append((ev, payload)))
-    orch._prune_stale_worktrees(preserve={"wedged"})
+    orch._batch._prune_stale_worktrees(preserve={"wedged"})
     assert seen["active"] == {chunk_label("wedged")}
     assert events == [("agent_reaped", {"reclaimed_bytes": None, "worktrees_removed": 2})]
 
@@ -337,7 +337,7 @@ def test_land_all_without_plans_drains_bare(orch, monkeypatch, tmp_path):
     bind_plan("a", TEST_CHUNK_ID)
     bind_plan("b", TEST_CHUNK_ID)
     captured = {}
-    monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path / s)
+    monkeypatch.setattr(orch._batch, "_worktree_for_slug", lambda s: tmp_path / s)
 
     def _drain(chunks, *, holding, **kwargs):
         captured["holding"] = holding
@@ -345,8 +345,8 @@ def test_land_all_without_plans_drains_bare(orch, monkeypatch, tmp_path):
         captured["slugs"] = [c.slug for c in chunks]
         return []
 
-    monkeypatch.setattr(orch._land_queue, "drain", _drain)
-    assert orch._land_all(["a", "b"], holding="hold") == []
+    monkeypatch.setattr(orch._batch._land_queue, "drain", _drain)
+    assert orch._batch._land_all(["a", "b"], holding="hold") == []
     assert captured["slugs"] == ["a", "b"]
     assert captured["kwargs"] == {}
 
@@ -356,15 +356,15 @@ def test_land_all_with_plans_passes_scheduler_hooks(orch, monkeypatch, tmp_path)
 
     bind_plan("a", TEST_CHUNK_ID)
     captured = {}
-    monkeypatch.setattr(orch, "_worktree_for_slug", lambda s: tmp_path / s)
+    monkeypatch.setattr(orch._batch, "_worktree_for_slug", lambda s: tmp_path / s)
 
     def _drain(chunks, *, holding, **kwargs):
         captured["kwargs"] = kwargs
         return []
 
-    monkeypatch.setattr(orch._land_queue, "drain", _drain)
+    monkeypatch.setattr(orch._batch._land_queue, "drain", _drain)
     plans = [_plan(orch, "a")]
-    orch._land_all(["a"], holding="hold", plans=plans)
+    orch._batch._land_all(["a"], holding="hold", plans=plans)
     assert set(captured["kwargs"]) == {"on_landed", "on_ejected", "list_ready_slices"}
 
 
@@ -376,7 +376,7 @@ def test_run_orchestrate_dry_run(orch, monkeypatch, capsys):
     events = []
     monkeypatch.setattr(orch, "ensure_session", lambda role, holding: "sess-1")
     monkeypatch.setattr(orch, "_load_plans", lambda paths: [_plan(orch, "afk-one", kind="AFK")])
-    monkeypatch.setattr(orch, "_land_all", lambda slugs, *, holding: land_calls.append((slugs, holding)) or [])
+    monkeypatch.setattr(orch._batch, "_land_all", lambda slugs, *, holding: land_calls.append((slugs, holding)) or [])
     monkeypatch.setattr(orch._utils, "emit_event", lambda ev, payload: events.append((ev, payload)))
 
     rc = orch.run_orchestrate("hold", [Path("p.md")], harness=None, model=None, dry_run=True)
@@ -454,7 +454,7 @@ def test_main_fan_out_spawns_each_plan(orch, monkeypatch):
     spawned = []
     monkeypatch.setattr(orch._utils, "resolve_plan_ref", lambda r: Path(r))
     monkeypatch.setattr(orch, "_load_plans", lambda paths: [_plan(orch, "p")])
-    monkeypatch.setattr(orch._fan_out, "spawn", lambda plan: spawned.append(plan.slug))
+    monkeypatch.setattr(orch._spawn, "spawn", lambda plan: spawned.append(plan.slug))
     monkeypatch.setattr(orch.sys, "argv", ["o", "fan-out", "p"])
     orch.main()  # no sys.exit on this branch
     assert spawned == ["p"]
@@ -470,7 +470,7 @@ def test_main_land_queue_prints_json(orch, monkeypatch, tmp_path, capsys):
     load_calls = []
     monkeypatch.setattr(orch._utils, "resolve_plan_ref", _resolve)
     monkeypatch.setattr(orch, "_load_plans", lambda paths, _expanding=False: load_calls.append(paths) or [])
-    monkeypatch.setattr(orch, "_land_all", lambda slugs, *, holding, plans: [{"slug": "a"}])
+    monkeypatch.setattr(orch._batch, "_land_all", lambda slugs, *, holding, plans: [{"slug": "a"}])
     monkeypatch.setattr(orch.sys, "stdin", io.StringIO("a\nb\n"))
     monkeypatch.setattr(orch.sys, "argv", ["o", "land-queue", "hold"])
     orch.main()

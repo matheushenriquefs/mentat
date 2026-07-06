@@ -1,4 +1,4 @@
-"""Structural guard: land_queue must not import scheduler."""
+"""Structural guard: landing must not import scheduler."""
 
 from __future__ import annotations
 
@@ -9,16 +9,16 @@ _SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestr
 
 
 def test_land_queue_drain_does_not_import_scheduler():
-    """land_queue.py must not import scheduler or reference Scheduler class."""
-    src = (_SCRIPTS / "land_queue.py").read_text()
+    """landing.py must not import scheduler or reference Scheduler class."""
+    src = (_SCRIPTS / "landing.py").read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                assert alias.name != "scheduler", "land_queue must not import scheduler"
+                assert alias.name != "scheduler", "landing must not import scheduler"
         if isinstance(node, ast.ImportFrom):
-            assert node.module != "scheduler", "land_queue must not import from scheduler"
-    assert "Scheduler" not in src, "land_queue must not reference Scheduler class"
+            assert node.module != "scheduler", "landing must not import from scheduler"
+    assert "Scheduler" not in src, "landing must not reference Scheduler class"
     assert "scheduler" not in [node.arg for node in ast.walk(tree) if isinstance(node, ast.arg)], (
-        "land_queue.drain must not have 'scheduler' parameter"
+        "landing.drain must not have 'scheduler' parameter"
     )

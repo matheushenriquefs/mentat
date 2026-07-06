@@ -1,4 +1,4 @@
-"""slice-2: land_queue.drain pulls chunks in topo order when given a scheduler.
+"""slice-2: landing.drain pulls chunks in topo order when given a scheduler.
 
 G2 — AFK_b depends on AFK_a. Even if chunks arrive in reverse spawn order
 (B then A), drain must land A before B because B.blocked_by includes A.
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import land_queue
+import landing
 import scheduler
 
 
@@ -27,10 +27,10 @@ def _plan(slug: str, blocked_by: list[str] | None = None) -> scheduler.Plan:
     )
 
 
-def _chunk(slug: str, tmp_path: Path) -> land_queue.Chunk:
+def _chunk(slug: str, tmp_path: Path) -> landing.Chunk:
     wt = tmp_path / slug
     wt.mkdir(exist_ok=True)
-    return land_queue.Chunk(slug=slug, worktree=wt)
+    return landing.Chunk(slug=slug, worktree=wt)
 
 
 def _install_stubs(monkeypatch, ff_calls: list[str], gate_block: set[str] | None = None) -> None:
@@ -48,11 +48,11 @@ def _install_stubs(monkeypatch, ff_calls: list[str], gate_block: set[str] | None
         ff_calls.append(chunk.slug)
         return None
 
-    monkeypatch.setattr(land_queue, "_rebase_chunk", fake_rebase)
-    monkeypatch.setattr(land_queue, "_run_gates", fake_gates)
-    monkeypatch.setattr(land_queue, "_ff_merge", fake_ff)
-    monkeypatch.setattr(land_queue, "_emit_event", lambda *a, **kw: None)
-    monkeypatch.setattr(land_queue, "_teardown_container", lambda slug: None)
+    monkeypatch.setattr(landing, "_rebase_chunk", fake_rebase)
+    monkeypatch.setattr(landing, "_run_gates", fake_gates)
+    monkeypatch.setattr(landing, "_ff_merge", fake_ff)
+    monkeypatch.setattr(landing, "_emit_event", lambda *a, **kw: None)
+    monkeypatch.setattr(landing, "_teardown_container", lambda slug: None)
 
 
 def test_chain_lands_in_topo_order(tmp_path, monkeypatch) -> None:
@@ -63,7 +63,7 @@ def test_chain_lands_in_topo_order(tmp_path, monkeypatch) -> None:
     ff_calls: list[str] = []
     _install_stubs(monkeypatch, ff_calls)
 
-    results = land_queue.drain(
+    results = landing.drain(
         [chunk_b, chunk_a],
         holding="holding",
         on_landed=sched.mark_landed,
@@ -83,7 +83,7 @@ def test_independent_afks_keep_input_order(tmp_path, monkeypatch) -> None:
     ff_calls: list[str] = []
     _install_stubs(monkeypatch, ff_calls)
 
-    land_queue.drain(
+    landing.drain(
         chunks,
         holding="holding",
         on_landed=sched.mark_landed,
@@ -100,7 +100,7 @@ def test_drain_without_scheduler_is_unchanged(tmp_path, monkeypatch) -> None:
     ff_calls: list[str] = []
     _install_stubs(monkeypatch, ff_calls)
 
-    land_queue.drain(chunks, holding="holding")
+    landing.drain(chunks, holding="holding")
 
     assert ff_calls == ["x", "y"]
 
@@ -119,7 +119,7 @@ def test_stalled_dep_lists_pending(tmp_path, monkeypatch) -> None:
     ff_calls: list[str] = []
     _install_stubs(monkeypatch, ff_calls)
 
-    results = land_queue.drain(
+    results = landing.drain(
         chunks,
         holding="holding",
         on_landed=sched.mark_landed,
@@ -134,7 +134,7 @@ def test_stalled_dep_lists_pending(tmp_path, monkeypatch) -> None:
 
 
 def test_blocked_chunk_waits_until_upstream_lands(tmp_path, monkeypatch) -> None:
-    """B reaches land_queue first but holds until A lands; B picks up immediately after."""
+    """B reaches landing first but holds until A lands; B picks up immediately after."""
     a, b = _plan("a"), _plan("b", blocked_by=["a"])
     sched = scheduler.Scheduler([a, b])
 
@@ -150,14 +150,14 @@ def test_blocked_chunk_waits_until_upstream_lands(tmp_path, monkeypatch) -> None
         landed_seq.append(chunk.slug)
         return None
 
-    monkeypatch.setattr(land_queue, "_rebase_chunk", fake_rebase)
-    monkeypatch.setattr(land_queue, "_run_gates", fake_gates)
-    monkeypatch.setattr(land_queue, "_ff_merge", fake_ff)
-    monkeypatch.setattr(land_queue, "_emit_event", lambda *a, **kw: None)
-    monkeypatch.setattr(land_queue, "_teardown_container", lambda slug: None)
+    monkeypatch.setattr(landing, "_rebase_chunk", fake_rebase)
+    monkeypatch.setattr(landing, "_run_gates", fake_gates)
+    monkeypatch.setattr(landing, "_ff_merge", fake_ff)
+    monkeypatch.setattr(landing, "_emit_event", lambda *a, **kw: None)
+    monkeypatch.setattr(landing, "_teardown_container", lambda slug: None)
 
     chunk_b, chunk_a = _chunk("b", tmp_path), _chunk("a", tmp_path)
-    land_queue.drain(
+    landing.drain(
         [chunk_b, chunk_a],
         holding="holding",
         on_landed=sched.mark_landed,

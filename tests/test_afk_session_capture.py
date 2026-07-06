@@ -41,7 +41,7 @@ class _FakeProc:
 
 
 def test_fan_out_creates_log_dir_and_exports_env(tmp_path, monkeypatch):
-    fan_out = _load(ORCH_SCRIPTS / "fan_out.py", "fan_out")
+    fan_out = _load(ORCH_SCRIPTS / "spawn.py", "spawn")
     plan_path = _write_plan(tmp_path, "afk-plan")
     plan = fake_plan(plan_path, "afk-plan")
     worktree = tmp_path / "wt"

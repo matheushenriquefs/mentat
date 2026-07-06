@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import land_queue
+import landing
 import scheduler
 
 
@@ -32,10 +32,10 @@ def _plan(slug: str, blocked_by: list[str] | None = None, kind: str = "AFK") -> 
     )
 
 
-def _chunk(slug: str, tmp_path: Path) -> land_queue.Chunk:
+def _chunk(slug: str, tmp_path: Path) -> landing.Chunk:
     wt = tmp_path / slug
     wt.mkdir(exist_ok=True)
-    return land_queue.Chunk(slug=slug, worktree=wt)
+    return landing.Chunk(slug=slug, worktree=wt)
 
 
 def _install_stubs(
@@ -67,15 +67,15 @@ def _install_stubs(
         if emitted is not None:
             emitted.append((event, payload))
 
-    monkeypatch.setattr(land_queue, "_rebase_chunk", fake_rebase)
-    monkeypatch.setattr(land_queue, "_run_gates", fake_gates)
-    monkeypatch.setattr(land_queue, "_ff_merge", fake_ff)
-    monkeypatch.setattr(land_queue, "_emit_event", fake_emit)
-    monkeypatch.setattr(land_queue, "_teardown_container", lambda slug: None)
+    monkeypatch.setattr(landing, "_rebase_chunk", fake_rebase)
+    monkeypatch.setattr(landing, "_run_gates", fake_gates)
+    monkeypatch.setattr(landing, "_ff_merge", fake_ff)
+    monkeypatch.setattr(landing, "_emit_event", fake_emit)
+    monkeypatch.setattr(landing, "_teardown_container", lambda slug: None)
 
 
 def _drain(chunks, sched, holding="holding"):
-    return land_queue.drain(
+    return landing.drain(
         chunks,
         holding=holding,
         on_landed=sched.mark_landed,

@@ -31,7 +31,7 @@ def invoke(
       no --session-id (cursor uses internal chat IDs, not mentat session IDs)
       no --disallowedTools (inject AFK clause into prompt prefix instead)
 
-    Reads MENTAT_SESSION_LOG from env (set by mentat-orchestrate fan_out).
+    Reads MENTAT_SESSION_LOG from env (set by mentat-orchestrate spawn).
     When set, stdout is redirected into <session_log>. Result.session_log
     carries the path back so the self-answer detector and mentat-session
     track can read it.

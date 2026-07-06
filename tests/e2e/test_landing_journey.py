@@ -78,7 +78,7 @@ def _events(session_id: str, name: str) -> list[dict]:
 
 
 def test_drain_lands_clean_and_ejects_blocked(tmp_path, monkeypatch):
-    lq = load_script(SCRIPTS / "land_queue.py", "e2e_lq")
+    lq = load_script(SCRIPTS / "landing.py", "e2e_lq")
     main_repo, wts = _setup(tmp_path, ["good", "bad"])
     session = _configure_env(monkeypatch, tmp_path, main_repo)
 
@@ -111,7 +111,7 @@ def test_drain_lands_clean_and_ejects_blocked(tmp_path, monkeypatch):
 
 
 def test_drain_cascades_ejection_to_dependents(tmp_path, monkeypatch):
-    lq = load_script(SCRIPTS / "land_queue.py", "e2e_lq_cascade")
+    lq = load_script(SCRIPTS / "landing.py", "e2e_lq_cascade")
     main_repo, wts = _setup(tmp_path, ["root", "child"])
     session = _configure_env(monkeypatch, tmp_path, main_repo)
 
@@ -149,7 +149,7 @@ def test_drain_cascades_ejection_to_dependents(tmp_path, monkeypatch):
 
 
 def test_drain_stalls_when_no_chunk_ready(tmp_path, monkeypatch):
-    lq = load_script(SCRIPTS / "land_queue.py", "e2e_lq_stall")
+    lq = load_script(SCRIPTS / "landing.py", "e2e_lq_stall")
     main_repo, wts = _setup(tmp_path, ["blocked"])
     _configure_env(monkeypatch, tmp_path, main_repo)
 

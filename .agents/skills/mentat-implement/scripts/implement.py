@@ -603,8 +603,8 @@ def _land_and_review(slug: str, worktree: Path, holding: str) -> dict[str, objec
     for the single-chunk case (no Scheduler needed — drain() with one chunk and
     scheduler=None is equivalent). Returns a dict with status and landed tip sha.
     """
-    _land_script = paths.SKILLS_DIR / "mentat-orchestrate/scripts/land_queue.py"
-    land_queue = _load_mod("land_queue", _land_script)
+    _land_script = paths.SKILLS_DIR / "mentat-orchestrate/scripts/landing.py"
+    land_queue = _load_mod("landing", _land_script)
     chunk_id = os.environ.get("MENTAT_CHUNK_ID", "").strip()
     chunk = land_queue.Chunk(slug=slug, worktree=worktree, chunk_id=chunk_id)
     verdict = _do_land(chunk, holding=holding, land_queue=land_queue)

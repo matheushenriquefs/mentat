@@ -3,7 +3,7 @@ name: mentat-orchestrate
 description: Fan out multiple plans in parallel, land them serially onto a holding branch. Use when you want to orchestrate a batch of plan slices across worktrees.
 ---
 
-Hybrid orchestrator: one bin, two stage modules (`fan_out`, `land_queue`), four subcommands. Reads plan frontmatter to partition plans into anchored (HITL) and auto-spawned (AFK) groups. Spawns AFK plans in parallel via `subprocess.Popen` with manual polling; runs HITL plans in the current session. Lands all chunks serially onto the holding branch with gate checks.
+Hybrid orchestrator: one bin, stage modules (`spawn`, `landing`, `supervise`, `batch`), four subcommands. Reads plan frontmatter to partition plans into anchored (HITL) and auto-spawned (AFK) groups. Spawns AFK plans in parallel via `subprocess.Popen` with manual polling; runs HITL plans in the current session. Lands all chunks serially onto the holding branch with gate checks.
 
 ## How to invoke
 
@@ -44,7 +44,7 @@ Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the hol
    never subprocess-runs HITL implement — interactivity would be lost.
 6. Poll/wait for auto_spawn completions.
 7. Land auto_spawn chunks serially onto holding (HITL chunks land in the
-   follow-up `land-queue` call described in step 5). `land_queue.drain`
+   follow-up `land-queue` call described in step 5). `landing.drain`
    pulls chunks via `Scheduler.next_ready` — topo order is respected, so
    `B(blocked_by=[A])` waits until `A.landed` even if B's chunk arrived
    first. Ejecting a chunk cascades to every downstream chunk as

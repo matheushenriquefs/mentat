@@ -30,10 +30,10 @@ def test_worker_died_in_eject_reasons():
 def _run_partition(orch, routing, tmp_path, rc):
     plan = routing.Plan(slug="dead-chunk", kind="AFK", blocked_by=[], path=tmp_path / "dead-chunk.md")
     emitted = []
-    with patch.object(orch, "_emit_event", side_effect=lambda ev, p: emitted.append((ev, p))):
-        with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
+    with patch.object(orch._batch, "_emit_event", side_effect=lambda ev, p: emitted.append((ev, p))):
+        with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
             sched = routing.Scheduler([plan])
-            chunks, hitl, _transient = orch.partition_by_outcome([(plan, rc)], mark_ejected=sched.mark_ejected)
+            chunks, hitl, _transient = orch._batch.partition_by_outcome([(plan, rc)], mark_ejected=sched.mark_ejected)
     return chunks, hitl, emitted
 
 

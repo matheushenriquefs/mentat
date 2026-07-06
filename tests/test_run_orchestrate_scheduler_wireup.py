@@ -31,7 +31,7 @@ def _load(name: str):
 
 def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
     orchestrate = _load("orchestrate")
-    _load("land_queue")
+    _load("landing")
     _load("scheduler")
 
     a_path = tmp_path / "a.md"
@@ -61,9 +61,9 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
             results.append({"slug": c.slug, "status": "success", "tip": "abc"})
         return results
 
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out_plans)
-    monkeypatch.setattr(orchestrate, "_worktree_for_slug", lambda slug: worktrees[slug])
-    monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
+    monkeypatch.setattr(orchestrate._batch, "_fan_out_plans", fake_fan_out_plans)
+    monkeypatch.setattr(orchestrate._batch, "_worktree_for_slug", lambda slug: worktrees[slug])
+    monkeypatch.setattr(orchestrate._batch._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
     monkeypatch.setattr(orchestrate, "ensure_session", lambda *a, **k: "sess-1")
 
@@ -93,7 +93,7 @@ def test_run_orchestrate_passes_plan_slugs_to_land_queue(tmp_path, monkeypatch):
 def test_run_orchestrate_independent_afks_keep_plan_slug_identity(tmp_path, monkeypatch):
     """Two independent AFKs — chunks still arrive with plan slugs, not session_ids."""
     orchestrate = _load("orchestrate")
-    _load("land_queue")
+    _load("landing")
     _load("scheduler")
 
     a_path = tmp_path / "a.md"
@@ -107,8 +107,8 @@ def test_run_orchestrate_independent_afks_keep_plan_slug_identity(tmp_path, monk
         worktrees.update(bind_chunk_worktrees(plans, tmp_path))
         return [(p, 0, str(worktrees[p.slug]), None) for p in plans]
 
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out)
-    monkeypatch.setattr(orchestrate, "_worktree_for_slug", lambda slug: worktrees[slug])
+    monkeypatch.setattr(orchestrate._batch, "_fan_out_plans", fake_fan_out)
+    monkeypatch.setattr(orchestrate._batch, "_worktree_for_slug", lambda slug: worktrees[slug])
 
     captured_slugs: list[str] = []
 
@@ -116,7 +116,7 @@ def test_run_orchestrate_independent_afks_keep_plan_slug_identity(tmp_path, monk
         captured_slugs.extend(c.slug for c in chunks)
         return [{"slug": c.slug, "status": "success"} for c in chunks]
 
-    monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
+    monkeypatch.setattr(orchestrate._batch._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
     with patch_orchestrate_worktree(orchestrate, tmp_path):

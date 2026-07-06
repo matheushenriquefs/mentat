@@ -50,21 +50,21 @@ def _wire(orchestrate, monkeypatch, tmp_path):
             results.append({"slug": c.slug, "status": "success", "tip": "x"})
         return results
 
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out_plans)
-    monkeypatch.setattr(orchestrate, "_worktree_for_slug", lambda slug: worktrees[slug])
-    monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
+    monkeypatch.setattr(orchestrate._batch, "_fan_out_plans", fake_fan_out_plans)
+    monkeypatch.setattr(orchestrate._batch, "_worktree_for_slug", lambda slug: worktrees[slug])
+    monkeypatch.setattr(orchestrate._batch._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
     monkeypatch.setattr(orchestrate, "_emit_event", lambda *a, **k: None)
-    monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)
-    monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: None)
-    monkeypatch.setattr(orchestrate, "_gc_preserved_worktrees", lambda **kw: None)
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_containers", lambda: None)
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_worktrees", lambda **kw: None)
+    monkeypatch.setattr(orchestrate._batch, "_gc_preserved_worktrees", lambda **kw: None)
     return waves
 
 
 def test_blocked_chunk_not_spawned_until_upstream_lands(tmp_path, monkeypatch):
     """B blocked_by A → A fans out alone, B only after A lands."""
     orchestrate = _load("orchestrate")
-    _load("land_queue")
+    _load("landing")
     _load("scheduler")
 
     a = tmp_path / "a.md"
@@ -82,7 +82,7 @@ def test_blocked_chunk_not_spawned_until_upstream_lands(tmp_path, monkeypatch):
 def test_shared_write_set_chunks_never_spawn_concurrently(tmp_path, monkeypatch):
     """Two independent plans that declare the same touch-path are serialized."""
     orchestrate = _load("orchestrate")
-    _load("land_queue")
+    _load("landing")
     _load("scheduler")
 
     a = tmp_path / "a.md"
@@ -115,11 +115,11 @@ def test_run_batch_stalls_when_dep_never_resolves(tmp_path, monkeypatch):
         wt_map.update(bind_chunk_worktrees(plans, tmp_path))
         return [(p, 0) for p in plans]
 
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out)
-    monkeypatch.setattr(orchestrate, "_worktree_for_slug", lambda slug: wt_map[slug])
-    monkeypatch.setattr(orchestrate._land_queue, "drain", lambda chunks, **kw: [])
+    monkeypatch.setattr(orchestrate._batch, "_fan_out_plans", fake_fan_out)
+    monkeypatch.setattr(orchestrate._batch, "_worktree_for_slug", lambda slug: wt_map[slug])
+    monkeypatch.setattr(orchestrate._batch._land_queue, "drain", lambda chunks, **kw: [])
 
-    results, hitl, transient = orchestrate._run_batch(
+    results, hitl, transient = orchestrate._batch._run_batch(
         [B], holding="h", harness=None, model=None, sched=sched, known_slugs={"A", "B"}
     )
     assert any(r.get("status") == "stalled" and r.get("pending") == ["B"] for r in results)
@@ -128,7 +128,7 @@ def test_run_batch_stalls_when_dep_never_resolves(tmp_path, monkeypatch):
 def test_independent_chunks_fan_out_in_one_wave(tmp_path, monkeypatch):
     """No deps, disjoint write-sets → both spawn together (no needless serialization)."""
     orchestrate = _load("orchestrate")
-    _load("land_queue")
+    _load("landing")
     _load("scheduler")
 
     a = tmp_path / "a.md"

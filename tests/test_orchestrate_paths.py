@@ -33,12 +33,12 @@ def test_fan_out_paths():
     import pytest
 
     root = Path.home() / ".agents" / "skills" / "mentat-orchestrate" / "scripts"
-    fan_out_path = root / "fan_out.py"
-    if not fan_out_path.exists():
+    spawn_path = root / "spawn.py"
+    if not spawn_path.exists():
         pytest.skip("~/.agents/ not present in this env")
-    spec = importlib.util.spec_from_file_location("fan_out", fan_out_path)
+    spec = importlib.util.spec_from_file_location("spawn", spawn_path)
     mod = importlib.util.module_from_spec(spec)
-    sys.modules["fan_out"] = mod
+    sys.modules["spawn"] = mod
     spec.loader.exec_module(mod)
     _no_double(mod._LOG_SCRIPT)
     assert mod._LOG_SCRIPT.is_file(), mod._LOG_SCRIPT

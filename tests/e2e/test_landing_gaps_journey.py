@@ -1,6 +1,6 @@
 """E2E gap-closer: land-queue seams the main journey test leaves uncovered.
 
-Companion to ``test_land_queue_journey.py``. Reaches the un-patched helper
+Companion to ``test_landing_journey.py``. Reaches the un-patched helper
 bodies (``_run_gates`` delegating to the plans util, ``_teardown_container``
 firing the real teardown audit row), the ff-merge failure eject arm in
 ``land`` (both not-ff and git-error), and the cascade branch that skips a
@@ -80,7 +80,7 @@ def _events(session_id: str, name: str) -> list[dict]:
 
 
 def test_run_gates_delegates_to_plans_util(tmp_path):
-    lq = load_script(SCRIPTS / "land_queue.py", "e2e_lq_gaps_gates")
+    lq = load_script(SCRIPTS / "landing.py", "e2e_lq_gaps_gates")
     captured: dict[str, Path] = {}
 
     def fake_run_gates(worktree):
@@ -100,7 +100,7 @@ def test_run_gates_delegates_to_plans_util(tmp_path):
 
 
 def test_teardown_container_fires_real_teardown_event(tmp_path, monkeypatch):
-    lq = load_script(SCRIPTS / "land_queue.py", "e2e_lq_gaps_teardown")
+    lq = load_script(SCRIPTS / "landing.py", "e2e_lq_gaps_teardown")
     log_root = tmp_path / "logs"
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("MENTAT_LOG_PATH", str(log_root))
@@ -122,7 +122,7 @@ def test_teardown_container_fires_real_teardown_event(tmp_path, monkeypatch):
 
 
 def test_land_ejects_not_ff_when_ff_merge_reports_not_ff(tmp_path, monkeypatch):
-    lq = load_script(SCRIPTS / "land_queue.py", "e2e_lq_gaps_notff")
+    lq = load_script(SCRIPTS / "landing.py", "e2e_lq_gaps_notff")
     main_repo, wts = _setup(tmp_path, ["moved"])
     session = _configure_env(monkeypatch, tmp_path, main_repo)
 
@@ -140,7 +140,7 @@ def test_land_ejects_not_ff_when_ff_merge_reports_not_ff(tmp_path, monkeypatch):
 
 
 def test_land_ejects_git_error_when_ff_merge_reports_other_error(tmp_path, monkeypatch):
-    lq = load_script(SCRIPTS / "land_queue.py", "e2e_lq_gaps_giterr")
+    lq = load_script(SCRIPTS / "landing.py", "e2e_lq_gaps_giterr")
     main_repo, wts = _setup(tmp_path, ["broken"])
     _configure_env(monkeypatch, tmp_path, main_repo)
 
@@ -161,7 +161,7 @@ def test_land_ejects_git_error_when_ff_merge_reports_other_error(tmp_path, monke
 
 
 def test_drain_cascade_skips_downstream_not_in_pending(tmp_path, monkeypatch):
-    lq = load_script(SCRIPTS / "land_queue.py", "e2e_lq_gaps_cascade")
+    lq = load_script(SCRIPTS / "landing.py", "e2e_lq_gaps_cascade")
     main_repo, wts = _setup(tmp_path, ["root", "child"])
     session = _configure_env(monkeypatch, tmp_path, main_repo)
 

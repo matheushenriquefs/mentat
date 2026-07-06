@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import subprocess
+import sys
 import types
 from collections.abc import Generator
 from pathlib import Path
@@ -54,7 +55,21 @@ def load_script(path: Path, key: str | None = None) -> ModuleType:
     if spec is None or spec.loader is None:
         raise RuntimeError(f"could not load {path}")
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    # dataclasses (with `from __future__ import annotations`) resolves string
+    # annotations via sys.modules[cls.__module__] during class definition; register
+    # temporarily and restore whatever (if anything) was there, so this load doesn't
+    # clobber a peer module's already-bound `import <key>` reference (e.g. a sibling
+    # module that imported "runtime" before this call and holds that object directly).
+    had_prior = key in sys.modules
+    prior = sys.modules.get(key)
+    sys.modules[key] = mod
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        if had_prior:
+            sys.modules[key] = prior
+        else:
+            sys.modules.pop(key, None)
     return mod
 
 
@@ -257,9 +272,9 @@ def mock_fan_out_worktree(monkeypatch, fan_out_mod, worktree: Path) -> None:
 
 
 def patch_orchestrate_worktree(orch, root: Path):
-    """Patch orchestrate._worktree_for_slug to chunk-keyed paths under root."""
+    """Patch batch._worktree_for_slug to chunk-keyed paths under root."""
     return patch.object(
-        orch,
+        orch._batch,
         "_worktree_for_slug",
         side_effect=lambda s: root / ".mentat" / "worktrees" / TEST_CHUNK_ID / s,
     )

@@ -47,15 +47,15 @@ def test_default_concurrency_cap_is_three(monkeypatch):
     """Default AFK concurrency is 3 — raising it silently is what starved the
     round2 batch. A change must be a conscious edit here."""
     orch = _orch(monkeypatch)
-    monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)  # headroom above the default → no clamp
-    assert orch._concurrency_cap() == _DEFAULT_CONCURRENCY
+    monkeypatch.setattr(orch._supervise.os, "cpu_count", lambda: 32)  # headroom above the default → no clamp
+    assert orch._supervise._concurrency_cap() == _DEFAULT_CONCURRENCY
 
 
 def test_default_chunk_timeout_is_1800_seconds(monkeypatch):
     """Default per-chunk deadline is 30 min. Confirmed reasonable; must not drop
     silently, and any increase should be ground-truthed first."""
     orch = _orch(monkeypatch)
-    assert orch._chunk_timeout() == _DEFAULT_CHUNK_TIMEOUT
+    assert orch._supervise._chunk_timeout() == _DEFAULT_CHUNK_TIMEOUT
 
 
 def test_chunk_timeout_bad_config_falls_back_to_1800(monkeypatch):
@@ -63,7 +63,7 @@ def test_chunk_timeout_bad_config_falls_back_to_1800(monkeypatch):
     orch = load_script(ORCH_PY, "orch_defaults_bad")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"chunk_timeout": "not-an-int"})
     monkeypatch.delenv("MENTAT_CHUNK_TIMEOUT", raising=False)
-    assert orch._chunk_timeout() == _DEFAULT_CHUNK_TIMEOUT
+    assert orch._supervise._chunk_timeout() == _DEFAULT_CHUNK_TIMEOUT
 
 
 def test_global_config_template_documents_matching_cap():

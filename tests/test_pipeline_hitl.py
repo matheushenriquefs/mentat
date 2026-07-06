@@ -49,7 +49,7 @@ def _init_repo(repo: Path) -> str:
 
 def test_pipeline_hitl_lands_chunk_without_claude_headless(tmp_path, monkeypatch):
     orchestrate = _load("orchestrate")
-    land_queue = _load("land_queue")
+    land_queue = _load("landing")
 
     repo = tmp_path / "repo"
     _init_repo(repo)
@@ -72,7 +72,7 @@ def test_pipeline_hitl_lands_chunk_without_claude_headless(tmp_path, monkeypatch
 
     monkeypatch.setattr(orchestrate._utils, "emit_event", record)
     monkeypatch.setattr(land_queue, "_emit_event", record)
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [])
+    monkeypatch.setattr(orchestrate._batch, "_fan_out_plans", lambda plans, **kw: [])
 
     # --- Phase 1: orchestrate emits chunk_started{hitl-in-session}, no land ---
     rc = orchestrate.run_orchestrate("holding", [plan], harness=None, model=None, dry_run=False)

@@ -38,7 +38,7 @@ def _make_plan_obj(tmp_path: Path, slug: str, kind: str = "AFK"):
 
 def test_signal_exit_base_constant_is_128():
     orch = load_module("orchestrate")
-    assert orch._SIGNAL_EXIT_BASE == 128, "_SIGNAL_EXIT_BASE must equal 128"
+    assert orch._batch._SIGNAL_EXIT_BASE == 128, "_SIGNAL_EXIT_BASE must equal 128"
 
 
 # ── Slice 1: partition_by_outcome totality ──────────────────────────────────────
@@ -51,9 +51,9 @@ def _run_partition(tmp_path, rc: int) -> tuple[list, set]:
     plan = _make_plan_obj(tmp_path, "slug-a")
     ejected: list[str] = []
 
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch, "_emit_event", lambda *a, **k: None):
-            chunks, hitl, _transient = orch.partition_by_outcome(
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch, "_emit_event", lambda *a, **k: None):
+            chunks, hitl, _transient = orch._batch.partition_by_outcome(
                 [(plan, rc)],
                 mark_ejected=lambda slug: ejected.append(slug) or [],
             )
@@ -114,9 +114,9 @@ def testpartition_by_outcome_rc_69_emits_ejection(tmp_path):
     plan = _make_plan_obj(tmp_path, "slug-b")
     emitted: list[tuple] = []
 
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch, "_emit_event", lambda ev, payload: emitted.append((ev, payload))):
-            orch.partition_by_outcome(
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch, "_emit_event", lambda ev, payload: emitted.append((ev, payload))):
+            orch._batch.partition_by_outcome(
                 [(plan, 69)],
                 mark_ejected=lambda slug: [],
             )
@@ -130,9 +130,9 @@ def testpartition_by_outcome_rc_1_reason_is_implement_failed(tmp_path):
     plan = _make_plan_obj(tmp_path, "slug-c")
     emitted: list[tuple] = []
 
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch, "_emit_event", lambda ev, payload: emitted.append((ev, payload))):
-            orch.partition_by_outcome(
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch, "_emit_event", lambda ev, payload: emitted.append((ev, payload))):
+            orch._batch.partition_by_outcome(
                 [(plan, 1)],
                 mark_ejected=lambda slug: [],
             )
@@ -149,9 +149,9 @@ def testpartition_by_outcome_rc_69_reason_is_worker_died(tmp_path):
     plan = _make_plan_obj(tmp_path, "slug-d")
     emitted: list[tuple] = []
 
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch, "_emit_event", lambda ev, payload: emitted.append((ev, payload))):
-            orch.partition_by_outcome(
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch, "_emit_event", lambda ev, payload: emitted.append((ev, payload))):
+            orch._batch.partition_by_outcome(
                 [(plan, 69)],
                 mark_ejected=lambda slug: [],
             )
@@ -171,9 +171,9 @@ def testpartition_by_outcome_timeout_kill_payload_is_self_describing(tmp_path):
     plan = _make_plan_obj(tmp_path, "slug-t")
     emitted: list[tuple] = []
 
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-            orch.partition_by_outcome(
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+            orch._batch.partition_by_outcome(
                 [(plan, -9, "/logs/sess-t")],
                 mark_ejected=lambda slug: [],
             )
@@ -190,9 +190,9 @@ def testpartition_by_outcome_container_down_payload_names_killer(tmp_path):
     plan = _make_plan_obj(tmp_path, "slug-cd")
     emitted: list[tuple] = []
 
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-            orch.partition_by_outcome(
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+            orch._batch.partition_by_outcome(
                 [(plan, 69, "/logs/sess-cd")],
                 mark_ejected=lambda slug: [],
             )
@@ -216,10 +216,10 @@ def testpartition_by_outcome_tears_down_ejected_container(tmp_path):
     emitted: list[tuple] = []
 
     bind_plan("ej")
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch._devcontainer, "down", lambda slug: down_calls.append(slug) or True):
-            with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-                orch.partition_by_outcome([(plan, -9, "/logs/ej")], mark_ejected=lambda s: [])
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch._devcontainer, "down", lambda slug: down_calls.append(slug) or True):
+            with patch.object(orch._batch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+                orch._batch.partition_by_outcome([(plan, -9, "/logs/ej")], mark_ejected=lambda s: [])
 
     assert down_calls == [chunk_label("ej")], f"ejected chunk container must be torn down: {down_calls}"
     teardowns = [p for ev, p in emitted if ev == "chunk_teardown"]
@@ -235,12 +235,12 @@ def test_supervisor_stops_container_on_timeout(monkeypatch, tmp_path):
 
     bind_plan("hung-c")
     down_calls: list[str] = []
-    monkeypatch.setattr(orch._devcontainer, "down", lambda slug: down_calls.append(slug) or True)
-    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)], tmp_path))
+    monkeypatch.setattr(orch._batch._devcontainer, "down", lambda slug: down_calls.append(slug) or True)
+    monkeypatch.setattr(orch._supervise, "_chunk_timeout", lambda: 0.05)
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._supervise._spawn, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)], tmp_path))
 
-    orch._fan_out_plans([plan], harness=None, model=None)
+    orch._batch._fan_out_plans([plan], harness=None, model=None)
 
     assert chunk_label("hung-c") in down_calls, f"reaper must docker-stop the timed-out slug: {down_calls}"
 
@@ -290,7 +290,7 @@ def test_chunk_timeout_default_is_1800(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {})
     monkeypatch.delenv("MENTAT_CHUNK_TIMEOUT", raising=False)
-    assert orch._chunk_timeout() == 1800
+    assert orch._supervise._chunk_timeout() == 1800
 
 
 def test_chunk_timeout_reads_config(monkeypatch):
@@ -298,7 +298,7 @@ def test_chunk_timeout_reads_config(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"chunk_timeout": 600})
     monkeypatch.delenv("MENTAT_CHUNK_TIMEOUT", raising=False)
-    assert orch._chunk_timeout() == 600
+    assert orch._supervise._chunk_timeout() == 600
 
 
 def test_chunk_timeout_env_overrides_config(monkeypatch):
@@ -306,14 +306,14 @@ def test_chunk_timeout_env_overrides_config(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"chunk_timeout": 600})
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "120")
-    assert orch._chunk_timeout() == 120
+    assert orch._supervise._chunk_timeout() == 120
 
 
 def test_chunk_timeout_clamps_to_min_1(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"chunk_timeout": 0})
     monkeypatch.delenv("MENTAT_CHUNK_TIMEOUT", raising=False)
-    assert orch._chunk_timeout() >= 1
+    assert orch._supervise._chunk_timeout() >= 1
 
 
 def test_fan_out_plans_kills_hung_child_within_deadline(monkeypatch, tmp_path):
@@ -323,11 +323,11 @@ def test_fan_out_plans_kills_hung_child_within_deadline(monkeypatch, tmp_path):
 
     plan = routing.Plan(slug="hung", kind="AFK", blocked_by=[], path=tmp_path / "hung.md")
 
-    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)], tmp_path))
+    monkeypatch.setattr(orch._supervise, "_chunk_timeout", lambda: 0.05)
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._supervise._spawn, "spawn_async", _async_spawner([FakeAsyncProc(hang=True)], tmp_path))
 
-    results = orch._fan_out_plans([plan], harness=None, model=None)
+    results = orch._batch._fan_out_plans([plan], harness=None, model=None)
 
     assert len(results) == 1
     _p, rc = results[0][0], results[0][1]
@@ -345,11 +345,11 @@ def test_fan_out_plans_records_rc_for_finish_in_the_gap(monkeypatch, tmp_path):
     proc = FakeAsyncProc(hang=True)
     proc.returncode = 0  # exited just as the deadline fired
 
-    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner([proc], tmp_path))
+    monkeypatch.setattr(orch._supervise, "_chunk_timeout", lambda: 0.05)
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._supervise._spawn, "spawn_async", _async_spawner([proc], tmp_path))
 
-    results = orch._fan_out_plans([plan], harness=None, model=None)
+    results = orch._batch._fan_out_plans([plan], harness=None, model=None)
     _p, rc = results[0][0], results[0][1]
     assert rc == 0, f"finish-in-the-gap must record real rc, got {rc}"
 
@@ -363,11 +363,11 @@ def test_fan_out_plans_harvest_order_matches_submission(monkeypatch, tmp_path):
     plans = [routing.Plan(slug=f"p{i}", kind="AFK", blocked_by=[], path=tmp_path / f"p{i}.md") for i in range(3)]
     procs = [FakeAsyncProc(sleep=0.02, rc=0), FakeAsyncProc(hang=True), FakeAsyncProc(sleep=0.01, rc=0)]
 
-    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.1)
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 2)
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner(procs, tmp_path))
+    monkeypatch.setattr(orch._supervise, "_chunk_timeout", lambda: 0.1)
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 2)
+    monkeypatch.setattr(orch._supervise._spawn, "spawn_async", _async_spawner(procs, tmp_path))
 
-    results = orch._fan_out_plans(plans, harness=None, model=None)
+    results = orch._batch._fan_out_plans(plans, harness=None, model=None)
 
     assert [p.slug for p, *_ in results] == ["p0", "p1", "p2"], "harvest must be in submission order"
     rc_by = {p.slug: rc for p, rc, *_ in results}
@@ -383,9 +383,9 @@ def test_fan_out_plans_killed_child_ejects_worker_died(monkeypatch, tmp_path):
     plan = routing.Plan(slug="timed-out", kind="AFK", blocked_by=[], path=tmp_path / "p.md")
     emitted: list[tuple] = []
 
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-            chunks, _hitl, _transient = orch.partition_by_outcome(
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+            chunks, _hitl, _transient = orch._batch.partition_by_outcome(
                 [(plan, -9)],
                 mark_ejected=lambda slug: [],
             )
@@ -405,9 +405,9 @@ def testpartition_by_outcome_worker_died_is_in_transient_set(tmp_path):
     routing = load_module("scheduler")
     plan = routing.Plan(slug="td", kind="AFK", blocked_by=[], path=tmp_path / "td.md")
 
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch, "_emit_event", lambda *a, **k: None):
-            chunks, hitl, transient = orch.partition_by_outcome(
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch, "_emit_event", lambda *a, **k: None):
+            chunks, hitl, transient = orch._batch.partition_by_outcome(
                 [(plan, -9, "/logs/td")],
                 mark_ejected=lambda slug: [],
             )
@@ -421,9 +421,9 @@ def testpartition_by_outcome_container_down_is_transient(tmp_path):
     routing = load_module("scheduler")
     plan = routing.Plan(slug="cd", kind="AFK", blocked_by=[], path=tmp_path / "cd.md")
 
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch, "_emit_event", lambda *a, **k: None):
-            _c, _h, transient = orch.partition_by_outcome(
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch, "_emit_event", lambda *a, **k: None):
+            _c, _h, transient = orch._batch.partition_by_outcome(
                 [(plan, 69, "/logs/cd")],
                 mark_ejected=lambda slug: [],
             )
@@ -436,9 +436,9 @@ def testpartition_by_outcome_implement_failed_stays_terminal(tmp_path):
     routing = load_module("scheduler")
     plan = routing.Plan(slug="tf", kind="AFK", blocked_by=[], path=tmp_path / "tf.md")
 
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch, "_emit_event", lambda *a, **k: None):
-            _c, _h, transient = orch.partition_by_outcome(
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch, "_emit_event", lambda *a, **k: None):
+            _c, _h, transient = orch._batch.partition_by_outcome(
                 [(plan, 1, "/logs/tf")],
                 mark_ejected=lambda slug: [],
             )
@@ -453,9 +453,9 @@ def testpartition_by_outcome_transient_chunks_not_marked_ejected_by_partition(tm
     plan = routing.Plan(slug="wd", kind="AFK", blocked_by=[], path=tmp_path / "wd.md")
     marked: list[str] = []
 
-    with patch.object(orch, "_worktree_for_slug", return_value=tmp_path):
-        with patch.object(orch, "_emit_event", lambda *a, **k: None):
-            _c, _h, transient = orch.partition_by_outcome(
+    with patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path):
+        with patch.object(orch._batch, "_emit_event", lambda *a, **k: None):
+            _c, _h, transient = orch._batch.partition_by_outcome(
                 [(plan, -9, "/logs/wd")],
                 mark_ejected=lambda slug: marked.append(slug) or [],
             )
@@ -475,13 +475,13 @@ def test_run_orchestrate_names_ejected_chunks_on_failure(tmp_path, capsys):
     plan_obj = routing.Plan(slug="fail-slug", kind="AFK", blocked_by=[], path=plan)
 
     with (
-        patch.object(orch, "_fan_out_plans", return_value=[(plan_obj, 1)]),
-        patch.object(orch, "_worktree_for_slug", return_value=tmp_path),
-        patch.object(orch._land_queue, "drain", return_value=[]),
-        patch.object(orch, "_prune_stale_containers", lambda: None),
-        patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
+        patch.object(orch._batch, "_fan_out_plans", return_value=[(plan_obj, 1)]),
+        patch.object(orch._batch, "_worktree_for_slug", return_value=tmp_path),
+        patch.object(orch._batch._land_queue, "drain", return_value=[]),
+        patch.object(orch._batch, "_prune_stale_containers", lambda: None),
+        patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None),
         patch.object(orch._utils, "emit_event", lambda *a, **k: None),
-        patch.object(orch, "_emit_event", lambda *a, **k: None),
+        patch.object(orch._batch, "_emit_event", lambda *a, **k: None),
     ):
         rc = orch.run_orchestrate(
             holding="main",
@@ -504,10 +504,10 @@ def test_run_orchestrate_all_green_no_eject_summary(tmp_path, capsys):
     plan = _make_plan(tmp_path, "ok-slug", "AFK")
 
     with (
-        patch.object(orch, "_fan_out_plans", return_value=[]),
-        patch.object(orch._land_queue, "drain", return_value=[{"slug": "ok-slug", "status": "success"}]),
-        patch.object(orch, "_prune_stale_containers", lambda: None),
-        patch.object(orch, "_prune_stale_worktrees", lambda *a, **k: None),
+        patch.object(orch._batch, "_fan_out_plans", return_value=[]),
+        patch.object(orch._batch._land_queue, "drain", return_value=[{"slug": "ok-slug", "status": "success"}]),
+        patch.object(orch._batch, "_prune_stale_containers", lambda: None),
+        patch.object(orch._batch, "_prune_stale_worktrees", lambda *a, **k: None),
         patch.object(orch._utils, "emit_event", lambda *a, **k: None),
     ):
         rc = orch.run_orchestrate(
@@ -551,7 +551,7 @@ def test_prune_stale_containers_runs_even_with_dirty_worktree(tmp_path, monkeypa
     monkeypatch.setattr(_dc_mod, "down_run", lambda slugs: down_calls.append(set(slugs)) or 1)
     monkeypatch.setattr(orch._utils, "emit_event", lambda *a, **k: None)
 
-    orch._prune_stale_containers()
+    orch._batch._prune_stale_containers()
 
     assert down_calls, "devcontainer.down_run must be called even when dirty worktrees exist"
 
@@ -564,7 +564,7 @@ def test_chunk_timeout_bad_env_falls_through_to_config(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "not-a-number")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"chunk_timeout": 900})
-    assert orch._chunk_timeout() == 900
+    assert orch._supervise._chunk_timeout() == 900
 
 
 def test_chunk_timeout_bad_config_falls_through_to_default(monkeypatch):
@@ -572,7 +572,7 @@ def test_chunk_timeout_bad_config_falls_through_to_default(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.delenv("MENTAT_CHUNK_TIMEOUT", raising=False)
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"chunk_timeout": "lots"})
-    assert orch._chunk_timeout() == 1800
+    assert orch._supervise._chunk_timeout() == 1800
 
 
 # ── _kill_proc_group: process-group resolution + SIGKILL ─────────────────────
@@ -585,13 +585,13 @@ def test_kill_proc_group_signals_the_group(monkeypatch):
     class _P:
         pid = 4242
 
-    monkeypatch.setattr(orch.os, "getpgid", lambda _pid: 4242)
+    monkeypatch.setattr(orch._supervise.os, "getpgid", lambda _pid: 4242)
     killpg_calls: list[tuple[int, int]] = []
-    monkeypatch.setattr(orch.os, "killpg", lambda pgid, sig: killpg_calls.append((pgid, sig)))
+    monkeypatch.setattr(orch._supervise.os, "killpg", lambda pgid, sig: killpg_calls.append((pgid, sig)))
 
-    orch._kill_proc_group(_P())
+    orch._supervise._kill_proc_group(_P())
 
-    assert killpg_calls == [(4242, orch.signal.SIGKILL)]
+    assert killpg_calls == [(4242, orch._supervise.signal.SIGKILL)]
 
 
 def test_kill_proc_group_falls_back_when_no_pid(monkeypatch):
@@ -606,9 +606,11 @@ def test_kill_proc_group_falls_back_when_no_pid(monkeypatch):
         def kill(self):
             killed["n"] += 1
 
-    monkeypatch.setattr(orch.os, "killpg", lambda *a: (_ for _ in ()).throw(AssertionError("must not killpg")))
+    monkeypatch.setattr(
+        orch._supervise.os, "killpg", lambda *a: (_ for _ in ()).throw(AssertionError("must not killpg"))
+    )
 
-    orch._kill_proc_group(_P())
+    orch._supervise._kill_proc_group(_P())
     assert killed["n"] == 1
 
 
@@ -622,12 +624,12 @@ def test_fan_out_plans_hung_chunk_frees_slot_for_queued(monkeypatch, tmp_path):
     routing = load_module("scheduler")
     plans = [routing.Plan(slug=f"h{i}", kind="AFK", blocked_by=[], path=tmp_path / f"h{i}.md") for i in range(2)]
 
-    monkeypatch.setattr(orch, "_chunk_timeout", lambda: 0.05)
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
+    monkeypatch.setattr(orch._supervise, "_chunk_timeout", lambda: 0.05)
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 1)
     procs = [FakeAsyncProc(hang=True), FakeAsyncProc(sleep=0.01, rc=0)]
-    monkeypatch.setattr(orch._fan_out, "spawn_async", _async_spawner(procs, tmp_path))
+    monkeypatch.setattr(orch._supervise._spawn, "spawn_async", _async_spawner(procs, tmp_path))
 
-    results = orch._fan_out_plans(plans, harness=None, model=None)
+    results = orch._batch._fan_out_plans(plans, harness=None, model=None)
 
     rc_by = {p.slug: rc for p, rc, *_ in results}
     assert rc_by["h0"] is not None and rc_by["h0"] < 0, f"hung h0 must be killed: {rc_by}"

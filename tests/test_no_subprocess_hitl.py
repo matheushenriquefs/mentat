@@ -36,24 +36,24 @@ def test_hitl_plan_does_not_subprocess_implement(tmp_path, monkeypatch):
     afk = _write_plan(tmp_path, "fix-bar", "AFK")
 
     calls = []
-    real_run = orchestrate.subprocess.run
+    real_run = orchestrate._batch.subprocess.run
 
     def recording_run(cmd, *a, **kw):
         calls.append(list(cmd) if isinstance(cmd, (list, tuple)) else [cmd])
         return real_run(cmd, *a, **kw)
 
-    monkeypatch.setattr(orchestrate.subprocess, "run", recording_run)
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [(p, 0) for p in plans])
+    monkeypatch.setattr(orchestrate._batch.subprocess, "run", recording_run)
+    monkeypatch.setattr(orchestrate._batch, "_fan_out_plans", lambda plans, **kw: [(p, 0) for p in plans])
     landed: list[list[str]] = []
 
     def fake_drain(chunks, *, holding, **kw):
         landed.append([c.slug for c in chunks])
         return []
 
-    monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
+    monkeypatch.setattr(orchestrate._batch._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
-    monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)
-    monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: None)
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_containers", lambda: None)
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_worktrees", lambda **kw: None)
     bind_plan("fix-bar")
 
     with patch_orchestrate_worktree(orchestrate, tmp_path):
@@ -77,10 +77,10 @@ def test_hitl_emits_chunk_spawned_hitl_in_session(tmp_path, monkeypatch):
         emitted.append((event, payload))
 
     monkeypatch.setattr(orchestrate._utils, "emit_event", capture_emit)
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [])
-    monkeypatch.setattr(orchestrate._land_queue, "drain", lambda chunks, **kw: [])
-    monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)
-    monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: None)
+    monkeypatch.setattr(orchestrate._batch, "_fan_out_plans", lambda plans, **kw: [])
+    monkeypatch.setattr(orchestrate._batch._land_queue, "drain", lambda chunks, **kw: [])
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_containers", lambda: None)
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_worktrees", lambda **kw: None)
 
     orchestrate.run_orchestrate("holding", [hitl], harness=None, model=None, dry_run=False)
 

@@ -22,10 +22,10 @@ def test_run_orchestrate_emits_batch_reviewed(tmp_path):
     emitted: list[str] = []
 
     with (
-        patch.object(orch, "_fan_out_plans", return_value=[]),
-        patch.object(orch._land_queue, "drain", return_value=[]),
-        patch.object(orch, "_prune_stale_containers", lambda: None),
-        patch.object(orch, "_prune_stale_worktrees", lambda **kw: None),
+        patch.object(orch._batch, "_fan_out_plans", return_value=[]),
+        patch.object(orch._batch._land_queue, "drain", return_value=[]),
+        patch.object(orch._batch, "_prune_stale_containers", lambda: None),
+        patch.object(orch._batch, "_prune_stale_worktrees", lambda **kw: None),
         patch.object(orch._utils, "emit_event", side_effect=lambda e, p: emitted.append(e)),
     ):
         orch.run_orchestrate("main", [plan], harness=None, model=None, dry_run=False)

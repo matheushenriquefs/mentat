@@ -197,8 +197,8 @@ def testpartition_by_outcome_excludes_hitl_children_from_landing():
     ejected_slugs: list[str] = []
 
     with patch.object(orch, "_emit_event", side_effect=lambda e, p: emitted.append((e, p))):
-        with patch.object(orch, "_worktree_for_slug", side_effect=lambda s: Path(f"/wt/{s}")):
-            chunks, hitl, _transient = orch.partition_by_outcome(
+        with patch.object(orch._batch, "_worktree_for_slug", side_effect=lambda s: Path(f"/wt/{s}")):
+            chunks, hitl, _transient = orch._batch.partition_by_outcome(
                 [(plan_a, 0), (plan_b, orch.EX_HITL_REQUIRED)],
                 mark_ejected=ejected_slugs.append,
             )
@@ -218,8 +218,8 @@ def testpartition_by_outcome_all_clean_lands_all():
     bind_plan("y")
     plans = [sched.Plan(slug=s, kind="AFK", blocked_by=[], path=Path(f"/p/{s}.md")) for s in ("x", "y")]
     with patch.object(orch, "_emit_event", lambda e, p: None):
-        with patch.object(orch, "_worktree_for_slug", side_effect=lambda s: Path(f"/wt/{s}")):
-            chunks, hitl, _transient = orch.partition_by_outcome(
+        with patch.object(orch._batch, "_worktree_for_slug", side_effect=lambda s: Path(f"/wt/{s}")):
+            chunks, hitl, _transient = orch._batch.partition_by_outcome(
                 [(plans[0], 0), (plans[1], 0)],
                 mark_ejected=lambda s: None,
             )

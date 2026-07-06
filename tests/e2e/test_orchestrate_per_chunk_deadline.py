@@ -76,12 +76,12 @@ def test_healthy_sibling_not_killed_by_slow_sibling(monkeypatch, tmp_path):
 
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "5")
     monkeypatch.setattr(
-        orch._fan_out,
+        orch._supervise._spawn,
         "spawn_async",
         _spawner(tmp_path, {"a": (3.5, 5), "b": (2.0, 0)}),
     )
 
-    results = orch._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
+    results = orch._supervise._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
 
     by_slug = {item[0].slug: item[1] for item in results}
     assert by_slug == {"a": 5, "b": 0}, f"both must return true exit codes, neither killed: {by_slug}"
@@ -94,12 +94,12 @@ def test_only_overdue_chunk_killed(monkeypatch, tmp_path):
 
     monkeypatch.setenv("MENTAT_CHUNK_TIMEOUT", "2")
     monkeypatch.setattr(
-        orch._fan_out,
+        orch._supervise._spawn,
         "spawn_async",
         _spawner(tmp_path, {"a": (30.0, 0), "b": (0.5, 0)}),
     )
 
-    results = orch._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
+    results = orch._supervise._fan_out_plans([_plan(scheduler, "a"), _plan(scheduler, "b")], harness=None, model=None)
     by_slug = {plan.slug: rc for plan, rc, *_ in results}
     assert by_slug["a"] is not None and by_slug["a"] < 0, f"overdue A must be killed (rc<0), got {by_slug['a']}"
     assert by_slug["b"] == 0, f"healthy B must exit 0, got {by_slug['b']}"
@@ -113,9 +113,9 @@ def test_only_overdue_chunk_killed(monkeypatch, tmp_path):
     def fake_worktree(slug: str):
         return wt_a if slug == "a" else wt_b
 
-    with patch.object(orch, "_worktree_for_slug", side_effect=fake_worktree):
-        with patch.object(orch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
-            chunks, hitl, _transient = orch.partition_by_outcome(results, mark_ejected=lambda _slug: [])
+    with patch.object(orch._batch, "_worktree_for_slug", side_effect=fake_worktree):
+        with patch.object(orch._batch, "_emit_event", lambda ev, p: emitted.append((ev, p))):
+            chunks, hitl, _transient = orch._batch.partition_by_outcome(results, mark_ejected=lambda _slug: [])
 
     assert not hitl
     assert [c.slug for c in chunks] == ["b"], "B must be the only landable chunk"

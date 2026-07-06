@@ -59,7 +59,7 @@ def test_smoke_routing_partitions_afk_and_hitl(fixture_batch):
 
 
 def test_smoke_land_queue_emits_all_event_types(fixture_batch):
-    lq = load_module_from(REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts/land_queue.py", "land_queue")
+    lq = load_module_from(REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts/landing.py", "landing")
 
     emitted_events: list[str] = []
 

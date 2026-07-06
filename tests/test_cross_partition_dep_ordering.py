@@ -89,7 +89,7 @@ def test_run_orchestrate_passes_all_plans_to_scheduler(tmp_path, monkeypatch) ->
     cross-partition deps gate correctly.
     """
     orchestrate = _load("orchestrate")
-    _load("land_queue")
+    _load("landing")
     _load("scheduler")
 
     # A: HITL (anchored), C: AFK blocked_by=[A] (anchored due to upstream HITL)
@@ -104,7 +104,9 @@ def test_run_orchestrate_passes_all_plans_to_scheduler(tmp_path, monkeypatch) ->
     for slug in ("A", "C", "D"):
         bind_plan(slug)
 
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", lambda plans, **kw: [(p, 0, str(tmp_path), None) for p in plans])
+    monkeypatch.setattr(
+        orchestrate._batch, "_fan_out_plans", lambda plans, **kw: [(p, 0, str(tmp_path), None) for p in plans]
+    )
 
     captured: dict = {}
 
@@ -112,7 +114,7 @@ def test_run_orchestrate_passes_all_plans_to_scheduler(tmp_path, monkeypatch) ->
         captured["list_ready_slices"] = list_ready_slices
         return [{"slug": c.slug, "status": "success", "tip": "abc"} for c in chunks]
 
-    monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
+    monkeypatch.setattr(orchestrate._batch._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
     monkeypatch.setattr(orchestrate, "ensure_session", lambda *a, **k: "orch-test")
     monkeypatch.setattr(orchestrate._git, "require_commit_identity", lambda **kw: ("T", "t@t"))

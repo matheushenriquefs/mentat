@@ -41,7 +41,7 @@ def _setup_conflicting_siblings(tmp_path: Path):
     A and B both branch off holding's init commit and rewrite the same middle
     line differently, so once A lands, B's rebase onto holding conflicts.
     """
-    lq = load_module("land_queue")
+    lq = load_module("landing")
     main_repo = tmp_path / "main"
     main_repo.mkdir()
 

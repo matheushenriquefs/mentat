@@ -18,8 +18,8 @@ respawn is ``chunk_started{trigger:"recovery", attempt:N}``; the outcome rides t
 existing ``chunk_landed`` / ``chunk_ejected`` events.
 
 The side-effecting primitives (respawn / reslice / dead-letter / teardown) are
-injected by the caller (orchestrate) so this module stays free of the fan-out and
-land-queue imports and is unit-testable in isolation.
+injected by the caller (orchestrate) so this module stays free of the spawn and
+landing imports and is unit-testable in isolation.
 """
 
 from __future__ import annotations

@@ -20,15 +20,15 @@ from tests.conftest import TEST_CHUNK_ID, bind_plan, chunk_label, patch_orchestr
 
 
 def _seed_run_chunks(orchestrate, *slugs: str) -> None:
-    orchestrate._run_chunk_slugs.clear()
+    orchestrate._supervise._run_chunk_slugs.clear()
     for slug in slugs:
         bind_plan(slug, TEST_CHUNK_ID)
-        orchestrate._run_chunk_slugs.add(chunk_label(slug))
+        orchestrate._supervise._run_chunk_slugs.add(chunk_label(slug))
 
 
 def _seed_flat_run_chunk(orchestrate, name: str) -> None:
-    orchestrate._run_chunk_slugs.clear()
-    orchestrate._run_chunk_slugs.add(name)
+    orchestrate._supervise._run_chunk_slugs.clear()
+    orchestrate._supervise._run_chunk_slugs.add(name)
 
 
 def _load(name: str):
@@ -47,7 +47,7 @@ def _make_plans(tmp_path: Path) -> list[Path]:
 
 def test_run_orchestrate_prunes_before_fanout(tmp_path, monkeypatch):
     orchestrate = _load("orchestrate")
-    _load("land_queue")
+    _load("landing")
     _load("scheduler")
 
     prune_called_before: list[bool] = []
@@ -62,10 +62,10 @@ def test_run_orchestrate_prunes_before_fanout(tmp_path, monkeypatch):
             _seed_run_chunks(orchestrate, p.slug)
         return [(p, 0) for p in plans]
 
-    monkeypatch.setattr(orchestrate, "_prune_stale_containers", fake_prune)
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out)
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_containers", fake_prune)
+    monkeypatch.setattr(orchestrate._batch, "_fan_out_plans", fake_fan_out)
     monkeypatch.setattr(
-        orchestrate._land_queue,
+        orchestrate._batch._land_queue,
         "drain",
         lambda chunks, **kw: [{"slug": c.slug, "status": "success"} for c in chunks],
     )
@@ -94,7 +94,7 @@ def test_dry_run_skips_prune(tmp_path, monkeypatch):
     def fake_prune():
         prune_calls.append(1)
 
-    monkeypatch.setattr(orchestrate, "_prune_stale_containers", fake_prune)
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_containers", fake_prune)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
     orchestrate.run_orchestrate(
@@ -116,7 +116,7 @@ def test_prune_stale_containers_delegates_to_devcontainer(tmp_path, monkeypatch)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda ev, payload: emit_calls.append((ev, payload)))
     monkeypatch.setattr(_dc_mod, "down_run", lambda slugs: 2)
 
-    orchestrate._prune_stale_containers()
+    orchestrate._batch._prune_stale_containers()
 
     assert emit_calls == [("agent_reaped", {"reclaimed_bytes": None, "containers_removed": 2})]
 
@@ -173,7 +173,7 @@ def _make_wt(wt_root: Path, name: str, *, age_secs: int = 7200) -> Path:
 def test_prune_runs_at_session_end_not_start(tmp_path, monkeypatch):
     """_prune_stale_worktrees called after _land_all; _prune_stale_containers called before."""
     orchestrate = _load("orchestrate")
-    _load("land_queue")
+    _load("landing")
     _load("scheduler")
 
     call_order: list[str] = []
@@ -182,16 +182,16 @@ def test_prune_runs_at_session_end_not_start(tmp_path, monkeypatch):
         call_order.append("land")
         return [{"slug": c.slug, "status": "success"} for c in chunks]
 
-    monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: call_order.append("containers"))
-    monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: call_order.append("worktrees"))
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_containers", lambda: call_order.append("containers"))
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_worktrees", lambda **kw: call_order.append("worktrees"))
 
     def fake_fan_out(plans, **kw):
         for p in plans:
             _seed_run_chunks(orchestrate, p.slug)
         return [(p, 0) for p in plans]
 
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out)
-    monkeypatch.setattr(orchestrate._land_queue, "drain", fake_drain)
+    monkeypatch.setattr(orchestrate._batch, "_fan_out_plans", fake_fan_out)
+    monkeypatch.setattr(orchestrate._batch._land_queue, "drain", fake_drain)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
     with patch_orchestrate_worktree(orchestrate, tmp_path):
@@ -234,15 +234,15 @@ def test_prune_removes_old_clean_orphan(tmp_path, monkeypatch):
             return _cp_proc(0)
         return _cp_proc(0)
 
-    monkeypatch.setattr(orchestrate._worktrees, "is_dirty", lambda _p: False)
+    monkeypatch.setattr(orchestrate._batch._worktrees, "is_dirty", lambda _p: False)
 
     def fake_remove(p: Path) -> bool:
         shutil.rmtree(p, ignore_errors=True)
         return not p.exists()
 
-    monkeypatch.setattr(orchestrate._worktrees, "_remove", fake_remove)
+    monkeypatch.setattr(orchestrate._batch._worktrees, "_remove", fake_remove)
 
-    orchestrate._prune_stale_worktrees()
+    orchestrate._batch._prune_stale_worktrees()
 
     assert not wt.exists(), "stale clean orphan must be removed"
 
@@ -266,7 +266,7 @@ def test_prune_skips_dirty_orphan(tmp_path, monkeypatch):
             return _cp_proc(0, "?? dirty.txt\n")  # dirty
         return _cp_proc(0)
 
-    monkeypatch.setattr(orchestrate._worktrees, "is_dirty", lambda _p: False)
+    monkeypatch.setattr(orchestrate._batch._worktrees, "is_dirty", lambda _p: False)
 
     assert wt.exists(), "dirty orphan must be preserved"
 
@@ -283,7 +283,7 @@ def test_prune_skips_recent(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: _cp_proc(0, ""))
 
-    orchestrate._prune_stale_worktrees()
+    orchestrate._batch._prune_stale_worktrees()
 
     assert wt.exists(), "recent worktree must not be pruned"
 
@@ -301,7 +301,7 @@ def test_prune_skips_active(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: _cp_proc(0, ""))
 
-    orchestrate._prune_stale_worktrees(preserve={slug})
+    orchestrate._batch._prune_stale_worktrees(preserve={slug})
 
     assert wt.exists(), "active worktree must not be pruned"
 
@@ -327,14 +327,14 @@ def test_prune_is_path_based_not_name_based(tmp_path, monkeypatch):
             return _cp_proc(0)
         return _cp_proc(0)
 
-    monkeypatch.setattr(orchestrate._worktrees, "is_dirty", lambda _p: False)
+    monkeypatch.setattr(orchestrate._batch._worktrees, "is_dirty", lambda _p: False)
 
     def fake_remove(p: Path) -> bool:
         shutil.rmtree(p, ignore_errors=True)
         return not p.exists()
 
-    monkeypatch.setattr(orchestrate._worktrees, "_remove", fake_remove)
-    orchestrate._prune_stale_worktrees()
+    monkeypatch.setattr(orchestrate._batch._worktrees, "_remove", fake_remove)
+    orchestrate._batch._prune_stale_worktrees()
 
     assert not wt.exists(), "name-exemption is gone — clean stale pruned by path"
 
@@ -357,9 +357,9 @@ def test_prune_falls_back_to_rmtree(tmp_path, monkeypatch):
             return _cp_proc(1)  # fail → triggers shutil.rmtree fallback
         return _cp_proc(0)
 
-    monkeypatch.setattr(orchestrate._worktrees, "is_dirty", lambda _p: False)
+    monkeypatch.setattr(orchestrate._batch._worktrees, "is_dirty", lambda _p: False)
     monkeypatch.setattr(subprocess, "run", fake_run)
-    orchestrate._prune_stale_worktrees()
+    orchestrate._batch._prune_stale_worktrees()
 
     assert not wt.exists(), "rmtree fallback must remove dir when git worktree remove fails"
 
@@ -385,14 +385,14 @@ def test_prune_emits_session_prune_event(tmp_path, monkeypatch):
             return _cp_proc(0)
         return _cp_proc(0)
 
-    monkeypatch.setattr(orchestrate._worktrees, "is_dirty", lambda _p: False)
+    monkeypatch.setattr(orchestrate._batch._worktrees, "is_dirty", lambda _p: False)
 
     def fake_remove(p: Path) -> bool:
         shutil.rmtree(p, ignore_errors=True)
         return not p.exists()
 
-    monkeypatch.setattr(orchestrate._worktrees, "_remove", fake_remove)
-    orchestrate._prune_stale_worktrees()
+    monkeypatch.setattr(orchestrate._batch._worktrees, "_remove", fake_remove)
+    orchestrate._batch._prune_stale_worktrees()
 
     prune_events = [(ev, p) for ev, p in emit_calls if ev == "agent_reaped"]
     assert len(prune_events) == 1, f"expected exactly one agent_reaped; got {prune_events}"
@@ -416,7 +416,7 @@ def test_container_prune_runs_even_with_dirty_worktree(tmp_path, monkeypatch):
     monkeypatch.setattr(_dc_mod, "down_run", lambda slugs: down_calls.append(set(slugs)) or 1)
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
-    orchestrate._prune_stale_containers()
+    orchestrate._batch._prune_stale_containers()
 
     assert down_calls, "devcontainer.down_run must be called even when dirty worktrees exist"
 
@@ -427,19 +427,19 @@ def test_container_prune_runs_even_with_dirty_worktree(tmp_path, monkeypatch):
 def test_run_orchestrate_prunes_worktrees_even_on_exception(tmp_path, monkeypatch):
     """A mid-batch exception must still run the end-of-batch prune + GC (finally)."""
     orchestrate = _load("orchestrate")
-    _load("land_queue")
+    _load("landing")
     _load("scheduler")
 
     calls: list[str] = []
-    monkeypatch.setattr(orchestrate, "_prune_stale_containers", lambda: None)
-    monkeypatch.setattr(orchestrate, "_prune_stale_worktrees", lambda **kw: calls.append("prune"))
-    monkeypatch.setattr(orchestrate, "_gc_preserved_worktrees", lambda **kw: calls.append("gc"))
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_containers", lambda: None)
+    monkeypatch.setattr(orchestrate._batch, "_prune_stale_worktrees", lambda **kw: calls.append("prune"))
+    monkeypatch.setattr(orchestrate._batch, "_gc_preserved_worktrees", lambda **kw: calls.append("gc"))
     monkeypatch.setattr(orchestrate._utils, "emit_event", lambda *a, **k: None)
 
     def boom(plans, **kw):
         raise RuntimeError("fan-out blew up mid-batch")
 
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", boom)
+    monkeypatch.setattr(orchestrate._batch, "_fan_out_plans", boom)
 
     import pytest
 
@@ -514,7 +514,7 @@ def test_gc_preserved_spares_active_slug(tmp_path):
 
 def test_prune_failure_does_not_abort(tmp_path, monkeypatch):
     orchestrate = _load("orchestrate")
-    _load("land_queue")
+    _load("landing")
     _load("scheduler")
 
     def fake_subprocess_run(cmd, **kw):
@@ -528,16 +528,16 @@ def test_prune_failure_does_not_abort(tmp_path, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
     monkeypatch.setattr(orchestrate._utils, "read_config", lambda: {})
-    monkeypatch.setattr(orchestrate, "_run_recovery", lambda *a, **k: (set(), set(), set()))
+    monkeypatch.setattr(orchestrate._batch, "_run_recovery", lambda *a, **k: (set(), set(), set()))
 
     def fake_fan_out(plans, **kw):
         for p in plans:
             _seed_run_chunks(orchestrate, p.slug)
         return [(p, 0, None, None) for p in plans]
 
-    monkeypatch.setattr(orchestrate, "_fan_out_plans", fake_fan_out)
+    monkeypatch.setattr(orchestrate._batch, "_fan_out_plans", fake_fan_out)
     monkeypatch.setattr(
-        orchestrate._land_queue,
+        orchestrate._batch._land_queue,
         "drain",
         lambda chunks, **kw: [{"slug": c.slug, "status": "success"} for c in chunks],
     )

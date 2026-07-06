@@ -12,7 +12,7 @@ import lib.devcontainer as devcontainer_mod
 from tests.conftest import TEST_CHUNK_ID, bind_plan, fake_plan, load_script
 
 ORCH_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-orchestrate/scripts"
-_FAN_OUT = ORCH_SCRIPTS / "fan_out.py"
+_SPAWN = ORCH_SCRIPTS / "spawn.py"
 
 
 def _load_orchestrate():
@@ -24,18 +24,18 @@ def _load_orchestrate():
 
 
 def test_fan_out_spawned_records_child_worktree(tmp_path: Path, monkeypatch) -> None:
-    fan_out = load_script(_FAN_OUT, "fan_out_ri3")
+    spawn_mod = load_script(_SPAWN, "spawn_ri3")
     wt = tmp_path / "wt"
     wt.mkdir()
     plan = fake_plan(tmp_path / "p.md", "p")
 
     monkeypatch.setattr(
-        fan_out,
+        spawn_mod,
         "_prepare_chunk_spawn",
         lambda *a, **k: ("sess", ["true"], {}, wt),
     )
     monkeypatch.setattr(
-        fan_out.subprocess,
+        spawn_mod.subprocess,
         "Popen",
         lambda *a, **k: SimpleNamespace(pid=1),
     )
@@ -44,8 +44,8 @@ def test_fan_out_spawned_records_child_worktree(tmp_path: Path, monkeypatch) -> 
     def capture(event, payload):
         emitted.append((event, payload))
 
-    monkeypatch.setattr(fan_out, "_emit_event", capture)
-    fan_out.spawn_with_proc(plan)
+    monkeypatch.setattr(spawn_mod, "_emit_event", capture)
+    spawn_mod.spawn_with_proc(plan)
     assert emitted[0][0] == "chunk_started"
     assert emitted[0][1]["worktree"] == str(wt)
 
@@ -73,17 +73,17 @@ def test_partition_marks_oom_as_transient_killed_by(monkeypatch, tmp_path: Path)
     wt.mkdir()
     plan = fake_plan(tmp_path / "p.md", "p")
 
-    monkeypatch.setattr(orch, "_worktree_for_slug", lambda _s: wt)
-    monkeypatch.setattr(orch._devcontainer, "container_oom_killed", lambda _cs: True)
+    monkeypatch.setattr(orch._batch, "_worktree_for_slug", lambda _s: wt)
+    monkeypatch.setattr(orch._batch._devcontainer, "container_oom_killed", lambda _cs: True)
     emitted: list[tuple] = []
-    monkeypatch.setattr(orch, "_emit_event", lambda e, p: emitted.append((e, p)))
-    monkeypatch.setattr(orch, "_teardown_ejected", lambda _s: None)
+    monkeypatch.setattr(orch._batch, "_emit_event", lambda e, p: emitted.append((e, p)))
+    monkeypatch.setattr(orch._batch, "_teardown_ejected", lambda _s: None)
 
     results = [(plan, EX_UNAVAILABLE, "/logs", None)]
-    chunks, hitl, transient = orch.partition_by_outcome(results, mark_ejected=lambda s: [])
+    chunks, hitl, transient = orch._batch.partition_by_outcome(results, mark_ejected=lambda s: [])
     assert "p" in transient
     eject = next(p for e, p in emitted if e == "chunk_ejected")
-    assert eject["reason"] == orch.CONTAINER_OOM
+    assert eject["reason"] == orch._batch.CONTAINER_OOM
     assert "killed_by" not in eject
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import land_queue
+import landing
 import scheduler
 from lib import devcontainer as _dc_mod  # noqa: E402
 
@@ -20,10 +20,10 @@ def _plan(slug: str, blocked_by: list[str] | None = None) -> scheduler.Plan:
     )
 
 
-def _chunk(slug: str, tmp_path: Path) -> land_queue.Chunk:
+def _chunk(slug: str, tmp_path: Path) -> landing.Chunk:
     wt = tmp_path / ".mentat" / "worktrees" / TEST_CHUNK_ID / slug
     wt.mkdir(parents=True, exist_ok=True)
-    return land_queue.Chunk(slug=slug, worktree=wt, chunk_id=TEST_CHUNK_ID)
+    return landing.Chunk(slug=slug, worktree=wt, chunk_id=TEST_CHUNK_ID)
 
 
 def _install_stubs(
@@ -49,14 +49,14 @@ def _install_stubs(
             return "not_ff"
         return None
 
-    def fake_teardown(chunk: land_queue.Chunk) -> None:
+    def fake_teardown(chunk: landing.Chunk) -> None:
         torn_down.append(chunk.slug)
 
-    monkeypatch.setattr(land_queue, "_rebase_chunk", fake_rebase)
-    monkeypatch.setattr(land_queue, "_run_gates", fake_gates)
-    monkeypatch.setattr(land_queue, "_ff_merge", fake_ff)
-    monkeypatch.setattr(land_queue, "_emit_event", lambda *a, **kw: None)
-    monkeypatch.setattr(land_queue, "_teardown_container", fake_teardown)
+    monkeypatch.setattr(landing, "_rebase_chunk", fake_rebase)
+    monkeypatch.setattr(landing, "_run_gates", fake_gates)
+    monkeypatch.setattr(landing, "_ff_merge", fake_ff)
+    monkeypatch.setattr(landing, "_emit_event", lambda *a, **kw: None)
+    monkeypatch.setattr(landing, "_teardown_container", fake_teardown)
 
 
 def test_drain_tears_down_after_success(tmp_path, monkeypatch) -> None:
@@ -64,7 +64,7 @@ def test_drain_tears_down_after_success(tmp_path, monkeypatch) -> None:
     _install_stubs(monkeypatch, torn_down=torn_down)
     chunk = _chunk("ok", tmp_path)
 
-    results = land_queue.drain([chunk], holding="holding")
+    results = landing.drain([chunk], holding="holding")
 
     assert results[0]["status"] == "success"
     assert "ok" in torn_down, f"container not torn down after success; torn_down={torn_down}"
@@ -75,7 +75,7 @@ def test_drain_tears_down_after_rebase_eject(tmp_path, monkeypatch) -> None:
     _install_stubs(monkeypatch, rebase_fail={"conflict-slug"}, torn_down=torn_down)
     chunk = _chunk("conflict-slug", tmp_path)
 
-    results = land_queue.drain([chunk], holding="holding")
+    results = landing.drain([chunk], holding="holding")
 
     assert results[0]["status"] == "eject"
     assert results[0]["reason"] == "rebase_conflicted"
@@ -87,7 +87,7 @@ def test_drain_tears_down_after_gate_eject(tmp_path, monkeypatch) -> None:
     _install_stubs(monkeypatch, gate_block={"blocked-slug"}, torn_down=torn_down)
     chunk = _chunk("blocked-slug", tmp_path)
 
-    results = land_queue.drain([chunk], holding="holding")
+    results = landing.drain([chunk], holding="holding")
 
     assert results[0]["status"] == "eject"
     assert results[0]["reason"] == "gate_failed"
@@ -99,7 +99,7 @@ def test_drain_tears_down_after_not_ff(tmp_path, monkeypatch) -> None:
     _install_stubs(monkeypatch, ff_fail={"noff-slug"}, torn_down=torn_down)
     chunk = _chunk("noff-slug", tmp_path)
 
-    results = land_queue.drain([chunk], holding="holding")
+    results = landing.drain([chunk], holding="holding")
 
     assert results[0]["status"] == "eject"
     assert results[0]["reason"] == "not_ff"
@@ -113,7 +113,7 @@ def test_drain_tears_down_cascaded_eject(tmp_path, monkeypatch) -> None:
     _install_stubs(monkeypatch, gate_block={"a"}, torn_down=torn_down)
 
     chunks = [_chunk("a", tmp_path), _chunk("b", tmp_path)]
-    land_queue.drain(
+    landing.drain(
         chunks,
         holding="holding",
         on_landed=sched.mark_landed,
@@ -139,15 +139,15 @@ def test_teardown_failure_swallowed(tmp_path, monkeypatch) -> None:
 
         return _R()
 
-    monkeypatch.setattr(land_queue, "_rebase_chunk", lambda c, h: (f"sha-{c.slug}", None))
-    monkeypatch.setattr(land_queue, "_run_gates", lambda c: ("pass", ""))
-    monkeypatch.setattr(land_queue, "_ff_merge", lambda c, h: None)
-    monkeypatch.setattr(land_queue, "_emit_event", lambda e, p: emitted.append((e, p)))
-    monkeypatch.setattr(land_queue._utils, "read_config", lambda: {})
+    monkeypatch.setattr(landing, "_rebase_chunk", lambda c, h: (f"sha-{c.slug}", None))
+    monkeypatch.setattr(landing, "_run_gates", lambda c: ("pass", ""))
+    monkeypatch.setattr(landing, "_ff_merge", lambda c, h: None)
+    monkeypatch.setattr(landing, "_emit_event", lambda e, p: emitted.append((e, p)))
+    monkeypatch.setattr(landing._utils, "read_config", lambda: {})
     monkeypatch.setattr(_sp, "run", fake_run)
 
     chunk = _chunk("fail-slug", tmp_path)
-    results = land_queue.drain([chunk], holding="holding")
+    results = landing.drain([chunk], holding="holding")
 
     assert results[0]["status"] == "success", "drain must complete despite teardown failure"
     teardown_events = [p for e, p in emitted if e == "chunk_teardown"]
@@ -158,11 +158,9 @@ def test_teardown_failure_swallowed(tmp_path, monkeypatch) -> None:
 def test_teardown_delegates_to_devcontainer_down(monkeypatch):
     down_calls: list[str] = []
     monkeypatch.setattr(_dc_mod, "down", lambda slug, **kw: down_calls.append(slug) or True)
-    monkeypatch.setattr(land_queue, "_emit_event", lambda *a, **kw: None)
+    monkeypatch.setattr(landing, "_emit_event", lambda *a, **kw: None)
 
-    land_queue._teardown_container(
-        land_queue.Chunk(slug="my-chunk", worktree=Path("/tmp/my-chunk"), chunk_id=TEST_CHUNK_ID)
-    )
+    landing._teardown_container(landing.Chunk(slug="my-chunk", worktree=Path("/tmp/my-chunk"), chunk_id=TEST_CHUNK_ID))
 
     assert down_calls == [f"{TEST_CHUNK_ID}/my-chunk"]
 
@@ -176,7 +174,7 @@ def test_drain_tears_down_all_pending_on_stall(tmp_path, monkeypatch) -> None:
 
     # Only b's chunk arrives — a never does → stall; b's container must be torn down
     chunks = [_chunk("b", tmp_path)]
-    results = land_queue.drain(
+    results = landing.drain(
         chunks,
         holding="holding",
         on_landed=sched.mark_landed,

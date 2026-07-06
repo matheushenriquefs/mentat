@@ -4,7 +4,7 @@ Red tracers:
 - _compaction_threshold() returns int from config or None
 - _invoke_harness passes seed_summary from MENTAT_SEED_SUMMARY env
 - _checkpoint_if_needed writes summary.md{status:succeeded} when threshold crossed
-- fan_out._spawn_worktree_subprocess injects MENTAT_SEED_SUMMARY when prior run crossed threshold
+- spawn_mod._spawn_worktree_subprocess injects MENTAT_SEED_SUMMARY when prior run crossed threshold
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from tests.conftest import fake_plan, load_script, mock_fan_out_worktree
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 IMPL_SCRIPTS = REPO_ROOT / ".agents/skills/mentat-implement/scripts"
-FAN_OUT_SCRIPT = REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts/fan_out.py"
+SPAWN_SCRIPT = REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts/spawn.py"
 sys.path.insert(0, str(REPO_ROOT / ".agents"))
 
 
@@ -27,8 +27,8 @@ def _impl():
     return load_script(IMPL_SCRIPTS / "implement.py", "impl_f5")
 
 
-def _fan_out():
-    return load_script(FAN_OUT_SCRIPT, "fan_out_f5")
+def _spawn_mod():
+    return load_script(SPAWN_SCRIPT, "spawn_f5")
 
 
 # ── _compaction_threshold ─────────────────────────────────────────────────────
@@ -128,17 +128,17 @@ def test_checkpoint_if_needed_noop_below_threshold(tmp_path: Path, monkeypatch: 
     assert not path.exists(), "summary.md written when below threshold — should be noop"
 
 
-# ── fan_out._spawn_worktree_subprocess MENTAT_SEED_SUMMARY ───────────────────
+# ── spawn_mod._spawn_worktree_subprocess MENTAT_SEED_SUMMARY ───────────────────
 
 
 def test_fan_out_spawn_injects_seed_summary_into_child_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """F5 tracer: _spawn_worktree_subprocess must set MENTAT_SEED_SUMMARY in child env when provided."""
-    fan_out = _fan_out()
+    spawn_mod = _spawn_mod()
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
     worktree = tmp_path / "wt"
     worktree.mkdir()
-    mock_fan_out_worktree(monkeypatch, fan_out, worktree)
+    mock_fan_out_worktree(monkeypatch, spawn_mod, worktree)
 
     plan_path = tmp_path / "myplan.md"
     plan_path.write_text("---\nid: myplan\n---\nbody\n")
@@ -154,7 +154,7 @@ def test_fan_out_spawn_injects_seed_summary_into_child_env(tmp_path: Path, monke
         return FakeProc()
 
     with patch("subprocess.Popen", fake_popen):
-        sid, proc, _wt = fan_out._spawn_worktree_subprocess(plan, seed_summary="prior summary text")
+        sid, proc, _wt = spawn_mod._spawn_worktree_subprocess(plan, seed_summary="prior summary text")
 
     assert captured_env, "Popen was not called"
     assert "MENTAT_SEED_SUMMARY" in captured_env[0], "MENTAT_SEED_SUMMARY not injected into child env"
@@ -163,13 +163,13 @@ def test_fan_out_spawn_injects_seed_summary_into_child_env(tmp_path: Path, monke
 
 def test_fan_out_spawn_no_seed_summary_absent_from_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """F5 tracer: _spawn_worktree_subprocess must NOT set MENTAT_SEED_SUMMARY when seed_summary is None."""
-    fan_out = _fan_out()
+    spawn_mod = _spawn_mod()
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
     monkeypatch.delenv("MENTAT_SEED_SUMMARY", raising=False)
     worktree = tmp_path / "wt"
     worktree.mkdir()
-    mock_fan_out_worktree(monkeypatch, fan_out, worktree)
+    mock_fan_out_worktree(monkeypatch, spawn_mod, worktree)
 
     plan_path = tmp_path / "myplan.md"
     plan_path.write_text("---\nid: myplan\n---\nbody\n")
@@ -185,7 +185,7 @@ def test_fan_out_spawn_no_seed_summary_absent_from_env(tmp_path: Path, monkeypat
         return FakeProc()
 
     with patch("subprocess.Popen", fake_popen):
-        sid, proc, _wt = fan_out._spawn_worktree_subprocess(plan, seed_summary=None)
+        sid, proc, _wt = spawn_mod._spawn_worktree_subprocess(plan, seed_summary=None)
 
     assert captured_env, "Popen was not called"
     assert "MENTAT_SEED_SUMMARY" not in captured_env[0], (
@@ -193,7 +193,7 @@ def test_fan_out_spawn_no_seed_summary_absent_from_env(tmp_path: Path, monkeypat
     )
 
 
-# ── orchestrate._fan_out_plans between-chunk seed forwarding ──────────────────
+# ── orchestrate._batch._fan_out_plans between-chunk seed forwarding ──────────────────
 
 ORCH_SCRIPT = REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts/orchestrate.py"
 
@@ -254,9 +254,9 @@ def test_fan_out_plans_seeds_next_chunk_from_completed_summary(tmp_path: Path, m
 
     # Pin cap=1 so seeding is deterministic: plan-a runs fully (writing its
     # summary into the shared seed) before plan-b spawns.
-    monkeypatch.setattr(orch, "_concurrency_cap", lambda: 1)
-    with patch.object(orch._fan_out, "spawn_async", fake_spawn_async):
-        orch._fan_out_plans(plans, harness=None, model=None)
+    monkeypatch.setattr(orch._supervise, "_concurrency_cap", lambda: 1)
+    with patch.object(orch._supervise._spawn, "spawn_async", fake_spawn_async):
+        orch._supervise._fan_out_plans(plans, harness=None, model=None)
 
     assert len(spawn_calls) == 2, f"Expected 2 spawns, got {len(spawn_calls)}"
     assert spawn_calls[0]["slug"] == "plan-a"

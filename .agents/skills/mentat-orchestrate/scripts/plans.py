@@ -45,8 +45,8 @@ def concurrency_cap() -> int:
     the devcontainers, and the host. The clamp is logged so an operator seeing
     an effective cap below their configured ``concurrency`` knows why.
 
-    Shared by the async fan-out (``orchestrate.py``) and the speculative land
-    queue (``land_queue.py``) — both honor the same load-headroom guard.
+    Shared by the async fan-out (``supervise.py``) and the speculative land
+    queue (``landing.py``) — both honor the same load-headroom guard.
     """
     raw = read_config().get("concurrency", 3)
     try:
