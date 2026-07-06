@@ -21,3 +21,4 @@ Architecture Decision Records for Mentat.
 | [0015](./0015-auto-recovery.md) | Model-driven auto-recovery — JIT retry/reslice/abandon + storm/budget/attempt caps | Accepted |
 | [0016](./0016-mutation-signal.md) | Mutation signal — advisory surviving-mutant hint, never a gate | Accepted |
 | [0017](./0017-per-run-isolation.md) | Per-run isolation — chunk-keyed identity, override-config, run-scoped prune, OOM recover | Accepted |
+| [0018](./0018-skill-modularization.md) | Skill modularization boundaries + rename map | Accepted |

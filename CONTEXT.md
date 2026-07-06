@@ -153,5 +153,5 @@ Present-tense facts, not promises of future work.
 | [0015](docs/adr/0015-auto-recovery.md) | Model-driven auto-recovery | JIT retry/reslice/abandon over transient ejects; storm/budget/attempt caps. Superseded by ADR-0007 v7 (SQLite canonical store) for its audit substrate. |
 | [0016](docs/adr/0016-mutation-signal.md) | Mutation signal | Advisory surviving-mutant hint (`task mutation`, mutmut) scoped to changed shipped-source files. Never a gate. |
 | [0017](docs/adr/0017-per-run-isolation.md) | Per-run isolation | Chunk-keyed identity, override-config, run-scoped prune, OOM recovery. |
-| 0018 | Skill-modularization boundaries + rename-map | Reserved for `mentat-skill-modularize` — not yet authored, ledger entry only. |
+| [0018](docs/adr/0018-skill-modularization.md) | Skill modularization | God-file splits, rename map, `mentat-session`→`mentat-track`, `lib/support/` grouping. ES5 dropped (RI2). |
 
