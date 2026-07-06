@@ -142,7 +142,7 @@ Present-tense facts, not promises of future work.
 | [0004](docs/adr/0004-parallel-orchestration.md) | Parallel-slicing orchestration | Fan-out parallel, land serial. Cap 3 chunks. Re-gate after land rebase. Docker required. Driver names no project tool. |
 | [0005](docs/adr/0005-ubiquitous-lexicon.md) | Ubiquitous lexicon | Slice/chunk/batch vocabulary. One Laravel borrow (batch, noun only). |
 | [0006](docs/adr/0006-soft-readonly-test-enforcement.md) | Soft read-only tests | No kernel mount. Impl-only-after-red contract + runner-redirection blacklist entry. Both agnostic. |
-| [0007](docs/adr/0007-audit-envelope.md) | Audit envelope | 19-event flat snake_case catalog, SQLite canonical store (`mentat.db`), transcript at `~/.mentat/logs/<repo>/<agent_id>/`. |
+| [0007](docs/adr/0007-audit-envelope.md) | Audit envelope | Flat snake_case catalog (`EVENT_CATALOG`), SQLite canonical store (`mentat.db`), transcript at `~/.mentat/logs/<repo>/<agent_id>/`. |
 | [0008](docs/adr/0008-python-runtime.md) | Python runtime | Stdlib-only at the bin layer; uv/ruff/pyright/pytest at the dev layer. Container-required Python 3.11+. |
 | [0009](docs/adr/0009-plugin-api.md) | Plugin API | Vite-derived, one slot (harness), entry-point discovery. Mentat core stays minimal. Number reused — the original ADR-0009 (audit envelope) was renumbered to ADR-0007; retired here, not superseded. |
 | [0010](docs/adr/0010-readonly-test-mount.md) | Read-only test mount | OCP `<plan>.tests.json` manifest + container bind-mount with `readonly` flag. |
@@ -154,4 +154,6 @@ Present-tense facts, not promises of future work.
 | [0016](docs/adr/0016-mutation-signal.md) | Mutation signal | Advisory surviving-mutant hint (`task mutation`, mutmut) scoped to changed shipped-source files. Never a gate. |
 | [0017](docs/adr/0017-per-run-isolation.md) | Per-run isolation | Chunk-keyed identity, override-config, run-scoped prune, OOM recovery. |
 | [0018](docs/adr/0018-skill-modularization.md) | Skill modularization | God-file splits, rename map, `mentat-track`→`mentat-track`, `lib/support/` grouping. ES5 dropped (RI2). |
+| [0019](docs/adr/0019-code-organization.md) | Code organization | Domain-not-kind, protocol+registry+adapter, &lt;100 LOC smell, no `utils.py`/`helpers.py`, env/path accessors. |
+| [0020](docs/adr/0020-test-craft.md) | Test craft | Tests mirror source, real dep not mock, `real_audit_store` fixture, one-behavior-per-test, `filterwarnings=error`. |
 

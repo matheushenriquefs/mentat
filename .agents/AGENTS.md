@@ -49,7 +49,7 @@ read on demand):
 - **0004** parallel-slicing orchestration — fan-out parallel, land serial, Docker-required.
 - **0005** ubiquitous lexicon — slice/chunk/batch, one Laravel borrow (batch, noun only).
 - **0006** soft read-only tests — impl-only-after-red contract + blacklist, driver agnostic.
-- **0007** audit envelope — 19-event catalog, SQLite canonical store, per-agent log dir.
+- **0007** audit envelope — flat snake_case catalog (`EVENT_CATALOG`), SQLite canonical store, per-agent log dir.
 - **0008** python runtime — stdlib-only bin layer; uv/ruff/pyright/pytest dev layer.
 - **0009** plugin API — Vite-derived 1-slot harness adapter (drop-in module).
 - **0010** read-only test mount — OCP manifest + container bind-mount.
@@ -61,4 +61,6 @@ read on demand):
 - **0016** mutation signal — advisory only, never a gate; test-ROI heuristic.
 - **0017** per-run isolation — chunk-keyed worktrees, ambient git-env scrub.
 - **0018** skill modularization — split container/track skills, domain-type rename map.
+- **0019** code organization — domain-not-kind, protocol+registry+adapter, env/path accessors.
+- **0020** test craft — mirror source, real dep, `real_audit_store`, filterwarnings=error.
 

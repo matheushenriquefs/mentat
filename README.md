@@ -155,7 +155,7 @@ task test      # pytest tests/
 | [How-to guides](./docs/how-to/) | Worked workflows: implement, orchestrate, track, doctor, HITL handoff. |
 | [Architecture](./docs/ARCHITECTURE.md) | Narrative overview, ADR pointers. |
 | [Glossary](./CONTEXT.md) | Domain lexicon — slice / chunk / batch / land / eject / AFK / HITL. |
-| [ADRs](./docs/adr/README.md) | 18 architecture decision records, 0001–0018. |
+| [ADRs](./docs/adr/README.md) | 20 architecture decision records, 0001–0020. |
 | [Filesystem layout](./.agents/docs/PATHS.md) | Every path Mentat reads or writes. |
 | [Style guide](./docs/STYLE.md) | Voice classes, LOC budgets, banned words. |
 | [Plugin API](./docs/PLUGINS.md) | The harness adapter slot. |
