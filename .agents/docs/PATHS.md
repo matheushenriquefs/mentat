@@ -23,7 +23,7 @@ harness = "claude-code"   # claude-code | cursor
 ```
 `runtime = "host"` makes `mentat-container` skip bring-up and run project tools on the
 host, after a one-time isolation-forfeit warning — the documented opt-out for repos that
-cannot containerize. Legacy `config.jsonc` is read with a one-time deprecation warning until retired.
+cannot containerize.
 
 ## Agent/harness-shared (`~/.agents/`)
 

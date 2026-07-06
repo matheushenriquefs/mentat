@@ -110,19 +110,12 @@ def test_precommit_workflow_with_links_passes(tmp_path):
     assert verdict == "pass"
 
 
-def test_precommit_jsonc_strips_comments_then_parses(tmp_path):
+def test_precommit_jsonc_suffix_is_not_a_gate_class(tmp_path):
+    """A committed .jsonc file is no longer a special gate class — it is ignored."""
     pre = _load_precommit()
-    (tmp_path / "cfg.jsonc").write_text('// note\n{"k": 1}\n')
+    (tmp_path / "cfg.jsonc").write_text("{ this is not json at all ]\n")
     verdict, _ = pre.run(tmp_path)
     assert verdict == "pass"
-
-
-def test_precommit_jsonc_bad_blocks(tmp_path):
-    pre = _load_precommit()
-    (tmp_path / "cfg.jsonc").write_text('{"k": ,}\n')
-    verdict, msg = pre.run(tmp_path)
-    assert verdict == "block"
-    assert "parse fail" in msg
 
 
 def test_precommit_skips_node_modules(tmp_path):

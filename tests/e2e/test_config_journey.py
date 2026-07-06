@@ -1,4 +1,4 @@
-"""E2E: drive the layered TOML config reader + JSONC helper over real files.
+"""E2E: drive the layered TOML config reader + devcontainer.json parser over real files.
 
 Every journey writes real files to a tmp dir (and, for :func:`read_config`, a real
 ``git init`` repo) then asserts on parsed/merged output. No mocks — these exercise
@@ -21,37 +21,42 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 config = load_script(REPO_ROOT / ".agents/lib/config.py", "config")
 
 
-def test_load_jsonc_strips_comments_and_preserves_quoted_slashes(tmp_path):
-    """load_jsonc parses a real JSONC file: // line-comments are stripped while a
-    quoted string containing // is preserved verbatim. Covers lines 18-22, 27-28."""
+def test_parse_devcontainer_strips_comments_commas_and_preserves_quoted_slashes(tmp_path):
+    """parse_devcontainer_json parses a real devcontainer.json: // and /* */ comments
+    are stripped and a trailing comma tolerated, while a quoted string containing //
+    is preserved verbatim (the footgun the old regex had)."""
     path = tmp_path / "devcontainer.json"
     path.write_text(
         "{\n"
         "  // this whole line is a comment\n"
+        "  /* and a block comment */\n"
         '  "image": "mcr.microsoft.com/devcontainers/base",  // trailing comment\n'
-        '  "url": "https://example.com//path"\n'
+        '  "url": "https://example.com//path",\n'
         "}\n"
     )
 
-    data = config.load_jsonc(path)
+    data = config.parse_devcontainer_json(path)
 
     assert data["image"] == "mcr.microsoft.com/devcontainers/base", "value must survive comment stripping"
     assert data["url"] == "https://example.com//path", "// inside a quoted string must NOT be treated as a comment"
 
 
-def test_load_jsonc_returns_empty_on_bad_json(tmp_path):
-    """load_jsonc swallows a JSONDecodeError and returns {}. Covers line 29-30."""
+def test_parse_devcontainer_raises_on_bad_json(tmp_path):
+    """parse_devcontainer_json fails loud on malformed content — it raises ConfigError
+    instead of masking to {} (the fail-loud contract)."""
     path = tmp_path / "broken.json"
     path.write_text("{ this is not valid json ]")
 
-    assert config.load_jsonc(path) == {}, "malformed JSONC must yield an empty dict"
+    with pytest.raises(config.ConfigError, match="devcontainer.json parse error"):
+        config.parse_devcontainer_json(path)
 
 
-def test_load_jsonc_returns_empty_on_missing_file(tmp_path):
-    """load_jsonc swallows the OSError from a missing file and returns {}. Covers 29-30."""
+def test_parse_devcontainer_raises_on_missing_file(tmp_path):
+    """parse_devcontainer_json lets the OSError from a missing file surface (fail loud)."""
     missing = tmp_path / "does-not-exist.json"
 
-    assert config.load_jsonc(missing) == {}, "missing JSONC file must yield an empty dict"
+    with pytest.raises(OSError):
+        config.parse_devcontainer_json(missing)
 
 
 def test_load_config_file_parses_valid_toml(tmp_path):

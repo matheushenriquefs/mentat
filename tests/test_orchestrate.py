@@ -220,7 +220,7 @@ def test_concurrency_cap_defaults_to_3_when_config_missing(monkeypatch):
     assert orch._concurrency_cap() == 3
 
 
-def test_concurrency_cap_reads_config_jsonc(monkeypatch):
+def test_concurrency_cap_reads_config(monkeypatch):
     orch = load_module("orchestrate")
     monkeypatch.setattr(orch._utils, "read_config", lambda: {"concurrency": 7})
     monkeypatch.setattr(orch.os, "cpu_count", lambda: 32)  # headroom above config → no clamp

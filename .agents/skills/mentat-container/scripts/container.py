@@ -30,8 +30,7 @@ def _host_runtime() -> bool:
 
     Default (key unset, ``"docker"``, or ``"container"``) → containerized. Only the
     explicit ``"host"`` value forfeits ADR-0004 isolation. Reads through the live
-    config reader, so it works against ``config.toml`` (or the deprecated
-    ``config.jsonc`` overlay — migrate to ``config.toml``).
+    config reader (``config.toml``).
     """
     from lib.config import read_config
 
@@ -196,9 +195,9 @@ def _write_override_config(wt: Path, chunk_slug: str) -> Path:
     dcj_src = wt / ".devcontainer" / "devcontainer.json"
     extra_files: dict[str, str] = {}
     if dcj_src.exists():
-        from lib.config import load_jsonc
+        from lib.config import parse_devcontainer_json
 
-        data = load_jsonc(dcj_src)
+        data = parse_devcontainer_json(dcj_src)
     else:
         try:
             spec = compose_render.synth_spec(wt)

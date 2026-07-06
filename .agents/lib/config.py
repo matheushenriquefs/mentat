@@ -1,9 +1,8 @@
-"""Mentat config: layered TOML reader + JSONC helper for devcontainer files. Stdlib only."""
+"""Mentat config: layered TOML reader + devcontainer.json parser. Stdlib only."""
 
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import tomllib
 from pathlib import Path
@@ -15,24 +14,95 @@ class ConfigError(ValueError):
     """Malformed or unreadable Mentat config."""
 
 
-# Match // line-comments OR quoted strings (preserve strings, strip comments)
-_COMMENT_RE = re.compile(r'//[^\n]*|"(?:[^"\\]|\\.)*"')
+def _strip_json_comments(text: str) -> str:
+    """Return ``text`` with ``//`` line and ``/* */`` block comments removed and
+    trailing commas dropped, ready for ``json.loads``.
+
+    A single string-aware scan: comment markers and commas inside JSON string
+    literals (including escaped quotes) are preserved verbatim — the footgun the
+    old regex had (stripping ``//`` inside ``"https://…"``) cannot happen here.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    in_str = False
+    while i < n:
+        c = text[i]
+        if in_str:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if c == '"':
+                in_str = False
+            i += 1
+            continue
+        if c == '"':
+            in_str = True
+            out.append(c)
+            i += 1
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "/":
+            i += 2
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            i += 2
+            while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
+                i += 1
+            i += 2
+            continue
+        out.append(c)
+        i += 1
+    return _drop_trailing_commas("".join(out))
 
 
-def _strip_comments(text: str) -> str:
-    def _replacer(m: re.Match[str]) -> str:
-        s = m.group(0)
-        return "" if s.startswith("//") else s
+def _drop_trailing_commas(text: str) -> str:
+    """Remove commas that precede a closing ``}`` or ``]`` (string-aware)."""
+    out: list[str] = []
+    i, n = 0, len(text)
+    in_str = False
+    while i < n:
+        c = text[i]
+        if in_str:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if c == '"':
+                in_str = False
+            i += 1
+            continue
+        if c == '"':
+            in_str = True
+            out.append(c)
+            i += 1
+            continue
+        if c == ",":
+            j = i + 1
+            while j < n and text[j] in " \t\r\n":
+                j += 1
+            if j < n and text[j] in "}]":
+                i += 1
+                continue
+        out.append(c)
+        i += 1
+    return "".join(out)
 
-    return _COMMENT_RE.sub(_replacer, text)
 
+def parse_devcontainer_json(path: Path) -> dict[str, object]:
+    """Parse a devcontainer.json (JSON + ``//``/``/* */`` comments + trailing commas).
 
-def load_jsonc(path: Path) -> dict[str, object]:
-    """Parse a JSONC file (e.g. .devcontainer/devcontainer.json). {} on read/parse error."""
+    Fails loud: a malformed file raises :class:`ConfigError` rather than masking to
+    ``{}``, so a broken devcontainer surfaces at read time instead of silently
+    synthesizing a wrong container config.
+    """
     try:
-        return json.loads(_strip_comments(path.read_text()))  # type: ignore[no-any-return]
-    except json.JSONDecodeError, OSError, UnicodeDecodeError:
-        return {}
+        return json.loads(_strip_json_comments(path.read_text()))  # type: ignore[no-any-return]
+    except json.JSONDecodeError as exc:
+        raise ConfigError(f"{path}: devcontainer.json parse error: {exc.msg} (line {exc.lineno})") from exc
 
 
 def _load_toml(path: Path) -> dict[str, object]:

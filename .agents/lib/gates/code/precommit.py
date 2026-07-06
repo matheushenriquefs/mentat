@@ -1,8 +1,7 @@
 """Deterministic pre-commit gate.
 
 File-class dispatcher: ADR docs need three sections, agent/command docs need YAML
-frontmatter, workflow docs need at least one cross-ref link, *.jsonc must parse
-as JSON after stripping pure `//` comment lines.
+frontmatter, workflow docs need at least one cross-ref link.
 
 External-interpreter checks (bash -n, jq) block when the interpreter is absent.
 A missing interpreter for a file that needs it is a hard error — not an advisory.
@@ -10,7 +9,6 @@ A missing interpreter for a file that needs it is a hard error — not an adviso
 
 from __future__ import annotations
 
-import json
 import re
 import shutil
 import subprocess
@@ -25,8 +23,7 @@ if str(_AGENTS_ROOT) not in sys.path:
 from lib.gates._walk import iter_files as _iter_files  # noqa: E402
 
 _LINK_RE = re.compile(r"\[.+?\]\(.+?\.md\)")
-_COMMENT_LINE_RE = re.compile(r"^\s*//")
-_SUFFIX_CLASS: dict[str, str] = {".jsonc": "jsonc", ".sh": "shell", ".jq": "jq"}
+_SUFFIX_CLASS: dict[str, str] = {".sh": "shell", ".jq": "jq"}
 
 
 def _classify(path: Path) -> str | None:
@@ -75,16 +72,6 @@ def _gate_workflow(path: Path) -> str | None:
     return None
 
 
-def _gate_jsonc(path: Path) -> str | None:
-    text = path.read_text()
-    stripped = "\n".join(line for line in text.splitlines() if not _COMMENT_LINE_RE.match(line))
-    try:
-        json.loads(stripped)
-    except json.JSONDecodeError as e:
-        return f"{path}: jsonc parse fail at line {e.lineno}: {e.msg}"
-    return None
-
-
 def _gate_shell(path: Path) -> tuple[str | None, str | None]:
     """Return (block_msg, advise_msg). Block if bash not on PATH."""
     if shutil.which("bash") is None:
@@ -120,11 +107,6 @@ def _check(path: Path, cls: str) -> tuple[list[str], list[str]]:
         return blocks, advisories
     if cls == "workflow":
         msg = _gate_workflow(path)
-        if msg:
-            blocks.append(msg)
-        return blocks, advisories
-    if cls == "jsonc":
-        msg = _gate_jsonc(path)
         if msg:
             blocks.append(msg)
         return blocks, advisories

@@ -34,9 +34,10 @@ def _precommit_mod():
 # ── _classify ────────────────────────────────────────────────────────────────
 
 
-def test_classify_jsonc_suffix(tmp_path: Path):
+def test_classify_jsonc_suffix_is_unclassified(tmp_path: Path):
+    # .jsonc is retired — no longer a special gate class.
     precommit = _precommit_mod()
-    assert precommit._classify(tmp_path / "cfg.jsonc") == "jsonc"
+    assert precommit._classify(tmp_path / "cfg.jsonc") is None
 
 
 def test_classify_shell_suffix(tmp_path: Path):
@@ -154,25 +155,6 @@ def test_gate_workflow_passes_with_link(tmp_path: Path):
     doc = tmp_path / "CONTEXT.md"
     doc.write_text("# Context\n\nsee [the plan](plan.md) for more\n")
     assert precommit._gate_workflow(doc) is None
-
-
-# ── _gate_jsonc ──────────────────────────────────────────────────────────────
-
-
-def test_gate_jsonc_passes_after_stripping_comment_lines(tmp_path: Path):
-    precommit = _precommit_mod()
-    doc = tmp_path / "cfg.jsonc"
-    doc.write_text('// leading comment\n// another\n{"a": 1}\n')
-    assert precommit._gate_jsonc(doc) is None
-
-
-def test_gate_jsonc_blocks_on_invalid_json(tmp_path: Path):
-    precommit = _precommit_mod()
-    doc = tmp_path / "cfg.jsonc"
-    doc.write_text("{not valid json,,,}\n")
-    msg = precommit._gate_jsonc(doc)
-    assert msg is not None
-    assert "jsonc parse fail" in msg
 
 
 # ── _gate_shell ──────────────────────────────────────────────────────────────
@@ -315,22 +297,6 @@ def test_check_workflow_passes_with_link(tmp_path: Path):
     assert precommit._check(doc, "workflow") == ([], [])
 
 
-def test_check_jsonc_blocks_on_invalid(tmp_path: Path):
-    precommit = _precommit_mod()
-    doc = tmp_path / "c.jsonc"
-    doc.write_text("{bad,,}\n")
-    blocks, advisories = precommit._check(doc, "jsonc")
-    assert advisories == []
-    assert len(blocks) == 1
-
-
-def test_check_jsonc_passes_on_valid(tmp_path: Path):
-    precommit = _precommit_mod()
-    doc = tmp_path / "c.jsonc"
-    doc.write_text('{"a": 1}\n')
-    assert precommit._check(doc, "jsonc") == ([], [])
-
-
 def test_check_shell_blocks_when_absent(tmp_path: Path, monkeypatch):
     precommit = _precommit_mod()
     monkeypatch.setattr(precommit.shutil, "which", lambda _name: None)
@@ -411,7 +377,6 @@ def test_run_passes_on_clean_classified_files(tmp_path: Path):
     skill_dir = tmp_path / "skills" / "widget"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("---\nname: widget\n---\nbody\n")
-    (tmp_path / "cfg.jsonc").write_text('// c\n{"ok": true}\n')
     assert precommit.run(tmp_path) == ("pass", "")
 
 

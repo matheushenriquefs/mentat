@@ -113,7 +113,7 @@ CLEAN_FULL = textwrap.dedent("""\
 
     - HITL class: `AskUserQuestion` allowed at any phase.
     - AFK class: no interactive prompts; ambiguity is ejection, not a question.
-    - Harness selection from `~/.mentat/config.jsonc`; `--harness` flag overrides.
+    - Harness selection from `~/.mentat/config.toml`; `--harness` flag overrides.
     - Plan class read from frontmatter only; no env var override.
     - Session id from `$MENTAT_SESSION` (`<epoch>-<pid>` format).
     - Log dir created mode 0o700 on first write.

@@ -1,4 +1,4 @@
-"""lib/config.py: layered TOML read_config, devcontainer load_jsonc, and config_status."""
+"""lib/config.py: layered TOML read_config, parse_devcontainer_json, and config_status."""
 
 from __future__ import annotations
 
@@ -13,25 +13,50 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / ".agents"))
 from lib import config  # noqa: E402
 
-# ── load_jsonc (genuine JSONC, e.g. devcontainer.json) ────────────────────────
+# ── parse_devcontainer_json (JSON + comments + trailing commas) ───────────────
 
 
-def test_load_jsonc_strips_line_comments(tmp_path):
+def test_parse_devcontainer_strips_line_comments(tmp_path):
     f = tmp_path / "devcontainer.json"
     f.write_text('{"a": 1, // comment\n"b": 2}')
-    assert config.load_jsonc(f) == {"a": 1, "b": 2}
+    assert config.parse_devcontainer_json(f) == {"a": 1, "b": 2}
 
 
-def test_load_jsonc_preserves_inline_url(tmp_path):
+def test_parse_devcontainer_strips_block_comments(tmp_path):
+    f = tmp_path / "devcontainer.json"
+    f.write_text('{"a": 1, /* inline\nmulti-line */ "b": 2}')
+    assert config.parse_devcontainer_json(f) == {"a": 1, "b": 2}
+
+
+def test_parse_devcontainer_tolerates_trailing_commas(tmp_path):
+    f = tmp_path / "devcontainer.json"
+    f.write_text('{\n  "a": [1, 2, 3,],\n  "b": 2,\n}')
+    assert config.parse_devcontainer_json(f) == {"a": [1, 2, 3], "b": 2}
+
+
+def test_parse_devcontainer_preserves_inline_url(tmp_path):
     f = tmp_path / "devcontainer.json"
     f.write_text('{"postCreate": "echo https://example.com"}')
-    assert config.load_jsonc(f) == {"postCreate": "echo https://example.com"}
+    assert config.parse_devcontainer_json(f) == {"postCreate": "echo https://example.com"}
 
 
-def test_load_jsonc_returns_empty_on_invalid(tmp_path):
+def test_parse_devcontainer_preserves_comment_markers_in_strings(tmp_path):
+    f = tmp_path / "devcontainer.json"
+    f.write_text('{"a": "b /* not a comment */ c", "d": "e, f"}')
+    assert config.parse_devcontainer_json(f) == {"a": "b /* not a comment */ c", "d": "e, f"}
+
+
+def test_parse_devcontainer_preserves_escaped_quote_in_string(tmp_path):
+    f = tmp_path / "devcontainer.json"
+    f.write_text(r'{"a": "quote \" then // not a comment"}')
+    assert config.parse_devcontainer_json(f) == {"a": 'quote " then // not a comment'}
+
+
+def test_parse_devcontainer_raises_on_invalid(tmp_path):
     f = tmp_path / "bad.json"
     f.write_text("{not valid json")
-    assert config.load_jsonc(f) == {}
+    with pytest.raises(config.ConfigError, match="devcontainer.json parse error"):
+        config.parse_devcontainer_json(f)
 
 
 # ── read_config layering (TOML, repo over global) ─────────────────────────────
@@ -108,10 +133,11 @@ def test_config_status_invalid_toml_warns(tmp_path):
     assert warn is not None
 
 
-def test_load_jsonc_returns_empty_on_non_utf8(tmp_path):
+def test_parse_devcontainer_raises_on_non_utf8(tmp_path):
     f = tmp_path / "devcontainer.json"
     f.write_bytes(b'{"a": "\xff\xfe not utf-8"}')
-    assert config.load_jsonc(f) == {}
+    with pytest.raises(UnicodeDecodeError):
+        config.parse_devcontainer_json(f)
 
 
 def test_load_config_file_malformed_toml_raises(tmp_path):
