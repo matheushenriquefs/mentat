@@ -484,9 +484,7 @@ def migrate_legacy_state_db(*, dest: Path | None = None) -> bool:
         legacy_tbl = "ses" + "sions"
         if legacy_tbl not in tables:
             return True
-        rows = conn.execute(
-            f"SELECT uuid, pid, status, started_at, last_event_at FROM {legacy_tbl}"
-        ).fetchall()
+        rows = conn.execute(f"SELECT uuid, pid, status, started_at, last_event_at FROM {legacy_tbl}").fetchall()
         agents = AgentDAO(conn)
         for uuid, pid, status, started_at, last_event_at in rows:
             mapped: AgentStatus
@@ -605,6 +603,51 @@ def reconcile_liveness() -> None:
         conn.close()
 
 
+def _supervisor_orphan(agent: Agent, visible_ids: set[str]) -> bool:
+    """Child whose supervisor is absent from the visible pool (reaped or missing)."""
+    sid = agent.supervisor_id
+    return bool(sid and sid not in visible_ids)
+
+
+def gc_reaped_track_dirs(repo: str, *, now: float | None = None) -> None:
+    """Remove on-disk log dirs for long-idle reaped agents under one repo."""
+    from lib.agent import log_root
+
+    clock = time.time() if now is None else now
+    root = log_root() / repo
+    if not root.is_dir():
+        return
+    conn = connect()
+    try:
+        agents = AgentDAO(conn)
+        events = EventDAO(conn)
+        for child in list(root.iterdir()):
+            if not child.is_dir():
+                continue
+            row = agents.get_by_id(child.name)
+            if row is None or row.status != "reaped":
+                continue
+            evs = events.list_by_agent(row.id)
+            try:
+                mtime = (
+                    datetime.fromisoformat(evs[-1].ts).timestamp()
+                    if evs
+                    else datetime.fromisoformat(row.started_at).timestamp()
+                )
+            except ValueError:
+                mtime = clock
+            if clock - mtime > _RECENCY_SECS:
+                shutil.rmtree(child, ignore_errors=True)
+    finally:
+        conn.close()
+
+
+def reconcile_track(repo: str, *, now: float | None = None) -> None:
+    """Liveness + filesystem GC for one repo's track registry."""
+    reconcile_liveness()
+    gc_reaped_track_dirs(repo, now=now)
+
+
 def _track_status(agent: Agent, events: list[Event]) -> str:
     if agent.status == "reaped":
         return "reaped"
@@ -631,7 +674,7 @@ def list_track_entries(
     """Agents for one repo's track registry — keyed on log dir under ``repo``."""
     from lib.agent import log_root
 
-    reconcile_liveness()
+    reconcile_track(repo, now=now)
     clock = time.time() if now is None else now
     root = log_root() / repo
     conn = connect()
@@ -639,8 +682,11 @@ def list_track_entries(
         agents = AgentDAO(conn)
         events = EventDAO(conn)
         pool = agents.list_visible()
+        visible_ids = {a.id for a in pool}
         out: list[dict[str, object]] = []
         for agent in pool:
+            if _supervisor_orphan(agent, visible_ids):
+                continue
             log_dir = root / agent.id.replace("/", "-")
             if not log_dir.is_dir():
                 continue
