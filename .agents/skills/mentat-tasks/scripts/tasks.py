@@ -16,10 +16,10 @@ _AGENTS_DIR = _SCRIPTS.parents[2]  # .agents/
 if str(_AGENTS_DIR) not in sys.path:
     sys.path.insert(0, str(_AGENTS_DIR))
 
+from lib.agent import ensure_agent as _ensure_agent  # noqa: E402
 from lib.events import bind  # noqa: E402
 from lib.exits import EX_USAGE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
-from lib.agent import ensure_agent as _ensure_agent  # noqa: E402
 from lib.support import frontmatter  # noqa: E402
 
 _utils: _types.ModuleType = load_sibling(__file__, "lifecycle")  # type: ignore[assignment]
@@ -170,14 +170,14 @@ def cmd_release(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tasks")
     sub = parser.add_subparsers(dest="cmd")
 
     sub.add_parser("next-id")
 
-    create_p = sub.add_parser("create")
-    create_p.add_argument("slug")
+    create_p = sub.add_parser("create", help="Create task file from stdin body")
+    create_p.add_argument("slug", metavar="plan-ref", help="Plan ref (task filename suffix)")
 
     claim_p = sub.add_parser("claim")
     claim_p.add_argument("file")
@@ -199,6 +199,11 @@ def main(argv: list[str] | None = None) -> None:
 
     list_p = sub.add_parser("list")
     list_p.add_argument("--status", default=None)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = build_parser()
 
     _dispatch: dict[str, Callable[[argparse.Namespace], int]] = {
         "next-id": cmd_next_id,

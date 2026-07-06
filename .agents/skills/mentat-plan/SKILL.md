@@ -19,29 +19,34 @@ Underlying call (what the slash form runs):
 python3 ~/.agents/skills/mentat-plan/scripts/plan.py <subcommand> <args>
 ```
 
+```
+python3 ~/.agents/skills/mentat-plan/scripts/plan.py write {plan-ref} {body-path}
+python3 ~/.agents/skills/mentat-plan/scripts/plan.py resolve-slug {plan-ref}
+```
+
 Subcommands: `write`, `resolve-slug`.
 
 ## Subcommands
 
 | Subcommand | Args | Description |
 |---|---|---|
-| `write` | `<slug> <body-path>` | Write `~/.agents/plans/<slug>.md` from body file. |
-| `resolve-slug` | `<slug-or-path>` | Print canonical absolute path. Pure — no stat. |
+| `write` | `{plan-ref} {body-path}` | Write `~/.agents/plans/{plan-ref}.md` from body file. |
+| `resolve-slug` | `{plan-ref}` | Print canonical absolute path. Pure — no stat. |
 
 ## Plan-ref resolution
 
-Bare slug (no `/`, no `.md` suffix) → `~/.agents/plans/<slug>.md`.
+Bare plan-ref (no `/`, no `.md` suffix) → `~/.agents/plans/{plan-ref}.md`.
 Slash or `.md` suffix → treated as a path (expanduser + resolve).
 
 ## Authoring flow
 
-1. Slugify the subject for the plan path: `~/.agents/plans/<slug>.md`.
+1. Slugify the subject for the plan path: `~/.agents/plans/{plan-ref}.md`.
 2. Grill requirements against `CONTEXT.md` and ADRs (created lazily as decisions crystallize).
 3. Decompose into tracer-bullet vertical slices.
 4. Tag each slice **AFK** (gate clears unattended → eligible to auto-spawn) or **HITL** (needs an architectural call → anchors in calling agent).
 5. Note `blocked_by` between slices for true dependencies; orchestrator topo-sorts.
-6. Write body to a temp file, then `plan.py write <slug> <temp-path>`.
-7. `write` suggests `/mentat-tasks <slug>`. Handoff: **plan → tasks → track** — materialize slices with `/mentat-tasks`, then `mentat-track track`.
+6. Write body to a temp file, then `plan.py write {plan-ref} {body-path}`.
+7. `write` suggests `/mentat-tasks {plan-ref}`. Handoff: **plan → tasks → track** — materialize slices with `/mentat-tasks`, then `mentat-track`.
 
 ## Tracer-bullet slicing
 

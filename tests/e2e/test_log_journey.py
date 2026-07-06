@@ -33,9 +33,8 @@ def _dispatch(log, argv: list[str]) -> int:
         "emit": log.cmd_emit,
         "validate": log.cmd_validate,
         "list": log.cmd_list,
-        "query": log.cmd_list,
         "prune": log.cmd_prune,
-    }[args.cmd if args.cmd != "query" else "list"](args)
+    }[args.cmd](args)
 
 
 def test_log_emit_validate_query_prune_lifecycle(tmp_path, monkeypatch, capsys):

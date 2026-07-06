@@ -1,8 +1,6 @@
 ---
 name: mentat-git
-description: >
-  Git operations routed through the running devcontainer.
-  Use to commit or fast-forward rebase onto the holding branch.
+description: Git operations routed through the running devcontainer. Use to commit or fast-forward rebase onto the holding branch.
 ---
 
 Container-routing git wrapper. Container required (ADR-0004) — auto-ups via `mentat-container up` if missing; exit 69 if bring-up fails. Rebase is fast-forward-only — no replay across pre-commit.
@@ -11,9 +9,9 @@ Container-routing git wrapper. Container required (ADR-0004) — auto-ups via `m
 
 ```
 python3 ~/.agents/skills/mentat-git/scripts/git.py commit [-- <git commit args>]
-python3 ~/.agents/skills/mentat-git/scripts/git.py rebase <holding-branch>
-python3 ~/.agents/skills/mentat-git/scripts/git.py worktree create <slug> [--base <branch>] [--parent <dir>]
-python3 ~/.agents/skills/mentat-git/scripts/git.py worktree sweep [--force]
+python3 ~/.agents/skills/mentat-git/scripts/git.py rebase {holding-branch}
+python3 ~/.agents/skills/mentat-git/scripts/git.py worktree create {plan-ref} {--base} {--parent}
+python3 ~/.agents/skills/mentat-git/scripts/git.py worktree sweep {--force}
 ```
 
 ## Commit flow
@@ -43,12 +41,12 @@ rm .commit-msg
 
 1. Resolve main repo root via `git rev-parse --git-common-dir`.
 2. Default parent dir = `<repo>/.mentat/worktrees/`; override via `--parent`.
-3. Target path = `<parent>/<slug>`. Branch name = `<slug>`. Base branch = `--base` (default `main`).
+3. Target path = `<parent>/{plan-ref}`. Branch name = `{plan-ref}`. Base branch = `{--base}` (default `main`).
 4. Idempotent: target already a registered worktree → exit 0, print path.
 5. Path exists but unregistered → exit 65 (conflict; never overwrite).
 6. Base branch missing → exit 66.
-7. Else `git worktree add -b <slug> <target> <base>`; print resolved target path on success.
-8. Runs on host — `git worktree add` writes to main repo's `.git/worktrees/`, which is not bind-mounted into the new slug's container.
+7. Else `git worktree add -b {plan-ref} <target> <base>`; print resolved target path on success.
+8. Runs on host — `git worktree add` writes to main repo's `.git/worktrees/`, which is not bind-mounted into the new plan-ref's container.
 
 ## Worktree sweep flow
 

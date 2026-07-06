@@ -4,7 +4,7 @@ Drives ``implement.py`` across its full reachable surface: the pure/manifest
 helpers, the config + checkpoint readers, the frontmatter/summary plumbing, the
 AFK wedge + self-answer + gate-block channels of ``run_plan``, the orchestration
 wrappers (``_run_and_doctor``, ``_auto_doctor``, ``_auto_summary``, teardown,
-prune, worktree preflight, land), the argparse ``_build_parser``, and ``main``
+prune, worktree preflight, land), the argparse ``build_parser``, and ``main``
 dispatch. Every seam that would spawn a real harness, shell a subprocess, touch
 docker, or change the real cwd is monkeypatched — the tests exercise only the
 in-process-reachable lines.
@@ -762,11 +762,11 @@ def test_land_and_review_returns_verdict(impl, monkeypatch, tmp_path):
     assert out == {"status": "landed", "tip": "abc123", "holding": "main"}
 
 
-# ── _build_parser ──────────────────────────────────────────────────────────────
+# ── build_parser ──────────────────────────────────────────────────────────────
 
 
-def test_build_parser_run_namespace(impl):
-    args = impl._build_parser().parse_args(
+def testbuild_parser_run_namespace(impl):
+    args = impl.build_parser().parse_args(
         ["run", "plan1", "--harness", "h", "--model", "m", "--land", "--holding", "hb"]
     )
     assert args.command == "run"
@@ -777,21 +777,21 @@ def test_build_parser_run_namespace(impl):
     assert args.holding == "hb"
 
 
-def test_build_parser_mark_test_writable(impl):
-    args = impl._build_parser().parse_args(["mark-test-writable", "slug", "path/x_test.py"])
+def testbuild_parser_mark_test_writable(impl):
+    args = impl.build_parser().parse_args(["mark-test-writable", "slug", "path/x_test.py"])
     assert args.command == "mark-test-writable"
     assert args.slug == "slug"
     assert args.path == "path/x_test.py"
 
 
-def test_build_parser_run_minimal(impl):
-    args = impl._build_parser().parse_args(["run", "p"])
+def testbuild_parser_run_minimal(impl):
+    args = impl.build_parser().parse_args(["run", "p"])
     assert args.plan_refs == ["p"]
 
 
-def test_build_parser_requires_subcommand(impl):
+def testbuild_parser_requires_subcommand(impl):
     with pytest.raises(SystemExit):
-        impl._build_parser().parse_args([])
+        impl.build_parser().parse_args([])
 
 
 # ── main ───────────────────────────────────────────────────────────────────────

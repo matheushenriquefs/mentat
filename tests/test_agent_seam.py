@@ -100,7 +100,7 @@ def test_summary_file_under_agent_dir(tmp_path, monkeypatch):
 def test_repo_name_stable_from_worktree(tmp_path, monkeypatch):
     """repo_name() resolves the main repo basename even when cwd is a linked worktree.
 
-    Regression: a fresh `mentat-track track` shell has no MENTAT_REPO, so the
+    Regression: a fresh `mentat-track` shell has no MENTAT_REPO, so the
     reader fell back to cwd().name. Run from a worktree, that is the slug, not the
     repo — pointing the registry at an empty log dir ("couldn't track agents").
     The writer froze MENTAT_REPO to the repo-root basename at spawn, so the reader

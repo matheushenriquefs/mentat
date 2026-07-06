@@ -57,7 +57,7 @@ Every modified file passes its class checker before commit. Run: `lefthook run p
 
 ## Audit
 
-Every command emits start + complete events via `mentat-log emit`. Event catalog: [ADR-0007](docs/adr/0007-audit-envelope.md). Use `mentat-track track` for live monitoring.
+Every command emits start + complete events via `mentat-log emit`. Event catalog: [ADR-0007](docs/adr/0007-audit-envelope.md). Use `mentat-track` for live monitoring.
 
 ## Ship Surface
 

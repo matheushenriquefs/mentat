@@ -1,8 +1,6 @@
 ---
 name: mentat-container
-description: >
-  Manage the devcontainer lifecycle for a mentat worktree.
-  Use when you need to start, stop, run commands inside, or diagnose a devcontainer.
+description: Manage the devcontainer lifecycle for a mentat worktree. Use to start, stop, run commands inside, or diagnose a devcontainer.
 ---
 
 Start, stop, exec inside, and diagnose devcontainers for mentat worktrees. Wraps `devcontainer` CLI + Docker with worktree-aware slug derivation and atomic `override`.
@@ -10,17 +8,18 @@ Start, stop, exec inside, and diagnose devcontainers for mentat worktrees. Wraps
 ## How to invoke
 
 ```
-python3 ~/.agents/skills/mentat-container/scripts/container.py <subcommand> <args>
+python3 ~/.agents/skills/mentat-container/scripts/container.py up
+python3 ~/.agents/skills/mentat-container/scripts/container.py run '{cmd}'
+python3 ~/.agents/skills/mentat-container/scripts/container.py down
+python3 ~/.agents/skills/mentat-container/scripts/container.py doctor
 ```
-
-Subcommands: `up`, `run`, `down`, `doctor`.
 
 ## Subcommands
 
 | Subcommand | Args | Description |
 |---|---|---|
 | `up` | — | Start devcontainer for cwd worktree (idempotent) |
-| `run` | `'<cmd>'` | Exec command inside running container |
+| `run` | `{cmd}` | Exec command inside running container |
 | `down` | — | Stop container |
 | `doctor` | — | Walk container invariants and report issues |
 

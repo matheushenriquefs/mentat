@@ -327,8 +327,8 @@ def test_build_parser_list_has_all_flag():
     assert args.all_agents is True
 
 
-def test_build_parser_track_has_all_flag():
+def test_build_bare_parser_has_all_flag():
     agent = load_module("track")
-    p = agent.build_parser()
-    args = p.parse_args(["track", "--all"])
+    p = agent.build_bare_parser()
+    args = p.parse_args(["--all"])
     assert args.all_agents is True

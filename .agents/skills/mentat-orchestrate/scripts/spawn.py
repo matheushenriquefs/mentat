@@ -15,11 +15,11 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
+from lib.agent import agent_dir as _agent_dir_fn
+from lib.agent import make_agent_id  # noqa: E402
 from lib.chunk import bind_plan_chunk, make_chunk_id  # noqa: E402
 from lib.events import bind, spawned_payload  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
-from lib.agent import make_agent_id  # noqa: E402
-from lib.agent import agent_dir as _agent_dir_fn
 from lib.support import paths  # noqa: E402
 
 _GIT_SCRIPT = paths.SKILLS_DIR / "mentat-git/scripts/git.py"
@@ -131,15 +131,13 @@ def spawn_with_proc(
     plan: _PlanLike, *, harness: str | None = None, model: str | None = None, seed_summary: str | None = None
 ) -> tuple[str, subprocess.Popen]:
     """Spawn plan headless (sync Popen). Print track command immediately. Return (agent_id, Popen)."""
-    agent_id, proc, worktree = _spawn_worktree_subprocess(
-        plan, harness=harness, model=model, seed_summary=seed_summary
-    )
+    agent_id, proc, worktree = _spawn_worktree_subprocess(plan, harness=harness, model=model, seed_summary=seed_summary)
     _emit_event(
         "chunk_started",
         spawned_payload(plan.slug, str(plan.path), harness=harness or "default", worktree=str(worktree)),
     )
     _emit_event("agent_started", {"harness": harness or "default"})
-    print(f"mentat-track track {agent_id}")
+    print(f"mentat-track {agent_id}")
     print(agent_id)
     return agent_id, proc
 
@@ -156,7 +154,7 @@ async def spawn_async(
         spawned_payload(plan.slug, str(plan.path), harness=harness or "default", worktree=str(worktree)),
     )
     _emit_event("agent_started", {"harness": harness or "default"})
-    print(f"mentat-track track {agent_id}")
+    print(f"mentat-track {agent_id}")
     print(agent_id)
     return agent_id, proc, worktree
 

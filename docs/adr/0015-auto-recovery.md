@@ -19,7 +19,7 @@ transient container hiccup handed the operator three dead worktrees to re-run by
 hand, even though a rebase-and-retry would have landed them. The four dependency
 roots this feature needed — a transient-vs-terminal classification seam and
 worker-died marker (runtime), backpressure/breaker/backoff guards, session
-inspection (`mentat-track track` / `diagnose`), and a write-set serializer
+inspection (`mentat-track` / `diagnose`), and a write-set serializer
 (land queue) — were landed first; this ADR records the recovery engine built on
 top of them.
 

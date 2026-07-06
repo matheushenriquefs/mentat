@@ -10,10 +10,13 @@ Emit, validate, list, and prune structured audit events. Canonical store: `~/.me
 Terminal tool — run on PATH (no slash form; this is not a harness slash command):
 
 ```
-mentat-log <subcommand> <args>
+mentat-log emit {agent} {event} {payload}
+mentat-log validate {file}
+mentat-log list {agent-id} {--event} {--agent}
+mentat-log prune {--before}
 ```
 
-Subcommands: `emit`, `validate`, `list`, `prune`. (`query` is a deprecated alias for `list`.)
+Subcommands: `emit`, `validate`, `list`, `prune`.
 
 ## Event catalog (18)
 

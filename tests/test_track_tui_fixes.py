@@ -1,4 +1,4 @@
-"""TUI fixes for `mentat-track track` (the multi-AFK navigator): focus/cursor
+"""TUI fixes for `mentat-track` (the multi-AFK navigator): focus/cursor
 pinning to agent identity (flicker A), the flicker-free repaint engine
 (flicker B), transcript scrollback, honest empty states, and transcript-by-role
 coloring. Pure surface only — the raw-tty/select poll loop stays the untested I/O

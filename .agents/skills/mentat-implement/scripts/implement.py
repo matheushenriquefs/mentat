@@ -361,7 +361,7 @@ def _land_and_review(slug: str, worktree: Path, holding: str) -> dict[str, objec
     }
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mentat-implement", description="Atomic plan executor")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -398,7 +398,7 @@ def main() -> None:
     argv = sys.argv[1:]
     if not argv or argv[0] not in _SUBCOMMANDS:
         argv = ["run", *argv]
-    args = _build_parser().parse_args(argv)
+    args = build_parser().parse_args(argv)
 
     if args.command == "mark-test-writable":
         mark_test_writable(slug=args.slug, path=args.path)
@@ -419,7 +419,7 @@ def main() -> None:
     slug = plan_path.stem
     ensure_agent("implement", slug)
     agent_id = os.environ.get("MENTAT_AGENT", slug)
-    print(f"mentat-implement: track this run with `mentat-track track {agent_id}`", file=sys.stderr)
+    print(f"mentat-implement: track this run with `mentat-track {agent_id}`", file=sys.stderr)
     _prune_worktrees_preflight()
     harness = _utils.default_harness()
     reuse_worktree = bool(getattr(args, "reuse_worktree", False))

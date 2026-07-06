@@ -44,7 +44,7 @@ Domain glossary for Mentat. For narrative architecture overview, see [docs/ARCHI
 : Docker container for a chunk's target repo — where all project tools run. `python3 ~/.agents/skills/mentat-container/scripts/container.py up` brings it up; `... container.py run '<cmd>'` executes commands inside. _Avoid_: "the container", "the Docker".
 
 **Headless agent CLI**
-: The harness CLI — `cursor-agent` or `claude-code`. What `--harness=` selects; `/mentat-track track` watches it; each harness adapter module under `.agents/skills/mentat-implement/scripts/harness/` declares its `cmd` and `output_format`. _Avoid_: "build" (collides with Docker `build:` in `mentat-container-up`).
+: The harness CLI — `cursor-agent` or `claude-code`. What `--harness=` selects; `/mentat-track` watches it; each harness adapter module under `.agents/skills/mentat-implement/scripts/harness/` declares its `cmd` and `output_format`. _Avoid_: "build" (collides with Docker `build:` in `mentat-container-up`).
 
 **Reviewer gate**
 : The six ADR-0003 reviewer subagents — `mentat-plan-reviewer`, `mentat-test-reviewer`, `mentat-bug-reviewer`, `mentat-rules-reviewer`, `mentat-context-reviewer`, `mentat-smell-reviewer`. Plan and test score against a threshold; bug, rules, and context veto; smell is advisory. They gate each chunk at implement and land time. `mentat-orchestrate` additionally runs them as an advisory end-of-queue batch review over the final tip. _Avoid_: conflating the per-chunk gate with the end-of-queue review.

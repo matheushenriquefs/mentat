@@ -16,7 +16,7 @@ agent.
 ## 2. Track the run
 
 ```
-/mentat-track track
+/mentat-track
 ```
 
 With no agent argument, `track` opens the live navigator over every agent in the
@@ -30,7 +30,7 @@ current repository — one row per chunk, with status and last event. From there
 To follow one chunk directly, pass its agent id:
 
 ```
-/mentat-track track <agent-id>
+/mentat-track <agent-id>
 ```
 
 See [tracking a run](./tracking-a-run.md) for the full view reference.

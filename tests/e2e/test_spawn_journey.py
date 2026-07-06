@@ -188,7 +188,7 @@ def test_spawn_with_proc_prints_track_command_and_agent_id(isolate_logs, tmp_pat
     monkeypatch.setattr(spawn_mod, "_emit_event", lambda name, payload: None)
     agent_id, _proc = spawn_mod.spawn_with_proc(_fake_plan(tmp_path))
     out = capsys.readouterr().out
-    assert f"mentat-track track {agent_id}" in out
+    assert f"mentat-track {agent_id}" in out
     assert agent_id in out
 
 

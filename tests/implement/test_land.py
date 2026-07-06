@@ -45,7 +45,7 @@ class _FakeLandQueue:
 def test_build_parser_accepts_land_flag():
     """F2 tracer: --land must be a recognized arg on the 'run' subparser."""
     impl = _impl()
-    parser = impl._build_parser()
+    parser = impl.build_parser()
     # Should parse without error
     args = parser.parse_args(["run", "--land", "--holding", "main", "my-plan"])
     assert getattr(args, "land", None) is True or getattr(args, "land", False) is not False or hasattr(args, "land"), (
@@ -56,7 +56,7 @@ def test_build_parser_accepts_land_flag():
 def test_build_parser_land_requires_holding():
     """F2: --land without --holding must produce an error (holding required when landing)."""
     impl = _impl()
-    parser = impl._build_parser()
+    parser = impl.build_parser()
     # --land without --holding — should either error at parse time or we document holding defaults to main
     # Minimally: --holding arg must exist on the run subparser
     args = parser.parse_args(["run", "--land", "--holding", "mybranch", "my-plan"])

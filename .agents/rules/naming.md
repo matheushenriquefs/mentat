@@ -68,9 +68,7 @@ subcommand is the action. This governs vocabulary, not literal `:`
 syntax — `mentat-log emit`, not `mentat-log:emit`.
 
 - Read a collection: `list`. Read one thing's overview: `show`. Read live
-  process state: `status`. Never `query` — `mentat-log query` is a
-  deprecated alias kept only for back-compat; new code calls `mentat-log
-  list`.
+  process state: `status`. Never `query` as a subcommand verb.
 - Mint something new: `make` or `create` (mirrors the Python verb split
   above).
 - Destroy or reset: `prune` (age-based delete), `reset` (return to a known

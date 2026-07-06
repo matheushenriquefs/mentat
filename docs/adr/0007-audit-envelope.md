@@ -89,6 +89,6 @@ Future growth still prefers payload extension over new event names.
 ## Consequences
 
 All bins subprocess to `mentat-log emit`. Schema changes: amend `EVENT_CATALOG`
-in one file. Readers query SQLite (`mentat-log list`, `mentat-track track`,
+in one file. Readers query SQLite (`mentat-log list`, `mentat-track`,
 `recover.attempt_count`, `diagnose`). NDJSON audit files are not stored; export
 on stdout when a human greps. DDL and DAO rules: `.agents/rules/database.md`.

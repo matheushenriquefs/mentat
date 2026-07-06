@@ -107,7 +107,7 @@ def test_track_all_lists_every_seeded_session(tmp_path, monkeypatch):
         store.record_emit(env, event, {"slug": "x"})
         (log_root / repo / uuid).mkdir(parents=True)
 
-    out = _run(["track", "--all"], log_root, repo)
+    out = _run(["--all"], log_root, repo)
 
     for agent, status in (("live-sess", "working"), ("done-sess", "idle"), ("failed-sess", "idle")):
         line = next((ln for ln in out.splitlines() if agent in ln), None)

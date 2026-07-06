@@ -44,7 +44,7 @@ def invoke(
     Reads MENTAT_AGENT_LOG from env (set by mentat-orchestrate spawn). When
     set the run is captured: claude gets --output-format stream-json --verbose,
     and stdout is redirected into <agent_log>. Result.agent_log carries the
-    path back so the self-answer detector and mentat-track track can read it.
+    path back so the self-answer detector and mentat-track can read it.
 
     afk=True → --disallowedTools AskUserQuestion (AFK contract).
     seed_summary → prepended to prompt for seeded fresh-agent continuity.

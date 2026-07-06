@@ -63,7 +63,7 @@ point instead of landing unattended.
 In a second harness agent, watch progress live:
 
 ```
-/mentat-track track
+/mentat-track
 ```
 
 This streams the run's events and the agent's activity. Leave it open while the

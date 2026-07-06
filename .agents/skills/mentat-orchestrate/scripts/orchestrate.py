@@ -14,11 +14,11 @@ if str(_AGENTS_ROOT) not in sys.path:
 
 from lib import git as _git  # noqa: E402
 from lib import plans as _plans_lib  # noqa: E402
+from lib.agent import ensure_agent  # noqa: E402
 from lib.events import HITL_IN_AGENT, UPSTREAM_EJECTED, ejected_payload, spawned_payload  # noqa: E402
 from lib.events import bind as _bind  # noqa: E402
 from lib.exits import EX_CONFIG, EX_DATAERR, EX_NOINPUT  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
-from lib.agent import ensure_agent  # noqa: E402
 
 _utils = load_sibling(__file__, "plans")
 _scheduler = load_sibling(__file__, "scheduler")
@@ -98,7 +98,7 @@ def _emit_anchored_chunks(plans: list[_scheduler.Plan], *, harness: str | None, 
 
     HITL plans run in the **calling Claude agent** — never via subprocess —
     so AskUserQuestion works. The caller queries the audit log
-    (`mentat-log query chunk_started --agent=$MENTAT_AGENT`) and drives
+    (`mentat-log list {agent-id} --event=chunk_started --agent=$MENTAT_AGENT`) and drives
     `/mentat-implement <slug>` in-agent per anchored slug, then re-invokes
     `orchestrate land-queue <holding>` with the HITL slugs on stdin.
 
@@ -126,7 +126,7 @@ def run_orchestrate(
     dry_run: bool,
 ) -> int:
     agent_id = ensure_agent("orchestrate", holding)
-    print(f"mentat-orchestrate: track this run with `mentat-track track {agent_id}`", file=sys.stderr)
+    print(f"mentat-orchestrate: track this run with `mentat-track {agent_id}`", file=sys.stderr)
     try:
         _git.require_commit_identity()
     except _git.GitError as e:

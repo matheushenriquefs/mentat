@@ -10,7 +10,7 @@ Manage a local markdown task store backed by POSIX atomics. No server, no databa
 
 ## Layout
 
-Tasks live at `<repo>/.mentat/tasks/<ID>-<slug>.md`. Cross-repo unified view: `ln -s ~/.mentat/tasks .mentat/tasks` (user runs once).
+Tasks live at `<repo>/.mentat/tasks/<ID>-{plan-ref}.md`. Cross-repo unified view: `ln -s ~/.mentat/tasks .mentat/tasks` (user runs once).
 
 Board-home vs worktree separation (ADR-0002): task files live on the holding branch. Chunks operating in worktrees write status back via the atomic protocol below.
 
@@ -40,7 +40,7 @@ All operations route through `scripts/tasks.py`. Set `MENTAT_TASKS_DIR` to overr
 | Subcommand | Args | Description |
 |---|---|---|
 | `next-id` | — | Print next `T###` |
-| `create <slug>` | reads stdin | Create task file from stdin body |
+| `create` | `{plan-ref}` | reads stdin | Create task file from stdin body |
 | `claim <file> <agent> <ttl_s>` | — | Atomic claim via O_EXCL lock sentinel |
 | `release <file>` | — | Release claim, restore `todo` |
 | `refresh <file> <ttl_s>` | — | Bump `claim_expires_at` |

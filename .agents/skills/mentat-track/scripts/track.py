@@ -26,6 +26,7 @@ _panes = load_sibling(__file__, "panes")
 _agent = load_sibling(__file__, "agent")
 _diagnose = load_sibling(__file__, "diagnose")
 
+_SUBCMDS = frozenset({"list", "doctor", "report", "diagnose"})
 
 _humanize_age = _registry._humanize_age
 
@@ -101,6 +102,19 @@ def cmd_diagnose(agent_id: str | None) -> int:
     return 0
 
 
+def build_bare_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="mentat-track", description="Stream live events")
+    p.add_argument("agent", nargs="?", default=None, metavar="agent-id", help="{agent-id?}")
+    p.add_argument(
+        "--all",
+        dest="all_agents",
+        action="store_true",
+        default=False,
+        help="Show all agents in the navigator",
+    )
+    return p
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="mentat-track")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -108,30 +122,33 @@ def build_parser() -> argparse.ArgumentParser:
     list_p = sub.add_parser("list", help="Repo-wide agent registry (attention-ordered)")
     list_p.add_argument("--all", dest="all_agents", action="store_true", default=False, help="Show all agents")
 
-    track_p = sub.add_parser("track", help="Stream live events")
-    track_p.add_argument("agent", nargs="?", default=None)
-    track_p.add_argument("--all", dest="all_agents", action="store_true", default=False, help="Show all agents")
-
     doctor_p = sub.add_parser("doctor", help="Build verdict markdown")
-    doctor_p.add_argument("agent", nargs="?", default=None)
+    doctor_p.add_argument("agent", nargs="?", default=None, metavar="agent-id")
 
     report_p = sub.add_parser("report", help="Render the success-side report-back summary")
-    report_p.add_argument("agent", nargs="?", default=None)
+    report_p.add_argument("agent", nargs="?", default=None, metavar="agent-id")
 
     diag_p = sub.add_parser("diagnose", help="Doctor-first diagnose loop")
-    diag_p.add_argument("agent", nargs="?", default=None)
+    diag_p.add_argument("agent", nargs="?", default=None, metavar="agent-id")
 
     return p
 
 
+def _is_bare_argv(argv: list[str]) -> bool:
+    return not argv or argv[0] not in _SUBCMDS
+
+
 def main() -> None:
-    parser = build_parser()
-    args = parser.parse_args()
+    argv = sys.argv[1:]
+    if _is_bare_argv(argv):
+        args = build_bare_parser().parse_args(argv)
+        sys.exit(cmd_track(args.agent, args.all_agents))
+
+    args = build_parser().parse_args(argv)
     agent = getattr(args, "agent", None)
     all_agents = getattr(args, "all_agents", False)
     dispatch = {
         "list": lambda: cmd_list(all_agents),
-        "track": lambda: cmd_track(agent, all_agents),
         "doctor": lambda: cmd_doctor(agent),
         "report": lambda: cmd_report(agent),
         "diagnose": lambda: cmd_diagnose(agent),

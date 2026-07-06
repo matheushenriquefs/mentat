@@ -16,7 +16,7 @@ to the top. Use this for a quick snapshot.
 ## Open the live navigator
 
 ```
-/mentat-track track
+/mentat-track
 ```
 
 With no argument, `track` opens a live navigator over every agent in the
@@ -40,7 +40,7 @@ exits instead of opening the interactive navigator.
 To watch a single chunk directly, pass its agent id — the runs print it at start:
 
 ```
-/mentat-track track <agent-id>
+/mentat-track <agent-id>
 ```
 
 ## After the run

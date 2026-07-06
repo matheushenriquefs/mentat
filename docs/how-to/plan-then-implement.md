@@ -54,5 +54,5 @@ git checkout main && git merge --ff-only holding/add-csv-export
 
 - One plan slug per `mentat-implement` run. Passing more than one is refused — use
   [orchestrate](./plan-then-orchestrate.md) for multiple plans.
-- The run prints `mentat-track track <agent>` at the start so you can watch it
+- The run prints `mentat-track <agent>` at the start so you can watch it
   from another agent. See [tracking a run](./tracking-a-run.md).

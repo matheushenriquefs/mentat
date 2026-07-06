@@ -39,10 +39,10 @@ def build_parser() -> argparse.ArgumentParser:
     wt_p = sub.add_parser("worktree", help="Worktree management")
     wt_sub = wt_p.add_subparsers(dest="wt_cmd", required=True)
     wt_create = wt_sub.add_parser("create", help="Create a worktree under <repo>/.mentat/worktrees/ on a new branch")
-    wt_create.add_argument("slug", help="Plan slug (human-readable suffix)")
-    wt_create.add_argument("--chunk-id", default=None, help="Chunk uuid7 hex (minted when omitted)")
-    wt_create.add_argument("--base", default=None, help="Base branch (auto-detected when omitted)")
-    wt_create.add_argument("--parent", default=None, help="Parent dir (default: <repo>/.mentat/worktrees/)")
+    wt_create.add_argument("slug", metavar="plan-ref", help="Plan ref (worktree branch suffix)")
+    wt_create.add_argument("--chunk-id", default=None, help="{--chunk-id} chunk uuid7 hex (minted when omitted)")
+    wt_create.add_argument("--base", default=None, help="{--base} base branch (auto-detected when omitted)")
+    wt_create.add_argument("--parent", default=None, help="{--parent} parent dir (default: <repo>/.mentat/worktrees/)")
 
     wt_sweep = wt_sub.add_parser("sweep", help="List (default) or remove stray + prunable worktrees")
     wt_sweep.add_argument(

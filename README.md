@@ -102,7 +102,7 @@ curl -fsSL https://raw.githubusercontent.com/matheushenriquefs/mentat/main/insta
 /mentat-orchestrate run holding/add-csv-export add-csv-export-plan
 
 # 3. watch the batch land
-/mentat-track track
+/mentat-track
 
 # 4. inspect ejected chunks (if any)
 /mentat-track doctor

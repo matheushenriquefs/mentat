@@ -8,19 +8,19 @@ Atomic single-plan executor. ONE job: execute one plan in the calling agent. No 
 ## How to invoke
 
 ```
-/mentat-implement <plan-ref> [--harness <name>]
-/mentat-implement run --land [--holding <branch>] <plan-ref>
+/mentat-implement {plan-ref} {--harness}
+/mentat-implement run {--land} {--holding} {plan-ref}
 ```
 
-`plan-ref`: bare slug (`my-plan`) or path. Multi-slug → exit 1 (use mentat-orchestrate).
+`{plan-ref}`: bare slug (`my-plan`) or path. Multi plan-ref → exit 1 (use mentat-orchestrate).
 
-Subcommands (peers): `run` (default), `mark-test-writable <slug> <path>`.
+Subcommands (peers): `run` (default), `mark-test-writable {plan-ref} {path}`.
 
 `--land`: after all slices green, rebase onto `<holding>` (default `main`), fast-forward merge, spawn advisory batch review — no `mentat-orchestrate` needed. Use for a single plan start→finish in one agent. `--holding` order is intentionally swapped vs. `orchestrate run <branch> <plan>+`.
 
 ## Preflight
 
-1. **Worktree.** Main worktree → create sibling via `mentat-git worktree create <slug>` + chdir. Already in sibling → skipped. Not in repo → skipped. `MENTAT_SKIP_PREFLIGHT=1` → skipped.
+1. **Worktree.** Main worktree → create sibling via `mentat-git worktree create {plan-ref}` + chdir. Already in sibling → skipped. Not in repo → skipped. `MENTAT_SKIP_PREFLIGHT=1` → skipped.
 2. **Failure** → emit `chunk_ejected{reason: preflight-worktree-failed}` + exit rc (65/66/70).
 3. **Slice artifacts.** Skip already-passing predicates; refuse re-run on DONE slices.
 4. **Container** auto-ups via `mentat-container up`; second miss → exit 69.
@@ -58,16 +58,16 @@ Fail → fix, re-commit, re-spawn. No rebase on FAIL. Dismissals require refuted
 | 0 | All slices green, plan complete |
 | 1 | TDD or gate failure |
 | 42 | AFK ambiguity — HITL required |
-| 64 | CLI arg parse error / missing plan slug |
+| 64 | CLI arg parse error / missing plan-ref |
 | 65 | Malformed plan frontmatter |
-| 66 | Plan slug not found |
+| 66 | Plan-ref not found |
 | 69 | Container down at preflight |
 | 70 | Unhandled Python exception |
 | 78 | `~/.mentat/config.toml` missing or invalid |
 
 ## Rules
 
-- One plan slug per invocation. Refuse multi-slug input with exit 64.
+- One plan-ref per invocation. Refuse multi plan-ref input with exit 64.
 - Container required (ADR-0004). Exit 69 if container down at preflight.
 - AFK: no interactive prompts. Ambiguity → `summary.md{status: blocked}` → `chunk_ejected{hitl-required}` exit 42.
 - HITL: `AskUserQuestion` allowed at any phase.
@@ -79,7 +79,7 @@ Fail → fix, re-commit, re-spawn. No rebase on FAIL. Dismissals require refuted
 
 ## Read-only test mount (ADR-0010)
 
-When `~/.agents/plans/<slug>.tests.json` exists, reads it before `/mentat-container-up`:
+When `~/.agents/plans/{plan-ref}.tests.json` exists, reads it before `/mentat-container-up`:
 
 ```json
 { "closed": ["tests/test_foo.py"], "open": ["tests/test_new.py"] }
@@ -87,5 +87,5 @@ When `~/.agents/plans/<slug>.tests.json` exists, reads it before `/mentat-contai
 
 `closed - open` → mounted `readonly`. `open` → writable. Absent manifest → no extra mounts.
 
-`mark-test-writable <slug> <path>` flips a closed path writable for the red-test step.
+`mark-test-writable {plan-ref} {path}` flips a closed path writable for the red-test step.
 Audited as `test_writable_requested`.

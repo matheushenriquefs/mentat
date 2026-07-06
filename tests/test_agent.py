@@ -515,7 +515,7 @@ def test_main_dispatches_track_no_session(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "testrepo")
     (tmp_path / "logs" / "testrepo").mkdir(parents=True)
-    monkeypatch.setattr("sys.argv", ["agent.py", "track"])
+    monkeypatch.setattr("sys.argv", ["agent.py"])
     import pytest as _pytest
 
     with patch.object(agent_mod._panes, "navigate", return_value=0):

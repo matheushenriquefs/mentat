@@ -15,11 +15,11 @@ if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import store as _store  # noqa: E402
-from lib.events import EJECT_REASONS as _EJECT_REASONS  # noqa: E402
 from lib.agent import agent_id_from_env as _agent_id_from_env
 from lib.agent import log_root as _log_root  # noqa: E402
 from lib.agent import make_agent_id as _make_agent_id
 from lib.agent import repo_name as _repo
+from lib.events import EJECT_REASONS as _EJECT_REASONS  # noqa: E402
 
 EVENT_CATALOG: dict[str, list[str]] = {
     "slice_scheduled": ["slug"],
@@ -244,12 +244,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output format (jsonl reproduces the legacy audit trail on stdout)",
     )
 
-    qry_p = sub.add_parser("query", help="Alias for list (deprecated)")
-    qry_p.add_argument("agent_id", help="Agent ID")
-    qry_p.add_argument("--event", default=None, help="Filter by event name")
-    qry_p.add_argument("--agent", default=None, help="Filter by emitting skill name")
-    qry_p.add_argument("--format", default="jsonl", choices=("jsonl",))
-
     prune_p = sub.add_parser("prune", help="Delete old agent log dirs")
     prune_p.add_argument("--before", required=True, metavar="YYYY-MM-DD", help="Delete dirs older than this date")
 
@@ -259,8 +253,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    if args.cmd == "query":
-        args.cmd = "list"
     dispatch = {
         "emit": cmd_emit,
         "validate": cmd_validate,

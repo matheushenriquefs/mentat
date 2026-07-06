@@ -44,11 +44,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd")
 
     write_p = sub.add_parser("write", help="Write a plan file")
-    write_p.add_argument("slug", help="Plan slug (becomes <slug>.md)")
-    write_p.add_argument("body_path", help="Path to plan body file")
+    write_p.add_argument("slug", metavar="plan-ref", help="Plan ref (bare slug → ~/.agents/plans/{plan-ref}.md)")
+    write_p.add_argument("body_path", metavar="body-path", help="{body-path} plan body file")
 
-    resolve_p = sub.add_parser("resolve-slug", help="Print canonical path for slug-or-path")
-    resolve_p.add_argument("ref", help="Slug or path")
+    resolve_p = sub.add_parser("resolve-slug", help="Print canonical path for plan-ref")
+    resolve_p.add_argument("ref", metavar="plan-ref", help="Plan ref (bare slug or path)")
 
     return p
 

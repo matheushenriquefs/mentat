@@ -39,8 +39,8 @@ Subcommands: `run`, `fan-out`, `land-queue`, `batch-review`. `run` takes the hol
 5. Emit `chunk_started{harness:"hitl-in-agent"}` per anchored plan and
    return control. Caller queries the audit log
    (`mentat-log list chunk_started --agent=$MENTAT_AGENT`) and invokes
-   `/mentat-implement <slug>` in-agent per anchored slug, then re-invokes
-   `orchestrate land-queue <holding>` with the HITL slugs on stdin. Orchestrate
+   `/mentat-implement {plan-ref}` in-agent per anchored plan-ref, then re-invokes
+   `orchestrate land-queue {holding-branch}` with the HITL plan-refs on stdin. Orchestrate
    never subprocess-runs HITL implement — interactivity would be lost.
 6. Poll/wait for auto_spawn completions.
 7. Land auto_spawn chunks serially onto holding (HITL chunks land in the

@@ -1,7 +1,8 @@
-"""Drift lint: prose event references and retired wire-term token. Stdlib only."""
+"""Drift lint: prose event references, retired wire-term token, CLI surface. Stdlib only."""
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import re
 import sys
@@ -236,15 +237,109 @@ def lint_runtime_retired_term(root: Path) -> list[str]:
     return errors
 
 
+_BANNED_SUBCMDS = frozenset({"query", "track"})
+_CLI_SKILL_SCRIPTS: dict[str, frozenset[str]] = {
+    "skills/mentat-log/scripts/log.py": frozenset({"emit", "validate", "list", "prune"}),
+    "skills/mentat-track/scripts/track.py": frozenset({"list", "doctor", "report", "diagnose"}),
+    "skills/mentat-plan/scripts/plan.py": frozenset({"write", "resolve-slug"}),
+    "skills/mentat-git/scripts/git.py": frozenset({"commit", "rebase", "worktree"}),
+    "skills/mentat-tasks/scripts/tasks.py": frozenset(
+        {"next-id", "create", "claim", "release", "refresh", "done", "wontfix", "list"}
+    ),
+    "skills/mentat-orchestrate/scripts/orchestrate.py": frozenset({"run", "fan-out", "land-queue", "batch-review"}),
+    "skills/mentat-implement/scripts/implement.py": frozenset({"run", "mark-test-writable"}),
+    "skills/mentat-container/scripts/container.py": frozenset({"up", "run", "down", "doctor"}),
+}
+_SKILL_SLUG_INVOKE = re.compile(
+    r"skills/mentat-(?:plan|git|tasks)/SKILL\.md",
+)
+_DEPRECATED_CLI = re.compile(r"mentat-track\s+track\b|mentat-log\s+query\b")
+_SLUG_INVOKE = re.compile(r"<slug>")
+
+
+def _load_build_parser(script: Path):
+    spec = importlib.util.spec_from_file_location(f"drift_cli_{script.stem}", script)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {script}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    build = getattr(mod, "build_parser", None)
+    if build is None:
+        raise RuntimeError(f"{script}: missing build_parser")
+    return build()
+
+
+def _top_subcommands(parser: argparse.ArgumentParser) -> frozenset[str]:
+    for action in parser._actions:
+        choices = getattr(action, "choices", None)
+        if choices is not None and callable(getattr(action, "add_parser", None)):
+            return frozenset(str(k) for k in cast("dict[str, object]", choices))
+    return frozenset()
+
+
+def lint_cli_argparse(root: Path) -> list[str]:
+    """Return drift errors when skill argparse subcommands drift from the catalog."""
+    errors: list[str] = []
+    agents = root / ".agents"
+    scripts = [agents / rel for rel in _CLI_SKILL_SCRIPTS]
+    if not all(s.exists() for s in scripts):
+        return []
+    for rel, expected in _CLI_SKILL_SCRIPTS.items():
+        script = agents / rel
+        try:
+            parser = _load_build_parser(script)
+        except Exception as exc:
+            errors.append(f"{rel}: cannot build parser ({exc})")
+            continue
+        actual = _top_subcommands(parser)
+        banned = actual & _BANNED_SUBCMDS
+        if banned:
+            errors.append(f"{rel}: banned subcommand(s) {sorted(banned)!r}")
+        if actual != expected:
+            errors.append(f"{rel}: subcommands {sorted(actual)!r} != expected {sorted(expected)!r}")
+    return errors
+
+
+def lint_cli_skill_docs(root: Path) -> list[str]:
+    """Return drift errors for deprecated CLI prose or <slug> in invoke tables."""
+    errors: list[str] = []
+    agents = root / ".agents" / "skills"
+    if not agents.exists():
+        return errors
+    plan_git_tasks = (
+        agents / "mentat-plan/SKILL.md",
+        agents / "mentat-git/SKILL.md",
+        agents / "mentat-tasks/SKILL.md",
+    )
+    if not all(p.exists() for p in plan_git_tasks):
+        return []
+    for skill_dir in sorted(agents.glob("mentat-*/")):
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.exists():
+            continue
+        text = skill_md.read_text(encoding="utf-8", errors="replace")
+        rel = skill_md.relative_to(root)
+        if _DEPRECATED_CLI.search(text):
+            errors.append(f"{rel}: deprecated CLI form (mentat-track track or mentat-log query)")
+        if _SKILL_SLUG_INVOKE.search(str(rel)) and _SLUG_INVOKE.search(text):
+            errors.append(f"{rel}: <slug> in CLI-facing docs — use {{plan-ref}}")
+    return errors
+
+
 def run(chunk_path: Path | None) -> tuple[str, str]:
-    """Gate entry: block on prose event drift or retired wire-term resurrection."""
+    """Gate entry: block on prose event drift, retired wire-term resurrection, or CLI drift."""
     if chunk_path is None:
         return ("block", "drift_lint gate: no chunk path")
     if not chunk_path.exists():
         return ("block", f"drift_lint gate: chunk path missing: {chunk_path}")
 
     root = chunk_path if chunk_path.is_dir() else chunk_path.parent
-    errors = [*lint_prose(root), *lint_runtime_retired_term(root)]
+    errors = [
+        *lint_prose(root),
+        *lint_runtime_retired_term(root),
+        *lint_cli_argparse(root),
+        *lint_cli_skill_docs(root),
+    ]
     if errors:
         return ("block", "\n".join(errors))
     return ("pass", "")

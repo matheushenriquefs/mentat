@@ -10,11 +10,11 @@ Agent inspection toolkit. `list` shows the repo-wide agent registry from `mentat
 Terminal tool — run on PATH (no slash form; this is not a harness slash command):
 
 ```
-mentat-track list
-mentat-track track [<agent-id>]
-mentat-track doctor [<agent-id>]
-mentat-track report [<agent-id>]
-mentat-track diagnose
+mentat-track [{agent-id?}] {--all}
+mentat-track list {--all}
+mentat-track doctor [{agent-id?}]
+mentat-track report [{agent-id?}]
+mentat-track diagnose [{agent-id?}]
 ```
 
 ## list (repo-wide registry)

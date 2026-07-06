@@ -19,9 +19,9 @@ ORCH_SCRIPT = AGENTS_ROOT / "skills" / "mentat-orchestrate" / "scripts" / "orche
 
 
 def test_implement_suggests_session_track_at_start() -> None:
-    """F3 tracer: implement.py must print a 'mentat-track track' hint at run start."""
+    """F3 tracer: implement.py must print a 'mentat-track' hint at run start."""
     src = IMPL_SCRIPT.read_text()
-    assert "mentat-track track" in src, "implement.py missing 'mentat-track track' suggestion — add it near run start"
+    assert "mentat-track" in src, "implement.py missing 'mentat-track' suggestion — add it near run start"
 
 
 def test_implement_suggests_diff_review_at_end() -> None:
@@ -31,6 +31,6 @@ def test_implement_suggests_diff_review_at_end() -> None:
 
 
 def test_orchestrate_suggests_session_track_at_start() -> None:
-    """F3 tracer: orchestrate.py must print a 'mentat-track track' hint at run start."""
+    """F3 tracer: orchestrate.py must print a 'mentat-track' hint at run start."""
     src = ORCH_SCRIPT.read_text()
-    assert "mentat-track track" in src, "orchestrate.py missing 'mentat-track track' suggestion — add it near run start"
+    assert "mentat-track" in src, "orchestrate.py missing 'mentat-track' suggestion — add it near run start"

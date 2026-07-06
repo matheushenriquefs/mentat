@@ -131,7 +131,7 @@ def test_cli_worktree_help(repo):
         cwd=repo,
     )
     assert result.returncode == 0
-    assert "slug" in result.stdout.lower()
+    assert "plan-ref" in result.stdout.lower()
 
 
 # ── TOCTOU race window: stderr mapping kicks in if pre-check is bypassed ───
