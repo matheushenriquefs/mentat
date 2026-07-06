@@ -9,8 +9,6 @@ _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
-from lib.config import read_config  # noqa: E402, F401
-
 
 def container_id_for_cwd() -> str | None:
     """Return container ID for the current worktree, or None."""

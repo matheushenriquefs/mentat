@@ -132,19 +132,6 @@ def test_humanize_age_buckets(tmp_path):
     assert ss._humanize_age(172800) == "2d ago"
 
 
-def test_chunks_and_sessions_listing(tmp_path):
-    ss = _sessions()
-    repo_dir = tmp_path / "repo"
-    _seed(repo_dir / "a", stream=[{"type": "assistant", "message": {"content": []}}])
-    _seed(repo_dir / "mentat-manual-b", stream=[{"type": "assistant", "message": {"content": []}}])
-    names = ss.sessions_for_repo(repo_dir)
-    assert "a" in names
-    assert "mentat-manual-b" not in names, "ad-hoc manual runs are excluded"
-
-    chunks = ss.chunks_in_session(repo_dir / "a")
-    assert [p.name for p in chunks] == ["session.jsonl"]
-
-
 def test_list_sessions_ranks_attention_to_top(tmp_path, monkeypatch):
     ss = _sessions()
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))

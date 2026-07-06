@@ -35,12 +35,6 @@ def test_latest_session_excludes_mentat_manual(tmp_path, monkeypatch):
     assert result == "real-session"
 
 
-def test_sessions_for_repo_excludes_mentat_manual(tmp_path):
-    _make_dirs(tmp_path, ["mentat-manual-123-456", "real-session"])
-    result = sessions.sessions_for_repo(tmp_path)
-    assert result == ["real-session"]
-
-
 def test_returns_none_when_only_manual_present(tmp_path, monkeypatch):
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
     repo_dir = tmp_path / "logs" / "myrepo"

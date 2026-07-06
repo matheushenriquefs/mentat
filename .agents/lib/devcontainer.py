@@ -7,7 +7,6 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from pathlib import Path
 
 DEFAULT_LABEL = "mentat_chunk"
 DEFAULT_UNTIL = "1h"
@@ -145,58 +144,6 @@ def container_oom_killed(slug: str, *, label: str = DEFAULT_LABEL) -> bool:
     if inspect is None or inspect.returncode != 0:
         return False
     return inspect.stdout.strip().lower() == "true"
-
-
-def up(slug: str, wt: Path) -> bool:
-    """Bring container up from stopped or cold state. Returns True if container running."""
-    # Restart a stopped container
-    r = _run_docker(
-        [
-            "docker",
-            "ps",
-            "-aq",
-            "--filter",
-            f"label={DEFAULT_LABEL}={slug}",
-            "--filter",
-            "status=exited",
-        ]
-    )
-    if r and r.returncode == 0 and r.stdout.strip():
-        _run_docker(["docker", "start", r.stdout.strip()])
-        return container_id_for_slug(slug) is not None
-    # Cold start via devcontainer CLI
-    try:
-        git_dir_r = subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
-            capture_output=True,
-            text=True,
-            cwd=str(wt),
-            timeout=30,
-        )
-        git_dir = git_dir_r.stdout.strip() if git_dir_r.returncode == 0 else ""
-    except subprocess.TimeoutExpired:
-        git_dir = ""
-    ws = f"/workspaces/{slug}"
-    cmd = [
-        "devcontainer",
-        "up",
-        "--workspace-folder",
-        str(wt),
-        "--id-label",
-        f"{DEFAULT_LABEL}={slug}",
-    ]
-    if git_dir:
-        cmd += ["--remote-env", f"GIT_DIR={git_dir}", "--remote-env", f"GIT_WORK_TREE={ws}"]
-    up_timeout = int(os.environ.get("MENTAT_UP_TIMEOUT", "900"))
-    try:
-        result = subprocess.run(cmd, capture_output=False, timeout=up_timeout)
-    except FileNotFoundError:
-        print("devcontainer: devcontainer CLI not on PATH", file=sys.stderr)
-        return False
-    except subprocess.TimeoutExpired:
-        print(f"devcontainer: devcontainer up timed out after {up_timeout}s", file=sys.stderr)
-        return False
-    return result.returncode == 0 or container_id_for_slug(slug) is not None
 
 
 def run(slug: str, cmd: str) -> subprocess.CompletedProcess[str] | None:

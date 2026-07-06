@@ -166,49 +166,6 @@ def test_down_returns_true_when_not_running(monkeypatch):
     assert result is True
 
 
-# ── up ────────────────────────────────────────────────────────────────────────
-
-
-def test_up_restarts_stopped_container(monkeypatch, tmp_path):
-    calls: list[list[str]] = []
-
-    def fake_run(argv, **kw):
-        calls.append(list(argv))
-        if argv[1] == "ps" and "status=exited" in argv:
-            return _cp(0, "stopped-cid\n")
-        if argv[1] == "ps":
-            return _cp(0, "abc123\n")  # running after start
-        return _cp(0, "")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    result = devcontainer.up("my-slug", tmp_path)
-
-    assert result is True
-    start_calls = [c for c in calls if len(c) > 1 and c[1] == "start"]
-    assert start_calls, "docker start not called"
-
-
-def test_up_cold_start_calls_devcontainer_cli(monkeypatch, tmp_path):
-    calls: list[list[str]] = []
-
-    def fake_run(argv, **kw):
-        calls.append(list(argv))
-        if argv[0] == "docker" and argv[1] == "ps":
-            return _cp(0, "")  # no running or stopped container
-        return _cp(0, "abc123\n")  # devcontainer up succeeds → container_id check returns a cid
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    devcontainer.up("my-slug", tmp_path)
-
-    devcontainer_calls = [c for c in calls if c[0] == "devcontainer"]
-    assert devcontainer_calls, "devcontainer CLI not called for cold start"
-    assert "up" in devcontainer_calls[0]
-    assert "--id-label" in devcontainer_calls[0]
-
-
-# ── stdlib check ──────────────────────────────────────────────────────────────
-
-
 # ── CT4: down removes all matching containers ─────────────────────────────────
 
 
@@ -256,55 +213,6 @@ def test_down_reports_failure_when_rm_errors(monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     assert devcontainer.down("my-slug") is False
-
-
-# ── up cold-start git rev-parse timeout ───────────────────────────────────────
-
-
-def test_up_cold_start_git_rev_parse_timeout(monkeypatch, tmp_path):
-    """git rev-parse timing out during cold start leaves git_dir empty (lines 138-139)."""
-    import subprocess as _sp
-
-    calls: list[list[str]] = []
-
-    def fake_run(argv, **kw):
-        calls.append(list(argv))
-        if argv[0] == "git":
-            raise _sp.TimeoutExpired(argv, 30)
-        if argv[0] == "docker" and argv[1] == "ps":
-            return _cp(0, "")  # no running/stopped container → cold start
-        return _cp(0, "abc123\n")  # devcontainer up + id check
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    result = devcontainer.up("my-slug", tmp_path)
-
-    assert result is True
-    devcontainer_calls = [c for c in calls if c[0] == "devcontainer"]
-    assert devcontainer_calls, "devcontainer CLI must still run after git timeout"
-    # git_dir empty → no --remote-env flags injected
-    assert "--remote-env" not in devcontainer_calls[0]
-
-
-# ── up devcontainer CLI missing ───────────────────────────────────────────────
-
-
-def test_up_devcontainer_cli_missing_returns_false(monkeypatch, tmp_path, capsys):
-    """devcontainer CLI not on PATH → up() returns False (lines 155-156)."""
-
-    def fake_run(argv, **kw):
-        if argv[0] == "git":
-            return _cp(0, ".git\n")
-        if argv[0] == "docker" and argv[1] == "ps":
-            return _cp(0, "")  # cold start
-        if argv[0] == "devcontainer":
-            raise FileNotFoundError
-        return _cp(0, "")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    result = devcontainer.up("my-slug", tmp_path)
-
-    assert result is False
-    assert capsys.readouterr().err.strip() != "", "expected a stderr advisory"
 
 
 # ── run: no container ─────────────────────────────────────────────────────────
@@ -435,17 +343,3 @@ def test_run_docker_honors_mentat_docker(monkeypatch):
     devcontainer._run_docker(["docker", "ps", "-q"])
     assert captured, "subprocess.run not called"
     assert captured[0][0] == "my-docker", f"expected 'my-docker', got {captured[0][0]!r}"
-
-
-def test_up_devcontainer_timeout_returns_false(monkeypatch, tmp_path):
-    """up() must return False when devcontainer up times out, not raise."""
-    import subprocess as _sp
-
-    def fake_run(argv, **kw):
-        if isinstance(argv, list) and argv and argv[0] == "devcontainer":
-            raise _sp.TimeoutExpired(argv, 900)
-        return _cp(0, "")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    result = devcontainer.up("my-slug", tmp_path)
-    assert result is False

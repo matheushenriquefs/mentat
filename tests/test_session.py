@@ -49,17 +49,6 @@ def test_latest_session_excludes_manual(tmp_path, monkeypatch):
     assert session == "sess-1"
 
 
-def test_chunks_in_session_lists_all(tmp_path):
-    sessions_mod = load_module("sessions")
-    repo_dir = tmp_path / "myrepo"
-    session_dir = repo_dir / "sess-1"
-    session_dir.mkdir(parents=True)
-    (session_dir / "mentat-plan-chunk1.jsonl").write_text("{}\n")
-    (session_dir / "mentat-implement-chunk2.jsonl").write_text("{}\n")
-    chunks = sessions_mod.chunks_in_session(session_dir)
-    assert len(chunks) == 2
-
-
 def test_verdict_for_chunk_landed(tmp_path):
     diag_mod = load_module("diagnose")
     session_dir = _write_log(
@@ -616,11 +605,6 @@ def test_iter_rows_from_text_skips_non_dict_and_garbage():
     text = '{"a": 1}\n[1, 2, 3]\nnot json\n\n"bare string"\n{"b": 2}\n'
     rows = list(sessions_mod.iter_rows_from_text(text))
     assert rows == [{"a": 1}, {"b": 2}]
-
-
-def test_slug_for_chunk_is_file_stem():
-    sessions_mod = load_module("sessions")
-    assert sessions_mod.slug_for_chunk(Path("/x/mentat-implement-foo.jsonl")) == "mentat-implement-foo"
 
 
 def test_list_sessions_empty_when_repo_dir_missing(tmp_path):

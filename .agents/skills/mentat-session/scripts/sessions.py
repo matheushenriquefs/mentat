@@ -67,18 +67,6 @@ def get_latest_agent(repo_dir: Path) -> str | None:
     return store.get_latest_agent(repo_dir.name)
 
 
-def sessions_for_repo(repo_dir: Path) -> list[str]:
-    return [d.name for d in repo_dir.iterdir() if d.is_dir() and not d.name.startswith("mentat-manual-")]
-
-
-def chunks_in_session(session_dir: Path) -> list[Path]:
-    return list(session_dir.glob("*.jsonl"))
-
-
-def slug_for_chunk(file: Path) -> str:
-    return file.stem
-
-
 def iter_rows_from_text(text: str) -> Iterator[dict[str, object]]:
     """Yield parsed JSON object rows from jsonl text, skipping blanks/garbage."""
     for line in text.splitlines():
@@ -116,20 +104,6 @@ def _safe_mtime(path: Path) -> float | None:
         return path.stat().st_mtime
     except OSError:
         return None
-
-
-def newest_jsonl(session_dir: Path) -> Path | None:
-    """The session's most-recently-written jsonl (audit *.jsonl or harness session.jsonl).
-
-    Race-safe: a jsonl deleted between glob and stat is skipped, not raised.
-    """
-    best: Path | None = None
-    best_mtime = -1.0
-    for f in session_dir.glob("*.jsonl"):
-        m = _safe_mtime(f)
-        if m is not None and m > best_mtime:
-            best, best_mtime = f, m
-    return best
 
 
 def _is_waiting_stream(row: dict[str, object]) -> bool:
@@ -181,8 +155,8 @@ def _status_from_signals(
 class SessionStatus:
     """Fused single-pass scan for one session directory.
 
-    Replaces separate newest_jsonl + _audit_tail + _tail_row calls with one
-    pass per jsonl. Memoized — safe to construct once and query many times.
+    One pass per jsonl finds both the audit tail and the newest-file tail.
+    Memoized — safe to construct once and query many times.
     Falls back to directory mtime when no jsonl files exist.
     """
 
@@ -237,12 +211,6 @@ class SessionStatus:
         self._scan()
         age = max(0.0, self._now - self._mtime) if self._mtime is not None else None
         return _status_from_signals(self._audit, self._newest_tail, age, stale_secs=self._stale_secs)
-
-
-def session_status(session_dir: Path, age_secs: float | None, *, stale_secs: float = STALE_SECS) -> str:
-    """Pull one session's status, reconciling the audit signal with the live stream."""
-    ss = SessionStatus(session_dir, 0.0, stale_secs=stale_secs)
-    return _status_from_signals(ss.audit_tail, ss.newest_tail, age_secs, stale_secs=stale_secs)
 
 
 def _event_name(audit: dict[str, object] | None) -> str | None:

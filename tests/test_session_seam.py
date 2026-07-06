@@ -69,12 +69,6 @@ def test_seam_exports_summary_file():
     assert callable(getattr(session, "summary_file", None)), "lib.session missing summary_file()"
 
 
-def test_seam_exports_diagnosis_file():
-    """lib.session must export diagnosis_file(sid)."""
-    session = _load_session()
-    assert callable(getattr(session, "diagnosis_file", None)), "lib.session missing diagnosis_file()"
-
-
 # ── seam correctness ──────────────────────────────────────────────────────────
 
 
@@ -98,16 +92,6 @@ def test_summary_file_under_session_dir(tmp_path, monkeypatch):
     session = _load_session()
     sid = "implement-myplan-1234"
     assert session.summary_file(sid) == session.session_dir(sid) / "summary.md"
-
-
-def test_diagnosis_file_under_session_dir(tmp_path, monkeypatch):
-    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path))
-    monkeypatch.setenv("MENTAT_REPO", "myrepo")
-    if "lib.session" in sys.modules:
-        del sys.modules["lib.session"]
-    session = _load_session()
-    sid = "implement-myplan-1234"
-    assert session.diagnosis_file(sid) == session.session_dir(sid) / "diagnosis.md"
 
 
 # ── repo identity stable across worktrees (regression: "couldn't track sessions") ──

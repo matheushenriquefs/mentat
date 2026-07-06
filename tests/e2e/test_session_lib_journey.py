@@ -167,12 +167,6 @@ def test_summary_file_is_summary_md_under_session_dir(monkeypatch, tmp_path):
     assert session.summary_file("s1") == session.session_dir("s1") / "summary.md"
 
 
-def test_diagnosis_file_is_diagnosis_md_under_session_dir(monkeypatch, tmp_path):
-    monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
-    monkeypatch.setenv("MENTAT_REPO", "r")
-    assert session.diagnosis_file("s1") == session.session_dir("s1") / "diagnosis.md"
-
-
 def test_session_log_path_is_transcript_jsonl_under_session_dir(monkeypatch, tmp_path):
     monkeypatch.setenv("MENTAT_LOG_PATH", str(tmp_path / "logs"))
     monkeypatch.setenv("MENTAT_REPO", "r")

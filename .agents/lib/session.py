@@ -95,10 +95,6 @@ def summary_file(agent_id: str) -> Path:
     return agent_dir(agent_id) / "summary.md"
 
 
-def diagnosis_file(agent_id: str) -> Path:
-    return agent_dir(agent_id) / "diagnosis.md"
-
-
 def transcript_log_path(agent_id: str) -> Path:
     """Harness transcript path for agent_id."""
     return agent_dir(agent_id) / _TRANSCRIPT_NAME

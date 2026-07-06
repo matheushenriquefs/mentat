@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-import json
 import os
 import sys
 from contextlib import redirect_stdout
@@ -98,10 +97,6 @@ def test_derive_status_empty_is_crashed_when_stale():
 # ── list_sessions (registry scan + attention ordering) ────────────────────────
 
 
-def _set_mtime(log_file: Path, mtime: float) -> None:
-    os.utime(log_file, (mtime, mtime))
-
-
 def test_list_sessions_full_rank_order(tmp_path, monkeypatch):
     """All four ranks present and fully ordered waiting < idle < ? < working."""
     monkeypatch.setenv("MENTAT_REPO", "myrepo")
@@ -152,34 +147,6 @@ def test_list_sessions_age_tiebreak_within_rank(tmp_path, monkeypatch):
     )
     rows = sessions.list_sessions(repo_dir, now=now)
     assert [r["session"] for r in rows] == ["s-new", "s-old"]
-
-
-def test_session_status_audit_terminal_beats_newer_stream(tmp_path):
-    """A completed session whose harness session.jsonl was touched AFTER its terminal
-    audit event must still read idle — completion is judged from the audit stream, not
-    from whichever file has the newest mtime."""
-    sessions = load_module("sessions")
-    session_dir = tmp_path / "s-done"
-    session_dir.mkdir(parents=True)
-    audit = session_dir / "mentat-implement.jsonl"
-    audit.write_text(
-        json.dumps(
-            {
-                "ts": "2026-01-01T00:00:00+00:00",
-                "event": "chunk_landed",
-                "payload": {"slug": "d", "sha": "s", "holding": "h"},
-            }
-        )
-        + "\n"
-    )
-    stream = session_dir / "session.jsonl"
-    stream.write_text(
-        json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "done"}]}}) + "\n"
-    )
-    _set_mtime(audit, 1000.0)
-    _set_mtime(stream, 2000.0)
-    assert sessions.newest_jsonl(session_dir).name == "session.jsonl"
-    assert sessions.session_status(session_dir, 9999.0) == "idle"
 
 
 def test_list_sessions_survives_vanished_file(tmp_path, monkeypatch):
