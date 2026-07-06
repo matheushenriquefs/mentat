@@ -21,7 +21,7 @@ from unittest.mock import MagicMock, patch
 
 from tests.conftest import bind_plan, load_script, seed_agent_events
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 IMPL_SCRIPTS = REPO_ROOT / ".agents/skills/mentat-implement/scripts"
 ORCH_SCRIPTS = REPO_ROOT / ".agents/skills/mentat-orchestrate/scripts"
 SESSION_SCRIPTS = REPO_ROOT / ".agents/skills/mentat-track/scripts"
@@ -235,7 +235,6 @@ def test_ensure_agent_freezes_mentat_repo(tmp_path, monkeypatch):
     os.chdir into the worktree can't make _logs_path / doctor / emit resolve to
     the slug dir while transcript.jsonl sits under the repo dir."""
     from lib import agent as agent_mod
-
     from tests.conftest import init_git_repo
 
     repo = tmp_path / "myrepo"

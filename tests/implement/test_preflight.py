@@ -7,11 +7,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from tests.conftest import init_git_repo, load_script
 
-_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts"
-_GIT_SKILLS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-git/scripts"
+_SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-implement/scripts"
+_GIT_SKILLS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-git/scripts"
 _CID = "b" * 32
 
 

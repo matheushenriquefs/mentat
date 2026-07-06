@@ -8,10 +8,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from tests.conftest import load_script
 
-SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts"
+SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-implement/scripts"
 
 
 def load_module(name: str, package_path: Path | None = None):

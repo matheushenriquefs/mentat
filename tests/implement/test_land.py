@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from tests.conftest import load_script
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 IMPL_SCRIPTS = REPO_ROOT / ".agents/skills/mentat-implement/scripts"
 sys.path.insert(0, str(REPO_ROOT / ".agents"))
 

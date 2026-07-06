@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 from tests.conftest import load_script
 
-_IMPL = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts/implement.py"
+_IMPL = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-implement/scripts/implement.py"
 
 
 def _load():

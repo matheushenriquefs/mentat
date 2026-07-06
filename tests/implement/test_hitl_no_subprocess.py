@@ -12,7 +12,7 @@ from pathlib import Path
 
 from tests.conftest import load_script
 
-IMPL_SCRIPTS = Path(__file__).resolve().parents[1] / ".agents/skills/mentat-implement/scripts"
+IMPL_SCRIPTS = Path(__file__).resolve().parents[2] / ".agents/skills/mentat-implement/scripts"
 
 
 def _load(name: str):
