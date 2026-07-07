@@ -181,6 +181,8 @@ def test_migrate_legacy_state_db(tmp_path, monkeypatch):
 
     assert store.migrate_legacy_state_db(dest=dest) is True
     assert dest.exists()
+    assert not legacy.exists()
+    assert legacy.with_suffix(legacy.suffix + ".migrated").exists()
     conn = store.connect(dest)
     try:
         agent = store.AgentDAO(conn).get_by_id("sess-old")
