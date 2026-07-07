@@ -401,7 +401,14 @@ class TestWriteOverrideConfig:
         wt = tmp_path / "some-repo"
         wt.mkdir()
         slug = wt.name
-        expected = json.dumps({"name": slug, "workspaceFolder": f"/workspaces/{slug}"}, indent=2)
+        expected = json.dumps(
+            {
+                "name": slug,
+                "workspaceFolder": f"/workspaces/{slug}",
+                "remoteEnv": {"PATH": f"/workspaces/{slug}/.venv/bin:${{containerEnv:PATH}}"},
+            },
+            indent=2,
+        )
 
         with patch.object(override_mod, "synth_spec", return_value=override_mod.SynthResult(expected, {})):
             container._write_override_config(wt, _cs(slug))
@@ -798,6 +805,10 @@ def test_cmd_up_starts_multiple_stopped_containers_as_separate_args(tmp_path, mo
 
     monkeypatch.setattr(lifecycle.runtime, "_host_runtime", lambda: False)
     monkeypatch.setattr(lifecycle.utils, "container_id_for", fake_cid)
+    monkeypatch.setattr(lifecycle, "_write_override_config", lambda wt, cs: tmp_path / "override.json")
+    monkeypatch.setattr(lifecycle, "_run_lifecycle_hooks", lambda *a, **k: None)
+    monkeypatch.setattr(lifecycle, "_propagate_git_identity", lambda *a, **k: None)
+    monkeypatch.setattr(lifecycle, "_ensure_safe_directory", lambda *a, **k: None)
     monkeypatch.setattr(container_mod.subprocess, "run", fake_run)
 
     container_mod.cmd_up(tmp_path)
@@ -1221,6 +1232,9 @@ def test_cmd_up_running_container_ensures_safe_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(lifecycle.utils, "container_id_for", lambda slug: "running-cid")
     monkeypatch.setattr(lifecycle.utils, "workspace_folder_for", lambda wt: "/workspaces/wt")
     monkeypatch.setattr(lifecycle, "_ensure_safe_directory", lambda ws, cid: safe_calls.append(cid))
+    monkeypatch.setattr(lifecycle, "_write_override_config", lambda wt, cs: tmp_path / "override.json")
+    monkeypatch.setattr(lifecycle, "_run_lifecycle_hooks", lambda *a, **k: None)
+    monkeypatch.setattr(lifecycle, "_propagate_git_identity", lambda *a, **k: None)
 
     rc = container.cmd_up(tmp_path)
 

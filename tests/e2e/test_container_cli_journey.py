@@ -373,6 +373,9 @@ def test_cmd_up_already_running_ensures_safe_dir(cc, monkeypatch, tmp_path):
     monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     ensured = []
     monkeypatch.setattr(cc.lifecycle, "_ensure_safe_directory", lambda ws, cid: ensured.append((ws, cid)))
+    monkeypatch.setattr(cc.lifecycle, "_write_override_config", lambda wt, cs: tmp_path / "override.json")
+    monkeypatch.setattr(cc.lifecycle, "_run_lifecycle_hooks", lambda *a, **k: None)
+    monkeypatch.setattr(cc.lifecycle, "_propagate_git_identity", lambda *a, **k: None)
     assert cc.cmd_up(tmp_path / "slug") == 0
     assert ensured == [("/ws", "cid")]
 
@@ -383,6 +386,8 @@ def test_cmd_up_restart_stopped_container(cc, monkeypatch, tmp_path):
     monkeypatch.setattr(cc.utils, "workspace_folder_for", lambda wt: "/ws")
     monkeypatch.setattr(cc.lifecycle, "_ensure_safe_directory", lambda ws, cid: None)
     monkeypatch.setattr(cc.lifecycle, "_propagate_git_identity", lambda ws, cid, repo_root: None)
+    monkeypatch.setattr(cc.lifecycle, "_write_override_config", lambda wt, cs: tmp_path / "override.json")
+    monkeypatch.setattr(cc.lifecycle, "_run_lifecycle_hooks", lambda *a, **k: None)
 
     def responder(cmd):
         if cmd[1] == "ps":

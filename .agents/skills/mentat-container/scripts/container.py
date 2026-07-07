@@ -97,7 +97,7 @@ def cmd_run(wt: Path, command: str) -> int:
             cid,
             "bash",
             "-lc",
-            f"git config --global --add safe.directory '*' 2>/dev/null || true; {command}",
+            f"export PATH={ws}/.venv/bin:$PATH; git config --global --add safe.directory '*' 2>/dev/null || true; {command}",
         ],
     )
     return result.returncode

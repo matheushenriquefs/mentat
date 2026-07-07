@@ -148,6 +148,10 @@ def _write_override_config(wt: Path, chunk_slug: str) -> Path:
     if git_mount and git_mount not in data.get("mounts", []):
         data.setdefault("mounts", []).append(git_mount)
 
+    remote_env = dict(data.get("remoteEnv") or {})
+    remote_env["PATH"] = f"{expected_ws}/.venv/bin:${{containerEnv:PATH}}"
+    data["remoteEnv"] = remote_env
+
     _absolutize_build(data, wt)
     _patch_compose_paths(data, wt)
 
@@ -200,6 +204,64 @@ def _propagate_git_identity(ws: str, cid: str, repo_root: Path | None) -> None:
             )
 
 
+def _hooks_satisfied(ws: str, cid: str) -> bool:
+    """True when dev deps (pytest) are importable inside the container."""
+    env = ["-e", f"PATH={ws}/.venv/bin:/usr/local/bin:/usr/bin:/bin"]
+    try:
+        r = subprocess.run(
+            [utils._docker(), "exec", *env, "-u", "vscode", "--workdir", ws, cid, "python", "-m", "pytest", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        return False
+    return r.returncode == 0
+
+
+def _run_lifecycle_hooks(wt: Path, cid: str, ws: str, override_path: Path) -> None:
+    """Run onCreate/postCreate hooks when a warm container skipped devcontainer up."""
+    if _hooks_satisfied(ws, cid):
+        return
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        subprocess.run(
+            [
+                utils._docker(),
+                "exec",
+                "-u",
+                "vscode",
+                "--workdir",
+                ws,
+                cid,
+                "bash",
+                "-lc",
+                "~/.local/bin/uv sync --group dev",
+            ],
+            capture_output=False,
+            timeout=600,
+        )
+    if _hooks_satisfied(ws, cid):
+        return
+    import json as _json
+
+    from lib.config import parse_devcontainer_json
+
+    data = parse_devcontainer_json(override_path)
+    for key in ("onCreateCommand", "postCreateCommand"):
+        cmd = data.get(key)
+        if not isinstance(cmd, str) or not cmd.strip():
+            continue
+        cmd = cmd.replace("/workspaces/mentat-run-isolation", ws).replace("/workspaces/mentat", ws)
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            subprocess.run(
+                [utils._docker(), "exec", "-u", "vscode", "--workdir", ws, cid, "bash", "-lc", cmd],
+                capture_output=False,
+                timeout=600,
+            )
+        if _hooks_satisfied(ws, cid):
+            return
+
+
 def cmd_up(wt: Path) -> int:
     chunk_slug = utils._chunk_slug_for_wt(wt)
     if runtime._host_runtime():
@@ -211,6 +273,8 @@ def cmd_up(wt: Path) -> int:
     if cid:
         _ensure_safe_directory(ws, cid)
         _propagate_git_identity(ws, cid, _main_repo_root_for_wt(wt))
+        override_path = _write_override_config(wt, chunk_slug)
+        _run_lifecycle_hooks(wt, cid, ws, override_path)
         return 0
 
     # created/paused/restarting/dead states must not be silently skipped to cold-start.
@@ -262,6 +326,8 @@ def cmd_up(wt: Path) -> int:
             return EX_FAILURE
         _ensure_safe_directory(ws, cid2)
         _propagate_git_identity(ws, cid2, _main_repo_root_for_wt(wt))
+        override_path = _write_override_config(wt, chunk_slug)
+        _run_lifecycle_hooks(wt, cid2, ws, override_path)
         return 0
 
     # Cold start — external override config; tracked devcontainer.json stays pristine.
