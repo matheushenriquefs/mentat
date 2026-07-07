@@ -352,7 +352,7 @@ def _land_and_review(slug: str, worktree: Path, holding: str) -> dict[str, objec
     _land_script = paths.SKILLS_DIR / "mentat-orchestrate/scripts/landing.py"
     land_queue = _load_mod("landing", _land_script)
     chunk_id = get_chunk_id_from_env()
-    chunk = land_queue.Chunk(slug=slug, worktree=worktree, chunk_id=chunk_id)
+    chunk = land_queue.land_chunk(slug=slug, worktree=worktree, chunk_id=chunk_id or "")
     verdict = _do_land(chunk, holding=holding, land_queue=land_queue)
     return {
         "status": verdict.get("status"),

@@ -23,7 +23,7 @@ def _plan(slug: str, blocked_by: list[str] | None = None) -> scheduler.Plan:
 def _chunk(slug: str, tmp_path: Path) -> landing.Chunk:
     wt = tmp_path / ".mentat" / "worktrees" / TEST_CHUNK_ID / slug
     wt.mkdir(parents=True, exist_ok=True)
-    return landing.Chunk(slug=slug, worktree=wt, chunk_id=TEST_CHUNK_ID)
+    return landing.land_chunk(slug=slug, worktree=wt, chunk_id=TEST_CHUNK_ID)
 
 
 def _install_stubs(
@@ -56,6 +56,7 @@ def _install_stubs(
     monkeypatch.setattr(landing, "_run_gates", fake_gates)
     monkeypatch.setattr(landing, "_ff_merge", fake_ff)
     monkeypatch.setattr(landing, "_emit_event", lambda *a, **kw: None)
+    monkeypatch.setattr(landing, "_teardown_chunk_resources", fake_teardown)
     monkeypatch.setattr(landing, "_teardown_container", fake_teardown)
 
 
@@ -160,7 +161,7 @@ def test_teardown_delegates_to_devcontainer_down(monkeypatch):
     monkeypatch.setattr(_dc_mod, "down", lambda slug, **kw: down_calls.append(slug) or True)
     monkeypatch.setattr(landing, "_emit_event", lambda *a, **kw: None)
 
-    landing._teardown_container(landing.Chunk(slug="my-chunk", worktree=Path("/tmp/my-chunk"), chunk_id=TEST_CHUNK_ID))
+    landing._teardown_container(landing.land_chunk(slug="my-chunk", worktree=Path("/tmp/my-chunk"), chunk_id=TEST_CHUNK_ID))
 
     assert down_calls == [f"{TEST_CHUNK_ID}/my-chunk"]
 

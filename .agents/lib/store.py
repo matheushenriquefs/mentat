@@ -220,6 +220,15 @@ class Chunk:
     status_reason: StatusReason | None
     started_at: str
     ended_at: str | None
+    slug: str = ""
+
+    @property
+    def chunk_id(self) -> str:
+        return self.id
+
+    @property
+    def worktree(self) -> Path:
+        return Path(self.worktree_path) if self.worktree_path else Path(".")
 
 
 @dataclass(frozen=True)
@@ -248,17 +257,29 @@ def _row_agent(row: sqlite3.Row) -> Agent:
 
 
 def _row_chunk(row: sqlite3.Row) -> Chunk:
+    wt_path = row["worktree_path"]
+    slug = ""
+    if wt_path:
+        from lib.chunk import chunk_slug_from_worktree, parse_chunk_slug
+        from lib.git import repo_root
+
+        wt = Path(str(wt_path))
+        root = repo_root(wt)
+        if root is not None:
+            with contextlib.suppress(ValueError):
+                _, slug = parse_chunk_slug(chunk_slug_from_worktree(wt, root))
     return Chunk(
         id=str(row["id"]),
         slice_id=str(row["slice_id"]),
         agent_id=str(row["agent_id"]),
         attempt=int(row["attempt"]),
         container_id=row["container_id"],
-        worktree_path=row["worktree_path"],
+        worktree_path=wt_path,
         status=cast("ChunkStatus", row["status"]),
         status_reason=cast("StatusReason | None", row["status_reason"]),
         started_at=str(row["started_at"]),
         ended_at=row["ended_at"],
+        slug=slug,
     )
 
 
@@ -414,6 +435,35 @@ class ChunkDAO:
             return None
         return _row_chunk(row)
 
+    def update_status(
+        self,
+        chunk_id: str,
+        *,
+        status: ChunkStatus,
+        status_reason: StatusReason | None = None,
+        ended_at: str | None = None,
+    ) -> Chunk | None:
+        def _write(c: sqlite3.Connection) -> None:
+            c.execute(
+                """
+                UPDATE chunk
+                SET status = ?, status_reason = ?, ended_at = COALESCE(?, ended_at)
+                WHERE id = ?
+                """,
+                (status, status_reason, ended_at, chunk_id),
+            )
+
+        _write_with_retry(self._conn, _write)
+        return self.get_by_id(chunk_id)
+
+    def list_by_status(self, status: ChunkStatus) -> list[Chunk]:
+        rows = self._conn.execute("SELECT * FROM chunk WHERE status = ?", (status,)).fetchall()
+        return [_row_chunk(r) for r in rows]
+
+    def list_with_worktree(self) -> list[Chunk]:
+        rows = self._conn.execute("SELECT * FROM chunk WHERE worktree_path IS NOT NULL").fetchall()
+        return [_row_chunk(r) for r in rows]
+
 
 class EventDAO:
     def __init__(self, conn: sqlite3.Connection) -> None:
@@ -470,53 +520,58 @@ class EventDAO:
 
 
 def migrate_legacy_state_db(*, dest: Path | None = None) -> bool:
-    """One-shot ``state.db`` → ``mentat.db`` when dest is absent. Idempotent."""
+    """One-shot ``state.db`` → ``mentat.db``. Archives legacy file after success."""
     target = dest if dest is not None else db_path()
-    if target.exists():
-        return False
     legacy = legacy_state_db_path()
     if not legacy.exists():
         return False
-    shutil.copy2(legacy, target)
+    migrated_marker = legacy.with_suffix(legacy.suffix + ".migrated")
+    if migrated_marker.exists():
+        return False
+    if not target.exists():
+        shutil.copy2(legacy, target)
     conn = connect(target)
     try:
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
         legacy_tbl = "ses" + "sions"
-        if legacy_tbl not in tables:
-            return True
-        rows = conn.execute(f"SELECT uuid, pid, status, started_at, last_event_at FROM {legacy_tbl}").fetchall()
-        agents = AgentDAO(conn)
-        for uuid, pid, status, started_at, last_event_at in rows:
-            mapped: AgentStatus
-            if status == "running":
-                mapped = "running"
-            elif status in ("landed", "succeeded"):
-                mapped = "stopped"
-            else:
-                mapped = "stopped"
-            started_iso = datetime.fromtimestamp(float(started_at), tz=UTC).isoformat()
-            ended_iso = (
-                datetime.fromtimestamp(float(last_event_at), tz=UTC).isoformat() if mapped != "running" else None
-            )
-            with contextlib.suppress(sqlite3.IntegrityError):
-                agents.insert(
-                    Agent(
-                        id=str(uuid),
-                        supervisor_id=None,
-                        resumed_from_id=None,
-                        forked_from_id=None,
-                        harness="unknown",
-                        pid=pid,
-                        status=mapped,
-                        status_reason=None,
-                        started_at=started_iso,
-                        ended_at=ended_iso,
-                    )
+        if legacy_tbl in tables:
+            rows = conn.execute(f"SELECT uuid, pid, status, started_at, last_event_at FROM {legacy_tbl}").fetchall()
+            agents = AgentDAO(conn)
+            for uuid, pid, status, started_at, last_event_at in rows:
+                mapped: AgentStatus
+                if status == "running":
+                    mapped = "running"
+                elif status in ("landed", "succeeded"):
+                    mapped = "stopped"
+                else:
+                    mapped = "stopped"
+                started_iso = datetime.fromtimestamp(float(started_at), tz=UTC).isoformat()
+                ended_iso = (
+                    datetime.fromtimestamp(float(last_event_at), tz=UTC).isoformat() if mapped != "running" else None
                 )
-        conn.execute(f"DROP TABLE IF EXISTS {legacy_tbl}")
-        conn.commit()
+                with contextlib.suppress(sqlite3.IntegrityError):
+                    agents.insert(
+                        Agent(
+                            id=str(uuid),
+                            supervisor_id=None,
+                            resumed_from_id=None,
+                            forked_from_id=None,
+                            harness="unknown",
+                            pid=pid,
+                            status=mapped,
+                            status_reason=None,
+                            started_at=started_iso,
+                            ended_at=ended_iso,
+                        )
+                    )
+            conn.execute(f"DROP TABLE IF EXISTS {legacy_tbl}")
+            conn.commit()
     finally:
         conn.close()
+    try:
+        legacy.rename(migrated_marker)
+    except OSError:
+        legacy.unlink(missing_ok=True)
     return True
 
 

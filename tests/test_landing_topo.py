@@ -17,6 +17,8 @@ from pathlib import Path
 import landing
 import scheduler
 
+from tests.conftest import TEST_CHUNK_ID
+
 
 def _plan(slug: str, blocked_by: list[str] | None = None) -> scheduler.Plan:
     return scheduler.Plan(
@@ -30,7 +32,7 @@ def _plan(slug: str, blocked_by: list[str] | None = None) -> scheduler.Plan:
 def _chunk(slug: str, tmp_path: Path) -> landing.Chunk:
     wt = tmp_path / slug
     wt.mkdir(exist_ok=True)
-    return landing.Chunk(slug=slug, worktree=wt)
+    return landing.land_chunk(slug=slug, worktree=wt, chunk_id=TEST_CHUNK_ID)
 
 
 def _install_stubs(monkeypatch, ff_calls: list[str], gate_block: set[str] | None = None) -> None:

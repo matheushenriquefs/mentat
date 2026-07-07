@@ -755,6 +755,7 @@ def test_preflight_worktree_non_dir_path_is_software(impl, monkeypatch, tmp_path
 def test_land_and_review_returns_verdict(impl, monkeypatch, tmp_path):
     fake_land_queue = SimpleNamespace(
         Chunk=lambda slug, worktree, chunk_id="": SimpleNamespace(slug=slug, worktree=worktree, chunk_id=chunk_id),
+        land_chunk=lambda slug, worktree, chunk_id="": SimpleNamespace(slug=slug, worktree=worktree, chunk_id=chunk_id),
         land=lambda chunk, holding: {"status": "landed", "tip": "abc123"},
     )
     monkeypatch.setattr(impl, "_load_mod", lambda key, path: fake_land_queue)

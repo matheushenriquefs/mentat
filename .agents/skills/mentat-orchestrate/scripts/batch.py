@@ -31,6 +31,7 @@ from lib.events import (  # noqa: E402
 from lib.events import bind as _bind  # noqa: E402
 from lib.exits import EX_HITL_REQUIRED, EX_UNAVAILABLE  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
+from lib.store import Chunk  # noqa: E402
 from lib.support import backoff as _backoff  # noqa: E402
 
 _utils = load_sibling(__file__, "plans")
@@ -65,7 +66,7 @@ def partition_by_outcome(
     results: list[tuple[_scheduler.Plan, int | None, str | None]],
     *,
     mark_ejected: Callable[[str], list[str]],
-) -> tuple[list[_land_queue.Chunk], set[str], set[str]]:
+) -> tuple[list[Chunk], set[str], set[str]]:
     """Split fan-out results into (landable_chunks, hitl_slugs, transient_slugs).
 
     A child that exited EX_HITL_REQUIRED is a wedge: self-ejected, worktree
@@ -141,7 +142,7 @@ def partition_by_outcome(
             from lib.chunk import chunk_id_for_plan
 
             chunk_id = chunk_id_for_plan(plan.slug)
-            chunks.append(_land_queue.Chunk(slug=plan.slug, worktree=worktree, chunk_id=chunk_id))
+            chunks.append(_land_queue.land_chunk(slug=plan.slug, worktree=worktree, chunk_id=chunk_id))
             continue
 
         _emit_event("chunk_ejected", payload)
@@ -174,14 +175,27 @@ def _prune_stale_worktrees(preserve: set[str] | None = None) -> None:
     )
 
 
-def _gc_preserved_worktrees(preserve: set[str] | None = None) -> None:
-    _cleanup.gc_preserved_worktrees(
+def _prune_stale_preserved_worktrees(preserve: set[str] | None = None) -> None:
+    _cleanup.prune_stale_preserved_worktrees(
         run_chunk_ids_fn=_supervise._run_chunk_ids,
         preserve_chunk_slugs_fn=_supervise._preserve_chunk_slugs,
         preserve=preserve,
         worktrees_mod=_worktrees,
         emit_event=_utils.emit_event,
     )
+
+
+def _gc_preserved_worktrees(preserve: set[str] | None = None) -> None:
+    _prune_stale_preserved_worktrees(preserve=preserve)
+
+
+def prune_holding(holding: str) -> int:
+    from lib.git import repo_root
+
+    root = repo_root(Path.cwd())
+    if root is None:
+        return 0
+    return _cleanup.prune_landed_chunks(holding, repo_root=root, emit_event=_utils.emit_event)
 
 
 def _chunk_id_for_land(plan_slug: str) -> str:
@@ -203,7 +217,7 @@ def _land_all(
 ) -> list[dict[str, object]]:
     """Land chunks onto holding branch serially (debug land-queue subcommand + dry-run)."""
     chunks = [
-        _land_queue.Chunk(slug=s, worktree=_worktree_for_slug(s), chunk_id=_chunk_id_for_land(s)) for s in chunk_slugs
+        _land_queue.land_chunk(slug=s, worktree=_worktree_for_slug(s), chunk_id=_chunk_id_for_land(s)) for s in chunk_slugs
     ]
     if plans is None:
         return _land_queue.drain(chunks, holding=holding)
@@ -402,7 +416,7 @@ def _recovery_respawn(
     from lib.chunk import chunk_id_for_plan
 
     chunk_id = chunk_id_for_plan(plan.slug)
-    return _land_queue.drain([_land_queue.Chunk(slug=plan.slug, worktree=worktree, chunk_id=chunk_id)], holding=holding)
+    return _land_queue.drain([_land_queue.land_chunk(slug=plan.slug, worktree=worktree, chunk_id=chunk_id)], holding=holding)
 
 
 def _reslice_agent(plan: _scheduler.Plan, *, invoke: Callable[[str], str] | None = None) -> list[Path]:

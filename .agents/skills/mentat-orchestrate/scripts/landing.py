@@ -6,13 +6,13 @@ import concurrent.futures
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import NamedTuple
 
 _AGENTS_ROOT = Path(__file__).resolve().parents[3]
 if str(_AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENTS_ROOT))
 
 from lib import git as _git  # noqa: E402
+from lib.chunk_service import ChunkService  # noqa: E402
 from lib.events import (
     GATE_FAILED,
     GIT_ERROR,
@@ -23,20 +23,41 @@ from lib.events import (
     ejected_payload,
 )  # noqa: E402
 from lib.loader import load_sibling  # noqa: E402
+from lib.store import Chunk as ChunkRecord  # noqa: E402
+from lib.store import ChunkDAO, connect, iso_now, make_slice_id  # noqa: E402
 
 _utils = load_sibling(__file__, "plans")
 
 _emit_event = bind("mentat-orchestrate")
 
 
-class Chunk(NamedTuple):
-    slug: str
-    worktree: Path
-    chunk_id: str = ""
+def land_chunk(*, slug: str, worktree: Path, chunk_id: str) -> ChunkRecord:
+    """Resolve a land-queue chunk from the store, with a test fallback."""
+    row = ChunkDAO(connect()).get_by_id(chunk_id)
+    if row is not None:
+        return row
+    return ChunkRecord(
+        id=chunk_id,
+        slice_id=make_slice_id(slug, slug),
+        agent_id="",
+        attempt=1,
+        container_id=None,
+        worktree_path=str(worktree),
+        status="running",
+        status_reason=None,
+        started_at=iso_now(),
+        ended_at=None,
+        slug=slug,
+    )
 
 
-def _chunk_label(chunk: Chunk) -> str:
-    if chunk.chunk_id:
+def Chunk(slug: str, worktree: Path, chunk_id: str = "") -> ChunkRecord:  # noqa: N802
+    """Backward-compatible factory — prefer ``land_chunk``."""
+    return land_chunk(slug=slug, worktree=worktree, chunk_id=chunk_id)
+
+
+def _chunk_label(chunk: ChunkRecord) -> str:
+    if chunk.chunk_id and chunk.slug:
         from lib.chunk import chunk_slug
 
         return chunk_slug(chunk.chunk_id, chunk.slug)
@@ -52,7 +73,7 @@ def _chunk_label(chunk: Chunk) -> str:
     return chunk.slug
 
 
-def _teardown_container(chunk: Chunk) -> None:
+def _teardown_container(chunk: ChunkRecord) -> None:
     from lib import devcontainer
 
     label_val = _chunk_label(chunk)
@@ -60,7 +81,17 @@ def _teardown_container(chunk: Chunk) -> None:
     _emit_event("chunk_teardown", {"slug": chunk.slug, "chunk": label_val, "ok": ok})
 
 
-def _rebase_chunk(chunk: Chunk, holding: str) -> tuple[str | None, str | None]:
+def _teardown_chunk_resources(chunk: ChunkRecord) -> None:
+    """Terminal reclaim: worktree, holding branch, and container."""
+    svc = ChunkService.open()
+    ok = svc.teardown_resources(chunk)
+    if chunk.chunk_id:
+        svc.mark_landed(chunk.chunk_id)
+    label_val = _chunk_label(chunk)
+    _emit_event("chunk_teardown", {"slug": chunk.slug, "chunk": label_val, "ok": ok})
+
+
+def _rebase_chunk(chunk: ChunkRecord, holding: str) -> tuple[str | None, str | None]:
     """Rebase chunk onto holding. Returns (tip_sha, error_message)."""
     # mentat-container up modifies .devcontainer/ files in every worktree but
     # never stages them; git rebase refuses "You have unstaged changes".
@@ -68,11 +99,11 @@ def _rebase_chunk(chunk: Chunk, holding: str) -> tuple[str | None, str | None]:
     return _git.rebase_ff_only(chunk.worktree, holding)
 
 
-def _run_gates(chunk: Chunk) -> tuple[str, str]:
+def _run_gates(chunk: ChunkRecord) -> tuple[str, str]:
     return _utils.run_gates(chunk.worktree)
 
 
-def _ff_merge(chunk: Chunk, holding: str) -> str | None:
+def _ff_merge(chunk: ChunkRecord, holding: str) -> str | None:
     """FF-merge chunk HEAD onto the explicit holding branch.
 
     Returns None on success, ``"not_ff"`` when the merge is genuinely not
@@ -93,7 +124,7 @@ def _speculative_land_enabled() -> bool:
     return bool(_utils.read_config().get("speculative_land", False))
 
 
-def land(chunk: Chunk, *, holding: str) -> dict[str, object]:
+def land(chunk: ChunkRecord, *, holding: str) -> dict[str, object]:
     """Land one chunk. Returns verdict dict."""
     tip, err = _rebase_chunk(chunk, holding)
     if err:
@@ -145,6 +176,7 @@ def land(chunk: Chunk, *, holding: str) -> dict[str, object]:
             "holding": holding,
         },
     )
+    _teardown_chunk_resources(chunk)
     return {
         "slug": chunk.slug,
         "status": "success",
@@ -152,7 +184,7 @@ def land(chunk: Chunk, *, holding: str) -> dict[str, object]:
     }
 
 
-def _drain_serial(chunks: list[Chunk], *, holding: str) -> list[dict[str, object]]:
+def _drain_serial(chunks: list[ChunkRecord], *, holding: str) -> list[dict[str, object]]:
     """Land chunks one-by-one in input order (rebase → gate → FF-merge each).
 
     The safe path: every chunk is rebased onto the live holding tip and gated
@@ -163,11 +195,12 @@ def _drain_serial(chunks: list[Chunk], *, holding: str) -> list[dict[str, object
     for chunk in chunks:
         verdict = land(chunk, holding=holding)
         results.append(verdict)
-        _teardown_container(chunk)
+        if verdict.get("status") != "success":
+            _teardown_container(chunk)
     return results
 
 
-def _speculative_gate(chunk: Chunk, holding: str) -> tuple[Chunk, bool]:
+def _speculative_gate(chunk: ChunkRecord, holding: str) -> tuple[ChunkRecord, bool]:
     """Rebase chunk onto holding + run gates (no merge). Returns (chunk, passed).
 
     A rebase conflict or a blocking gate verdict counts as not-passed; the caller
@@ -180,7 +213,7 @@ def _speculative_gate(chunk: Chunk, holding: str) -> tuple[Chunk, bool]:
     return (chunk, verdict != "block")
 
 
-def _drain_speculative(chunks: list[Chunk], *, holding: str) -> list[dict[str, object]]:
+def _drain_speculative(chunks: list[ChunkRecord], *, holding: str) -> list[dict[str, object]]:
     """Speculative-parallel land (bors batch / Zuul speculative).
 
     Assume the whole batch lands: gate every chunk *concurrently* against the
@@ -216,13 +249,13 @@ def _drain_speculative(chunks: list[Chunk], *, holding: str) -> list[dict[str, o
             "chunk_landed",
             {"slug": chunk.slug, "sha": tip or "", "holding": holding},
         )
+        _teardown_chunk_resources(chunk)
         results.append({"slug": chunk.slug, "status": "success", "tip": tip})
-        _teardown_container(chunk)
     return results
 
 
 def drain(
-    chunks: list[Chunk],
+    chunks: list[ChunkRecord],
     *,
     holding: str,
     on_landed: Callable[[str], None] | None = None,
@@ -253,7 +286,7 @@ def drain(
             return _drain_speculative(chunks, holding=holding)
         return _drain_serial(chunks, holding=holding)
 
-    by_slug: dict[str, Chunk] = {c.slug: c for c in chunks}
+    by_slug: dict[str, ChunkRecord] = {c.slug: c for c in chunks}
     pending: list[str] = [c.slug for c in chunks]
     results: list[dict[str, object]] = []
 
@@ -274,7 +307,8 @@ def drain(
         ready = ready_list[0]
         verdict = land(by_slug[ready], holding=holding)
         results.append(verdict)
-        _teardown_container(by_slug[ready])
+        if verdict.get("status") != "success":
+            _teardown_container(by_slug[ready])
         pending.remove(ready)
         if verdict.get("status") == "success":
             _on_landed(ready)

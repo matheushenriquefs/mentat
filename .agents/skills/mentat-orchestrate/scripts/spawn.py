@@ -120,6 +120,17 @@ def _spawn_worktree_subprocess(
 ) -> tuple[str, subprocess.Popen, Path]:
     """Spawn a headless mentat-implement in a chunk-keyed worktree."""
     agent_id, cmd, env, worktree = _prepare_chunk_spawn(plan, harness=harness, model=model, seed_summary=seed_summary)
+    from lib.chunk import get_chunk_id_from_env, make_chunk_id
+    from lib.chunk_service import ChunkService
+
+    chunk_id = get_chunk_id_from_env(env) or make_chunk_id()
+    ChunkService.open().create(
+        chunk_id=chunk_id,
+        plan_slug=plan.slug,
+        plan_path=plan.path,
+        agent_id=agent_id,
+        worktree=worktree,
+    )
     proc = subprocess.Popen(cmd, env=env, cwd=str(worktree), **{_POPEN_NEW_GROUP: True})
     return agent_id, proc, worktree
 
@@ -148,6 +159,17 @@ async def spawn_async(
     """Spawn plan headless under asyncio. Emit chunk_started, print track command,
     return (agent_id, Process, worktree)."""
     agent_id, cmd, env, worktree = _prepare_chunk_spawn(plan, harness=harness, model=model, seed_summary=seed_summary)
+    from lib.chunk import get_chunk_id_from_env, make_chunk_id
+    from lib.chunk_service import ChunkService
+
+    chunk_id = get_chunk_id_from_env(env) or make_chunk_id()
+    ChunkService.open().create(
+        chunk_id=chunk_id,
+        plan_slug=plan.slug,
+        plan_path=plan.path,
+        agent_id=agent_id,
+        worktree=worktree,
+    )
     proc = await asyncio.create_subprocess_exec(*cmd, env=env, cwd=str(worktree), **{_POPEN_NEW_GROUP: True})
     _emit_event(
         "chunk_started",

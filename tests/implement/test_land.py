@@ -38,6 +38,10 @@ class _FakeChunk:
 class _FakeLandQueue:
     Chunk = _FakeChunk
 
+    @staticmethod
+    def land_chunk(*, slug, worktree, chunk_id):
+        return _FakeChunk(slug, worktree, chunk_id)
+
 
 # ── argparse: --land flag exists ──────────────────────────────────────────────
 

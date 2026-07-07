@@ -143,6 +143,18 @@ def preflight_worktree(
     target = Path(line)
     if not target.is_dir():
         return (EX_SOFTWARE, None)
+    agent_id = os.environ.get("MENTAT_AGENT", f"implement-{slug}")
+    from lib.chunk_service import ChunkService
+    from lib import plans as _plans
+
+    plan_path = _plans.resolve_plan_ref(slug)
+    ChunkService.open().create(
+        chunk_id=chunk_id,
+        plan_slug=slug,
+        plan_path=plan_path,
+        agent_id=agent_id,
+        worktree=target,
+    )
     return (0, target)
 
 
