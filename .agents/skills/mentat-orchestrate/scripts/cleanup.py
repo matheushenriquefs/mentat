@@ -48,7 +48,7 @@ def prune_stale_worktrees(
     emit_event("agent_reaped", {"reclaimed_bytes": None, "worktrees_removed": removed})
 
 
-def gc_preserved_worktrees(
+def prune_stale_preserved_worktrees(
     *,
     run_chunk_ids_fn: Callable[[], set[str]],
     preserve_chunk_slugs_fn: Callable[[set[str] | None], set[str]],
@@ -65,3 +65,42 @@ def gc_preserved_worktrees(
     active = preserve_chunk_slugs_fn(preserve)
     reclaimed = worktrees_mod.gc_preserved(root, active_slugs=active, scope_chunk_ids=scope)
     emit_event("agent_reaped", {"reclaimed_bytes": None, "worktrees_gc": reclaimed})
+
+
+def gc_preserved_worktrees(
+    *,
+    run_chunk_ids_fn: Callable[[], set[str]],
+    preserve_chunk_slugs_fn: Callable[[set[str] | None], set[str]],
+    preserve: set[str] | None = None,
+    worktrees_mod: Any,
+    emit_event: Callable[[str, dict[str, object]], None],
+    wt_root: Path | None = None,
+) -> None:
+    """Deprecated alias — use ``prune_stale_preserved_worktrees``."""
+    prune_stale_preserved_worktrees(
+        run_chunk_ids_fn=run_chunk_ids_fn,
+        preserve_chunk_slugs_fn=preserve_chunk_slugs_fn,
+        preserve=preserve,
+        worktrees_mod=worktrees_mod,
+        emit_event=emit_event,
+        wt_root=wt_root,
+    )
+
+
+def prune_landed_chunks(
+    holding: str,
+    *,
+    repo_root: Path,
+    emit_event: Callable[[str, dict[str, object]], None],
+) -> int:
+    """Cross-run reclaim for chunks merged into ``holding`` but still holding resources."""
+    from lib.chunk_service import ChunkService
+
+    svc = ChunkService.open()
+    reclaimed = 0
+    for chunk in svc.list_landed_reclaimable(holding, repo_root):
+        if svc.teardown_resources(chunk):
+            reclaimed += 1
+    if reclaimed:
+        emit_event("agent_reaped", {"reclaimed_bytes": None, "chunks_pruned": reclaimed})
+    return reclaimed

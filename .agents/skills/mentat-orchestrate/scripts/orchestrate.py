@@ -272,6 +272,9 @@ def build_parser() -> argparse.ArgumentParser:
     fr_p = sub.add_parser("batch-review", help="Debug: re-run batch review")
     fr_p.add_argument("agent_id", help="Agent ID")
 
+    prune_p = sub.add_parser("prune", help="Reap landed chunk resources for a holding branch")
+    prune_p.add_argument("holding", help="Holding branch")
+
     return p
 
 
@@ -314,6 +317,9 @@ def main() -> None:
             "batch_reviewed",
             {"agent_id": args.agent_id, "summary": f"batch review for agent {args.agent_id} — advisory"},
         )
+
+    elif args.cmd == "prune":
+        sys.exit(0 if _batch.prune_holding(args.holding) >= 0 else 1)
 
 
 if __name__ == "__main__":

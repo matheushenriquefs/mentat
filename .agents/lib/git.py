@@ -309,3 +309,32 @@ def ff_merge(cwd: Path, holding: str) -> str | None:
             return "not_ff"
         r = _run(["fetch", ".", f"{sha}:refs/heads/{holding}"], cwd=main_wt)
     return None if r.returncode == 0 else "git_error"
+
+
+def rev_parse_head(cwd: Path) -> str | None:
+    r = _run(["rev-parse", "HEAD"], cwd=cwd)
+    if r.returncode != 0:
+        return None
+    sha = r.stdout.strip()
+    return sha or None
+
+
+def is_ancestor(commit: str, branch: str, *, cwd: Path) -> bool:
+    """True when ``commit`` is an ancestor of ``refs/heads/<branch>``."""
+    tip_r = _run(["rev-parse", f"refs/heads/{branch}"], cwd=cwd)
+    if tip_r.returncode != 0:
+        return False
+    holding_tip = tip_r.stdout.strip()
+    if not holding_tip:
+        return False
+    anc = _run(["merge-base", "--is-ancestor", commit, holding_tip], cwd=cwd)
+    return anc.returncode == 0
+
+
+def delete_branch(repo_root: Path, branch: str) -> bool:
+    """Delete a local branch. Returns True when gone or already absent."""
+    r = _run(["branch", "-D", branch], cwd=repo_root)
+    if r.returncode == 0:
+        return True
+    verify = _run(["rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"], cwd=repo_root)
+    return verify.returncode != 0

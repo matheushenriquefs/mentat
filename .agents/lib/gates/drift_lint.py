@@ -246,7 +246,7 @@ _CLI_SKILL_SCRIPTS: dict[str, frozenset[str]] = {
     "skills/mentat-tasks/scripts/tasks.py": frozenset(
         {"next-id", "create", "claim", "release", "refresh", "done", "wontfix", "list"}
     ),
-    "skills/mentat-orchestrate/scripts/orchestrate.py": frozenset({"run", "fan-out", "land-queue", "batch-review"}),
+    "skills/mentat-orchestrate/scripts/orchestrate.py": frozenset({"run", "fan-out", "land-queue", "batch-review", "prune"}),
     "skills/mentat-implement/scripts/implement.py": frozenset({"run", "mark-test-writable"}),
     "skills/mentat-container/scripts/container.py": frozenset({"up", "run", "down", "doctor"}),
 }
